@@ -52,7 +52,7 @@ export function FinancialStatement({ socio, finances }) {
 
       <section className="flex flex-col gap-6 my-4" aria-labelledby="cuotas-title">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 id="cuotas-title" className="text-lg font-bold text-on-surface">Cuotas</h3>
+          <h3 id="cuotas-title" tabIndex="-1" className="text-lg font-bold text-on-surface">Cuotas</h3>
           <span className="text-sm text-on-surface-variant">{cuotas.length} {cuotas.length === 1 ? 'cuota' : 'cuotas'}</span>
         </div>
         {cuotas.length === 0 ? (

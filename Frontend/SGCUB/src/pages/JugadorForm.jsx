@@ -458,7 +458,7 @@ function JugadorForm() {
       } else {
         jugadorId = (await postJugador({ ...datosJugador, nuevo_socio: datosSocio })).jugador_id
       }
-      navigate(`/padron/jugadores/${jugadorId}`)
+      navigate(`/padron/jugadores/${jugadorId}${editando ? '' : '?tab=financiero'}`)
     } catch (requestError) {
       setErrorGuardado(getErrorMessage(requestError, editando ? 'No se pudo modificar el jugador.' : 'No se pudo agregar el jugador.'))
       window.scrollTo({ top: 0, behavior: 'smooth' })

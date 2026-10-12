@@ -1,5 +1,5 @@
 import React from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
@@ -56,6 +56,27 @@ function JugadorDetail() {
   const finances = useSocioFinances(jugador?.socio?.socio_id)
   const refreshFinances = finances.reload
   const cuotaBadges = React.useMemo(() => buildCuotaBadges(finances.account), [finances.account])
+  const financialFocusApplied = useRef(false)
+
+  useEffect(() => {
+    if (
+      requestedTab !== 'financiero'
+      || loading
+      || finances.loading
+      || !finances.account
+      || financialFocusApplied.current
+    ) return
+
+    const cuotasHeading = document.getElementById('cuotas-title')
+    if (!cuotasHeading) return
+
+    financialFocusApplied.current = true
+    cuotasHeading.focus({ preventScroll: true })
+    cuotasHeading.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
+  }, [finances.account, finances.loading, loading, requestedTab])
 
 
   const [modalBajaAbierto, setModalBajaAbierto] = useState(false)
