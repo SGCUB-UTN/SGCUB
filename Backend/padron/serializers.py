@@ -3,6 +3,7 @@ import re
 from rest_framework import serializers
 from django.db import transaction
 from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from
+from finanzas.services import create_or_update_player_current_cuota
 
 
 DNI_REGEX = re.compile(r"\d{7,8}")
@@ -580,6 +581,10 @@ class JugadorSerializer(serializers.ModelSerializer):
         for contact_data in contacts_data:
             contact_data["jugador"] = player
             VinculoFamiliarSerializer().create(contact_data)
+        
+        transaction.on_commit(
+            lambda socio_id=player.socio_id: create_or_update_player_current_cuota(socio_id)
+        )
         return player
 
     @transaction.atomic
