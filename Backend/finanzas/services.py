@@ -139,6 +139,14 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     return cuota
 
 
+def create_first_cuota(socio):
+    period = timezone.localdate().strftime(PERIOD_FORMAT)
+    try:
+        return create_cuota(socio, period)
+    except SocioInactivoError:
+        return None
+
+
 def has_payments(cuota):
     return Imputacion.objects.filter(movimiento_destino__cuota=cuota).exists()
 
