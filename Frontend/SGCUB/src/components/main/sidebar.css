@@ -110,6 +110,33 @@
   color: var(--primary, #006493);
 }
 
+.app-sidebar-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  text-align: left;
+}
+
+.app-sidebar-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-sidebar-group > summary::marker {
+  content: '';
+}
+
+.app-sidebar-section-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 18px;
+  transition: transform 220ms ease;
+}
+
+.app-sidebar-group[open] .app-sidebar-section-chevron {
+  transform: rotate(90deg);
+}
+
 .app-sidebar-subitem-icon {
   display: inline-flex;
   flex: 0 0 auto;
@@ -253,6 +280,10 @@
   display: none;
 }
 
+.app-sidebar--collapsed .app-sidebar-section-chevron {
+  display: none;
+}
+
 .app-sidebar-nav .app-sidebar-link,
 .app-sidebar-nav .app-sidebar-section,
 .app-sidebar-nav > div > div:nth-child(2),
@@ -277,6 +308,20 @@
 }
 
 :is(.app-sidebar--collapsing, .app-sidebar--collapsed) .app-sidebar-nav > div > div:nth-child(2) > a {
+  padding-left: 20.5px;
+}
+
+:is(.app-sidebar--collapsing, .app-sidebar--collapsed) .app-sidebar-nav > details > summary {
+  padding-left: 21.5px;
+}
+
+:is(.app-sidebar--collapsing, .app-sidebar--collapsed) .app-sidebar-nav > details > div {
+  margin-left: 0;
+  padding-left: 0;
+  border-left-color: transparent;
+}
+
+:is(.app-sidebar--collapsing, .app-sidebar--collapsed) .app-sidebar-nav > details > div > a {
   padding-left: 20.5px;
 }
 
