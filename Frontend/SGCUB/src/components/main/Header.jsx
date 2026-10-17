@@ -18,13 +18,7 @@ export default function Header({ collapsed = false }) {
       </div>
 
       <div className="app-header-actions ml-auto flex shrink-0 items-center gap-4">
-        <button className="relative p-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors">
-          <span className="material-symbols-outlined text-[20px]">notifications</span>
-
-          {/* Aca el uno habria que cambiarlo por un valor real o eliminar la notificacion */}
-
-          <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-error text-on-error font-label-sm text-[10px] font-bold">1</span>
-        </button>
+        
         
         <div className="h-6 w-px bg-outline-variant/30"></div>
         
