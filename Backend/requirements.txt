@@ -11,3 +11,4 @@ djangorestframework-simplejwt>=5.4,<6
 reportlab>=4.2,<5
 croniter
 django-cleanup>=9.0.0
+requests==2.32.3

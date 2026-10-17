@@ -20,6 +20,7 @@ import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
+import CometJugadorCard from '../components/comet/CometJugadorCard'
 
 const getContacts = (player) => (player.vinculos_familiares ?? []).map((c) => ({
   vinculo_familiar_id: c.vinculo_familiar_id,
@@ -182,6 +183,12 @@ function JugadorDetail() {
       content: socio.socio_id
         ? <FinancialStatement socio={socio} finances={finances} />
         : <EmptyState icon="account_balance_wallet" title="Sin datos de socio" description="El jugador no tiene un socio asociado." />,
+    },
+    {
+      id: 'comet',
+      label: 'COMET',
+      icon: 'cloud_sync',
+      content: <CometJugadorCard jugador={jugador} />,
     },
   ]
 

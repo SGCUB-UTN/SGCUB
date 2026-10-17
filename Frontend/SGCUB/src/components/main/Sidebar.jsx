@@ -179,12 +179,64 @@ export default function Sidebar({ collapsed, onToggle }) {
               </div>
             </NavLink>
 
-            <NavLink to="/reportes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-              <div className="flex items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[20px]">bar_chart</span>
-                <span className="app-sidebar-label font-body-md text-body-md">Reportes y COMET</span>
+            {/* Sección COMET */}
+            <div className="flex flex-col gap-0.5">
+              <NavLink
+                to="/comet"
+                className={({ isActive }) =>
+                  `app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium ${isActive ? 'app-sidebar-section--active' : ''}`
+                }
+              >
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">COMET</span>
+                </div>
+              </NavLink>
+              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <NavLink to="/comet/competiciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">emoji_events</span>
+                    <span className="app-sidebar-label text-base">Competiciones</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/equipos" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">groups_3</span>
+                    <span className="app-sidebar-label text-base">Equipos</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/partidos" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">sports_soccer</span>
+                    <span className="app-sidebar-label text-base">Partidos</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/tablas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">leaderboard</span>
+                    <span className="app-sidebar-label text-base">Tablas</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/inscripciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">assignment</span>
+                    <span className="app-sidebar-label text-base">Inscripciones</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/jugadores" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">badge</span>
+                    <span className="app-sidebar-label text-base">Jugadores</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comet/logs" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">history</span>
+                    <span className="app-sidebar-label text-base">Historial</span>
+                  </span>
+                </NavLink>
               </div>
-            </NavLink>
+            </div>
             {/* Sección Administración */}
             {showAdminSection && (
               <div className="flex flex-col gap-0.5">

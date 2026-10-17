@@ -66,6 +66,7 @@ def _local_date(value):
     return value.date()
 
 
+
 def build_nombre(dni, tipo_nombre, fecha_vencimiento):
     due_date = _local_date(fecha_vencimiento).strftime('%d/%m/%Y') if fecha_vencimiento else 'Sin vencimiento'
     return f"{dni} - {tipo_nombre} - {due_date}"

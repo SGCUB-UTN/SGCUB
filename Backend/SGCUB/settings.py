@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'usuarios',
     'django_cleanup.apps.CleanupConfig',
+    'comet',
 ]
 Q_CLUSTER = {
     'name': 'django_q_cluster',
@@ -210,3 +211,8 @@ SPECTACULAR_SETTINGS = {
 import os
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
+
+COMET_MODE = os.getenv("COMET_MODE", "mock")
+COMET_BASE_URL = os.getenv("COMET_BASE_URL", "")
+COMET_API_KEY = os.getenv("COMET_API_KEY", "")
+COMET_TIMEOUT = int(os.getenv("COMET_TIMEOUT", "30"))
