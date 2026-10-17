@@ -5,6 +5,7 @@ import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { formatPeriod } from '../shared/periodFormat'
 import { FIELD_CLASS, NO_SPINNER_CLASS, StepSection, SUMMARY_GROUP_CLASS, SummaryLine } from './formParts'
 import { isPaid } from './accountStatement'
+import { cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 
 const KINDS = [
   { value: 'descuento', label: 'Descuento', description: 'Se aplica una sola vez, sobre esta cuota.' },
@@ -41,14 +42,7 @@ const remainingWithoutFees = (cuota) => roundCents(Number(cuota?.saldo_sin_recar
 
 const isOpen = (cuota) => !isPaid(cuota) && Number(cuota.saldo_pendiente ?? 0) > 0
 
-const STATUS_BADGES = {
-  Paga: { label: 'Paga', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  Vencida: { label: 'Vencida', className: 'bg-error-container text-on-error-container border-error/20' },
-}
-const DEFAULT_STATUS_BADGE = { label: 'En fecha', className: 'bg-sky-50 text-sky-700 border-sky-200' }
-
 function CuotaChoice({ cuota, selected, onSelect }) {
-  const badge = STATUS_BADGES[cuota.estado_cuota] ?? DEFAULT_STATUS_BADGE
   return (
     <label className={`flex items-center gap-3 p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low'}`}>
       <input
@@ -61,7 +55,7 @@ function CuotaChoice({ cuota, selected, onSelect }) {
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-base font-semibold text-on-surface">Cuota {formatPeriod(cuota.periodo)}</span>
-          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${badge.className}`}>{badge.label}</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>{cuotaStateLabel(cuota.estado_cuota)}</span>
         </div>
         <span className="text-sm text-on-surface-variant">
           {cuota.fecha_venc1 ? `Vence el ${formatDate(cuota.fecha_venc1)}` : 'Sin fecha de vencimiento'}

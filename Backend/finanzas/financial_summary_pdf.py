@@ -17,10 +17,11 @@ TABLE_HEADERS = [
     "Apellido y nombre",
     "DNI",
     "Deuda en fecha",
-    "Cuotas vencidas",
+    "Vencidas 1° venc.",
+    "Vencidas 2° venc.",
     "Deuda vencida",
 ]
-COLUMN_SHARES = (0.09, 0.32, 0.14, 0.17, 0.11, 0.17)
+COLUMN_SHARES = (0.08, 0.28, 0.12, 0.15, 0.11, 0.11, 0.15)
 
 
 def financial_summary_filename(period_str):
@@ -43,7 +44,8 @@ def _debtor_rows(debtors):
             f"{row['apellido']}, {row['nombre']}",
             row["dni"],
             format_amount(row["deuda_en_fecha"]),
-            str(row["cuotas_vencidas"]),
+            str(row["cuotas_vencidas_1"]),
+            str(row["cuotas_vencidas_2"]),
             format_amount(row["deuda_vencida"]),
         ]
         for row in debtors
@@ -52,14 +54,16 @@ def _debtor_rows(debtors):
 
 def _total_row(debtors):
     total_en_fecha = sum((r["deuda_en_fecha"] for r in debtors), Decimal("0.00"))
-    total_vencidas = sum(r["cuotas_vencidas"] for r in debtors)
+    total_vencidas_1 = sum(r["cuotas_vencidas_1"] for r in debtors)
+    total_vencidas_2 = sum(r["cuotas_vencidas_2"] for r in debtors)
     total_deuda_vencida = sum((r["deuda_vencida"] for r in debtors), Decimal("0.00"))
     return [
         f"Total: {len(debtors)} socios con deuda",
         "",
         "",
         format_amount(total_en_fecha),
-        str(total_vencidas),
+        str(total_vencidas_1),
+        str(total_vencidas_2),
         format_amount(total_deuda_vencida),
     ]
 
@@ -94,6 +98,8 @@ def render_financial_summary_pdf(report):
             ("Socios en mora", str(report["socios_en_mora"])),
             ("Monto adeudado total", format_amount(report["monto_adeudado_total"])),
             ("Cuotas vencidas a la fecha", str(report["cuotas_vencidas"])),
+            ("Vencidas en 1° vencimiento", str(report["cuotas_vencidas_1"])),
+            ("Vencidas en 2° vencimiento", str(report["cuotas_vencidas_2"])),
         ], width),
         Spacer(1, 4 * mm),
         Paragraph("Recaudación por medio de cobro (acumulado histórico)", section_style),

@@ -2,7 +2,6 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.db import transaction
 from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -59,7 +58,6 @@ from .services import (
 	CuotaDuplicadaError,
 	PagoInvalidoError,
 	SocioInactivoError,
-	apply_cuota_surcharges,
 	apply_surcharges,
 	assign_benefit,
 	correct_payment,
@@ -69,6 +67,7 @@ from .services import (
 	generar_cuotas_mensuales,
 	pending_amounts,
 	register_payment,
+	reschedule_cuota,
 )
 
 
@@ -136,9 +135,14 @@ def cuota_detail(request, pk):
 	serializer = CuotaUpdateSerializer(cuota, data=request.data, partial=request.method == "PATCH")
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	with transaction.atomic():
-		serializer.save()
-		apply_cuota_surcharges(pk)
+	try:
+		reschedule_cuota(
+			pk,
+			serializer.validated_data.get("fecha_venc1", cuota.fecha_venc1),
+			serializer.validated_data.get("fecha_venc2", cuota.fecha_venc2),
+		)
+	except CuotaConPagosError as error:
+		return _cuota_con_pagos(error)
 	return Response(CuotaSerializer(_cuotas_queryset().get(pk=pk)).data)
 
 
@@ -328,6 +332,8 @@ def resumen_financiero(request):
 			Decimal("0.00"),
 		),
 		"cuotas_vencidas": sum(fila["cuotas_vencidas"] for fila in filas_morosas),
+		"cuotas_vencidas_1": sum(fila["cuotas_vencidas_1"] for fila in filas_morosas),
+		"cuotas_vencidas_2": sum(fila["cuotas_vencidas_2"] for fila in filas_morosas),
 		"transferencia_bancaria": pagos_por_medio.get(
 			MedioDePagoChoices.TRANSFERENCIA,
 			Decimal("0.00"),
@@ -487,9 +493,7 @@ def _build_financial_report(period_date):
     }
 
     unpaid_cuotas = list(
-        Cuota.objects.filter(
-            estado_cuota__in=[EstadoCuotaChoices.EN_FECHA, EstadoCuotaChoices.VENCIDA],
-        )
+        Cuota.objects.exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .select_related("movimiento__cuenta_corriente__socio__persona")
         .prefetch_related("items")
     )
@@ -511,14 +515,16 @@ def _build_financial_report(period_date):
                 "apellido": socio.persona.apellido,
                 "dni": socio.persona.dni,
                 "deuda_en_fecha": Decimal("0.00"),
-                "cuotas_vencidas": 0,
+                "cuotas_vencidas_1": 0,
+                "cuotas_vencidas_2": 0,
                 "deuda_vencida": Decimal("0.00"),
             }
         row = by_socio[socio.socio_id]
         if cuota.estado_cuota == EstadoCuotaChoices.EN_FECHA:
             row["deuda_en_fecha"] += amount
         else:
-            row["cuotas_vencidas"] += 1
+            key = "cuotas_vencidas_2" if cuota.estado_cuota == EstadoCuotaChoices.VENCIDA_2 else "cuotas_vencidas_1"
+            row[key] += 1
             row["deuda_vencida"] += amount
 
     debtors = sorted(by_socio.values(), key=lambda r: (r["apellido"], r["nombre"]))
@@ -533,6 +539,8 @@ def _build_financial_report(period_date):
         "socios_en_mora": len(filas_mora),
         "monto_adeudado_total": sum((f["monto_adeudado"] for f in filas_mora), Decimal("0.00")),
         "cuotas_vencidas": sum(f["cuotas_vencidas"] for f in filas_mora),
+        "cuotas_vencidas_1": sum(f["cuotas_vencidas_1"] for f in filas_mora),
+        "cuotas_vencidas_2": sum(f["cuotas_vencidas_2"] for f in filas_mora),
         "transferencia_bancaria": pagos_por_medio.get(MedioDePagoChoices.TRANSFERENCIA, Decimal("0.00")),
         "billetera_virtual": pagos_por_medio.get(MedioDePagoChoices.BILLETERA_VIRTUAL, Decimal("0.00")),
         "pago_efectivo": pagos_por_medio.get(MedioDePagoChoices.EFECTIVO, Decimal("0.00")),

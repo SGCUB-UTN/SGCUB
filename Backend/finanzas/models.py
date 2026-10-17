@@ -8,8 +8,12 @@ from django.utils import timezone
 
 class EstadoCuotaChoices(models.TextChoices):
     EN_FECHA = "EnFecha", "En Fecha"
-    VENCIDA = "Vencida", "Vencida"
+    VENCIDA_1 = "Vencida1", "Vencida (1° venc.)"
+    VENCIDA_2 = "Vencida2", "Vencida (2° venc.)"
     PAGA = "Paga", "Paga"
+
+
+OVERDUE_CUOTA_STATES = (EstadoCuotaChoices.VENCIDA_1, EstadoCuotaChoices.VENCIDA_2)
 
 
 class ConceptoItemChoices(models.TextChoices):
