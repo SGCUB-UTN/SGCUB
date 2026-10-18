@@ -179,6 +179,8 @@ export default function useDashboard() {
     sociosEnMora: resumenFinanciero?.socios_en_mora ?? null,
     montoAdeudadoTotal: resumenFinanciero?.monto_adeudado_total ?? null,
     cuotasVencidas: resumenFinanciero?.cuotas_vencidas ?? null,
+    cuotasVencidas1: resumenFinanciero?.cuotas_vencidas_1 ?? null,
+    cuotasVencidas2: resumenFinanciero?.cuotas_vencidas_2 ?? null,
     totalSociosActivos: sociosActivos.length,
 
     // Document alerts

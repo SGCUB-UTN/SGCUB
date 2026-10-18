@@ -4,6 +4,7 @@ import TablePagination from '../shared/TablePagination'
 import usePagination from '../../hooks/usePagination'
 import { formatAmount, formatDate } from '../personas/format'
 import { cuotaAmount, cuotaConcepts } from './accountStatement'
+import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 import CuotaDetailPanel from './CuotaDetailPanel'
 
 const COLUMN_COUNT = 9
@@ -44,7 +45,7 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
         )}
       >
         {visibleRows.map((cuota) => {
-          const state = cuota.estado_cuota ?? cuota.estado ?? 'Pendiente'
+          const state = cuotaState(cuota)
           const expanded = expandedId === cuota.cuota_id
           return (
             <Fragment key={cuota.cuota_id}>
@@ -66,12 +67,8 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
                 <td className="py-3.5 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_pagado ?? 0))}</td>
                 <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border ${
-                    state === 'Paga' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                    state === 'EnFecha' ? 'bg-sky-50 text-sky-700 border-sky-200' :
-                    'bg-error-container text-on-error-container border-error/20'
-                  }`}>
-                    {state === 'EnFecha' ? 'En fecha' : state}
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border ${cuotaStateBadgeClass(state)}`}>
+                    {cuotaStateLabel(state)}
                   </span>
                 </td>
               </tr>

@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('padron', '0016_remove_categoria_edad_minima'),
-        ('django_q', '0001_initial'),
+        ('django_q', '0019_alter_task_options_alter_ormq_key_alter_ormq_lock_and_more'),
     ]
 
     operations = [

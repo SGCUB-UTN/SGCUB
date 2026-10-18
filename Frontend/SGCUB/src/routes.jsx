@@ -39,6 +39,8 @@ import Usuarios from './pages/Usuarios'
 import ChangePassword from './pages/ChangePassword'
 import { CHANGE_PASSWORD_PATH } from './auth/paths'
 import DocumentacionDashboard from './pages/DocumentacionDashboard'
+import Comunicaciones from './pages/Comunicaciones'
+import HistorialComunicaciones from './pages/HistorialComunicaciones'
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -159,7 +161,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'comunicaciones',
-            element: <EnDesarrollo title="Comunicaciones" />,
+            element: <Comunicaciones />,
+          },
+          {
+            path: 'comunicaciones/historial',
+            element: <HistorialComunicaciones />,
           },
           {
             path: 'reportes',

@@ -10,6 +10,7 @@ import StatCard from '../components/shared/StatCard'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import { collectErrorMessages } from '../components/personas/format'
+import { CUOTA_STATES, countByState, isOverdue } from '../components/finanzas/cuotaStates'
 
 const FORMULARIO_INICIAL = {
   socio_id: '',
@@ -65,8 +66,8 @@ function Cuotas() {
 
   const resumen = useMemo(() => {
     const total = cuotas.length
-    const vencidas = cuotas.filter((cuota) => cuota.estado_cuota === 'Vencida').length
-    const pagas = cuotas.filter((cuota) => cuota.estado_cuota === 'Paga').length
+    const vencidas = cuotas.filter(isOverdue).length
+    const pagas = countByState(cuotas, CUOTA_STATES.PAGA)
 
     return {
       total: total.toLocaleString('es-AR'),

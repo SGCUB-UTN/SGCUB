@@ -11,7 +11,7 @@ const SIZES = {
   lg: { row: 'mt-2', value: 'font-display-lg text-display-lg leading-none', caption: 'text-base' },
 }
 
-export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption }) {
+export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, wrapContent = false }) {
   const style = TONES[tone] ?? TONES.neutral
   const sizeStyle = SIZES[size] ?? SIZES.md
   return (
@@ -21,6 +21,7 @@ export default function StatCard({ label, value, icon, tone = 'neutral', size = 
           <span className={`text-sm font-semibold uppercase tracking-wider ${style.accent ?? 'text-outline'}`}>{eyebrow}</span>
         )}
         <span className="text-base xl:text-xl leading-tight font-medium text-on-surface-variant uppercase tracking-wider break-words">{label}</span>
+
         <div className={`flex items-baseline flex-wrap gap-x-1.5 gap-y-0 min-w-0 ${sizeStyle.row}`}>
           <span className={`${sizeStyle.value} font-bold truncate ${style.accent ?? 'text-on-surface'}`}>{value}</span>
           {caption && (
