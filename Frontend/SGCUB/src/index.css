@@ -21,3 +21,28 @@
 ::-webkit-scrollbar {
   display: none;
 }
+
+.comunicaciones-table-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+
+.comunicaciones-table-scroll::-webkit-scrollbar {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.comunicaciones-table-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+.comunicaciones-table-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.comunicaciones-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
