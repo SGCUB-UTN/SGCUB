@@ -10,20 +10,14 @@ import { formatPeriod, periodOptions } from '../shared/periodFormat'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 
-const STATUS_LABELS = {
-  EnFecha: 'En fecha',
-  Vencida: 'Vencida',
-  Paga: 'Paga',
-}
-
-const STATUS_BADGE_CLASSES = {
-  Paga: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Vencida: 'bg-red-50 text-red-700 border-red-200',
-}
-const DEFAULT_STATUS_BADGE_CLASS = 'bg-sky-50 text-sky-700 border-sky-200'
-
-// Status sort: overdue first in ascending order.
-const STATUS_ORDER = { Vencida: 0, EnFecha: 1, Paga: 2 }
+import {
+  CUOTA_STATE_LABELS,
+  CUOTA_STATE_ORDER,
+  OVERDUE_FILTER,
+  cuotaStateBadgeClass,
+  cuotaStateLabel,
+  matchesStateFilter,
+} from '../finanzas/cuotaStates'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
@@ -54,7 +48,7 @@ const SORT_VALUES = {
   firstDue: (cuota) => cuota.fecha_venc1,
   secondDue: (cuota) => cuota.fecha_venc2,
   amount: (cuota) => cuotaAmount(cuota),
-  status: (cuota) => STATUS_ORDER[cuota.estado_cuota] ?? null,
+  status: (cuota) => CUOTA_STATE_ORDER[cuota.estado_cuota] ?? null,
 }
 // On load: most recent periods first.
 const INITIAL_SORT = { columna: 'period', direccion: 'desc' }
@@ -77,7 +71,7 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
     const text = search.trim().toLowerCase()
 
     return cuotas.filter((cuota) => {
-      if (status !== ALL && String(cuota.estado_cuota) !== status) return false
+      if (status !== ALL && !matchesStateFilter(cuota, status)) return false
       if (period !== ALL && cuota.periodo !== period) return false
       if (!text) return true
 
@@ -130,7 +124,8 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
             aria-label="Filtrar cuotas por estado"
           >
             <option value={ALL}>Estado: Todos</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            <option value={OVERDUE_FILTER}>Vencidas (1° y 2° venc.)</option>
+            {Object.entries(CUOTA_STATE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </FilterSelect>
@@ -195,8 +190,8 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
                 <td className="py-3 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc2)}</td>
                 <td className="py-3 px-4 text-right font-semibold">{cuotaAmount(cuota).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
                 <td className="py-3 px-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border ${STATUS_BADGE_CLASSES[cuota.estado_cuota] ?? DEFAULT_STATUS_BADGE_CLASS}`}>
-                    {STATUS_LABELS[cuota.estado_cuota] ?? cuota.estado_cuota ?? '—'}
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>
+                    {cuotaStateLabel(cuota.estado_cuota)}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-right">

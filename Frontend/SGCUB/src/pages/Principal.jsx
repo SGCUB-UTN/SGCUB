@@ -21,6 +21,8 @@ export default function Principal() {
     sociosEnMora,
     montoAdeudadoTotal,
     cuotasVencidas,
+    cuotasVencidas1,
+    cuotasVencidas2,
     totalSociosActivos,
     vencidos,
     proximosAVencer,
@@ -49,6 +51,8 @@ export default function Principal() {
         sociosEnMora={sociosEnMora}
         montoAdeudadoTotal={montoAdeudadoTotal}
         cuotasVencidas={cuotasVencidas}
+        cuotasVencidas1={cuotasVencidas1}
+        cuotasVencidas2={cuotasVencidas2}
         totalSociosActivos={totalSociosActivos}
       />
 

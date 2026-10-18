@@ -3,6 +3,7 @@ import { getComprobantes } from '../api/comprobantes'
 import { getCuotas } from '../api/cuotas'
 import { getResumenFinanciero } from '../api/resumenFinanciero'
 import { formatPeriod, periodOptions } from '../components/shared/periodFormat'
+import { CUOTA_STATES, countByState, cuotaState, isOverdue } from '../components/finanzas/cuotaStates'
 
 // Local 'YYYY-MM' of today (toISOString would use UTC and may shift the month)
 function currentPeriod() {
@@ -66,7 +67,7 @@ export default function useResumenFinanciero() {
   const periodKpis = useMemo(() => {
     const periodCuotas = cuotas.filter((c) => c.periodo === selectedPeriod)
     const cuotasGeneradas = periodCuotas.length
-    const cuotasPagas = periodCuotas.filter((c) => c.estado_cuota === 'Paga').length
+    const cuotasPagas = countByState(periodCuotas, CUOTA_STATES.PAGA)
 
     let totalRecaudadoPeriodo = 0
     if (selectedPeriod) {
@@ -93,7 +94,7 @@ export default function useResumenFinanciero() {
 
     cuotas.forEach((cuota) => {
       const pending = Number(cuota.saldo_pendiente ?? 0)
-      if (pending <= 0 || cuota.estado_cuota === 'Paga') return
+      if (pending <= 0 || cuotaState(cuota) === CUOTA_STATES.PAGA) return
 
       const socio = cuota.socio
       if (!socio) return
@@ -109,16 +110,20 @@ export default function useResumenFinanciero() {
           dni: socio.dni,
           deudaEnFecha: 0,
           cuotasVencidas: 0,
+          cuotasVencidas1: 0,
+          cuotasVencidas2: 0,
           deudaVencida: 0,
         })
       }
 
       const row = bySocio.get(id)
-      const estado = cuota.estado_cuota ?? cuota.estado
-      if (estado === 'EnFecha' || estado === 'En fecha') {
+      const estado = cuotaState(cuota)
+      if (estado === CUOTA_STATES.EN_FECHA) {
         row.deudaEnFecha += pending
-      } else if (estado === 'Vencida') {
+      } else if (isOverdue(cuota)) {
         row.cuotasVencidas += 1
+        if (estado === CUOTA_STATES.VENCIDA_2) row.cuotasVencidas2 += 1
+        else row.cuotasVencidas1 += 1
         row.deudaVencida += pending
       }
     })

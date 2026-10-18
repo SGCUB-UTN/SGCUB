@@ -38,7 +38,6 @@ function EditCuotaModal({ opened, onClose, onSubmit, formulario, onChange, loadi
 
           <Stack spacing={4}>
             <Text size="sm" fw={500}>Ítems</Text>
-            {/* Mantine v6: Table only styles a native table, it has no Table.Tbody / Table.Tr / Table.Td. */}
             <Table withBorder>
               <tbody>
                 {(cuota?.items ?? []).map((item) => (

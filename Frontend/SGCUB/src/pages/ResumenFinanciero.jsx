@@ -12,6 +12,7 @@ import usePagination from '../hooks/usePagination'
 import useOrdenTabla from '../hooks/useOrdenTabla'
 import StatCard from '../components/shared/StatCard'
 import SortableHeader from '../components/shared/SortableHeader'
+import { overdueBreakdown } from '../components/finanzas/cuotaStates'
 
 const SORT_VALUES = {
   numero: (row) => (row.numero_socio ? Number(row.numero_socio) : null),
@@ -223,7 +224,14 @@ function ResumenFinanciero() {
             <>
               <StatCard size="sm" tone="warning" icon="person_alert" label="Socios con deuda" value={Number(resumen?.socios_en_mora ?? 0).toLocaleString('es-AR')} />
               <StatCard size="sm" tone="warning" icon="pending_actions" label="Monto adeudado total" value={formatAmount(resumen?.monto_adeudado_total ?? 0)} />
-              <StatCard size="sm" tone="neutral" icon="event_busy" label="Cuotas vencidas a la fecha" value={Number(resumen?.cuotas_vencidas ?? 0).toLocaleString('es-AR')} />
+              <StatCard
+                size="sm"
+                tone="neutral"
+                icon="event_busy"
+                label="Cuotas vencidas a la fecha"
+                value={Number(resumen?.cuotas_vencidas ?? 0).toLocaleString('es-AR')}
+                caption={overdueBreakdown(resumen?.cuotas_vencidas_1, resumen?.cuotas_vencidas_2)}
+              />
             </>
           )}
         </div>
@@ -355,8 +363,11 @@ function ResumenFinanciero() {
 
                 <td className="py-3 px-4 text-center">
                   {row.cuotasVencidas > 0 ? (
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded font-label-sm text-label-sm font-bold bg-error-container text-on-error-container">
-                      {row.cuotasVencidas} cuota{row.cuotasVencidas !== 1 ? 's' : ''}
+                    <span className="inline-flex flex-col items-center gap-0.5">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded font-label-sm text-label-sm font-bold bg-error-container text-on-error-container">
+                        {row.cuotasVencidas} cuota{row.cuotasVencidas !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-on-surface-variant">{overdueBreakdown(row.cuotasVencidas1, row.cuotasVencidas2)}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center justify-center px-2 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant">
