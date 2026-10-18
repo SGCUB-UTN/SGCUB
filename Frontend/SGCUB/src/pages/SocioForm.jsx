@@ -175,7 +175,8 @@ function SocioForm() {
         ? await modificarSocio(id, payload)
         : await crearSocio(payload)
       const socioId = resultado?.socio_id ?? id
-      navigate(socioId ? `/padron/socios/${socioId}` : '/padron/socios')
+      const tabFinanciero = !editando ? '?tab=financiero' : ''
+      navigate(socioId ? `/padron/socios/${socioId}${tabFinanciero}` : '/padron/socios')
     } catch (requestError) {
       setErrorGuardado(getErrorMessage(requestError, editando ? 'No se pudo modificar el socio.' : 'No se pudo agregar el socio.'))
       window.scrollTo({ top: 0, behavior: 'smooth' })

@@ -139,6 +139,47 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     return cuota
 
 
+def create_first_cuota(socio):
+    period = timezone.localdate().strftime(PERIOD_FORMAT)
+    try:
+        return create_cuota(socio, period)
+    except SocioInactivoError:
+        return None
+
+
+@transaction.atomic
+def create_or_update_player_current_cuota(socio_id):
+    today = timezone.localdate()
+    period = today.strftime(PERIOD_FORMAT)
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    cuota = Cuota.objects.filter(
+        movimiento__cuenta_corriente__socio_id=socio_id,
+        periodo=period,
+    ).first()
+    if cuota is None:
+        try:
+            return create_cuota(socio, period, today=today)
+        except SocioInactivoError:
+            return None
+
+    cuota = lock_cuota(cuota.pk)
+    if is_locked(cuota):
+        return cuota
+
+    generated_items = GeneradorItemsCuota(socio, parse_period(period)).build_items()
+    sports_item = next(
+        (item for item in generated_items if item.concepto == ConceptoItemChoices.CUOTA_DEPORTIVA),
+        None,
+    )
+    if sports_item is None or cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA).exists():
+        return cuota
+
+    sports_item.cuota = cuota
+    sports_item.save()
+    sync_cuota_charge(cuota)
+    return cuota
+
+
 def has_payments(cuota):
     return Imputacion.objects.filter(movimiento_destino__cuota=cuota).exists()
 

@@ -45,7 +45,7 @@ from .models import (
 	SecuenciaComprobante,
 )
 from .pdf_utils import format_amount
-from .services import apply_surcharges, cuota_state, generar_cuotas_mensuales, next_receipt_number, sync_cuota_charge
+from .services import apply_surcharges, create_cuota, cuota_state, generar_cuotas_mensuales, next_receipt_number, sync_cuota_charge
 from .views import _build_financial_report
 
 
@@ -2366,19 +2366,22 @@ class CurrentAccountOpeningTests(APITestCase):
 			"domicilio_localidad": self.localidad.pk,
 		}
 
-	def test_new_socio_gets_an_empty_current_account(self):
-		response = self.client.post("/api/padron/socio/", self.person_payload("40111222"), format="json")
+	def test_new_socio_gets_a_current_account_and_first_monthly_cuota(self):
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.client.post("/api/padron/socio/", self.person_payload("40111222"), format="json")
 
 		self.assertEqual(response.status_code, 201, response.data)
 		account = CuentaCorriente.objects.get(socio_id=response.data["socio_id"])
-		self.assertEqual(account.saldo, Decimal("0.00"))
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente=account)
+		self.assertEqual(cuota.periodo, timezone.localdate().strftime("%Y-%m"))
+		self.assertEqual(account.saldo, -cuota.movimiento.monto)
 		self.assertEqual(account.estado_cuenta_corriente, "Activo")
 
 		status_response = self.client.get(reverse("estado-cuenta-socio", args=[response.data["socio_id"]]))
 
 		self.assertEqual(status_response.status_code, 200)
-		self.assertEqual(status_response.data["cuotas_generadas"], 0)
-		self.assertEqual(status_response.data["total_adeudado"], Decimal("0.00"))
+		self.assertEqual(status_response.data["cuotas_generadas"], 1)
+		self.assertEqual(status_response.data["total_adeudado"], cuota.movimiento.monto)
 
 	def test_new_player_with_new_socio_gets_a_current_account(self):
 		categoria = Categoria.objects.create(nombre="Infantil", anio_vigente=2026, edad_maxima=12, genero="M")
@@ -2394,10 +2397,94 @@ class CurrentAccountOpeningTests(APITestCase):
 			}],
 		}
 
-		response = self.client.post("/api/padron/jugador/", payload, format="json")
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.client.post("/api/padron/jugador/", payload, format="json")
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertTrue(CuentaCorriente.objects.filter(socio__persona__dni="40111223").exists())
+		account = CuentaCorriente.objects.get(socio__persona__dni="40111223")
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente=account)
+		conceptos = set(cuota.items.values_list("concepto", flat=True))
+		self.assertEqual(conceptos, {"CuotaSocial", "CuotaDeportiva"})
+
+	def create_player_for_existing_socio(self, socio):
+		categoria = Categoria.objects.create(
+			nombre=f"Infantil {socio.pk}",
+			anio_vigente=2026,
+			edad_maxima=12,
+			genero="M",
+		)
+		return self.client.post(
+			"/api/padron/jugador/",
+			{
+				"socio": socio.pk,
+				"categoria": categoria.pk,
+				"obra_social": "OSDE",
+				"tallaIndumentaria": "M",
+			},
+			format="json",
+		)
+
+	def test_new_player_for_existing_socio_gets_current_cuota_when_missing(self):
+		persona = Persona.objects.create(
+			nombre="Juan",
+			apellido="Perez",
+			dni="40111226",
+			fecha_nacimiento=date(2015, 3, 1),
+		)
+		socio = Socio.objects.create(persona=persona)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_player_for_existing_socio(socio)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		account = CuentaCorriente.objects.get(socio=socio)
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente=account)
+		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
+		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
+
+	def test_new_player_adds_sports_charge_to_existing_unpaid_current_cuota(self):
+		persona = Persona.objects.create(
+			nombre="Juan",
+			apellido="Perez",
+			dni="40111227",
+			fecha_nacimiento=date(2015, 3, 1),
+		)
+		socio = Socio.objects.create(persona=persona)
+		today = timezone.localdate()
+		cuota = create_cuota(socio, today.strftime("%Y-%m"), today=today.replace(day=1))
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_player_for_existing_socio(socio)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		cuota.refresh_from_db()
+		account = CuentaCorriente.objects.get(socio=socio)
+		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), 1)
+		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
+		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
+		self.assertEqual(account.saldo, Decimal("-2500.00"))
+
+	def test_new_player_does_not_change_paid_current_cuota(self):
+		persona = Persona.objects.create(
+			nombre="Juan",
+			apellido="Perez",
+			dni="40111228",
+			fecha_nacimiento=date(2015, 3, 1),
+		)
+		socio = Socio.objects.create(persona=persona)
+		today = timezone.localdate()
+		cuota = create_cuota(socio, today.strftime("%Y-%m"), today=today.replace(day=1))
+		cuota.estado_cuota = EstadoCuotaChoices.PAGA
+		cuota.save(update_fields=["estado_cuota"])
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_player_for_existing_socio(socio)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		cuota.refresh_from_db()
+		self.assertFalse(cuota.items.filter(concepto="CuotaDeportiva").exists())
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=socio).saldo, Decimal("-1000.00"))
 
 	def test_saving_an_existing_socio_does_not_open_another_account(self):
 		socio = crear_socio("40111224")

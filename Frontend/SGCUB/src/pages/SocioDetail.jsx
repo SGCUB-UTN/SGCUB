@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
@@ -33,6 +33,27 @@ function SocioDetail() {
   const finances = useSocioFinances(socio?.socio_id)
   const refreshFinances = finances.reload
   const cuotaBadges = useMemo(() => buildCuotaBadges(finances.account), [finances.account])
+  const financialFocusApplied = useRef(false)
+
+  useEffect(() => {
+    if (
+      requestedTab !== 'financiero'
+      || loading
+      || finances.loading
+      || !finances.account
+      || financialFocusApplied.current
+    ) return
+
+    const cuotasHeading = document.getElementById('cuotas-title')
+    if (!cuotasHeading) return
+
+    financialFocusApplied.current = true
+    cuotasHeading.focus({ preventScroll: true })
+    cuotasHeading.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
+  }, [finances.account, finances.loading, loading, requestedTab])
 
   const [modaldeactivateAbierto, setModaldeactivateAbierto] = useState(false)
   const [deactivate, setdeactivate] = useState(false)
