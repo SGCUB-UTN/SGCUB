@@ -115,7 +115,7 @@ def enviar_email_individual(destinatario: str, asunto: str, contenido: str, envi
         template = Template(HTML_EMAIL_TEMPLATE)
         context = Context({
             "asunto": asunto,
-            "contenido":"¡Hola! \n" + contenido + "\nSaludos,\nClub Social y Deportivo - SGCUB"
+            "contenido":contenido + "\nClub Social y Deportivo - SGCUB"
         })
         html_content = template.render(context)
         text_content = f"{asunto}\n\n{contenido}\n\n---\nClub Social y Deportivo - SGCUB"
