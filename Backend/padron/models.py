@@ -401,6 +401,16 @@ class VinculoFamiliar(models.Model):
         Jugador,
         on_delete=models.CASCADE,
         related_name="vinculos_familiares",
+        null=True,
+        blank=True,
+    )
+
+    docente = models.ForeignKey(
+        Docente,
+        on_delete=models.CASCADE,
+        related_name="vinculos_familiares",
+        null=True,
+        blank=True,
     )
 
     responsable_legal = models.BooleanField(default=False)
@@ -411,8 +421,21 @@ class VinculoFamiliar(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["persona", "jugador"],
+                condition=models.Q(jugador__isnull=False),
                 name="persona_jugador_contacto_unico",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["persona", "docente"],
+                condition=models.Q(docente__isnull=False),
+                name="persona_docente_contacto_unico",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(jugador__isnull=False, docente__isnull=True)
+                    | models.Q(jugador__isnull=True, docente__isnull=False)
+                ),
+                name="vinculo_familiar_jugador_o_docente",
+            ),
         ]
 
 class DocenteCategoria(models.Model):
