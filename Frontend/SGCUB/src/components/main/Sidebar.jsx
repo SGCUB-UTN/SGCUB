@@ -76,13 +76,14 @@ export default function Sidebar({ collapsed, onToggle }) {
             </NavLink>
             
             {/* Sección Personas */}
-            <div className="flex flex-col gap-0.5">
-              <div className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${personasActive ? 'app-sidebar-section--active' : ''}`}>
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${personasActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">groups</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">Personas</span>
                 </div>
-              </div>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                 <NavLink to="/padron/socios" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
@@ -103,16 +104,17 @@ export default function Sidebar({ collapsed, onToggle }) {
                   </span>
                 </NavLink>
               </div>
-            </div>
+            </details>
 
             {/* Sección Finanzas */}
-            <div className="flex flex-col gap-0.5">
-              <div className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">Finanzas</span>
                 </div>
-              </div>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                 <NavLink to="/finanzas/cuotas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
@@ -146,40 +148,40 @@ export default function Sidebar({ collapsed, onToggle }) {
                   </span>
                 </NavLink>
               </div>
-            </div>
+            </details>
 
-            <NavLink to="/documental" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-              <div className="flex items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[20px]">folder_shared</span>
-                <span className="app-sidebar-label font-body-md text-body-md">Documental</span>
-              </div>
-
-              {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
-                <span className="font-label-sm flex items-center gap-1">
-                  {alertas.vencidos > 0 && (
-                    <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
-                  )}
-                  {alertas.proximos > 0 && (
-                    <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
-                  )}
-                </span>
-              )}
+            <NavLink to="/documental" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]">folder_shared</span>
+                  <span className="app-sidebar-label font-body-md text-body-md">Documental</span>
+                </div>
+                {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
+                  <span className="font-label-sm flex items-center gap-1">
+                    {alertas.vencidos > 0 && (
+                      <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
+                    )}
+                    {alertas.proximos > 0 && (
+                      <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
+                    )}
+                  </span>
+                )}
             </NavLink>
             
-            <NavLink to="/padron/categorias" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-              <div className="flex items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[20px]">sports_soccer</span>
-                <span className="app-sidebar-label font-body-md text-body-md">Categorías</span>
-              </div>
+            <NavLink to="/padron/categorias" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]">sports_soccer</span>
+                  <span className="app-sidebar-label font-body-md text-body-md">Categorías</span>
+                </div>
             </NavLink>
 
-            <div className="flex flex-col gap-0.5">
-              <div className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none ${comunicacionesActive ? 'app-sidebar-section--active' : ''}`}>
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${comunicacionesActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">campaign</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">Comunicaciones</span>
                 </div>
-              </div>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                 <NavLink end to="/comunicaciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
@@ -194,22 +196,23 @@ export default function Sidebar({ collapsed, onToggle }) {
                   </span>
                 </NavLink>
               </div>
-            </div>
-
+            </details>
             {/* Sección COMET */}
-            <div className="flex flex-col gap-0.5">
-              <NavLink
-                to="/comet"
-                className={({ isActive }) =>
-                  `app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium ${isActive ? 'app-sidebar-section--active' : ''}`
-                }
-              >
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${pathname === '/comet' || pathname.startsWith('/comet/') ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">COMET</span>
                 </div>
-              </NavLink>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <NavLink to="/comet" end className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">cloud_sync</span>
+                    <span className="app-sidebar-label text-base">Inicio COMET</span>
+                  </span>
+                </NavLink>
                 <NavLink to="/comet/competiciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">emoji_events</span>
@@ -253,18 +256,18 @@ export default function Sidebar({ collapsed, onToggle }) {
                   </span>
                 </NavLink>
               </div>
-            </div>
+            </details>
             {/* Sección Administración */}
             {showAdminSection && (
-              <div className="flex flex-col gap-0.5">
-                <hr className="app-sidebar-divider border-0 border-t border-outline-variant/40 my-2 mx-space-sm" />              
-
-                <div className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
+              <details open className="app-sidebar-group flex flex-col gap-0.5">
+                <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
                   <div className="flex items-center gap-space-sm">
                     <span className="material-symbols-outlined text-[20px]">manage_accounts</span>
                     <span className="app-sidebar-label text-base font-semibold text-on-surface">Administración</span>
                   </div>
-                </div>
+                  <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                </summary>
+                <hr className="app-sidebar-divider border-0 border-t border-outline-variant/40 my-2 mx-space-sm" />
                 <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                   <PermissionGate permission={PERMISSIONS.manageUsers}>
                     <NavLink to="/usuarios" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
@@ -283,7 +286,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                     </NavLink>
                   </PermissionGate>
                 </div>
-              </div>
+              </details>
             )}
             
           </nav>
