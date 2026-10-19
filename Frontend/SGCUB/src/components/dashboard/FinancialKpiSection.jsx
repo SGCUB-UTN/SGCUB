@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatAmount } from '../personas/format'
 import StatCard from '../shared/StatCard'
+import { overdueBreakdown } from '../finanzas/cuotaStates'
 
 function KpiSkeleton() {
   return (
@@ -32,6 +33,8 @@ export default function FinancialKpiSection({
   sociosEnMora,
   montoAdeudadoTotal,
   cuotasVencidas,
+  cuotasVencidas1,
+  cuotasVencidas2,
   totalSociosActivos,
 }) {
   const moraPct = sociosEnMora != null && totalSociosActivos > 0
@@ -93,7 +96,7 @@ export default function FinancialKpiSection({
               <StatCard
                 label="Cuotas vencidas"
                 value={cuotasVencidas ?? '—'}
-                caption={cuotasVencidas != null ? 'sin pagar' : undefined}
+                caption={cuotasVencidas != null ? overdueBreakdown(cuotasVencidas1, cuotasVencidas2) : undefined}
                 icon="event_busy"
                 tone="error"
               />

@@ -668,7 +668,6 @@ function DocenteForm() {
                     }}
                     className="hidden"
                   />
-                  {/* Equal-height rows: file picker, "o" separator and the "delivered" checkbox; choosing one option disables the other */}
                   <div className={`relative flex-1 min-w-0 grid auto-rows-fr bg-surface-container-low rounded-lg p-3 border ${errores.antecedente_penal ? 'border-error' : 'border-outline-variant/40'}`}>
                     <div className="flex items-center min-w-0">
                       <button

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Prefetch, Sum
+from django.db.models import Prefetch, Q, Sum
 from django.utils import timezone
 
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
@@ -139,6 +139,47 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     return cuota
 
 
+def create_first_cuota(socio):
+    period = timezone.localdate().strftime(PERIOD_FORMAT)
+    try:
+        return create_cuota(socio, period)
+    except SocioInactivoError:
+        return None
+
+
+@transaction.atomic
+def create_or_update_player_current_cuota(socio_id):
+    today = timezone.localdate()
+    period = today.strftime(PERIOD_FORMAT)
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    cuota = Cuota.objects.filter(
+        movimiento__cuenta_corriente__socio_id=socio_id,
+        periodo=period,
+    ).first()
+    if cuota is None:
+        try:
+            return create_cuota(socio, period, today=today)
+        except SocioInactivoError:
+            return None
+
+    cuota = lock_cuota(cuota.pk)
+    if is_locked(cuota):
+        return cuota
+
+    generated_items = GeneradorItemsCuota(socio, parse_period(period)).build_items()
+    sports_item = next(
+        (item for item in generated_items if item.concepto == ConceptoItemChoices.CUOTA_DEPORTIVA),
+        None,
+    )
+    if sports_item is None or cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA).exists():
+        return cuota
+
+    sports_item.cuota = cuota
+    sports_item.save()
+    sync_cuota_charge(cuota)
+    return cuota
+
+
 def has_payments(cuota):
     return Imputacion.objects.filter(movimiento_destino__cuota=cuota).exists()
 
@@ -244,14 +285,18 @@ def pending_amounts(cuotas, ignored_origin=None):
     return pending
 
 
-def refresh_cuota_state(cuota, pending, today=None):
-    today = today or timezone.localdate()
+def cuota_state(cuota, pending, today):
     if pending <= 0:
-        state = EstadoCuotaChoices.PAGA
-    elif today > cuota.fecha_venc1:
-        state = EstadoCuotaChoices.VENCIDA
-    else:
-        state = EstadoCuotaChoices.EN_FECHA
+        return EstadoCuotaChoices.PAGA
+    if today > cuota.fecha_venc2:
+        return EstadoCuotaChoices.VENCIDA_2
+    if today > cuota.fecha_venc1:
+        return EstadoCuotaChoices.VENCIDA_1
+    return EstadoCuotaChoices.EN_FECHA
+
+
+def refresh_cuota_state(cuota, pending, today=None):
+    state = cuota_state(cuota, pending, today or timezone.localdate())
     if cuota.estado_cuota != state:
         cuota.estado_cuota = state
         cuota.save(update_fields=["estado_cuota"])
@@ -562,7 +607,9 @@ def apply_cuota_surcharges(cuota_id, today=None, configuration=None):
     configuration = configuration or ConfiguracionFinanciera.load()
     with transaction.atomic():
         cuota = lock_cuota(cuota_id)
-        if pending_amounts([cuota])[cuota.pk] <= 0:
+        pending = pending_amounts([cuota])[cuota.pk]
+        if pending <= 0:
+            refresh_cuota_state(cuota, pending, today)
             return []
 
         base_amount = net_amount(cuota.items.exclude(concepto=ConceptoItemChoices.MORA))
@@ -589,27 +636,55 @@ def apply_cuota_surcharges(cuota_id, today=None, configuration=None):
         return surcharges
 
 
+@transaction.atomic
+def reschedule_cuota(cuota_id, first_due_date, second_due_date, today=None):
+    cuota = lock_cuota(cuota_id)
+    ensure_cuota_without_payments(cuota)
+    if (cuota.fecha_venc1, cuota.fecha_venc2) != (first_due_date, second_due_date):
+        cuota.fecha_venc1 = first_due_date
+        cuota.fecha_venc2 = second_due_date
+        cuota.recargos_aplicados = 0
+        cuota.save(update_fields=["fecha_venc1", "fecha_venc2", "recargos_aplicados"])
+        deleted, _ = cuota.items.filter(concepto=ConceptoItemChoices.MORA).delete()
+        if deleted:
+            sync_cuota_charge(cuota)
+    apply_cuota_surcharges(cuota.pk, today)
+
+
+def stale_state_filter(today):
+    return (
+        Q(estado_cuota=EstadoCuotaChoices.EN_FECHA, fecha_venc1__lt=today)
+        | Q(estado_cuota=EstadoCuotaChoices.VENCIDA_1, fecha_venc2__lt=today)
+        | Q(estado_cuota=EstadoCuotaChoices.VENCIDA_1, fecha_venc1__gte=today)
+        | Q(estado_cuota=EstadoCuotaChoices.VENCIDA_2, fecha_venc2__gte=today)
+    )
+
+
 def apply_surcharges(today=None):
     today = today or timezone.localdate()
     configuration = ConfiguracionFinanciera.load()
-    cuota_ids = list(
-        Cuota.objects.filter(fecha_venc1__lt=today, recargos_aplicados__lt=2, movimiento__isnull=False)
+    previous_states = dict(
+        Cuota.objects.filter(movimiento__isnull=False)
+        .filter(Q(fecha_venc1__lt=today, recargos_aplicados__lt=2) | stale_state_filter(today))
         .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .order_by("pk")
-        .values_list("pk", flat=True)
+        .values_list("pk", "estado_cuota")
     )
     result = {
         "fecha": today.isoformat(),
-        "cuotas_revisadas": len(cuota_ids),
+        "cuotas_revisadas": len(previous_states),
         "recargos_primer_vencimiento": 0,
         "recargos_segundo_vencimiento": 0,
         "monto_total": Decimal("0.00"),
+        "estados_actualizados": 0,
     }
-    for cuota_id in cuota_ids:
+    for cuota_id in previous_states:
         for number, item in apply_cuota_surcharges(cuota_id, today, configuration):
             key = "recargos_primer_vencimiento" if number == 1 else "recargos_segundo_vencimiento"
             result[key] += 1
             result["monto_total"] += item.monto
+    current_states = Cuota.objects.filter(pk__in=previous_states).values_list("pk", "estado_cuota")
+    result["estados_actualizados"] = sum(1 for pk, state in current_states if previous_states[pk] != state)
     return result
 
 

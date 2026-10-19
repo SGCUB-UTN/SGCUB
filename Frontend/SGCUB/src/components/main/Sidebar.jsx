@@ -50,6 +50,7 @@ export default function Sidebar({ collapsed, onToggle }) {
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/finanzas/estado-cuenta', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
   const adminActive = ['/usuarios', '/automatizaciones']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
@@ -173,13 +174,29 @@ export default function Sidebar({ collapsed, onToggle }) {
                 </div>
             </NavLink>
 
-            <NavLink to="/comunicaciones" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${comunicacionesActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">campaign</span>
-                  <span className="app-sidebar-label font-body-md text-body-md">Comunicaciones</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Comunicaciones</span>
                 </div>
-            </NavLink>
-
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
+              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <NavLink end to="/comunicaciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">edit_note</span>
+                    <span className="app-sidebar-label text-base">Nuevo envío</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comunicaciones/historial" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">history</span>
+                    <span className="app-sidebar-label text-base">Historial de envíos</span>
+                  </span>
+                </NavLink>
+              </div>
+            </details>
             {/* Sección COMET */}
             <details open className="app-sidebar-group flex flex-col gap-0.5">
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${pathname === '/comet' || pathname.startsWith('/comet/') ? 'app-sidebar-section--active' : ''}`}>

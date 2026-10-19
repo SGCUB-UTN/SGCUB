@@ -5,6 +5,7 @@ import { formatPeriod } from '../shared/periodFormat'
 import { BenefitButton } from '../personas/HeaderPersona'
 import ComprobantePago from './ComprobantePago'
 import { FIELD_CLASS, NO_SPINNER_CLASS, StepSection, SUMMARY_GROUP_CLASS, SummaryLine } from './formParts'
+import { cuotaStateBadgeClass, cuotaStateLabel, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
 
@@ -49,7 +50,7 @@ function CuotaOption({ cuota, today, selected, onToggle }) {
   const fee = lateFee(cuota)
   const paid = Number(cuota.monto_pagado || 0)
   const pending = Number(cuota.saldo_pendiente || 0)
-  const overdue = Boolean(cuota.fecha_venc1) && cuota.fecha_venc1.split('T')[0] < today
+  const overdue = isOverdue(cuota)
 
   const breakdown = [
     `Cuota ${formatAmount(total - fee)}`,
@@ -69,7 +70,7 @@ function CuotaOption({ cuota, today, selected, onToggle }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-base font-semibold text-on-surface">Cuota {formatPeriod(cuota.periodo)}</span>
           {overdue && (
-            <span className="px-2 py-0.5 rounded text-xs font-bold bg-error-container text-on-error-container">Vencida</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>{cuotaStateLabel(cuota.estado_cuota)}</span>
           )}
         </div>
         <span className={`text-sm ${overdue ? 'text-error' : 'text-on-surface-variant'}`}>{dueText(cuota, today)}</span>
@@ -261,7 +262,6 @@ function PagoForm({ socio = null, cuenta = null, emptyHeader = null, initialCuot
 
   return (
     <form onSubmit={confirmPayment} className="flex flex-col gap-6" noValidate>
-      {/* Two fixed columns: the debt box can never wrap below the socio data */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 pb-4 border-b border-outline-variant/30">
         <div className="min-w-0">
           <p className="text-sm uppercase tracking-wider font-semibold text-primary">Registrar pago de</p>

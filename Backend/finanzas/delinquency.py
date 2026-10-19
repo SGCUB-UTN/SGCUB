@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
-from .models import Cuota, EstadoCuotaChoices
+from .models import OVERDUE_CUOTA_STATES, Cuota, EstadoCuotaChoices
 from .services import pending_amounts
 
 SCOPE_LABELS = {
@@ -77,13 +77,12 @@ def filter_socios(scope, socio_ids=None, socio_id=None, query="", category=""):
     return socios
 
 
-def overdue_cuotas_by_account(socios, today):
+def overdue_cuotas_by_account(socios):
     overdue = list(
         Cuota.objects.filter(
             movimiento__cuenta_corriente__socio__in=[socio.pk for socio in socios],
-            fecha_venc1__lt=today,
+            estado_cuota__in=OVERDUE_CUOTA_STATES,
         )
-        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .select_related("movimiento")
     )
     pending = pending_amounts(overdue)
@@ -92,6 +91,10 @@ def overdue_cuotas_by_account(socios, today):
         if pending[cuota.pk] > 0:
             by_account.setdefault(cuota.movimiento.cuenta_corriente_id, []).append(cuota)
     return by_account, pending
+
+
+def count_by_state(cuotas, state):
+    return sum(1 for cuota in cuotas if cuota.estado_cuota == state)
 
 
 def report_row(socio, cuotas, pending, today):
@@ -105,6 +108,8 @@ def report_row(socio, cuotas, pending, today):
         "categoria_deportiva": player.categoria.nombre if player else NO_CATEGORY,
         "monto_adeudado": sum((pending[cuota.pk] for cuota in cuotas), Decimal("0.00")),
         "cuotas_vencidas": len(cuotas),
+        "cuotas_vencidas_1": count_by_state(cuotas, EstadoCuotaChoices.VENCIDA_1),
+        "cuotas_vencidas_2": count_by_state(cuotas, EstadoCuotaChoices.VENCIDA_2),
         "dias_mora": max((today - cuota.fecha_venc1).days for cuota in cuotas),
     }
 
@@ -112,7 +117,7 @@ def report_row(socio, cuotas, pending, today):
 def delinquency_report(scope, **filters):
     today = timezone.localdate()
     socios = list(filter_socios(scope, **filters).order_by("persona__apellido", "persona__nombre"))
-    cuotas_by_account, pending = overdue_cuotas_by_account(socios, today)
+    cuotas_by_account, pending = overdue_cuotas_by_account(socios)
 
     rows = []
     without_account = 0
