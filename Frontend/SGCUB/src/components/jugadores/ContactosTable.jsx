@@ -11,8 +11,8 @@ function LegalGuardianBadge({ isLegalGuardian }) {
 
 const fullName = (contact) => `${contact.persona?.nombre ?? ''} ${contact.persona?.apellido ?? ''}`.trim()
 
-// Family links / emergency contacts of a jugador. The delete column only shows actions when `onDelete` is given.
-function ContactosTable({ contacts, onSelect, onDelete }) {
+// Family links / emergency contacts of a jugador or docente. The delete column only shows actions when `onDelete` is given.
+function ContactosTable({ contacts, onSelect, onDelete, mostrarResponsableLegal = true }) {
   return (
     <DataTable
       className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
@@ -23,7 +23,7 @@ function ContactosTable({ contacts, onSelect, onDelete }) {
           <th className="py-3 px-4" scope="col">DNI</th>
           <th className="py-3 px-4" scope="col">Teléfono</th>
           <th className="py-3 px-4" scope="col">Vínculo</th>
-          <th className="py-3 px-4 text-center" scope="col">Responsable legal</th>
+          {mostrarResponsableLegal && <th className="py-3 px-4 text-center" scope="col">Responsable legal</th>}
           <th className="py-3 px-4 text-center" scope="col">Acciones</th>
         </>
       )}
@@ -47,7 +47,9 @@ function ContactosTable({ contacts, onSelect, onDelete }) {
               <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-base font-medium">{contact.relacion}</span>
             ) : '—'}
           </td>
-          <td className="py-3.5 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
+          {mostrarResponsableLegal && (
+            <td className="py-3.5 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
+          )}
           <td className="py-3.5 px-4 text-center">
             {onDelete && (
               <button
