@@ -90,7 +90,7 @@ def persona_list_create(request):
     if request.method == "GET":
         people = Persona.objects.select_related(
             "genero", "domicilio__localidad", "domicilio__barrio", "socio__jugador", "docente"
-        ).prefetch_related("vinculos_familiares__jugador__socio__persona")
+        ).prefetch_related("vinculos_familiares__jugador__socio__persona", "vinculos_familiares__docente__persona")
         dni = request.query_params.get("dni")
         dni_prefix = request.query_params.get("dni_prefix")
         search = request.query_params.get("q", "").strip()
@@ -314,7 +314,11 @@ def jugador_list_create(request):
         players = Jugador.objects.select_related(
             "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
             "categoria", "categoria_secundaria", "estado",
-        ).prefetch_related("vinculos_familiares__persona")
+        ).prefetch_related(
+            "vinculos_familiares__persona__genero",
+            "vinculos_familiares__persona__domicilio__localidad",
+            "vinculos_familiares__persona__domicilio__barrio",
+        )
         category_id = request.query_params.get("categoria")
         if category_id:
             if not category_id.isdigit():
@@ -364,7 +368,13 @@ def docente_list_create(request):
     if request.method == "GET":
         teachers = Docente.objects.select_related(
             "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "persona__socio__jugador", "estado"
-        ).prefetch_related("categorias_docente__cargo", "categorias_docente__categoria")
+        ).prefetch_related(
+            "categorias_docente__cargo",
+            "categorias_docente__categoria",
+            "vinculos_familiares__persona__genero",
+            "vinculos_familiares__persona__domicilio__localidad",
+            "vinculos_familiares__persona__domicilio__barrio",
+        )
         serializer = DocenteSerializer(teachers, many=True)
         return Response(serializer.data)
 
@@ -408,8 +418,11 @@ def cargo_docente_list(request):
 def vinculo_familiar_list_create(request):
     if request.method == "GET":
         contacts = VinculoFamiliar.objects.select_related(
-            "persona",
+            "persona__genero",
+            "persona__domicilio__localidad",
+            "persona__domicilio__barrio",
             "jugador",
+            "docente",
         )
 
         serializer = VinculoFamiliarSerializer(contacts, many=True)
@@ -435,7 +448,13 @@ def vinculo_familiar_list_create(request):
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
 def vinculo_familiar_detail(request, pk):
     contact = get_object_or_404(
-        VinculoFamiliar.objects.select_related("persona", "jugador"),
+        VinculoFamiliar.objects.select_related(
+            "persona__genero",
+            "persona__domicilio__localidad",
+            "persona__domicilio__barrio",
+            "jugador",
+            "docente",
+        ),
         pk=pk,
     )
 
@@ -460,12 +479,13 @@ def vinculo_familiar_detail(request, pk):
         )
 
     player = contact.jugador
-    remaining_flags = list(
-        player.vinculos_familiares.exclude(pk=contact.pk).values_list("responsable_legal", flat=True)
-    )
-    error = player_contacts_error(player.socio.persona.fecha_nacimiento, remaining_flags)
-    if error:
-        return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+    if player is not None:
+        remaining_flags = list(
+            player.vinculos_familiares.exclude(pk=contact.pk).values_list("responsable_legal", flat=True)
+        )
+        error = player_contacts_error(player.socio.persona.fecha_nacimiento, remaining_flags)
+        if error:
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
     contact.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 
