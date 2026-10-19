@@ -12,7 +12,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage } from '../components/personas/format'
+import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -21,19 +21,7 @@ import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
-
-const getContacts = (player) => (player.vinculos_familiares ?? []).map((c) => ({
-  vinculo_familiar_id: c.vinculo_familiar_id,
-  persona: {
-    nombre: c.persona?.nombre ?? '',
-    apellido: c.persona?.apellido ?? '',
-    dni: c.persona?.dni ?? '',
-    telefono: c.persona?.telefono ?? '',
-    email: c.persona?.email ?? null,
-  },
-  relacion: c.relacion ?? '',
-  responsable_legal: Boolean(c.responsable_legal),
-}))
+import { getContactsPayload } from '../components/jugadores/contacts'
 
 function JugadorDetail() {
   const { id } = useParams()
@@ -98,9 +86,14 @@ function JugadorDetail() {
 
 
   const agregarContacto = async (contacto) => {
+    const contactoPayload = {
+      persona: contacto.persona,
+      relacion: contacto.relacion,
+      responsable_legal: Boolean(contacto.responsable_legal),
+    }
     try {
       const actualizado = await patchJugador(jugador.jugador_id, {
-        vinculos_familiares: [...getContacts(jugador), contacto],
+        vinculos_familiares: [...getContactsPayload(jugador), contactoPayload],
       })
       setJugador(actualizado)
     } catch (requestError) {
@@ -110,7 +103,7 @@ function JugadorDetail() {
 
   const eliminarContacto = async (contacto) => {
     try {
-      const contactosRestantes = getContacts(jugador)
+      const contactosRestantes = getContactsPayload(jugador)
         .filter((item) => item.vinculo_familiar_id !== contacto.vinculo_familiar_id)
       const actualizado = await patchJugador(jugador.jugador_id, {
         vinculos_familiares: contactosRestantes,
@@ -162,6 +155,8 @@ function JugadorDetail() {
   const socio = jugador.socio ?? {}
   const contactos = jugador.vinculos_familiares ?? []
   const activo = isActiveStatus(jugador.estado?.nombre)
+  const edadJugador = yearsSince(socio.fecha_nacimiento)
+  const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
 
   const tabs = [
     {
@@ -187,7 +182,15 @@ function JugadorDetail() {
       label: 'Familiar / Contactos',
       icon: 'family_restroom',
       badge: contactos.length ? { label: contactos.length, tono: 'info' } : undefined,
-      content: <FamilyTab contacts={contactos} onAdd={agregarContacto} onDelete={eliminarContacto} />,
+      content: (
+        <FamilyTab
+          contacts={contactos}
+          onAdd={agregarContacto}
+          onDelete={eliminarContacto}
+          domicilioTitular={socio}
+          mostrarResponsableLegal={mostrarResponsableLegal}
+        />
+      ),
     },
     {
       id: 'documentacion',
