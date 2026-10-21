@@ -4,7 +4,17 @@ import { PrimaryButton, Field, TabHeader, EmptyState } from './parts'
 import AddContactModal from '../../jugadores/AddContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
 
-function ContactDetailsModal({ contact, onClose }) {
+function formatearDomicilioContacto(person) {
+  if (!person?.domicilio_calle && !person?.domicilio_numero) return ''
+  const calleNumero = [person.domicilio_calle, person.domicilio_numero].filter(Boolean).join(' ')
+  const pisoDepto = [
+    person.domicilio_piso ? `Piso ${person.domicilio_piso}` : '',
+    person.domicilio_departamento ? `Depto ${person.domicilio_departamento}` : '',
+  ].filter(Boolean).join(' ')
+  return [calleNumero, pisoDepto].filter(Boolean).join(', ')
+}
+
+function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true }) {
   useEffect(() => {
     const closeWithEscape = (event) => event.key === 'Escape' && onClose()
     window.addEventListener('keydown', closeWithEscape)
@@ -13,6 +23,9 @@ function ContactDetailsModal({ contact, onClose }) {
 
   const person = contact.persona ?? {}
   const name = `${person.nombre ?? ''} ${person.apellido ?? ''}`.trim() || 'Sin nombre'
+  const domicilioTexto = formatearDomicilioContacto(person)
+  const entreCallesTexto = [person.domicilio_entre_calle_1, person.domicilio_entre_calle_2].filter(Boolean).join(' y ')
+  const ubicacionTexto = [person.domicilio_barrio_nombre, person.domicilio_localidad_nombre].filter(Boolean).join(', ')
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 bg-inverse-surface/40" onClick={onClose}>
@@ -30,9 +43,11 @@ function ContactDetailsModal({ contact, onClose }) {
               {contact.relacion && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-base font-medium">{contact.relacion}</span>
               )}
-              <span className={`text-base font-semibold ${contact.responsable_legal ? 'text-emerald-700' : 'text-on-surface-variant'}`}>
-                {contact.responsable_legal ? 'Responsable legal autorizado' : 'Solo contacto de emergencia'}
-              </span>
+              {mostrarResponsableLegal && (
+                <span className={`text-base font-semibold ${contact.responsable_legal ? 'text-emerald-700' : 'text-on-surface-variant'}`}>
+                  {contact.responsable_legal ? 'Responsable legal autorizado' : 'Solo contacto de emergencia'}
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -48,13 +63,18 @@ function ContactDetailsModal({ contact, onClose }) {
           <Field label="DNI" value={person.dni ? formatDni(person.dni) : ''} icon="badge" />
           <Field label="Teléfono" value={person.telefono} icon="call" />
           <Field label="Correo electrónico" value={person.email} icon="mail" className="sm:col-span-2" />
+          <Field label="Domicilio" value={domicilioTexto} icon="home_pin" className="sm:col-span-2" />
+          {entreCallesTexto && (
+            <Field label="Entre calles" value={entreCallesTexto} className="sm:col-span-2" />
+          )}
+          <Field label="Localidad / Barrio" value={ubicacionTexto} icon="location_on" className="sm:col-span-2" />
         </div>
       </div>
     </div>
   )
 }
 
-function DeleteContactModal({ contact, onClose, onConfirm }) {
+function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'jugador' }) {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const person = contact.persona ?? {}
@@ -103,7 +123,7 @@ function DeleteContactModal({ contact, onClose, onConfirm }) {
           </button>
         </div>
         <div className="p-6">
-          <p className="mt-1 text-base text-on-surface-variant">¿Estás seguro de eliminar a {name}?, esta acción quitará el vínculo familiar del jugador.</p>
+          <p className="mt-1 text-base text-on-surface-variant">¿Estás seguro de eliminar a {name}?, esta acción quitará el vínculo familiar del {etiquetaTitular}.</p>
           {error && <p className="mt-4 px-3 py-2 rounded-lg bg-error-container/40 text-base text-on-error-container" role="alert">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container">
@@ -130,16 +150,27 @@ function DeleteContactModal({ contact, onClose, onConfirm }) {
   )
 }
 
-export default function FamilyTab({ contacts = [], onAdd, onDelete }) {
+export default function FamilyTab({
+  contacts = [],
+  onAdd,
+  onDelete,
+  domicilioTitular = null,
+  etiquetaTitular = 'jugador',
+  mostrarResponsableLegal = true,
+}) {
   const [selectedContact, setSelectedContact] = useState(null)
   const [contactToDelete, setContactToDelete] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
+
+  const description = mostrarResponsableLegal
+    ? `Personas vinculadas al ${etiquetaTitular} para notificaciones y responsabilidad legal`
+    : `Personas vinculadas al ${etiquetaTitular} para notificaciones y contacto de emergencia`
 
   return (
     <div className="flex flex-col gap-6">
       <TabHeader
         title="Vínculos familiares y contactos de emergencia"
-        description="Personas vinculadas al jugador para notificaciones y responsabilidad legal"
+        description={description}
         actions={onAdd && (
           <PrimaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar contacto</PrimaryButton>
         )}
@@ -149,21 +180,41 @@ export default function FamilyTab({ contacts = [], onAdd, onDelete }) {
         <EmptyState
           icon="family_restroom"
           title="Sin contactos registrados"
-          description="Este jugador todavía no tiene familiares ni contactos de emergencia cargados."
+          description={`Este ${etiquetaTitular} todavía no tiene familiares ni contactos de emergencia cargados.`}
         />
       ) : (
         <ContactosTable
           contacts={contacts}
           onSelect={setSelectedContact}
           onDelete={onDelete ? setContactToDelete : undefined}
+          mostrarResponsableLegal={mostrarResponsableLegal}
         />
       )}
 
-      {selectedContact && <ContactDetailsModal contact={selectedContact} onClose={() => setSelectedContact(null)} />}
-      {contactToDelete && onDelete && (
-        <DeleteContactModal contact={contactToDelete} onClose={() => setContactToDelete(null)} onConfirm={onDelete} />
+      {selectedContact && (
+        <ContactDetailsModal
+          contact={selectedContact}
+          onClose={() => setSelectedContact(null)}
+          mostrarResponsableLegal={mostrarResponsableLegal}
+        />
       )}
-      {addModalOpen && <AddContactModal onClose={() => setAddModalOpen(false)} onSubmit={onAdd} />}
+      {contactToDelete && onDelete && (
+        <DeleteContactModal
+          contact={contactToDelete}
+          onClose={() => setContactToDelete(null)}
+          onConfirm={onDelete}
+          etiquetaTitular={etiquetaTitular}
+        />
+      )}
+      {addModalOpen && (
+        <AddContactModal
+          onClose={() => setAddModalOpen(false)}
+          onSubmit={onAdd}
+          domicilioTitular={domicilioTitular}
+          etiquetaTitular={etiquetaTitular}
+          mostrarResponsableLegal={mostrarResponsableLegal}
+        />
+      )}
     </div>
   )
 }

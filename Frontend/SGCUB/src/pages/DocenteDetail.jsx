@@ -7,8 +7,10 @@ import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModa
 import PersonHeader, { EditButton, DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
+import FamilyTab from '../components/personas/tabs/FamilyTab'
 import CategoriesTab from '../components/personas/tabs/CategoriesTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
+import { getContactsPayload } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
@@ -67,6 +69,35 @@ function DocenteDetail() {
     }
   }
 
+  const agregarContacto = async (contacto) => {
+    const contactoPayload = {
+      persona: contacto.persona,
+      relacion: contacto.relacion,
+      responsable_legal: false,
+    }
+    try {
+      const actualizado = await patchDocente(docente.docente_id, {
+        vinculos_familiares: [...getContactsPayload(docente), contactoPayload],
+      })
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo agregar el contacto.'), { cause: requestError })
+    }
+  }
+
+  const eliminarContacto = async (contacto) => {
+    try {
+      const contactosRestantes = getContactsPayload(docente)
+        .filter((item) => item.vinculo_familiar_id !== contacto.vinculo_familiar_id)
+      const actualizado = await patchDocente(docente.docente_id, {
+        vinculos_familiares: contactosRestantes,
+      })
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo eliminar el contacto.'), { cause: requestError })
+    }
+  }
+
   const confirmarBaja = async () => {
     setDandoDeBaja(true)
     setErrorBaja('')
@@ -107,6 +138,7 @@ function DocenteDetail() {
   }
 
   const persona = docente.persona_detalle ?? {}
+  const contactos = docente.vinculos_familiares ?? []
   const nombresCargos = (docente.asignaciones ?? []).map((asignacion) => asignacion.cargo_nombre).filter(Boolean).join(', ')
   const activo = isActiveStatus(docente.estado_nombre)
 
@@ -116,6 +148,22 @@ function DocenteDetail() {
       label: 'Datos personales',
       icon: 'person',
       content: <PersonalDataTab persona={persona} localidades={localidades} />,
+    },
+    {
+      id: 'familiar',
+      label: 'Familiar / Contactos',
+      icon: 'family_restroom',
+      badge: contactos.length ? { label: contactos.length, tono: 'info' } : undefined,
+      content: (
+        <FamilyTab
+          contacts={contactos}
+          onAdd={agregarContacto}
+          onDelete={eliminarContacto}
+          domicilioTitular={persona}
+          etiquetaTitular="docente"
+          mostrarResponsableLegal={false}
+        />
+      ),
     },
     {
       id: 'documentacion',

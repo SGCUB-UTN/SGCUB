@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
 import { putSocio } from '../api/socios'
 import AddContactModal from '../components/jugadores/AddContactModal'
-import { RELATIONS } from '../components/jugadores/contacts'
+import FilaContacto from '../components/jugadores/FilaContacto'
+import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
 import { formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
 import PageHeader from '../components/shared/PageHeader'
@@ -15,8 +16,6 @@ import useEstados from '../hooks/useEstados'
 import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
-
-const CAMPOS_CONTACTO = ['dni', 'nombre', 'apellido', 'telefono', 'relacion']
 
 const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', obra_social_otra: '', tallaIndumentaria: '' }
 
@@ -52,9 +51,6 @@ const TALLES = [
   { valor: 'XXL', nombre: 'Doble extra grande' },
 ]
 
-let ultimaClave = 0
-const nuevaClave = () => `contacto-${++ultimaClave}`
-
 const jugadorAFormulario = (jugador) => ({
   ...socioAFormulario(jugador.socio ?? {}),
   categoria: String(jugador.categoria?.categoria_id ?? ''),
@@ -63,33 +59,6 @@ const jugadorAFormulario = (jugador) => ({
   ...obraSocialAFormulario(jugador.obra_social),
   tallaIndumentaria: jugador.tallaIndumentaria ?? '',
 })
-
-const contactoAFila = (contacto) => ({
-  clave: nuevaClave(),
-  vinculo_familiar_id: contacto.vinculo_familiar_id,
-  dni: String(contacto.persona?.dni ?? ''),
-  nombre: contacto.persona?.nombre ?? '',
-  apellido: contacto.persona?.apellido ?? '',
-  telefono: contacto.persona?.telefono ?? '',
-  email: contacto.persona?.email ?? '',
-  relacion: contacto.relacion ?? '',
-  responsable_legal: Boolean(contacto.responsable_legal),
-})
-
-const filaAContacto = (fila) => ({
-  ...(fila.vinculo_familiar_id ? { vinculo_familiar_id: fila.vinculo_familiar_id } : {}),
-  persona: {
-    dni: fila.dni.trim(),
-    nombre: fila.nombre.trim(),
-    apellido: fila.apellido.trim(),
-    telefono: fila.telefono.trim(),
-    email: fila.email.trim() || null,
-  },
-  relacion: fila.relacion,
-  responsable_legal: fila.responsable_legal,
-})
-
-const idCampoContacto = (fila, campo) => `${fila.clave}-${campo}`
 
 const LETRA_GENERO = { Masculino: 'M', Femenino: 'F' }
 
@@ -114,23 +83,6 @@ function validarDeportivo(formulario, editando) {
   return errores
 }
 
-function validarContactos(contactos) {
-  const errores = {}
-  const dnis = new Set()
-  contactos.forEach((fila) => {
-    CAMPOS_CONTACTO.forEach((campo) => {
-      if (!String(fila[campo] ?? '').trim()) errores[idCampoContacto(fila, campo)] = 'Obligatorio.'
-    })
-    const dni = fila.dni.trim()
-    if (dni && !/^\d{7,8}$/.test(dni)) errores[idCampoContacto(fila, 'dni')] = 'DNI de 7 u 8 dígitos.'
-    else if (dni && dnis.has(dni)) errores[idCampoContacto(fila, 'dni')] = 'DNI repetido.'
-    dnis.add(dni)
-    const email = fila.email.trim()
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errores[idCampoContacto(fila, 'email')] = 'Correo inválido.'
-  })
-  return errores
-}
-
 const EDAD_MAYORIA = 18
 
 function edadActual(fechaNacimiento) {
@@ -148,83 +100,6 @@ function errorVinculos(contactos, fechaNacimiento) {
     return 'El jugador es menor de edad: al menos un vínculo familiar debe ser responsable legal.'
   }
   return null
-}
-
-function FilaContacto({ fila, indice, errores, mostrarSinGuardar, resaltarResponsable, onChange, onRemove }) {
-  const bind = (campo) => ({
-    id: idCampoContacto(fila, campo),
-    value: fila[campo],
-    onChange: (event) => onChange(campo, event.target.value),
-  })
-  const error = (campo) => errores[idCampoContacto(fila, campo)]
-
-  return (
-    <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low/30 p-4 flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center">{indice + 1}</span>
-          <span className="text-base font-semibold text-on-surface">
-            {`${fila.nombre} ${fila.apellido}`.trim() || 'Nuevo contacto'}
-          </span>
-          {mostrarSinGuardar && !fila.vinculo_familiar_id && (
-            <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-sm font-medium">Sin guardar</span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-sm font-medium text-error hover:bg-error-container/40 transition-colors cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-base">delete</span>
-          Quitar
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
-        <Campo id={idCampoContacto(fila, 'dni')} label="DNI" requerido error={error('dni')}>
-          <input
-            {...bind('dni')}
-            onChange={(event) => onChange('dni', event.target.value.replace(/\D/g, '').slice(0, 8))}
-            type="text"
-            inputMode="numeric"
-            placeholder="Ej: 28492104"
-            className={claseInput(Boolean(error('dni')), 'font-mono')}
-          />
-        </Campo>
-        <Campo id={idCampoContacto(fila, 'nombre')} label="Nombre" requerido error={error('nombre')}>
-          <input {...bind('nombre')} type="text" className={claseInput(Boolean(error('nombre')))} />
-        </Campo>
-        <Campo id={idCampoContacto(fila, 'apellido')} label="Apellido" requerido error={error('apellido')}>
-          <input {...bind('apellido')} type="text" className={claseInput(Boolean(error('apellido')))} />
-        </Campo>
-        <Campo id={idCampoContacto(fila, 'telefono')} label="Teléfono" requerido error={error('telefono')}>
-          <InputConIcono {...bind('telefono')} type="tel" icono="call" conError={Boolean(error('telefono'))} />
-        </Campo>
-        <Campo id={idCampoContacto(fila, 'email')} label="Correo electrónico" opcional error={error('email')}>
-          <InputConIcono {...bind('email')} type="email" icono="mail" conError={Boolean(error('email'))} />
-        </Campo>
-        <Campo id={idCampoContacto(fila, 'relacion')} label="Relación" requerido error={error('relacion')}>
-          <SelectConFlecha {...bind('relacion')} conError={Boolean(error('relacion'))}>
-            <option value="" disabled>Seleccionar...</option>
-            {/* Conserva RELATIONS cargadas antes que no estén en la lista actual. */}
-            {[...new Set([...RELATIONS, ...(fila.relacion ? [fila.relacion] : [])])].map((relacion) => (
-              <option key={relacion} value={relacion}>{relacion}</option>
-            ))}
-          </SelectConFlecha>
-        </Campo>
-      </div>
-
-      <label className={`flex items-center gap-2 cursor-pointer select-none w-fit ${resaltarResponsable ? 'px-2 py-1 -mx-2 rounded border-2 border-error bg-error-container/30' : ''}`}>
-        <input
-          type="checkbox"
-          className="w-4 h-4 accent-primary cursor-pointer"
-          checked={fila.responsable_legal}
-          onChange={(event) => onChange('responsable_legal', event.target.checked)}
-        />
-        <span className="text-base text-on-surface font-medium">Responsable legal</span>
-      </label>
-    </div>
-  )
 }
 
 function JugadorForm() {
@@ -255,9 +130,10 @@ function JugadorForm() {
     getJugador(id)
       .then((datos) => {
         if (!activo) return
+        const formInicial = jugadorAFormulario(datos)
         setJugador(datos)
-        setFormulario(jugadorAFormulario(datos))
-        setContactos((datos.vinculos_familiares ?? []).map(contactoAFila))
+        setFormulario(formInicial)
+        setContactos((datos.vinculos_familiares ?? []).map((c) => contactoAFila(c, formInicial)))
       })
       .catch((requestError) => {
         if (activo) setErrorCarga(requestError.response?.data?.detail || 'No se pudo cargar el jugador.')
@@ -391,17 +267,26 @@ function JugadorForm() {
   const actualizarContacto = (clave, campo, valor) => {
     setContactos((actuales) => actuales.map((fila) => (fila.clave === clave ? { ...fila, [campo]: valor } : fila)))
     limpiarError(`${clave}-${campo}`)
+    if (campo === 'mismo_domicilio') {
+      CAMPOS_DOMICILIO_CONTACTO.forEach((c) => limpiarError(`${clave}-${c}`))
+    }
     if (campo === 'responsable_legal') limpiarError('vinculos_familiares')
   }
 
   const quitarContacto = (clave) => setContactos((actuales) => actuales.filter((fila) => fila.clave !== clave))
 
+  const edadJugador = edadActual(formulario?.fecha_nacimiento)
+  const mostrarResponsableLegal = edadJugador === null || edadJugador < EDAD_MAYORIA
+
   const agregarContacto = async (contacto) => {
     const dni = String(contacto.persona?.dni ?? '').trim()
+    if (dni && dni === dniIngresado) {
+      throw new Error('No se puede registrar al mismo jugador como su propio contacto.')
+    }
     if (contactos.some((fila) => fila.dni.trim() === dni)) {
       throw new Error('Esta persona ya figura entre los contactos del jugador.')
     }
-    setContactos((actuales) => [...actuales, contactoAFila(contacto)])
+    setContactos((actuales) => [...actuales, contactoAFila(contacto, formulario)])
     limpiarError('vinculos_familiares')
   }
 
@@ -412,7 +297,7 @@ function JugadorForm() {
     const nuevosErrores = {
       ...validar(formulario, esGeneroOtro),
       ...validarDeportivo(formulario, editando),
-      ...validarContactos(contactos),
+      ...validarContactos(contactos, dniIngresado, 'jugador'),
     }
     if (socioDuplicado) nuevosErrores.dni = 'Ya existe otro socio registrado con este DNI.'
     if (jugadorDelSocio) nuevosErrores.dni = 'Este socio ya está registrado como jugador.'
@@ -423,7 +308,7 @@ function JugadorForm() {
 
     const ordenCampos = [
       ...CAMPOS_OBLIGATORIOS, 'genero_otro', 'categoria', 'estado', 'obra_social', 'obra_social_otra', 'tallaIndumentaria',
-      ...contactos.flatMap((fila) => [...CAMPOS_CONTACTO, 'email'].map((campo) => idCampoContacto(fila, campo))),
+      ...contactos.flatMap((fila) => [...CAMPOS_CONTACTO, 'email', ...CAMPOS_DOMICILIO_CONTACTO].map((campo) => idCampoContacto(fila, campo))),
       'vinculos_familiares',
     ]
     const primerError = ordenCampos.find((campo) => nuevosErrores[campo])
@@ -442,7 +327,7 @@ function JugadorForm() {
       ...(editando ? { estado } : {}),
       obra_social: obra_social === OBRA_SOCIAL_OTRA ? obra_social_otra.trim() : obra_social,
       tallaIndumentaria,
-      vinculos_familiares: contactos.map(filaAContacto),
+      vinculos_familiares: contactos.map((fila) => filaAContacto(fila, formulario, mostrarResponsableLegal)),
     }
 
     setGuardando(true)
@@ -784,7 +669,9 @@ function JugadorForm() {
                     fila={fila}
                     indice={indice}
                     errores={errores}
+                    localidades={localidades}
                     mostrarSinGuardar={editando}
+                    mostrarResponsableLegal={mostrarResponsableLegal}
                     resaltarResponsable={Boolean(errores.vinculos_familiares)}
                     onChange={(campo, valor) => actualizarContacto(fila.clave, campo, valor)}
                     onRemove={() => quitarContacto(fila.clave)}
@@ -822,7 +709,12 @@ function JugadorForm() {
       </div>
 
       {agregandoContacto && (
-        <AddContactModal onClose={() => setAgregandoContacto(false)} onSubmit={agregarContacto} />
+        <AddContactModal
+          onClose={() => setAgregandoContacto(false)}
+          onSubmit={agregarContacto}
+          domicilioTitular={formulario}
+          mostrarResponsableLegal={mostrarResponsableLegal}
+        />
       )}
     </div>
   )

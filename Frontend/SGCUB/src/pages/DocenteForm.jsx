@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, API_ORIGIN } from '../api/conf'
 import { getCargosDocente, getDocente, patchDocente, postDocente } from '../api/docentes'
 import { esCategoriaAsignable, etiquetaCategoria } from '../components/docentes/docentesUtils'
+import AddContactModal from '../components/jugadores/AddContactModal'
+import FilaContacto from '../components/jugadores/FilaContacto'
+import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
 import { ErrorFile, LoadingFile } from '../components/personas/FileStatus'
 import { formatDate, formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
@@ -161,6 +164,8 @@ function DocenteForm() {
 
   const [formularioEditado, setFormulario] = useState(() => personaAFormulario(FORM_INICIAL))
   const [asignaciones, setAsignaciones] = useState(() => [nuevaAsignacion()])
+  const [contactos, setContactos] = useState([])
+  const [agregandoContacto, setAgregandoContacto] = useState(false)
   const [errores, setErrores] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [errorGuardado, setErrorGuardado] = useState('')
@@ -212,9 +217,11 @@ function DocenteForm() {
     getDocente(id)
       .then(async (docente) => {
         if (!activo) return
+        const formInicial = personaAFormulario(docente.persona_detalle ?? {})
         setDocenteOriginal(docente)
-        setFormulario(personaAFormulario(docente.persona_detalle ?? {}))
+        setFormulario(formInicial)
         setAsignaciones(asignacionesAFilas(docente.asignaciones))
+        setContactos((docente.vinculos_familiares ?? []).map((c) => contactoAFila(c, formInicial)))
 
         try{
           const tipoId = await obtenerTipoAntecedentes()
@@ -337,6 +344,27 @@ function DocenteForm() {
 
   const quitarAsignacion = (clave) => setAsignaciones((actuales) => actuales.filter((fila) => fila.clave !== clave))
 
+  const actualizarContacto = (clave, campo, valor) => {
+    setContactos((actuales) => actuales.map((fila) => (fila.clave === clave ? { ...fila, [campo]: valor } : fila)))
+    limpiarError(`${clave}-${campo}`)
+    if (campo === 'mismo_domicilio') {
+      CAMPOS_DOMICILIO_CONTACTO.forEach((c) => limpiarError(`${clave}-${c}`))
+    }
+  }
+
+  const quitarContacto = (clave) => setContactos((actuales) => actuales.filter((fila) => fila.clave !== clave))
+
+  const agregarContacto = async (contacto) => {
+    const dni = String(contacto.persona?.dni ?? '').trim()
+    if (dni && dni === dniIngresado) {
+      throw new Error('No se puede registrar al mismo docente como su propio contacto.')
+    }
+    if (contactos.some((fila) => fila.dni.trim() === dni)) {
+      throw new Error('Esta persona ya figura entre los contactos del docente.')
+    }
+    setContactos((actuales) => [...actuales, contactoAFila(contacto, formulario)])
+  }
+
   const guardar = async (event) => {
     event.preventDefault()
     setErrorGuardado('')
@@ -344,6 +372,7 @@ function DocenteForm() {
     const nuevosErrores = {
       ...validar(formulario, esGeneroOtro),
       ...validarAsignaciones(asignaciones),
+      ...validarContactos(contactos, dniIngresado, 'docente'),
     }
     if (criminalRecordRequired && !archivoAntecedente && !criminalRecordDelivered) {
       nuevosErrores.antecedente_penal = 'Adjuntá el PDF de antecedentes penales o indicá que el documento fue entregado.'
@@ -355,6 +384,7 @@ function DocenteForm() {
     const ordenCampos = [
       ...CAMPOS_OBLIGATORIOS, 'genero_otro', 'antecedente_penal',
       ...asignaciones.flatMap((fila) => CAMPOS_ASIGNACION.map((campo) => idCampoAsignacion(fila, campo))),
+      ...contactos.flatMap((fila) => [...CAMPOS_CONTACTO, 'email', ...CAMPOS_DOMICILIO_CONTACTO].map((campo) => idCampoContacto(fila, campo))),
     ]
     const primerError = ordenCampos.find((campo) => nuevosErrores[campo])
     if (primerError) {
@@ -369,11 +399,19 @@ function DocenteForm() {
       domicilio_localidad: formulario.domicilio_localidad || null,
     }
 
+    const vinculosPayload = contactos.map((fila) => ({
+      ...filaAContacto(fila, formulario),
+      responsable_legal: false,
+    }))
+
     setGuardando(true)
     if (editando) {
       try {
         await api.patch(`padron/persona/${docenteOriginal.persona}/`, datosPersona)
-        await patchDocente(id, { asignaciones: filasAAsignaciones(asignaciones) })
+        await patchDocente(id, {
+          asignaciones: filasAAsignaciones(asignaciones),
+          vinculos_familiares: vinculosPayload,
+        })
 
         if (archivoAntecedente || criminalRecordDelivered) await saveCriminalRecord(docenteOriginal.persona)
 
@@ -396,7 +434,11 @@ function DocenteForm() {
         : (await api.post('padron/persona/', datosPersona)).data.persona_id
 
       // El backend crea el docente y sus cargos en una sola operación y asigna el legajo
-      docente = await postDocente({ persona: personaId, asignaciones: filasAAsignaciones(asignaciones) })
+      docente = await postDocente({
+        persona: personaId,
+        asignaciones: filasAAsignaciones(asignaciones),
+        vinculos_familiares: vinculosPayload,
+      })
       
       if (archivoAntecedente || criminalRecordDelivered) {
         await saveCriminalRecord(personaId)
@@ -760,6 +802,48 @@ function DocenteForm() {
                 />
               ))}
             </div>
+
+            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
+              <SeccionTitulo
+                icono="family_restroom"
+                titulo="Vínculos familiares y contactos de emergencia"
+                extra={(
+                  <button
+                    id="vinculos_familiares"
+                    type="button"
+                    onClick={() => setAgregandoContacto(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-semibold text-primary border border-primary/40 hover:bg-primary/10 transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base">person_add</span>
+                    Agregar contacto
+                  </button>
+                )}
+              />
+
+              {contactos.length === 0 ? (
+                <div className="flex flex-col items-center text-center gap-1 py-8 border border-dashed border-outline-variant/50 rounded-lg">
+                  <span className="material-symbols-outlined text-[32px] text-outline">contact_emergency</span>
+                  <p className="text-base font-semibold text-on-surface">Sin contactos registrados</p>
+                  <p className="text-sm text-on-surface-variant">Podés agregar un familiar o contacto de emergencia para este docente.</p>
+                </div>
+              ) : (
+                contactos.map((fila, indice) => (
+                  <FilaContacto
+                    key={fila.clave}
+                    fila={fila}
+                    indice={indice}
+                    errores={errores}
+                    localidades={localidades}
+                    mostrarSinGuardar={editando}
+                    mostrarResponsableLegal={false}
+                    etiquetaTitular="docente"
+                    onChange={(campo, valor) => actualizarContacto(fila.clave, campo, valor)}
+                    onRemove={() => quitarContacto(fila.clave)}
+                  />
+                ))
+              )}
+            </div>
+
             <div className="mt-8 pt-6 border-t border-outline-variant/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="text-base text-on-surface-variant flex items-center gap-1.5">
                 <span className="text-error font-bold">*</span> Campos obligatorios
@@ -786,6 +870,16 @@ function DocenteForm() {
           </div>
         </form>
       </div>
+
+      {agregandoContacto && (
+        <AddContactModal
+          onClose={() => setAgregandoContacto(false)}
+          onSubmit={agregarContacto}
+          domicilioTitular={formulario}
+          etiquetaTitular="docente"
+          mostrarResponsableLegal={false}
+        />
+      )}
     </div>
   )
 }

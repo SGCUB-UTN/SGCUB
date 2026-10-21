@@ -1149,3 +1149,111 @@ class PadronViewTests(APITestCase):
     def test_docente_delete_no_existe(self):
         response = self.client.delete("/api/padron/docente/9999/", format="json")
         self.assertEqual(status.HTTP_404_NOT_FOUND, response.status_code)
+
+    def test_vinculo_familiar_guarda_domicilio_contacto(self):
+        barrio = Barrio.objects.create(nombre="Tolosa", localidad=self.localidad)
+        socio = self.crear_socio_menor_orm()
+        categoria = self.crear_categoria_orm()
+        response = self.create_jugador(
+            socio.socio_id,
+            categoria.pk,
+            vinculos_familiares=[{
+                "persona": {
+                    "dni": "20444555",
+                    "nombre": "Ana",
+                    "apellido": "Perez",
+                    "telefono": "221555",
+                    "domicilio_calle": "Calle 50",
+                    "domicilio_numero": "1240",
+                    "domicilio_piso": "3",
+                    "domicilio_departamento": "B",
+                    "domicilio_entre_calle_1": "19",
+                    "domicilio_entre_calle_2": "20",
+                    "domicilio_localidad": self.localidad.pk,
+                    "domicilio_barrio": barrio.pk,
+                },
+                "relacion": "Madre",
+                "responsable_legal": True,
+            }],
+        )
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        contacto = response.data["vinculos_familiares"][0]["persona"]
+        self.assertEqual("Calle 50", contacto["domicilio_calle"])
+        self.assertEqual("1240", contacto["domicilio_numero"])
+        self.assertEqual("3", contacto["domicilio_piso"])
+        self.assertEqual("B", contacto["domicilio_departamento"])
+        self.assertEqual(self.localidad.pk, contacto["domicilio_localidad"])
+        self.assertEqual(barrio.pk, contacto["domicilio_barrio"])
+
+    def test_vinculo_familiar_domicilio_incompleto_falla(self):
+        socio = self.crear_socio_menor_orm()
+        categoria = self.crear_categoria_orm()
+        response = self.create_jugador(
+            socio.socio_id,
+            categoria.pk,
+            vinculos_familiares=[{
+                "persona": {
+                    "dni": "20444555",
+                    "nombre": "Ana",
+                    "apellido": "Perez",
+                    "telefono": "221555",
+                    "domicilio_calle": "Calle 50",
+                },
+                "relacion": "Madre",
+                "responsable_legal": True,
+            }],
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+    def test_docente_post_y_patch_con_vinculos_familiares(self):
+        persona = self.crear_persona_orm()
+        response = self.create_docente(
+            persona.persona_id,
+            vinculos_familiares=[{
+                "persona": {
+                    "dni": "25666777",
+                    "nombre": "Laura",
+                    "apellido": "Gomez",
+                    "telefono": "2214445566",
+                    "domicilio_calle": "Calle 12",
+                    "domicilio_numero": "850",
+                    "domicilio_localidad": self.localidad.pk,
+                },
+                "relacion": "Pareja",
+            }],
+        )
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        self.assertEqual(1, len(response.data["vinculos_familiares"]))
+        self.assertEqual("Pareja", response.data["vinculos_familiares"][0]["relacion"])
+        self.assertEqual("Calle 12", response.data["vinculos_familiares"][0]["persona"]["domicilio_calle"])
+        self.assertFalse(response.data["vinculos_familiares"][0]["responsable_legal"])
+
+        docente_id = response.data["docente_id"]
+        patch_response = self.client.patch(
+            f"/api/padron/docente/{docente_id}/",
+            {"vinculos_familiares": []},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_200_OK, patch_response.status_code, patch_response.data)
+        self.assertEqual([], patch_response.data["vinculos_familiares"])
+        self.assertFalse(VinculoFamiliar.objects.filter(docente_id=docente_id).exists())
+
+    def test_jugador_y_docente_no_pueden_ser_su_propio_contacto(self):
+        socio = self.crear_socio_menor_orm()
+        categoria = self.crear_categoria_orm()
+        jugador_resp = self.create_jugador(
+            socio.socio_id,
+            categoria.pk,
+            vinculos_familiares=[self.contacto_payload(dni=socio.persona.dni)],
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, jugador_resp.status_code)
+        self.assertIn("vinculos_familiares", jugador_resp.data)
+
+        persona_docente = self.crear_persona_orm(dni="35666777")
+        docente_resp = self.create_docente(
+            persona_docente.persona_id,
+            asignaciones=[{"cargo": self.cargo().pk, "categorias": [categoria.pk]}],
+            vinculos_familiares=[self.contacto_payload(dni=persona_docente.dni, responsable_legal=False)],
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, docente_resp.status_code)
+        self.assertIn("vinculos_familiares", docente_resp.data)
