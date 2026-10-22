@@ -57,10 +57,9 @@ const SORT_VALUES = {
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function SociosTable({ data, isLoading, error }) {
+function SociosTable({ data, isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('activo')
 
   const socios = useMemo(() => data ?? [], [data])
 
@@ -76,8 +75,13 @@ function SociosTable({ data, isLoading, error }) {
   }, [socios, search, status])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const [previousStatus, setPreviousStatus] = useState(status)
+  if (status !== previousStatus) {
+    setPreviousStatus(status)
+    resetPage()
+  }
 
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
@@ -92,7 +96,7 @@ function SociosTable({ data, isLoading, error }) {
           <FilterSelect
             className="bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm focus:outline-none focus:border-primary cursor-pointer"
             value={status}
-            onChange={(event) => withPageReset(setStatus)(event.target.value)}
+            onChange={(event) => onStatusChange(event.target.value)}
             aria-label="Filtrar por estado"
           >
             <option value="activo">Estado: Activo</option>

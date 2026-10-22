@@ -13,7 +13,7 @@ const SIZES = {
 
 const BASE_CLASS = 'min-w-0 w-full text-left bg-surface-container-lowest border rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 
-export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, wrapContent = false, onClick, isSelected = false }) {
+export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, onClick, isSelected = false }) {
   const style = TONES[tone] ?? TONES.neutral
   const sizeStyle = SIZES[size] ?? SIZES.md
   const Container = onClick ? 'button' : 'div'

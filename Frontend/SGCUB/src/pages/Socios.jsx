@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
@@ -8,6 +8,7 @@ import useSocio from '../hooks/useSocio'
 function Padron() {
   const { socios, isLoading, error } = useSocio({ onlyMembers: true })
   const navigate = useNavigate()
+  const [status, setStatus] = useState('activo')
 
   const totales = useMemo(() => {
     const activos = socios.filter((socio) => {
@@ -41,9 +42,9 @@ function Padron() {
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-          <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" />
-          <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" />
-          <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" />
+          <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+          <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+          <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
 
         <section aria-label="Socios">
@@ -51,6 +52,8 @@ function Padron() {
             data={socios}
             isLoading={isLoading}
             error={error}
+            status={status}
+            onStatusChange={setStatus}
             onEdit={(socio) => navigate(`/padron/socios/${socio.socio_id}/editar`)}
           />
         </section>

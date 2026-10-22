@@ -19,7 +19,6 @@ export default function ComunicacionesKPIs({ kpis }) {
         caption={`mensajes enviados con éxito`}
         icon="outbox"
         tone="neutral"
-        wrapContent
       />
       <StatCard
         size="lg"
@@ -29,7 +28,6 @@ export default function ComunicacionesKPIs({ kpis }) {
         caption={data.canales_activos_texto}
         icon="verified"
         tone="warning"
-        wrapContent
       />
       <StatCard
         size="lg"
@@ -39,7 +37,6 @@ export default function ComunicacionesKPIs({ kpis }) {
         caption="requieren actualizar datos de contacto"
         icon="phonelink_erase"
         tone="error"
-        wrapContent
       />
     </div>
   )
