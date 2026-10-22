@@ -9,7 +9,7 @@ import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
-import { collectErrorMessages } from '../components/personas/format'
+import { collectErrorMessages, formatDni } from '../components/personas/format'
 import { CUOTA_STATES, countByState, isOverdue } from '../components/finanzas/cuotaStates'
 
 const FORMULARIO_INICIAL = {
@@ -61,7 +61,7 @@ function Cuotas() {
     .filter(esSocioActivo)
     .map((socio) => ({
       value: String(socio.socio_id),
-      label: `${socio.apellido}, ${socio.nombre} - DNI ${socio.dni}`,
+      label: `${socio.apellido}, ${socio.nombre} - DNI ${formatDni(socio.dni)}`,
     })), [socios])
 
   const resumen = useMemo(() => {

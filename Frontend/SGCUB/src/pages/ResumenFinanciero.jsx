@@ -293,7 +293,6 @@ function ResumenFinanciero() {
         <DataTable
           className="min-w-full"
           tableClassName="min-w-[780px]"
-          bodyClassName="text-base"
           headers={(
             <>
               <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatDni, formatPhone } from '../personas/format'
 
 export default function IndividualPlayerSelector({
   socios = [],
@@ -37,7 +38,7 @@ export default function IndividualPlayerSelector({
         id: 'socio_tel',
         nombre: `${selectedSocio.nombre} ${selectedSocio.apellido}`.trim(),
         tipo: 'Teléfono celular',
-        dato: `Tel: ${selectedSocio.telefono}`,
+        dato: `Tel: ${formatPhone(selectedSocio.telefono)}`,
         canal: 'WhatsApp',
       })
     }
@@ -127,7 +128,7 @@ export default function IndividualPlayerSelector({
                           {nombre}
                         </span>
                         <span className="text-xs text-on-surface-variant">
-                          DNI {dni} • {num} {s.telefono ? `• Tel: ${s.telefono}` : ''} {s.email ? `• ${s.email}` : ''}
+                          DNI {formatDni(dni)} • {num} {s.telefono ? `• Tel: ${formatPhone(s.telefono)}` : ''} {s.email ? `• ${s.email}` : ''}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -162,7 +163,7 @@ export default function IndividualPlayerSelector({
                   {selectedSocio.nombre} {selectedSocio.apellido}
                 </span>
                 <span className="text-xs text-on-surface-variant">
-                  DNI {selectedSocio.dni} • Socio N° {selectedSocio.numero_socio ?? 'S/N'}
+                  DNI {formatDni(selectedSocio.dni)} • Socio N° {selectedSocio.numero_socio ?? 'S/N'}
                 </span>
               </div>
             </div>

@@ -9,6 +9,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { formatDni } from '../personas/format'
 import { cargosDe, esActivo, exportarNominaCSV } from './docentesUtils'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
@@ -116,8 +117,6 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-lg"
         headers={(
           <>
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
@@ -153,9 +152,9 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
               <td className="py-3 px-4">
                 <span className="font-medium text-on-surface block text-base">{fullName(docente) || '—'}</span>
               </td>
-              <td className="py-3 px-4 text-on-surface-variant text-sm">{docente.persona_detalle?.dni ?? '—'}</td>
-              <td className="py-3 px-4 text-on-surface-variant text-sm">{cargosDe(docenteCategorias).join(', ') || '—'}</td>
-              <td className="py-3 px-4 text-on-surface-variant text-sm">{categoryNames(docenteCategorias)}</td>
+              <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
+              <td className="py-3 px-4 text-on-surface-variant">{cargosDe(docenteCategorias).join(', ') || '—'}</td>
+              <td className="py-3 px-4 text-on-surface-variant">{categoryNames(docenteCategorias)}</td>
               <td className="py-3 px-4">
                 <ActiveStatusBadge isActive={esActivo(docente)} label={esActivo(docente) ? 'Activo' : 'De baja'} />
               </td>

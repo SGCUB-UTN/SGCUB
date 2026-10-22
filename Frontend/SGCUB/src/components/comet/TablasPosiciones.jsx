@@ -48,8 +48,6 @@ export default function TablasPosiciones({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <th className="py-3 px-4 w-12 text-center" scope="col">#</th>
@@ -80,13 +78,13 @@ export default function TablasPosiciones({ data, isLoading, error }) {
             <tr key={`${fila._posicion}-${fila.equipo}`} className={`hover:bg-surface-container-low/60 transition-colors ${claseFila(fila._posicion)}`}>
               <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{fila._posicion}</td>
               <td className="py-3 px-4 font-semibold text-on-surface">{fila.equipo || '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.pj ?? '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.pg ?? '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.pe ?? '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.pp ?? '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.gf ?? '—'}</td>
-              <td className="py-3 px-3 text-center text-on-surface-variant">{fila.gc ?? '—'}</td>
-              <td className="py-3 px-3 text-center font-bold text-primary">
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.pj ?? '—'}</td>
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.pg ?? '—'}</td>
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.pe ?? '—'}</td>
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.pp ?? '—'}</td>
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.gf ?? '—'}</td>
+              <td className="py-3 px-4 text-center text-on-surface-variant">{fila.gc ?? '—'}</td>
+              <td className="py-3 px-4 text-center font-bold text-primary">
                 {fila.puntos ?? '—'}
                 {dg !== 0 && (
                   <span className="block text-xs font-normal text-on-surface-variant">

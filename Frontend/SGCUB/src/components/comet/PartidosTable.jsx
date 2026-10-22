@@ -70,8 +70,6 @@ export default function PartidosTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Fecha" columna="fecha" orden={sort} onOrdenar={sortAndReset} />
@@ -93,7 +91,7 @@ export default function PartidosTable({ data, isLoading, error }) {
 
         {!isLoading && visibleRows.map((p) => (
           <tr key={p.id} className="hover:bg-surface-container-low/80 transition-colors">
-            <td className="py-3 px-4 pl-6 font-mono text-sm text-on-surface">{p.fecha || '—'}{p.hora ? ` ${p.hora}` : ''}</td>
+            <td className="py-3 px-4 pl-6 text-on-surface">{p.fecha || '—'}{p.hora ? ` ${p.hora}` : ''}</td>
             <td className="py-3 px-4 font-medium text-on-surface">{p.local || '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{p.visitante || '—'}</td>
             <td className="py-3 px-4"><EstadoPartido estado={p.estado} /></td>

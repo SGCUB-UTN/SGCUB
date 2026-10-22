@@ -166,11 +166,11 @@ export default function HistorialComunicacionesTable({
           tableClassName="min-w-[800px]"
           headers={(
             <>
-              <th className="px-4 py-3 font-semibold text-xs" scope="col">Fecha / Hora</th>
-              <th className="px-4 py-3 font-semibold text-xs" scope="col">Título y Asunto</th>
-              <th className="px-4 py-3 font-semibold text-xs" scope="col">Canales</th>
-              <th className="px-4 py-3 font-semibold text-xs text-center" scope="col">Destinatarios</th>
-              <th className="px-4 py-3 font-semibold text-xs" scope="col">Estado</th>
+              <th className="px-4 py-3 font-semibold" scope="col">Fecha / Hora</th>
+              <th className="px-4 py-3 font-semibold" scope="col">Título y Asunto</th>
+              <th className="px-4 py-3 font-semibold" scope="col">Canales</th>
+              <th className="px-4 py-3 font-semibold text-center" scope="col">Destinatarios</th>
+              <th className="px-4 py-3 font-semibold" scope="col">Estado</th>
             </>
           )}
         >
@@ -214,7 +214,7 @@ export default function HistorialComunicacionesTable({
                   className="cursor-pointer hover:bg-surface-container-low/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-colors"
                 >
                   {/* Fecha */}
-                  <td className="px-4 py-3 text-xs text-on-surface-variant font-medium whitespace-nowrap">
+                  <td className="px-4 py-3 text-on-surface-variant font-medium whitespace-nowrap">
                     {fecha}
                   </td>
 

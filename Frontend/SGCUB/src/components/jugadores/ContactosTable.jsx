@@ -35,7 +35,6 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
   return (
     <DataTable
       className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
-      bodyClassName="text-base"
       headers={(
         <>
           <th className="py-3 px-4" scope="col">Nombre y apellido</th>
@@ -53,23 +52,23 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
           className="hover:bg-surface-container-low transition-colors cursor-pointer group"
           onClick={() => onSelect(contact)}
         >
-          <td className="py-3.5 px-4">
+          <td className="py-3 px-4">
             <span className="font-semibold text-on-surface group-hover:text-primary transition-colors inline-flex items-center gap-1.5">
               {fullName(contact) || 'Sin nombre'}
               <span className="material-symbols-outlined text-[16px] text-primary opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
             </span>
           </td>
-          <td className="py-3.5 px-4 text-on-surface-variant">{contact.persona?.dni ? formatDni(contact.persona.dni) : '—'}</td>
-          <td className="py-3.5 px-4 whitespace-nowrap text-on-surface">{formatPhone(contact.persona?.telefono)}</td>
-          <td className="py-3.5 px-4">
+          <td className="py-3 px-4 text-on-surface-variant">{contact.persona?.dni ? formatDni(contact.persona.dni) : '—'}</td>
+          <td className="py-3 px-4 whitespace-nowrap text-on-surface">{formatPhone(contact.persona?.telefono)}</td>
+          <td className="py-3 px-4">
             {contact.relacion ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-base font-medium">{contact.relacion}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-sm font-medium">{contact.relacion}</span>
             ) : '—'}
           </td>
           {mostrarResponsableLegal && (
-            <td className="py-3.5 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
+            <td className="py-3 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
           )}
-          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+          <td className="py-3 px-4 text-center whitespace-nowrap">
             {onEdit && (
               <RowAction
                 icon="edit"

@@ -40,7 +40,6 @@ export function ScholarshipsTable({ becas }) {
         <DataTable
           className={TABLE_CLASS}
           tableClassName="min-w-[760px] table-fixed"
-          bodyClassName="text-base"
           headers={(
             <>
               <th className="py-3 px-4 w-[15%]" scope="col">Vigencia</th>
@@ -55,11 +54,11 @@ export function ScholarshipsTable({ becas }) {
             const state = SCHOLARSHIP_STATES[scholarshipState(beca, today)]
             return (
               <tr key={beca.beca_id}>
-                <td className="py-3.5 px-4 font-semibold text-on-surface whitespace-nowrap">{formatDate(beca.fecha_aplicacion)} → {formatDate(beca.fecha_fin)}</td>
-                <td className="py-3.5 px-4 text-center font-semibold text-on-surface">{scholarshipValue(beca)}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant break-words">{beca.motivo || '—'}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(beca.fecha_creacion)}</td>
-                <td className="py-3.5 px-4 text-center">
+                <td className="py-3 px-4 font-semibold text-on-surface whitespace-nowrap">{formatDate(beca.fecha_aplicacion)} → {formatDate(beca.fecha_fin)}</td>
+                <td className="py-3 px-4 text-center font-semibold text-on-surface">{scholarshipValue(beca)}</td>
+                <td className="py-3 px-4 text-on-surface-variant break-words">{beca.motivo || '—'}</td>
+                <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(beca.fecha_creacion)}</td>
+                <td className="py-3 px-4 text-center">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border ${state.className}`}>{state.label}</span>
                 </td>
               </tr>
@@ -82,7 +81,6 @@ export function DiscountsTable({ cuotas }) {
         <DataTable
           className={TABLE_CLASS}
           tableClassName="min-w-[640px] table-fixed"
-          bodyClassName="text-base"
           headers={(
             <>
               <th className="py-3 px-4 w-[20%]" scope="col">Cuota</th>
@@ -94,10 +92,10 @@ export function DiscountsTable({ cuotas }) {
         >
           {discounts.map((discount) => (
             <tr key={discount.item_cuota_id}>
-              <td className="py-3.5 px-4 font-semibold text-on-surface whitespace-nowrap">{formatPeriod(discount.periodo)}</td>
-              <td className="py-3.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(discount.fecha_aplicacion)}</td>
-              <td className="py-3.5 px-4 text-on-surface-variant break-words">{discount.motivo || '—'}</td>
-              <td className="py-3.5 px-4 text-right font-semibold text-on-surface">− {formatAmount(discount.monto)}</td>
+              <td className="py-3 px-4 font-semibold text-on-surface whitespace-nowrap">{formatPeriod(discount.periodo)}</td>
+              <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(discount.fecha_aplicacion)}</td>
+              <td className="py-3 px-4 text-on-surface-variant break-words">{discount.motivo || '—'}</td>
+              <td className="py-3 px-4 text-right font-semibold text-on-surface">− {formatAmount(discount.monto)}</td>
             </tr>
           ))}
         </DataTable>

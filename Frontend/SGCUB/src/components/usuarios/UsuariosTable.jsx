@@ -127,7 +127,7 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
           const isSelf = usuario.id === currentUserId
           return (
             <tr key={usuario.id} className="hover:bg-surface-container-low/80 transition-colors">
-              <td className="py-3 px-12 pl-6 font-semibold text-on-surface text-base whitespace-nowrap">{formatDni(usuario.dni)}</td>
+              <td className="py-3 px-4 pl-6 font-semibold text-on-surface text-base whitespace-nowrap">{formatDni(usuario.dni)}</td>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-2.5">
                   
@@ -151,7 +151,7 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
                 <ActiveStatusBadge isActive={usuario.is_active} label={usuario.is_active ? 'Activo' : 'Dado de baja'} />
               </td>
               {canEdit && (
-                <td className="py-2 px-4 pr-6">
+                <td className="py-3 px-4 pr-6">
                   <div className="flex items-center justify-end gap-1">
                     <button type="button" className={iconButtonClass} onClick={() => onEdit(usuario)} title="Editar datos y rol" aria-label={`Editar a ${usuario.full_name}`}>
                       <span className="material-symbols-outlined text-[20px]" aria-hidden="true">edit</span>

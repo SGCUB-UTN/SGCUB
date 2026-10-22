@@ -129,14 +129,14 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
             role="button"
             className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
           >
-            <td className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap">
+            <td className="py-3 px-4 font-semibold text-primary whitespace-nowrap">
               #{comprobante.numero}
               {comprobante.estado === 'Anulado' && (
                 <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-error-container text-on-error-container">Anulado</span>
               )}
             </td>
-            <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(comprobante.fecha_emision)}</td>
-            <td className="py-3.5 px-4">
+            <td className="py-3 px-4 text-on-surface-variant">{formatDate(comprobante.fecha_emision)}</td>
+            <td className="py-3 px-4">
               {comprobante.socio ? (
                 <>
                   <span className="block font-medium text-on-surface">{socioName(comprobante)}</span>
@@ -146,8 +146,8 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
                 <span className="text-on-surface-variant">—</span>
               )}
             </td>
-            <td className="py-3.5 px-4 text-on-surface-variant">Pago #{comprobante.pago}</td>
-            <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">Pago #{comprobante.pago}</td>
+            <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</td>
           </tr>
         ))}
       </DataTable>

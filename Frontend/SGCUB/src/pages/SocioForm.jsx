@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/conf'
 import { getSocio } from '../api/socios'
 import PageHeader from '../components/shared/PageHeader'
-import { getErrorMessage } from '../components/personas/format'
+import { formatDni, getErrorMessage } from '../components/personas/format'
 
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
 import usePersonaSearchDNI from '../hooks/usePersonaSearchDNI'
@@ -12,11 +12,6 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import { CAMPOS_OBLIGATORIOS, FORM_INICIAL, claseInput, enfocarCampo, socioAFormulario, validar } from '../components/socios/socioForm'
 import { Campo, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConFlecha } from '../components/socios/SocioFormFields'
-
-const formatearDni = (dni) => {
-  const numero = Number(dni)
-  return Number.isNaN(numero) ? dni : numero.toLocaleString('es-AR')
-}
 
 const CAMPOS_BLOQUEADOS_PERSONA = ['nombre', 'apellido', 'fecha_nacimiento', 'genero', 'genero_otro']
 
@@ -334,7 +329,7 @@ function SocioForm() {
                           <p className="text-base font-bold text-on-error-container">
                             Ya existe un socio registrado con el DNI:{' '}
                             <span>
-                              {formatearDni(socioDuplicado.dni)}
+                              {formatDni(socioDuplicado.dni)}
                             </span>
                           </p>
                           <p className="text-base text-on-error-container/80 mt-0.5">
@@ -364,7 +359,7 @@ function SocioForm() {
                         </div>
                         <p className="text-base">
                           <strong>{`${personaEncontrada.nombre ?? ''} ${personaEncontrada.apellido ?? ''}`.trim()}</strong>
-                          {' '}(DNI {formatearDni(personaEncontrada.dni)}) ya está registrado como socio
+                          {' '}(DNI {formatDni(personaEncontrada.dni)}) ya está registrado como socio
                           {socioSeleccionado.numero_socio ? ` (Socio N° ${formatearNumeroSocio(socioSeleccionado.numero_socio)})` : ''}.
                         </p>
                       </div>

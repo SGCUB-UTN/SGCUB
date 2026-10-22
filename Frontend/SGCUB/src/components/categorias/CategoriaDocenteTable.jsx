@@ -39,7 +39,7 @@ function CategoriaDocenteTable({ docenteCategorias, onRemove }) {
                 <span className="text-on-surface-variant">Sin cargo</span>
               )}
             </td>
-            <td className="py-2 px-4 pr-6">
+            <td className="py-3 px-4 pr-6">
               <div className="flex items-center justify-end">
                 <button
                   type="button"

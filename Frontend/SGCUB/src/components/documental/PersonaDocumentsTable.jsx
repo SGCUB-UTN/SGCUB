@@ -155,7 +155,7 @@ export default function PersonaDocumentsTable({ title, documents, getTypeName, o
                   </span>
                 )}
               </td>
-              <td className="py-2 px-4 pr-6">
+              <td className="py-3 px-4 pr-6">
                 <div className="flex items-center justify-end gap-1">
                   {doc.archivoUrl && (
                     <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />

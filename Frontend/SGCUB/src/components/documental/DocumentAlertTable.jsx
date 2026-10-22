@@ -129,10 +129,10 @@ export default function DocumentAlertTable({ title, icon, tone = 'warning', docu
               </div>
             </td>
             <td className="py-3 px-4">
-              <span className={`text-base font-medium ${style.document}`}>{getTypeName(doc.tipo_documento)}</span>
+              <span className={`font-medium ${style.document}`}>{getTypeName(doc.tipo_documento)}</span>
             </td>
             <td className="py-3 px-4 whitespace-nowrap">
-              <span className="block text-base font-medium text-on-surface">{doc.dueDateLabel}</span>
+              <span className="block font-medium text-on-surface">{doc.dueDateLabel}</span>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold mt-1 ${style.badge}`}>
                 {getBadgeLabel(doc)}
               </span>

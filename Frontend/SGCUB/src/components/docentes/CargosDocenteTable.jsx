@@ -36,7 +36,6 @@ function CargosDocenteTable({ asignaciones, editable = false, removeDisabledReas
   return (
     <DataTable
       className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
-      bodyClassName="text-base"
       headers={(
         <>
           <th className="py-3 px-4" scope="col">Cargo</th>
@@ -49,13 +48,13 @@ function CargosDocenteTable({ asignaciones, editable = false, removeDisabledReas
         const cargoName = asignacion.cargo_nombre ?? ''
         return (
           <tr key={asignacion.cargo} className="align-top hover:bg-surface-container-low transition-colors">
-            <td className="py-3.5 px-4 font-semibold text-on-surface whitespace-nowrap">{asignacion.cargo_nombre ?? '—'}</td>
+            <td className="py-3 px-4 font-semibold text-on-surface whitespace-nowrap">{asignacion.cargo_nombre ?? '—'}</td>
             <td className="py-3 px-4">
               <ul className="flex flex-wrap gap-1.5">
                 {asignacion.categorias.map((categoria) => (
                   <li
                     key={categoria.categoria_id}
-                    className="px-2.5 py-0.5 rounded-md bg-surface-container-high text-on-surface text-base font-medium"
+                    className="px-2.5 py-0.5 rounded-md bg-surface-container-high text-on-surface text-sm font-medium"
                   >
                     {etiquetaCategoria(categoria)}
                   </li>
@@ -63,7 +62,7 @@ function CargosDocenteTable({ asignaciones, editable = false, removeDisabledReas
               </ul>
             </td>
             {editable && (
-              <td className="py-2 px-4">
+              <td className="py-3 px-4">
                 <div className="flex items-center justify-end gap-1">
                   <EditButton label={`Editar cargo ${cargoName}`.trim()} onClick={() => onEdit(asignacion)} />
                   <RemoveButton

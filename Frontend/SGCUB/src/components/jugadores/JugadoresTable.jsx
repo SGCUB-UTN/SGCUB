@@ -10,6 +10,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { formatDni } from '../personas/format'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -137,8 +138,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
@@ -175,7 +174,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
                 {jugador.socio?.es_ex_jugador && <ProfileBadge>Socio activo</ProfileBadge>}
               </div>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">{jugador.socio?.dni ?? '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
             <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{secondaryCategoryName(jugador)}</td>
             <td className="py-3 px-4">

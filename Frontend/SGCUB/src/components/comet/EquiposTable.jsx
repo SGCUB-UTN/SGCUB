@@ -44,8 +44,6 @@ export default function EquiposTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Equipo" columna="nombre" orden={sort} onOrdenar={sortAndReset} />

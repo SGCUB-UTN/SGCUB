@@ -132,7 +132,6 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-3 xl:shrink-0">
-          
           <button
             type="button"
             onClick={onAdd}
@@ -145,8 +144,6 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-lg"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>

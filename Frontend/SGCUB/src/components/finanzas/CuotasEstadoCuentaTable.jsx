@@ -29,7 +29,6 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
       <DataTable
         className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
         tableClassName="min-w-[960px]"
-        bodyClassName="text-base"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
@@ -56,17 +55,17 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
                 onKeyDown={(event) => handleKeyDown(event, cuota.cuota_id)}
                 className={`cursor-pointer transition-colors ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
               >
-                <td className="py-3.5 pl-4 pr-0 text-outline">
+                <td className="py-3 pl-4 pr-0 text-outline">
                   <span className={`material-symbols-outlined text-[22px] transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
                 </td>
-                <td className="py-3.5 px-4 font-semibold text-on-surface">{cuota.periodo || '—'}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc1)}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc2)}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{cuotaConcepts(cuota)}</td>
-                <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(cuotaAmount(cuota))}</td>
-                <td className="py-3.5 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_pagado ?? 0))}</td>
-                <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
-                <td className="py-3.5 px-4 text-center">
+                <td className="py-3 px-4 font-semibold text-on-surface">{cuota.periodo || '—'}</td>
+                <td className="py-3 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc1)}</td>
+                <td className="py-3 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc2)}</td>
+                <td className="py-3 px-4 text-on-surface-variant">{cuotaConcepts(cuota)}</td>
+                <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(cuotaAmount(cuota))}</td>
+                <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_pagado ?? 0))}</td>
+                <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
+                <td className="py-3 px-4 text-center">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border ${cuotaStateBadgeClass(state)}`}>
                     {cuotaStateLabel(state)}
                   </span>

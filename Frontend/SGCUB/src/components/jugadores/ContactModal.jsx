@@ -4,7 +4,7 @@ import useBarrios from '../../hooks/useBarrios'
 import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { bindPhone } from '../socios/socioForm'
-import { phoneDigits, phoneError } from '../personas/format'
+import { formatDni, phoneDigits, phoneError } from '../personas/format'
 import { RELATIONS, sonMismoDomicilio, tieneDatosDomicilioParciales, tieneDomicilioRegistrado } from './contacts'
 
 const contactoVacio = {
@@ -305,7 +305,7 @@ export default function ContactModal({
                         <span className="text-base text-on-surface font-medium">
                           {`${persona.nombre ?? ''} ${persona.apellido ?? ''}`.trim() || 'Sin nombre'}
                         </span>
-                        <span className="text-sm text-on-surface-variant">DNI {persona.dni}</span>
+                        <span className="text-sm text-on-surface-variant">DNI {formatDni(persona.dni)}</span>
                       </span>
                       <span className="material-symbols-outlined text-[20px] text-on-surface-variant">arrow_forward</span>
                     </button>

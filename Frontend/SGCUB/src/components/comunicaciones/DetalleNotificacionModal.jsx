@@ -1,3 +1,6 @@
+import DataTable from '../shared/DataTable'
+import { formatPhone } from '../personas/format'
+
 export default function DetalleNotificacionModal({ isOpen, onClose, notificacion }) {
   if (!isOpen || !notificacion) return null
 
@@ -138,25 +141,25 @@ export default function DetalleNotificacionModal({ isOpen, onClose, notificacion
                 No se registraron detalles individuales para este envío masivo.
               </p>
             ) : (
-              <table className="w-full text-left text-xs">
-                <thead className="bg-surface-container border-b border-outline-variant/20 text-on-surface-variant sticky top-0 font-medium">
-                  <tr>
-                    <th className="py-2.5 px-3">Canal</th>
-                    <th className="py-2.5 px-3">Contacto / Destinatario</th>
-                    <th className="py-2.5 px-3">Estado</th>
-                    <th className="py-2.5 px-3">Fecha</th>
-                    <th className="py-2.5 px-3">Detalle</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant/15">
+              <DataTable
+                headers={(
+                  <>
+                    <th className="py-3 px-4" scope="col">Canal</th>
+                    <th className="py-3 px-4" scope="col">Contacto / Destinatario</th>
+                    <th className="py-3 px-4" scope="col">Estado</th>
+                    <th className="py-3 px-4" scope="col">Fecha</th>
+                    <th className="py-3 px-4" scope="col">Detalle</th>
+                  </>
+                )}
+              >
                   {envios.map((envio) => (
                     <tr key={envio.id} className="hover:bg-surface-container-low transition-colors">
-                      <td className="py-2.5 px-3">{getCanalBadge(envio.canal)}</td>
-                      <td className="py-2.5 px-3 font-mono font-medium text-on-surface">
-                        {envio.destinatario_contacto}
+                      <td className="py-3 px-4">{getCanalBadge(envio.canal)}</td>
+                      <td className="py-3 px-4 font-medium text-on-surface whitespace-nowrap">
+                        {formatPhone(envio.destinatario_contacto)}
                       </td>
-                      <td className="py-2.5 px-3">{getEstadoBadge(envio.estado)}</td>
-                      <td className="py-2.5 px-3 text-on-surface-variant">
+                      <td className="py-3 px-4">{getEstadoBadge(envio.estado)}</td>
+                      <td className="py-3 px-4 text-on-surface-variant">
                         {envio.fecha_envio
                           ? new Date(envio.fecha_envio).toLocaleTimeString('es-AR', {
                               hour: '2-digit',
@@ -164,7 +167,7 @@ export default function DetalleNotificacionModal({ isOpen, onClose, notificacion
                             })
                           : '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-on-surface-variant">
+                      <td className="py-3 px-4 text-on-surface-variant">
                         {envio.detalle_fallo ? (
                           <span className="text-error font-medium">{envio.detalle_fallo}</span>
                         ) : (
@@ -173,8 +176,7 @@ export default function DetalleNotificacionModal({ isOpen, onClose, notificacion
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+              </DataTable>
             )}
           </div>
         </div>
