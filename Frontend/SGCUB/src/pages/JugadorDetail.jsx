@@ -114,11 +114,11 @@ function JugadorDetail() {
     }
   }
 
-  const confirmarBaja = async () => {
+  const confirmarBaja = async (completa) => {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
-      await deactivateJugador(jugador.jugador_id)
+      await deactivateJugador(jugador.jugador_id, { completa })
       setModalBajaAbierto(false)
       navigate('/padron/jugadores')
     } catch (requestError) {

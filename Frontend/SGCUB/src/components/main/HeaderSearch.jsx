@@ -133,7 +133,7 @@ export default function HeaderSearch() {
       <input
         ref={inputRef}
         className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:bg-surface-container-lowest transition-colors"
-        placeholder="Buscador Global. Ingrese para buscar por DNI, Nombre, Apellido o N° de Socio..."
+        placeholder="Búsqueda global (DNI, nombre, apellido, n° de socio)"
         type="text"
         role="combobox"
         aria-expanded={showDropdown}
