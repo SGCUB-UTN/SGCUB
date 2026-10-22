@@ -363,7 +363,11 @@ def jugador_detail(request, pk):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     # Baja lógica: el registro se conserva con estado deportivo Inactivo
-    player.deactivate()
+    if request.query_params.get("completa") == "true":
+        player.socio.deactivate()
+        player.refresh_from_db()
+    else:
+        player.deactivate()
     return Response(JugadorSerializerDetail(player).data)
 
 

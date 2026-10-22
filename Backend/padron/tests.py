@@ -899,6 +899,16 @@ class PadronViewTests(APITestCase):
         self.assertEqual("Inactivo", response.data["estado"]["nombre"])
         jugador.refresh_from_db()
         self.assertEqual("Inactivo", jugador.estado.nombre)
+        self.assertEqual("Activo", jugador.socio.estado_administrativo.nombre)
+
+    def test_jugador_delete_completa_da_de_baja_su_socio(self):
+        jugador = self.crear_jugador_orm()
+        response = self.client.delete(f"/api/padron/jugador/{jugador.jugador_id}/?completa=true", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("Inactivo", response.data["estado"]["nombre"])
+        jugador.refresh_from_db()
+        self.assertEqual("Inactivo", jugador.estado.nombre)
+        self.assertEqual("Inactivo", jugador.socio.estado_administrativo.nombre)
 
     def test_jugador_delete_no_existe(self):
         response = self.client.delete("/api/padron/jugador/9999/", format="json")
