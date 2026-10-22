@@ -2,6 +2,7 @@ import React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
+import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
 import ProfileLinkBadge from '../components/shared/ProfileLinkBadge'
@@ -129,11 +130,17 @@ function JugadorDetail() {
     }
   }
 
-  const confirmarAlta = async () => {
+  const confirmarAlta = async (completa) => {
     setDandoDeAlta(true)
     setErrorAlta('')
     try {
-      setJugador(await activateJugador(jugador.jugador_id))
+      if (completa) {
+        setJugador(await activateJugador(jugador.jugador_id))
+      } else {
+        await activateSocio(jugador.socio.socio_id)
+        setJugador(await getJugador(jugador.jugador_id))
+      }
+      refreshFinances()
       setModalAltaAbierto(false)
     } catch (requestError) {
       setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el jugador.'))
