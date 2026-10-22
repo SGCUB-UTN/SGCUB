@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
+import ProfileLinkBadge from '../components/shared/ProfileLinkBadge'
 import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
@@ -259,6 +260,18 @@ function JugadorDetail() {
           />
         )}
       />
+
+      {jugador.tipo_baja === 'parcial' && (
+        <div className="mt-4 flex items-center gap-3 flex-wrap p-3 rounded-lg border border-secondary/30 bg-secondary-fixed/40 text-base text-on-surface" role="status">
+          <span className="material-symbols-outlined text-[20px] text-secondary" aria-hidden="true">pause_circle</span>
+          <span className="flex-1 min-w-0">
+            <strong>Baja temporal:</strong> el jugador está de baja deportiva, pero sigue como socio activo y abona la cuota social.
+          </span>
+          <ProfileLinkBadge to={`/padron/socios/${socio.socio_id}`} icon="badge" title="Ver perfil social">
+            Socio activo
+          </ProfileLinkBadge>
+        </div>
+      )}
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
 

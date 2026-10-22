@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
+import ProfileLinkBadge from '../shared/ProfileLinkBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -71,6 +72,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
     return socios.filter((socio) => {
       if (status === 'activo' && !isActive(socio)) return false
       if (status === 'baja' && isActive(socio)) return false
+      if (status === 'ex_jugador' && !socio.es_ex_jugador) return false
       if (!text) return true
       return [socio.nombre, socio.apellido, socio.dni, socio.numero_socio]
         .some((field) => String(field ?? '').toLowerCase().includes(text))
@@ -105,6 +107,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
             <option value="baja">De baja / Inactivo</option>
+            <option value="ex_jugador">Ex jugadores</option>
           </FilterSelect>
         </div>
         <div className="flex items-center justify-end xl:shrink-0">
@@ -153,9 +156,16 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
               {socio.numero_socio ? `#${socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
-              <span className="font-medium text-on-surface block text-base">
-                {socio.nombre} {socio.apellido}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-on-surface text-base">
+                  {socio.nombre} {socio.apellido}
+                </span>
+                {socio.es_ex_jugador && socio.jugador_id && (
+                  <ProfileLinkBadge to={`/padron/jugadores/${socio.jugador_id}`} icon="sports_soccer" title="Ver perfil deportivo">
+                    Ex jugador
+                  </ProfileLinkBadge>
+                )}
+              </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
             <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>

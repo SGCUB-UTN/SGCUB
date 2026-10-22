@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import JugadoresTable from '../components/jugadores/JugadoresTable'
 import useCategorias from '../hooks/useCategorias'
@@ -10,6 +10,7 @@ function Jugadores() {
   const navigate = useNavigate()
   const { jugadores, isLoading, error } = useJugadores()
   const { categorias } = useCategorias()
+  const [status, setStatus] = useState('activo')
   const totales = useMemo(() => {
     const sportStatusOf = (jugador) => (jugador.estado?.nombre ?? '').toLowerCase()
     const isDeactivated = (jugador) => {
@@ -22,6 +23,7 @@ function Jugadores() {
       total: jugadores.length.toLocaleString('es-AR'),
       activos: activos.toLocaleString('es-AR'),
       bajas: bajas.toLocaleString('es-AR'),
+      bajasTemporales: jugadores.filter((jugador) => jugador.tipo_baja === 'parcial').length.toLocaleString('es-AR'),
     }
   }, [jugadores])
 
@@ -42,9 +44,10 @@ function Jugadores() {
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-        <StatCard label="Total Jugadores" value={totales.total} icon="sports_soccer" tone="neutral" />
-        <StatCard label="Jugadores Activos" value={totales.activos} icon="how_to_reg" tone="positive" />
-        <StatCard label="Jugadores de Baja" value={totales.bajas} icon="person_off" tone="muted" />
+        <StatCard label="Total" value={totales.total} icon="sports_soccer" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+        <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+        <StatCard label="Baja temporal" value={totales.bajasTemporales} icon="pause_circle" tone="warning" onClick={() => setStatus('baja_temporal')} isSelected={status === 'baja_temporal'} />
       </div>
       <section aria-label="Jugadores">
         <JugadoresTable
@@ -52,6 +55,8 @@ function Jugadores() {
           categorias={categorias}
           isLoading={isLoading}
           error={error}
+          status={status}
+          onStatusChange={setStatus}
           onEdit={(jugador) => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)}
         />
       </section>

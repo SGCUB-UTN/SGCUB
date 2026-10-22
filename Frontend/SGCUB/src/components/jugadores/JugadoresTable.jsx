@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
+import ProfileLinkBadge from '../shared/ProfileLinkBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -57,11 +58,10 @@ const SORT_VALUES = {
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function JugadoresTable({ data, categorias = [], isLoading, error }) {
+function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('todas')
-  const [status, setStatus] = useState('activo')
 
   const jugadores = useMemo(() => data ?? [], [data])
 
@@ -71,6 +71,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error }) {
       if (category !== 'todas' && String(jugador.categoria?.categoria_id) !== category) return false
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && isActive(jugador)) return false
+      if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
       if (!text) return true
       return [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre]
         .some((field) => String(field ?? '').toLowerCase().includes(text))
@@ -78,8 +79,13 @@ function JugadoresTable({ data, categorias = [], isLoading, error }) {
   }, [jugadores, search, category, status])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const [previousStatus, setPreviousStatus] = useState(status)
+  if (status !== previousStatus) {
+    setPreviousStatus(status)
+    resetPage()
+  }
 
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
@@ -103,12 +109,13 @@ function JugadoresTable({ data, categorias = [], isLoading, error }) {
           <FilterSelect
             className={FILTER_CLASS}
             value={status}
-            onChange={(event) => withPageReset(setStatus)(event.target.value)}
+            onChange={(event) => onStatusChange(event.target.value)}
             aria-label="Filtrar por estado"
           >
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
             <option value="baja">De baja / Inactivo</option>
+            <option value="baja_temporal">Baja temporal</option>
           </FilterSelect>
         </div>
         <div className="flex items-center justify-end xl:shrink-0">
@@ -164,7 +171,14 @@ function JugadoresTable({ data, categorias = [], isLoading, error }) {
             <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{secondaryCategoryName(jugador)}</td>
             <td className="py-3 px-4">
-              <ActiveStatusBadge isActive={isActive(jugador)} label={isActive(jugador) ? 'Activo' : 'De baja'} />
+              <div className="flex items-center gap-2 flex-wrap">
+                <ActiveStatusBadge isActive={isActive(jugador)} label={isActive(jugador) ? 'Activo' : 'De baja'} />
+                {jugador.tipo_baja === 'parcial' && (
+                  <ProfileLinkBadge to={`/padron/socios/${jugador.socio?.socio_id}`} icon="badge" title="Ver perfil social">
+                    Socio activo
+                  </ProfileLinkBadge>
+                )}
+              </div>
             </td>
           </tr>
         ))}
