@@ -7,6 +7,7 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import { formatDni, formatPhone } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 
@@ -153,8 +154,8 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
                 {socio.nombre} {socio.apellido}
               </span>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">{socio.dni ?? '—'}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{phoneOf(socio) || '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatPhone(phoneOf(socio))}</td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDate(socio.fecha_alta)}</td>
             <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
           </tr>
