@@ -5,7 +5,8 @@ import { activateJugador, deactivateJugador, getJugador, patchJugador } from '..
 import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
-import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
+import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
+import PersonHeader, { ActivateButton, BenefitButton, DeactivateButton, EditButton, HeaderNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -13,6 +14,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
+import { categoryTags, socialStatus, sportStatus } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useAssignBenefit from '../hooks/useAssignBenefit'
@@ -72,6 +74,7 @@ function JugadorDetail() {
 
 
   const [modalBajaAbierto, setModalBajaAbierto] = useState(false)
+  const [modalBajaCompletaAbierto, setModalBajaCompletaAbierto] = useState(false)
   const [dandoDeBaja, setDandoDeBaja] = useState(false)
   const [errorBaja, setErrorBaja] = useState('')
   const [modalAltaAbierto, setModalAltaAbierto] = useState(false)
@@ -118,12 +121,18 @@ function JugadorDetail() {
     }
   }
 
+  const openModal = (setError, setOpened) => {
+    setError('')
+    setOpened(true)
+  }
+
   const confirmarBaja = async (completa) => {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
       await deactivateJugador(jugador.jugador_id, { completa })
       setModalBajaAbierto(false)
+      setModalBajaCompletaAbierto(false)
       navigate('/padron/jugadores')
     } catch (requestError) {
       setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el jugador.')
@@ -237,54 +246,49 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        statuses={bajaTemporal
-          ? [
-            { label: 'Socio activo', isActive: true, icon: 'badge' },
-            { label: 'Jugador inactivo', isActive: false, icon: 'sports_soccer' },
-          ]
-          : undefined}
-        status={jugador.estado?.nombre ? { label: jugador.estado.nombre, isActive: isActiveStatus(jugador.estado.nombre) } : null}
+        statuses={[socialStatus(socio, finances.account), sportStatus(jugador)]}
+        tags={categoryTags(jugador)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
-          { label: 'Categoría', value: jugador.categoria?.nombre || '—' },
-          { label: 'Fecha de alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Categoría', value: jugador.categoria?.nombre || 'Sin categoría' },
         ]}
-        actions={activo ? (
+        statusAction={activo
+          ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />
+          : !bajaTemporal && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
+        actions={(activo || bajaTemporal) && (
           <>
-            <DeactivateButton
-              onClick={() => {
-                setErrorBaja('')
-                setModalBajaAbierto(true)
-              }}
-            />
             <EditButton onClick={() => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)} />
             {socio.socio_id && (
               <>
-                <ActionsDivider />
-                <BenefitButton onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+                <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })}>
+                  Beca o descuento
+                </BenefitButton>
                 <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
               </>
             )}
           </>
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorAlta('')
-              setModalAltaAbierto(true)
-            }}
-          />
+        )}
+        footer={bajaTemporal && (
+          <HeaderNotice
+            icon="pause_circle"
+            title="Baja temporal"
+            actions={(
+              <>
+                <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)}>
+                  Alta como jugador
+                </ActivateButton>
+                <DeactivateButton variant="outline" onClick={() => openModal(setErrorBaja, setModalBajaCompletaAbierto)}>
+                  Baja completa
+                </DeactivateButton>
+              </>
+            )}
+          >
+            Sin actividad deportiva. Sigue como socio y abona la cuota social.
+          </HeaderNotice>
         )}
       />
-
-      {bajaTemporal && (
-        <div className="mt-4 flex items-center gap-3 flex-wrap p-3 rounded-lg border border-secondary/30 bg-secondary-fixed/40 text-base text-on-surface" role="status">
-          <span className="material-symbols-outlined text-[20px] text-secondary" aria-hidden="true">pause_circle</span>
-          <span className="flex-1 min-w-0">
-            <strong>Baja temporal:</strong> el jugador está de baja deportiva, pero sigue como socio activo y abona la cuota social.
-          </span>
-        </div>
-      )}
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
 
@@ -295,6 +299,15 @@ function JugadorDetail() {
         jugador={jugador}
         loading={dandoDeAlta}
         error={errorAlta}
+      />
+
+      <DeactivateSocioModal
+        opened={modalBajaCompletaAbierto}
+        onClose={() => !dandoDeBaja && setModalBajaCompletaAbierto(false)}
+        onConfirm={() => confirmarBaja(true)}
+        socio={socio}
+        loading={dandoDeBaja}
+        error={errorBaja}
       />
 
       <DeactivateJugadorModal

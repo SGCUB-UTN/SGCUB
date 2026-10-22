@@ -1,4 +1,4 @@
-import { yearsSince, isActiveStatus, formatDni, formatDate, yearsText } from '../format'
+import { yearsSince, isActiveStatus, formatDni, formatDate, formatPhone, yearsText } from '../format'
 import { Field, RecordSection } from './parts'
 
 const nombreGenero = (persona) => {
@@ -25,12 +25,11 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo }
           <Field label="Apellido(s)" value={persona.apellido} />
           <Field
             label="Fecha de nacimiento"
-            value={persona.fecha_nacimiento ? formatDate(persona.fecha_nacimiento) : ''}
+            value={persona.fecha_nacimiento ? `${formatDate(persona.fecha_nacimiento)}${age !== null ? ` (${yearsText(age)})` : ''}` : ''}
             icon="cake"
-            help={age !== null ? `Edad actual: ${yearsText(age)}` : undefined}
           />
           <Field label="Género" value={nombreGenero(persona)} />
-          <Field label="Teléfono / Móvil" value={persona.telefono} icon="call" />
+          <Field label="Teléfono / Móvil" value={persona.telefono ? formatPhone(persona.telefono) : ''} icon="call" />
           <Field label="Correo electrónico" value={persona.email} icon="mail" className="lg:col-span-2" />
         </div>
       </RecordSection>

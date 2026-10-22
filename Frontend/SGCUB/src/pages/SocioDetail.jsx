@@ -3,11 +3,12 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
+import { socialStatus } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useLocalidades from '../hooks/useLocalidades'
@@ -136,26 +137,20 @@ function SocioDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        status={socio.estado_administrativo_nombre ? { label: socio.estado_administrativo_nombre, isActive: isActiveStatus(socio.estado_administrativo_nombre) } : null}
+        statuses={[socialStatus(socio, finances.account)]}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
-          { label: 'Fecha de alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Alta', value: formatDate(socio.fecha_alta) },
           { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
         ]}
-        actions={activo ? (
-          <>
-            <DeactivateButton
-              onClick={() => {
-                setErrorEliminacion('')
-                setModaldeactivateAbierto(true)
-              }}
-            />
-            <EditButton onClick={() => navigate(`/padron/socios/${socio.socio_id}/editar`)} />
-            <ActionsDivider />
-            <BenefitButton onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-            <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-          </>
+        statusAction={activo ? (
+          <DeactivateButton
+            onClick={() => {
+              setErrorEliminacion('')
+              setModaldeactivateAbierto(true)
+            }}
+          />
         ) : (
           <ActivateButton
             onClick={() => {
@@ -163,6 +158,15 @@ function SocioDetail() {
               setModalActivarAbierto(true)
             }}
           />
+        )}
+        actions={activo && (
+          <>
+            <EditButton onClick={() => navigate(`/padron/socios/${socio.socio_id}/editar`)} />
+            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })}>
+              Beca o descuento
+            </BenefitButton>
+            <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+          </>
         )}
       />
 

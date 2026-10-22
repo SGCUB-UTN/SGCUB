@@ -207,16 +207,13 @@ function DocenteDetail() {
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
           ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}
-        actions={activo ? (
-          <>
-            <EditButton onClick={() => navigate(`/padron/docentes/${docente.docente_id}/editar`)} />
-            <DeactivateButton
-              onClick={() => {
-                setErrorBaja('')
-                setModalBajaAbierto(true)
-              }}
-            />
-          </>
+        statusAction={activo ? (
+          <DeactivateButton
+            onClick={() => {
+              setErrorBaja('')
+              setModalBajaAbierto(true)
+            }}
+          />
         ) : (
           <ActivateButton
             onClick={() => {
@@ -226,6 +223,7 @@ function DocenteDetail() {
             }}
           />
         )}
+        actions={activo && <EditButton onClick={() => navigate(`/padron/docentes/${docente.docente_id}/editar`)} />}
       />
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
