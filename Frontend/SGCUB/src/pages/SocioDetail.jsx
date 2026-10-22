@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
@@ -103,6 +103,9 @@ function SocioDetail() {
   if (loading) return <LoadingFile text="Cargando detalle del socio..." />
   if (error || !socio) {
     return <ErrorFile message={error || 'El socio solicitado no existe.'} backTo="/padron/socios" backText="Volver al padrón" />
+  }
+  if (socio.jugador_id) {
+    return <Navigate to={`/padron/jugadores/${socio.jugador_id}`} replace state={{ from: 'socios' }} />
   }
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)

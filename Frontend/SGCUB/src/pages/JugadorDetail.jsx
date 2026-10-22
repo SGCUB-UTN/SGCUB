@@ -1,11 +1,10 @@
 import React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
 import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
-import ProfileLinkBadge from '../components/shared/ProfileLinkBadge'
 import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
@@ -30,6 +29,9 @@ function JugadorDetail() {
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') ?? undefined
   const navigate = useNavigate()
+  const origin = useLocation().state?.from === 'socios'
+    ? { label: 'Socios', to: '/padron/socios' }
+    : { label: 'Jugadores', to: '/padron/jugadores' }
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -229,7 +231,7 @@ function JugadorDetail() {
       <PersonHeader
         breadcrumb={[
           { label: 'Personas' },
-          { label: 'Jugadores', to: '/padron/jugadores' },
+          origin,
           { label: `Jugador ${formatNumber(jugador.jugador_id)}` },
         ]}
         name={socio.nombre}
@@ -274,9 +276,6 @@ function JugadorDetail() {
           <span className="flex-1 min-w-0">
             <strong>Baja temporal:</strong> el jugador está de baja deportiva, pero sigue como socio activo y abona la cuota social.
           </span>
-          <ProfileLinkBadge to={`/padron/socios/${socio.socio_id}`} icon="badge" title="Ver perfil social">
-            Socio activo
-          </ProfileLinkBadge>
         </div>
       )}
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
-import ProfileLinkBadge from '../shared/ProfileLinkBadge'
+import ProfileBadge from '../shared/ProfileBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -174,9 +174,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               <div className="flex items-center gap-2 flex-wrap">
                 <ActiveStatusBadge isActive={isActive(jugador)} label={isActive(jugador) ? 'Activo' : 'De baja'} />
                 {jugador.tipo_baja === 'parcial' && (
-                  <ProfileLinkBadge to={`/padron/socios/${jugador.socio?.socio_id}`} icon="badge" title="Ver perfil social">
-                    Socio activo
-                  </ProfileLinkBadge>
+                  <ProfileBadge icon="badge">Socio activo</ProfileBadge>
                 )}
               </div>
             </td>

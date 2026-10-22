@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
-import ProfileLinkBadge from '../shared/ProfileLinkBadge'
+import ProfileBadge from '../shared/ProfileBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -23,6 +23,10 @@ const formatDate = (date) => {
 }
 
 const phoneOf = (socio) => socio.telefono ?? socio.persona?.telefono ?? ''
+
+const detailPathOf = (socio) => (socio.jugador_id
+  ? `/padron/jugadores/${socio.jugador_id}`
+  : `/padron/socios/${socio.socio_id}`)
 
 const isActive = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase().includes('activo')
   && !(socio.estado_administrativo_nombre ?? '').toLowerCase().includes('inactivo')
@@ -149,7 +153,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
         {!isLoading && visibleRows.map((socio) => (
           <tr
             key={socio.socio_id}
-            onClick={() => navigate(`/padron/socios/${socio.socio_id}`)}
+            onClick={() => navigate(detailPathOf(socio), { state: { from: 'socios' } })}
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
           >
             <td className="py-3 px-4 font-bold text-primary text-base pl-6">
@@ -160,11 +164,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
                 <span className="font-medium text-on-surface text-base">
                   {socio.nombre} {socio.apellido}
                 </span>
-                {socio.es_ex_jugador && socio.jugador_id && (
-                  <ProfileLinkBadge to={`/padron/jugadores/${socio.jugador_id}`} icon="sports_soccer" title="Ver perfil deportivo">
-                    Ex jugador
-                  </ProfileLinkBadge>
-                )}
+                {socio.es_ex_jugador && <ProfileBadge icon="sports_soccer">Ex jugador</ProfileBadge>}
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
