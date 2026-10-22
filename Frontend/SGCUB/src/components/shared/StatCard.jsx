@@ -11,11 +11,16 @@ const SIZES = {
   lg: { row: 'mt-2', value: 'font-display-lg text-display-lg leading-none', caption: 'text-base' },
 }
 
-export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, wrapContent = false }) {
+const BASE_CLASS = 'min-w-0 w-full text-left bg-surface-container-lowest border rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
+
+export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, onClick, isSelected = false }) {
   const style = TONES[tone] ?? TONES.neutral
   const sizeStyle = SIZES[size] ?? SIZES.md
+  const Container = onClick ? 'button' : 'div'
+  const borderClass = isSelected ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/30 hover:border-outline-variant'
+  const buttonProps = onClick ? { type: 'button', onClick, 'aria-pressed': isSelected } : {}
   return (
-    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs">
+    <Container className={`${BASE_CLASS} ${borderClass}`} {...buttonProps}>
       <div className="flex flex-col min-w-0">
         {eyebrow && (
           <span className={`text-sm font-semibold uppercase tracking-wider ${style.accent ?? 'text-outline'}`}>{eyebrow}</span>
@@ -32,6 +37,6 @@ export default function StatCard({ label, value, icon, tone = 'neutral', size = 
       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${style.icon}`}>
         <span className="material-symbols-outlined text-[22px]" aria-hidden="true">{icon}</span>
       </div>
-    </div>
+    </Container>
   )
 }

@@ -11,7 +11,17 @@ export const formatDni = (dni) => {
   return Number.isNaN(numero) ? dni : numero.toLocaleString('es-AR')
 }
 
-export const formatNumber = (number) => (number ? `#${String(number).padStart(4, '0')}` : '—')
+export const formatPhone = (phone) => {
+  if (!phone) return '—'
+  const digits = String(phone).replace(/\D/g, '')
+  if (digits.length !== 10) return phone
+  const areaLength = digits.startsWith('11') ? 2 : 3
+  const area = digits.slice(0, areaLength)
+  const local = digits.slice(areaLength)
+  return `(${area}) ${local.slice(0, -4)}-${local.slice(-4)}`
+}
+
+export const formatNumber =(number) => (number ? `#${String(number).padStart(4, '0')}` : '—')
 
 export const formatAmount = (amount) =>
   Number(amount || 0).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })

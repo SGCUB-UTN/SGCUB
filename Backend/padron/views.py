@@ -136,8 +136,13 @@ def persona_detail(request, pk):
 def socio_list_create(request):
     if request.method == "GET":
         members = Socio.objects.select_related(
-            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo"
+            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador"
         )
+        is_player = request.query_params.get("es_jugador")
+        if is_player is not None:
+            if is_player not in ("true", "false"):
+                return Response({"es_jugador": "Debe ser 'true' o 'false'."}, status=status.HTTP_400_BAD_REQUEST)
+            members = members.filter(jugador__isnull=is_player == "false")
         serializer = SocioSerializer(members, many=True)
         return Response(serializer.data)
 

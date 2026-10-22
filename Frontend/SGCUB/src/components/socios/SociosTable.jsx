@@ -7,10 +7,12 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import { formatDni, formatPhone } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import useRegisterPayment from '../../hooks/useRegisterPayment'
 
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 7
 
 const formatDate = (date) => {
   if (!date) return '—'
@@ -57,10 +59,10 @@ const SORT_VALUES = {
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function SociosTable({ data, isLoading, error }) {
+function SociosTable({ data, isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
+  const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('activo')
 
   const socios = useMemo(() => data ?? [], [data])
 
@@ -76,8 +78,13 @@ function SociosTable({ data, isLoading, error }) {
   }, [socios, search, status])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const [previousStatus, setPreviousStatus] = useState(status)
+  if (status !== previousStatus) {
+    setPreviousStatus(status)
+    resetPage()
+  }
 
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
@@ -92,7 +99,7 @@ function SociosTable({ data, isLoading, error }) {
           <FilterSelect
             className="bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm focus:outline-none focus:border-primary cursor-pointer"
             value={status}
-            onChange={(event) => withPageReset(setStatus)(event.target.value)}
+            onChange={(event) => onStatusChange(event.target.value)}
             aria-label="Filtrar por estado"
           >
             <option value="activo">Estado: Activo</option>
@@ -121,7 +128,8 @@ function SociosTable({ data, isLoading, error }) {
             <th className="py-3 px-4 pl-5" scope="col">DNI</th>
             <th className="py-3 px-4" scope="col">Teléfono</th>
             <SortableHeader className="py-3 px-4" etiqueta="Fecha de Alta" columna="fechaAlta" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="py-3 px-4 w-36 whitespace-nowrap" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <th className="py-3 px-4 text-right" scope="col">Acciones</th>
           </>
         )}
       >
@@ -149,10 +157,24 @@ function SociosTable({ data, isLoading, error }) {
                 {socio.nombre} {socio.apellido}
               </span>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">{socio.dni ?? '—'}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{phoneOf(socio) || '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
+            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDate(socio.fecha_alta)}</td>
             <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
+            <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
+              <span title={isActive(socio) ? 'Registrar pago' : 'No se pueden registrar pagos a socios de baja'} className="inline-flex">
+                <button
+                  type="button"
+                  onClick={() => openPayment({ socioId: socio.socio_id })}
+                  disabled={!isActive(socio)}
+                  aria-label={`Registrar pago de ${socio.nombre} ${socio.apellido}`}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 shrink-0 rounded-md border border-primary/30 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-primary"
+                >
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">payments</span>
+                  Pagar
+                </button>
+              </span>
+            </td>
           </tr>
         ))}
       </DataTable>
