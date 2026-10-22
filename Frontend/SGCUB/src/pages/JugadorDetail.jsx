@@ -165,6 +165,7 @@ function JugadorDetail() {
   const socio = jugador.socio ?? {}
   const contactos = jugador.vinculos_familiares ?? []
   const activo = isActiveStatus(jugador.estado?.nombre)
+  const bajaTemporal = jugador.tipo_baja === 'parcial'
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
 
@@ -236,6 +237,12 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        statuses={bajaTemporal
+          ? [
+            { label: 'Socio activo', isActive: true, icon: 'badge' },
+            { label: 'Jugador inactivo', isActive: false, icon: 'sports_soccer' },
+          ]
+          : undefined}
         status={jugador.estado?.nombre ? { label: jugador.estado.nombre, isActive: isActiveStatus(jugador.estado.nombre) } : null}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
@@ -270,7 +277,7 @@ function JugadorDetail() {
         )}
       />
 
-      {jugador.tipo_baja === 'parcial' && (
+      {bajaTemporal && (
         <div className="mt-4 flex items-center gap-3 flex-wrap p-3 rounded-lg border border-secondary/30 bg-secondary-fixed/40 text-base text-on-surface" role="status">
           <span className="material-symbols-outlined text-[20px] text-secondary" aria-hidden="true">pause_circle</span>
           <span className="flex-1 min-w-0">

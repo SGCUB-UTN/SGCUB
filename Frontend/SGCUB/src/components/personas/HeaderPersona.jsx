@@ -4,8 +4,10 @@ import PageHeader from '../shared/PageHeader'
 const getInitials = (name, surname) =>
   `${name?.trim()?.[0] ?? ''}${surname?.trim()?.[0] ?? ''}`.toUpperCase() || '?'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, status, metadata = [], actions }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, status, statuses, metadata = [], actions }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
+  const statusList = statuses ?? (status ? [status] : [])
+  const mainStatus = statusList[0]
 
   return (
     <>
@@ -19,10 +21,10 @@ export default function PersonHeader({ breadcrumb = [], name, surname, status, m
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
                 {getInitials(name, surname)}
               </div>
-              {status && (
+              {mainStatus && (
                 <span
-                  className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest ${status.isActive ? 'bg-emerald-500' : 'bg-outline'}`}
-                  title={`Estado: ${status.label}`}
+                  className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest ${mainStatus.isActive ? 'bg-emerald-500' : 'bg-outline'}`}
+                  title={`Estado: ${mainStatus.label}`}
                 />
               )}
             </div>
@@ -30,16 +32,17 @@ export default function PersonHeader({ breadcrumb = [], name, surname, status, m
             <div className="flex flex-col gap-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl text-on-surface font-bold tracking-tight">{fullName}</h1>
-                {status && (
+                {statusList.map((item) => (
                   <span
+                    key={item.label}
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-sm font-semibold ${
-                      status.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-container-high text-on-surface-variant'
+                      item.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-container-high text-on-surface-variant'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[16px]">{status.isActive ? 'check_circle' : 'block'}</span>
-                    {status.label}
+                    <span className="material-symbols-outlined text-[16px]">{item.icon ?? (item.isActive ? 'check_circle' : 'block')}</span>
+                    {item.label}
                   </span>
-                )}
+                ))}
               </div>
               {metadata.length > 0 && (
                 <div className="flex items-center gap-y-1 gap-x-4 flex-wrap text-base text-on-surface-variant">
