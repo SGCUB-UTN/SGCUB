@@ -5,6 +5,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import usePagination from '../../hooks/usePagination'
 import DetalleNotificacionModal from './DetalleNotificacionModal'
+import { matchesSearch } from '../shared/search'
 
 export default function HistorialComunicacionesTable({
   notificaciones = [],
@@ -19,7 +20,7 @@ export default function HistorialComunicacionesTable({
 
   // Filtrado reactivo por término y estado
   const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = search.trim()
     return notificaciones.filter((item) => {
       // Filtro de estado
       if (filtroEstado !== 'TODOS') {
@@ -31,10 +32,7 @@ export default function HistorialComunicacionesTable({
 
       // Filtro de búsqueda
       if (!query) return true
-      const titulo = (item.titulo || '').toLowerCase()
-      const asunto = (item.asunto || '').toLowerCase()
-      const contenido = (item.contenido || '').toLowerCase()
-      return titulo.includes(query) || asunto.includes(query) || contenido.includes(query)
+      return matchesSearch(query, [item.titulo, item.asunto, item.contenido])
     })
   }, [notificaciones, search, filtroEstado])
 

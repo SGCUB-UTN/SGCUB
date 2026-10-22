@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 4
 
@@ -47,11 +48,10 @@ export default function InscripcionesTable({ data, isLoading, error }) {
   const inscripciones = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return inscripciones
     return inscripciones.filter((i) =>
-      [i.jugador_id, i.competicion_id, i.estado]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [i.jugador_id, i.competicion_id, i.estado]),
     )
   }, [inscripciones, search])
 

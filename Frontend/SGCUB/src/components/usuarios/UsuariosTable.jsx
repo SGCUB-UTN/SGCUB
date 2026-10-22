@@ -9,6 +9,7 @@ import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni, getRoleStyle } from './usuarioFormat'
+import { matchesSearch } from '../shared/search'
 
 const filterClass = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm focus:outline-none focus:border-primary cursor-pointer'
 const iconButtonClass = 'inline-flex items-center justify-center p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer'
@@ -30,15 +31,14 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
   const usuarios = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     const textDigits = text.replace(/\./g, '')
     return usuarios.filter((usuario) => {
       if (status === 'activo' && !usuario.is_active) return false
       if (status === 'baja' && usuario.is_active) return false
       if (role !== 'todos' && usuario.role !== role) return false
       if (!text) return true
-      return [usuario.first_name, usuario.last_name, usuario.full_name, usuario.email]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [usuario.first_name, usuario.last_name, usuario.full_name, usuario.email])
         || (textDigits !== '' && usuario.dni.includes(textDigits))
     })
   }, [usuarios, search, status, role])

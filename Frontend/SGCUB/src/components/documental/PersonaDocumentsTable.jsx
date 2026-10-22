@@ -7,6 +7,7 @@ import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import { formatDate } from '../personas/format'
 import { parseDueDate } from './dueDate'
+import { matchesSearch } from '../shared/search'
 
 const STATUS_LABELS = {
   vigente: { label: 'Vigente / Aprobado', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-600' },
@@ -84,9 +85,8 @@ export default function PersonaDocumentsTable({ title, documents, getTypeName, o
   [rows])
 
   const filteredRows = useMemo(() => {
-    const text = search.trim().toLowerCase()
     return rows.filter(doc =>
-      (!text || doc.typeName.toLowerCase().includes(text)) &&
+      matchesSearch(search, [doc.typeName]) &&
       (docType === ALL || String(doc.tipo_documento) === docType) &&
       (status === ALL || doc.status === status))
   }, [rows, search, docType, status])

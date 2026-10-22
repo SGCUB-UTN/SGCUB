@@ -11,6 +11,7 @@ import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -72,15 +73,14 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
   const jugadores = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return jugadores.filter((jugador) => {
       if (category !== 'todas' && String(jugador.categoria?.categoria_id) !== category) return false
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
       if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
       if (!text) return true
-      return [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre])
     })
   }, [jugadores, search, category, status])
 

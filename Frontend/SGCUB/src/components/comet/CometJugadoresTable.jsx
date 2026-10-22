@@ -7,6 +7,7 @@ import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 4
 
@@ -23,11 +24,10 @@ export default function CometJugadoresTable({ data, isLoading, error }) {
   const jugadores = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return jugadores
     return jugadores.filter((j) =>
-      [j.nombres, j.apellidos, j.documento]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [j.nombres, j.apellidos, j.documento]),
     )
   }, [jugadores, search])
 

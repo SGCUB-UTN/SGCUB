@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import useSocio from '../../hooks/useSocio'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 const MAX_RESULTS = 8
 
@@ -39,11 +40,10 @@ function SocioPicker({ onSelect, compact = false, description = 'Buscá por nomb
   )
 
   const results = useMemo(() => {
-    const term = query.trim().toLowerCase()
+    const term = query.trim()
     if (!term) return []
     return activeSocios
-      .filter((socio) => [socio.dni, socio.numero_socio, socio.nombre, socio.apellido, `${socio.nombre} ${socio.apellido}`, `${socio.apellido} ${socio.nombre}`]
-        .some((value) => String(value ?? '').toLowerCase().includes(term)))
+      .filter((socio) => matchesSearch(term, [socio.dni, socio.numero_socio, socio.nombre, socio.apellido, `${socio.nombre} ${socio.apellido}`, `${socio.apellido} ${socio.nombre}`]))
       .slice(0, MAX_RESULTS)
   }, [query, activeSocios])
 

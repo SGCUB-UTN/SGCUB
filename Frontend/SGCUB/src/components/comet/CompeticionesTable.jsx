@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 5
 
@@ -22,11 +23,10 @@ export default function CompeticionesTable({ data, isLoading, error }) {
   const competiciones = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return competiciones
     return competiciones.filter((c) =>
-      [c.nombre, c.temporada, c.categoria, c.estado]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [c.nombre, c.temporada, c.categoria, c.estado]),
     )
   }, [competiciones, search])
 

@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 4
 
@@ -46,11 +47,10 @@ export default function PartidosTable({ data, isLoading, error }) {
   const partidos = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return partidos
     return partidos.filter((p) =>
-      [p.local, p.visitante, p.estado, p.fecha]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [p.local, p.visitante, p.estado, p.fecha]),
     )
   }, [partidos, search])
 

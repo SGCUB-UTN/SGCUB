@@ -8,6 +8,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -93,14 +94,13 @@ export default function CometLogsTable({ data, isLoading, error }) {
   const logs = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return logs.filter((log) => {
       if (operacion !== 'todas' && log.operacion !== operacion) return false
       if (estado === 'ok' && !log.exitoso) return false
       if (estado === 'error' && log.exitoso) return false
       if (!text) return true
-      return [log.jugador_nombre, log.operacion_nombre, log.mensaje, log.exportado_por]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [log.jugador_nombre, log.operacion_nombre, log.mensaje, log.exportado_por])
     })
   }, [logs, search, operacion, estado])
 

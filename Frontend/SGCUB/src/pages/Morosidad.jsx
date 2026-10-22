@@ -4,6 +4,7 @@ import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
 import { getSocios } from '../api/socios'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
 import PageHeader from '../components/shared/PageHeader'
+import { matchesSearch } from '../components/shared/search'
 
 function Morosidad() {
   const [socios, setSocios] = useState([])
@@ -47,10 +48,9 @@ function Morosidad() {
   )].sort((a, b) => a.localeCompare(b, 'es')), [categoriaPorSocio])
 
   const sociosFiltrados = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase()
+    const termino = busqueda.trim()
     return socios.filter((socio) => {
-      const coincideTexto = !termino || [socio.nombre, socio.apellido, socio.dni, socio.numero_socio]
-        .some((valor) => String(valor ?? '').toLowerCase().includes(termino))
+      const coincideTexto = !termino || matchesSearch(termino, [socio.nombre, socio.apellido, socio.dni, socio.numero_socio])
       const categoria = categoriaPorSocio[String(socio.socio_id)] || 'Sin categoría'
       const coincideCategoria = !categoriaSeleccionada || categoria === categoriaSeleccionada
       return coincideTexto && coincideCategoria

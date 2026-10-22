@@ -5,6 +5,7 @@ import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
+import { matchesSearch } from '../shared/search'
 
 const PAGE_SIZE = 5
 
@@ -41,11 +42,8 @@ const TONES = {
   },
 }
 
-const matchesSearch = (doc, search, getTypeName) => {
-  const text = search.toLowerCase()
-  return (doc.persona_nombre_completo || '').toLowerCase().includes(text) ||
-    getTypeName(doc.tipo_documento).toLowerCase().includes(text)
-}
+const matchesDocumentSearch = (doc, search, getTypeName) =>
+  matchesSearch(search, [doc.persona_nombre_completo, getTypeName(doc.tipo_documento)])
 
 const matchesFilters = (doc, category, docType) =>
   (category === ALL || doc.categoria_nombre === category) &&
@@ -67,7 +65,7 @@ export default function DocumentAlertTable({ title, icon, tone = 'warning', docu
   const [limit, setLimit] = useState(PAGE_SIZE)
   const style = TONES[tone] ?? TONES.warning
 
-  const filteredRows = rows.filter(doc => matchesSearch(doc, search, getTypeName) && matchesFilters(doc, category, docType))
+  const filteredRows = rows.filter(doc => matchesDocumentSearch(doc, search, getTypeName) && matchesFilters(doc, category, docType))
   const { ordenadas: sortedRows, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
   const visibleRows = sortedRows.slice(0, limit)
   const openProfile = (doc) => navigate(`${doc.url_perfil}?tab=documentacion`)

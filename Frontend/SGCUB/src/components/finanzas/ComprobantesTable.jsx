@@ -9,6 +9,7 @@ import { formatPeriod, periodOf, periodOptions } from '../shared/periodFormat'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
@@ -41,13 +42,13 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
   )
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     const textDigits = text.replace(/[.#]/g, '')
     return comprobantes.filter((comprobante) => {
       if (status !== ALL && comprobante.estado !== status) return false
       if (month !== ALL && periodOf(comprobante.fecha_emision) !== month) return false
       if (!text) return true
-      return socioName(comprobante).toLowerCase().includes(text)
+      return matchesSearch(text, [socioName(comprobante)])
         || (textDigits !== '' && [comprobante.numero, comprobante.pago, comprobante.socio?.dni]
           .some((field) => String(field ?? '').includes(textDigits)))
     })

@@ -11,6 +11,7 @@ import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
 import { cargosDe, esActivo, exportarNominaCSV } from './docentesUtils'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -42,7 +43,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
   )
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return docentes.filter((docente) => {
       const docenteCategorias = categoriasPorDocente[docente.docente_id] ?? []
       if (cargo !== 'todos' && !cargosDe(docenteCategorias).includes(cargo)) return false
@@ -50,8 +51,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
       if (status === 'activo' && !esActivo(docente)) return false
       if (status === 'baja' && esActivo(docente)) return false
       if (!text) return true
-      return [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido, docente.persona_detalle?.dni, docente.legajo]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido, docente.persona_detalle?.dni, docente.legajo])
     })
   }, [docentes, categoriasPorDocente, search, cargo, category, status])
 

@@ -12,6 +12,7 @@ import { formatDni, formatPhone } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 7
 
@@ -72,14 +73,13 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
   const socios = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return socios.filter((socio) => {
       if (status === 'activo' && !isActive(socio)) return false
       if (status === 'baja' && isActive(socio)) return false
       if (status === 'ex_jugador' && !socio.es_ex_jugador) return false
       if (!text) return true
-      return [socio.nombre, socio.apellido, socio.dni, socio.numero_socio]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [socio.nombre, socio.apellido, socio.dni, socio.numero_socio])
     })
   }, [socios, search, status])
 

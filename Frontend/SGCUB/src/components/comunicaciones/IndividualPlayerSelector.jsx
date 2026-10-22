@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { formatDni, formatPhone } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 export default function IndividualPlayerSelector({
   socios = [],
@@ -14,18 +15,9 @@ export default function IndividualPlayerSelector({
 
   // Filtrado reactivo de socios reales del backend
   const filteredSocios = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
+    const q = searchQuery.trim()
     if (!q) return socios.slice(0, 10) // Mostrar los primeros 10 si no escribe nada
-    return socios.filter((s) => {
-      const nombreCompleto = `${s.nombre ?? ''} ${s.apellido ?? ''}`.toLowerCase()
-      const dni = String(s.dni ?? '')
-      const numSocio = String(s.numero_socio ?? '')
-      return (
-        nombreCompleto.includes(q) ||
-        dni.includes(q) ||
-        numSocio.includes(q)
-      )
-    })
+    return socios.filter((s) => matchesSearch(q, [s.nombre, s.apellido, s.dni, s.numero_socio]))
   }, [socios, searchQuery])
 
   // Canales de contacto del socio seleccionado

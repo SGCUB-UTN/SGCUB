@@ -13,6 +13,7 @@ import useOrdenTabla from '../hooks/useOrdenTabla'
 import StatCard from '../components/shared/StatCard'
 import SortableHeader from '../components/shared/SortableHeader'
 import { overdueBreakdown } from '../components/finanzas/cuotaStates'
+import { matchesSearch } from '../components/shared/search'
 
 const SORT_VALUES = {
   numero: (row) => (row.numero_socio ? Number(row.numero_socio) : null),
@@ -124,11 +125,8 @@ function ResumenFinanciero() {
     else if (debtFilter === 'vencida') rows = rows.filter((r) => r.deudaVencida > 0)
     else if (debtFilter === 'ambas') rows = rows.filter((r) => r.deudaEnFecha > 0 && r.deudaVencida > 0)
 
-    const query = search.trim().toLocaleLowerCase()
-    if (!query) return rows
-    return rows.filter((r) =>
-      `${r.nombre} ${r.apellido} ${r.dni} ${r.numero_socio}`.toLocaleLowerCase().includes(query),
-    )
+    if (!search.trim()) return rows
+    return rows.filter((r) => matchesSearch(search, [r.nombre, r.apellido, r.dni, r.numero_socio]))
   }, [debtorRows, search, debtFilter])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
