@@ -885,6 +885,21 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
         self.assertEqual(1, jugador.vinculos_familiares.count())
 
+    def test_jugador_patch_edita_un_vinculo_existente(self):
+        jugador = self.crear_jugador_orm()
+        contacto = jugador.vinculos_familiares.get()
+        payload = self.contacto_payload(dni=contacto.persona.dni)
+        payload["persona"]["telefono"] = "2214854719"
+        payload["relacion"] = "Tutor"
+        response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {
+            "vinculos_familiares": [{"vinculo_familiar_id": contacto.pk, **payload}],
+        }, format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
+        contacto.refresh_from_db()
+        self.assertEqual(1, jugador.vinculos_familiares.count())
+        self.assertEqual("Tutor", contacto.relacion)
+        self.assertEqual("2214854719", contacto.persona.telefono)
+
     def test_jugador_patch_categoria_que_no_corresponde(self):
         jugador = self.crear_jugador_orm()
         chica = self.crear_categoria_orm(nombre="Chica", edad_maxima=9)

@@ -1,5 +1,5 @@
 import DataTable from '../shared/DataTable'
-import { formatDni } from '../personas/format'
+import { formatDni, formatPhone } from '../personas/format'
 
 function LegalGuardianBadge({ isLegalGuardian }) {
   return isLegalGuardian ? (
@@ -11,8 +11,27 @@ function LegalGuardianBadge({ isLegalGuardian }) {
 
 const fullName = (contact) => `${contact.persona?.nombre ?? ''} ${contact.persona?.apellido ?? ''}`.trim()
 
-// Family links / emergency contacts of a jugador or docente. The delete column only shows actions when `onDelete` is given.
-function ContactosTable({ contacts, onSelect, onDelete, mostrarResponsableLegal = true }) {
+const ROW_ACTION_CLASS = 'inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer'
+
+function RowAction({ icon, label, className, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={`${ROW_ACTION_CLASS} ${className}`}
+      aria-label={label}
+      title={label}
+    >
+      <span className="material-symbols-outlined text-[20px]">{icon}</span>
+    </button>
+  )
+}
+
+// Family links / emergency contacts of a jugador or docente. The actions column only shows the actions whose handler is given.
+function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsableLegal = true }) {
   return (
     <DataTable
       className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
@@ -41,7 +60,7 @@ function ContactosTable({ contacts, onSelect, onDelete, mostrarResponsableLegal 
             </span>
           </td>
           <td className="py-3.5 px-4 text-on-surface-variant">{contact.persona?.dni ? formatDni(contact.persona.dni) : '—'}</td>
-          <td className="py-3.5 px-4"><span className="font-mono text-base text-on-surface">{contact.persona?.telefono || '—'}</span></td>
+          <td className="py-3.5 px-4 whitespace-nowrap text-on-surface">{formatPhone(contact.persona?.telefono)}</td>
           <td className="py-3.5 px-4">
             {contact.relacion ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-base font-medium">{contact.relacion}</span>
@@ -50,20 +69,22 @@ function ContactosTable({ contacts, onSelect, onDelete, mostrarResponsableLegal 
           {mostrarResponsableLegal && (
             <td className="py-3.5 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
           )}
-          <td className="py-3.5 px-4 text-center">
+          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+            {onEdit && (
+              <RowAction
+                icon="edit"
+                label={`Editar contacto ${fullName(contact)}`.trim()}
+                className="text-primary hover:bg-primary/10"
+                onClick={() => onEdit(contact)}
+              />
+            )}
             {onDelete && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onDelete(contact)
-                }}
-                className="inline-flex items-center justify-center p-2 rounded-lg text-error hover:bg-error-container/60 transition-colors cursor-pointer"
-                aria-label={`Eliminar contacto ${fullName(contact)}`.trim()}
-                title="Eliminar contacto"
-              >
-                <span className="material-symbols-outlined text-[20px]">delete</span>
-              </button>
+              <RowAction
+                icon="delete"
+                label={`Eliminar contacto ${fullName(contact)}`.trim()}
+                className="text-error hover:bg-error-container/60"
+                onClick={() => onDelete(contact)}
+              />
             )}
           </td>
         </tr>

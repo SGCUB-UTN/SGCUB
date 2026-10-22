@@ -10,7 +10,7 @@ import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
 import CategoriesTab from '../components/personas/tabs/CategoriesTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
-import { getContactsPayload } from '../components/jugadores/contacts'
+import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
@@ -82,6 +82,17 @@ function DocenteDetail() {
       setCarga((actual) => ({ ...actual, docente: actualizado }))
     } catch (requestError) {
       throw new Error(getErrorMessage(requestError, 'No se pudo agregar el contacto.'), { cause: requestError })
+    }
+  }
+
+  const editarContacto = async (contacto) => {
+    try {
+      const actualizado = await patchDocente(docente.docente_id, {
+        vinculos_familiares: getContactsPayloadWith(docente, contacto),
+      })
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo modificar el contacto.'), { cause: requestError })
     }
   }
 
@@ -158,6 +169,7 @@ function DocenteDetail() {
         <FamilyTab
           contacts={contactos}
           onAdd={agregarContacto}
+          onEdit={editarContacto}
           onDelete={eliminarContacto}
           domicilioTitular={persona}
           etiquetaTitular="docente"

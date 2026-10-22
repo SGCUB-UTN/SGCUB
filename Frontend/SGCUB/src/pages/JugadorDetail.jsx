@@ -24,7 +24,7 @@ import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
-import { getContactsPayload } from '../components/jugadores/contacts'
+import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 
 function JugadorDetail() {
   const { id } = useParams()
@@ -105,6 +105,17 @@ function JugadorDetail() {
       setJugador(actualizado)
     } catch (requestError) {
       throw new Error(getErrorMessage(requestError, 'No se pudo agregar el contacto.'), { cause: requestError })
+    }
+  }
+
+  const editarContacto = async (contacto) => {
+    try {
+      const actualizado = await patchJugador(jugador.jugador_id, {
+        vinculos_familiares: getContactsPayloadWith(jugador, contacto),
+      })
+      setJugador(actualizado)
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo modificar el contacto.'), { cause: requestError })
     }
   }
 
@@ -206,6 +217,7 @@ function JugadorDetail() {
         <FamilyTab
           contacts={contactos}
           onAdd={agregarContacto}
+          onEdit={editarContacto}
           onDelete={eliminarContacto}
           domicilioTitular={socio}
           mostrarResponsableLegal={mostrarResponsableLegal}
