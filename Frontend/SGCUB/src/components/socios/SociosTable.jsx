@@ -164,7 +164,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
                 <span className="font-medium text-on-surface text-base">
                   {socio.nombre} {socio.apellido}
                 </span>
-                {socio.es_ex_jugador && <ProfileBadge icon="sports_soccer">Ex jugador</ProfileBadge>}
+                {socio.es_ex_jugador && <ProfileBadge>Ex jugador</ProfileBadge>}
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>

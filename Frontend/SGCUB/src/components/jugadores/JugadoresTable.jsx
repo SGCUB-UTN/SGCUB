@@ -19,6 +19,11 @@ const isActive = (jugador) => {
   return estado.includes('activo') && !estado.includes('baja') && !estado.includes('inactivo')
 }
 
+const statusLabel = (jugador) => {
+  if (isActive(jugador)) return 'Activo'
+  return jugador.tipo_baja === 'parcial' ? 'Baja temporal' : 'De baja'
+}
+
 const secondaryCategoryName = (jugador) => {
   const secundaria = jugador.categoria_secundaria ?? jugador.categoriaSecundaria
   if (secundaria?.nombre) return secundaria.nombre
@@ -33,7 +38,7 @@ const exportCsv = (jugadores) => {
   const headers = ['N° Socio', 'Nombre y apellido', 'DNI', 'Categoría principal', 'Categoría secundaria', 'Estado']
   const rows = jugadores.map((jugador) => [
     jugador.socio?.numero_socio ?? '',
-    `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim(),
+    `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() ,
     jugador.socio?.dni ?? '',
     jugador.categoria?.nombre ?? '',
     secondaryCategoryName(jugador),
@@ -165,17 +170,17 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               {jugador.socio?.numero_socio ? `#${jugador.socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
-              <span className="font-medium text-on-surface block text-base">{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-on-surface block text-base">{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+                {jugador.socio?.es_ex_jugador && <ProfileBadge>Socio activo</ProfileBadge>}
+              </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{jugador.socio?.dni ?? '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{secondaryCategoryName(jugador)}</td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <ActiveStatusBadge isActive={isActive(jugador)} label={isActive(jugador) ? 'Activo' : 'De baja'} />
-                {jugador.tipo_baja === 'parcial' && (
-                  <ProfileBadge icon="badge">Socio activo</ProfileBadge>
-                )}
+                <ActiveStatusBadge isActive={isActive(jugador)} label={statusLabel(jugador)} />
               </div>
             </td>
           </tr>
