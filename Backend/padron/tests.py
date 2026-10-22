@@ -362,6 +362,23 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
 
+    def test_socio_get_list_filtra_por_es_jugador(self):
+        solo_socio = self.crear_socio_orm()
+        jugador = self.crear_jugador_orm()
+
+        response = self.client.get("/api/padron/socio/?es_jugador=false", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual([solo_socio.socio_id], [item["socio_id"] for item in response.data])
+        self.assertFalse(response.data[0]["es_jugador"])
+
+        response = self.client.get("/api/padron/socio/?es_jugador=true", format="json")
+        self.assertEqual([jugador.socio.socio_id], [item["socio_id"] for item in response.data])
+        self.assertTrue(response.data[0]["es_jugador"])
+
+    def test_socio_get_list_es_jugador_invalido(self):
+        response = self.client.get("/api/padron/socio/?es_jugador=quizas", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
     def test_socio_get_detail(self):
         socio = self.crear_socio_orm()
         response = self.client.get(f"/api/padron/socio/{socio.socio_id}/", format="json")

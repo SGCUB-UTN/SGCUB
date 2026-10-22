@@ -2,9 +2,10 @@ import { api } from './conf'
 
 const sociosEndpoint = 'padron/socio/'
 
-export const getSocios = async () => {
+export const getSocios = async ({ onlyMembers = false } = {}) => {
   try {
-    const response = await api.get(sociosEndpoint)
+    const params = onlyMembers ? { es_jugador: false } : undefined
+    const response = await api.get(sociosEndpoint, { params })
     return response.data
   } catch (error) {
     console.error('Error al obtener los socios:', error)

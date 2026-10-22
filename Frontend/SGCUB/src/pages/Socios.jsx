@@ -6,21 +6,18 @@ import StatCard from '../components/shared/StatCard'
 import useSocio from '../hooks/useSocio'
 
 function Padron() {
-  const { socios, isLoading, error } = useSocio()
+  const { socios, isLoading, error } = useSocio({ onlyMembers: true })
   const navigate = useNavigate()
 
   const totales = useMemo(() => {
-    const sociosActivos = socios.filter((socio) => {
+    const activos = socios.filter((socio) => {
       const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
       return estado.includes('activo') && !estado.includes('inactivo')
-    })
-    const activos = sociosActivos.length
-    const activosNoJugadores = sociosActivos.filter((socio) => !socio.es_jugador).length
+    }).length
     const formato = (valor) => valor.toLocaleString('es-AR')
     return {
       total: formato(socios.length),
       activos: formato(activos),
-      activosNoJugadores: formato(activosNoJugadores),
       inactivos: formato(socios.length - activos),
     }
   }, [socios])
