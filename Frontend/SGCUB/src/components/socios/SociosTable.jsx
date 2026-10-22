@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
+import ProfileBadge from '../shared/ProfileBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -22,6 +23,10 @@ const formatDate = (date) => {
 }
 
 const phoneOf = (socio) => socio.telefono ?? socio.persona?.telefono ?? ''
+
+const detailPathOf = (socio) => (socio.jugador_id
+  ? `/padron/jugadores/${socio.jugador_id}`
+  : `/padron/socios/${socio.socio_id}`)
 
 const isActive = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase().includes('activo')
   && !(socio.estado_administrativo_nombre ?? '').toLowerCase().includes('inactivo')
@@ -71,6 +76,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
     return socios.filter((socio) => {
       if (status === 'activo' && !isActive(socio)) return false
       if (status === 'baja' && isActive(socio)) return false
+      if (status === 'ex_jugador' && !socio.es_ex_jugador) return false
       if (!text) return true
       return [socio.nombre, socio.apellido, socio.dni, socio.numero_socio]
         .some((field) => String(field ?? '').toLowerCase().includes(text))
@@ -105,6 +111,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
             <option value="baja">De baja / Inactivo</option>
+            <option value="ex_jugador">Ex jugadores</option>
           </FilterSelect>
         </div>
         <div className="flex items-center justify-end xl:shrink-0">
@@ -146,16 +153,19 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
         {!isLoading && visibleRows.map((socio) => (
           <tr
             key={socio.socio_id}
-            onClick={() => navigate(`/padron/socios/${socio.socio_id}`)}
+            onClick={() => navigate(detailPathOf(socio), { state: { from: 'socios' } })}
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
           >
             <td className="py-3 px-4 font-bold text-primary text-base pl-6">
               {socio.numero_socio ? `#${socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
-              <span className="font-medium text-on-surface block text-base">
-                {socio.nombre} {socio.apellido}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-on-surface text-base">
+                  {socio.nombre} {socio.apellido}
+                </span>
+                {socio.es_ex_jugador && <ProfileBadge icon="sports_soccer">Ex jugador</ProfileBadge>}
+              </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
             <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>

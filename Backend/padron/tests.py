@@ -375,6 +375,54 @@ class PadronViewTests(APITestCase):
         self.assertEqual([jugador.socio.socio_id], [item["socio_id"] for item in response.data])
         self.assertTrue(response.data[0]["es_jugador"])
 
+    def test_socio_get_list_incluye_ex_jugadores_entre_socios(self):
+        jugador = self.crear_jugador_orm()
+        jugador.deactivate()
+
+        response = self.client.get("/api/padron/socio/?es_jugador=false", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual([jugador.socio.socio_id], [item["socio_id"] for item in response.data])
+        self.assertFalse(response.data[0]["es_jugador"])
+        self.assertTrue(response.data[0]["es_ex_jugador"])
+        self.assertEqual(jugador.jugador_id, response.data[0]["jugador_id"])
+
+        response = self.client.get("/api/padron/socio/?es_jugador=true", format="json")
+        self.assertEqual([], response.data)
+
+    def test_socio_get_list_excluye_jugadores_con_baja_completa(self):
+        jugador = self.crear_jugador_orm()
+        jugador.socio.deactivate()
+
+        response = self.client.get("/api/padron/socio/?es_jugador=false", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual([], response.data)
+
+        response = self.client.get("/api/padron/socio/?es_jugador=true", format="json")
+        self.assertEqual([jugador.socio.socio_id], [item["socio_id"] for item in response.data])
+
+    def test_socio_alta_tras_baja_completa_vuelve_como_ex_jugador(self):
+        jugador = self.crear_jugador_orm()
+        jugador.socio.deactivate()
+        activo = EstadoAdministrativo.objects.get(nombre="Activo")
+
+        response = self.client.patch(
+            f"/api/padron/socio/{jugador.socio.socio_id}/", {"estado_administrativo": activo.pk}, format="json"
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        jugador.refresh_from_db()
+        self.assertEqual("Inactivo", jugador.estado.nombre)
+
+        response = self.client.get("/api/padron/socio/?es_jugador=false", format="json")
+        self.assertEqual([jugador.socio.socio_id], [item["socio_id"] for item in response.data])
+        self.assertTrue(response.data[0]["es_ex_jugador"])
+
+    def test_socio_get_list_incluye_socio_inactivo_sin_jugador(self):
+        socio = self.crear_socio_orm()
+        socio.deactivate()
+
+        response = self.client.get("/api/padron/socio/?es_jugador=false", format="json")
+        self.assertEqual([socio.socio_id], [item["socio_id"] for item in response.data])
+
     def test_socio_get_list_es_jugador_invalido(self):
         response = self.client.get("/api/padron/socio/?es_jugador=quizas", format="json")
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
@@ -837,6 +885,21 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
         self.assertEqual(1, jugador.vinculos_familiares.count())
 
+    def test_jugador_patch_edita_un_vinculo_existente(self):
+        jugador = self.crear_jugador_orm()
+        contacto = jugador.vinculos_familiares.get()
+        payload = self.contacto_payload(dni=contacto.persona.dni)
+        payload["persona"]["telefono"] = "2214854719"
+        payload["relacion"] = "Tutor"
+        response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {
+            "vinculos_familiares": [{"vinculo_familiar_id": contacto.pk, **payload}],
+        }, format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
+        contacto.refresh_from_db()
+        self.assertEqual(1, jugador.vinculos_familiares.count())
+        self.assertEqual("Tutor", contacto.relacion)
+        self.assertEqual("2214854719", contacto.persona.telefono)
+
     def test_jugador_patch_categoria_que_no_corresponde(self):
         jugador = self.crear_jugador_orm()
         chica = self.crear_categoria_orm(nombre="Chica", edad_maxima=9)
@@ -897,8 +960,34 @@ class PadronViewTests(APITestCase):
         response = self.client.delete(f"/api/padron/jugador/{jugador.jugador_id}/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual("Inactivo", response.data["estado"]["nombre"])
+        self.assertEqual("parcial", response.data["tipo_baja"])
         jugador.refresh_from_db()
         self.assertEqual("Inactivo", jugador.estado.nombre)
+        self.assertEqual("Activo", jugador.socio.estado_administrativo.nombre)
+
+    def test_jugador_delete_completa_da_de_baja_su_socio(self):
+        jugador = self.crear_jugador_orm()
+        response = self.client.delete(f"/api/padron/jugador/{jugador.jugador_id}/?completa=true", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("Inactivo", response.data["estado"]["nombre"])
+        self.assertEqual("completa", response.data["tipo_baja"])
+        jugador.refresh_from_db()
+        self.assertEqual("Inactivo", jugador.estado.nombre)
+        self.assertEqual("Inactivo", jugador.socio.estado_administrativo.nombre)
+
+    def test_jugador_get_list_informa_tipo_baja(self):
+        activo = self.crear_jugador_orm()
+        response = self.client.get("/api/padron/jugador/", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIsNone(response.data[0]["tipo_baja"])
+
+        activo.deactivate()
+        response = self.client.get("/api/padron/jugador/", format="json")
+        self.assertEqual("parcial", response.data[0]["tipo_baja"])
+
+        activo.socio.deactivate()
+        response = self.client.get("/api/padron/jugador/", format="json")
+        self.assertEqual("completa", response.data[0]["tipo_baja"])
 
     def test_jugador_delete_no_existe(self):
         response = self.client.delete("/api/padron/jugador/9999/", format="json")

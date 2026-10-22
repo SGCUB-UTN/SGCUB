@@ -6,7 +6,7 @@ export function RecordSection({ title, color = 'bg-primary-container', extra, ch
       <div className="flex items-center justify-between pb-1 border-b border-surface-container mb-4">
         <div className="flex items-center gap-2">
           <span className={`w-1 h-5 rounded ${color}`} />
-          <h2 className="text-xl text-on-surface font-bold tracking-tight ">{title}</h2>
+          <h2 className="text-xl text-on-surface font-bold tracking-tight">{title}</h2>
         </div>
         {extra}
       </div>

@@ -318,6 +318,8 @@ class SocioSerializer(serializers.ModelSerializer):
     )
     estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
     es_jugador = serializers.BooleanField(source="is_player", read_only=True)
+    es_ex_jugador = serializers.BooleanField(source="is_former_player", read_only=True)
+    jugador_id = serializers.IntegerField(source="player_profile.jugador_id", read_only=True, allow_null=True)
 
     class Meta:
         model = Socio
@@ -325,7 +327,7 @@ class SocioSerializer(serializers.ModelSerializer):
             "socio_id", "persona", "numero_socio", "nombre", "apellido", "dni", "telefono", "email",
             "fecha_nacimiento", "edad", "genero", "genero_nombre", "genero_otro",
             "domicilio_calle", "domicilio_numero", "domicilio_piso", "domicilio_departamento", "domicilio_entre_calle_1", "domicilio_entre_calle_2", "domicilio_barrio", "domicilio_barrio_nombre", "domicilio_localidad",
-            "estado_administrativo", "estado_administrativo_nombre", "fecha_alta", "es_jugador"
+            "estado_administrativo", "estado_administrativo_nombre", "fecha_alta", "es_jugador", "es_ex_jugador", "jugador_id"
         ]
         read_only_fields = ["numero_socio", "fecha_alta"]
 
@@ -694,6 +696,7 @@ class JugadorListSerializer(serializers.ModelSerializer):
     categoria_secundaria = CategoriaSerializer(read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     vinculos_familiares = VinculoFamiliarSerializer(many=True, read_only=True)
+    tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -702,7 +705,7 @@ class JugadorListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Jugador
-        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "tallaIndumentaria", "estado", "vinculos_familiares"]
+        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "tallaIndumentaria", "estado", "tipo_baja", "vinculos_familiares"]
 
 
 class JugadorSerializerDetail(serializers.ModelSerializer):
@@ -711,6 +714,7 @@ class JugadorSerializerDetail(serializers.ModelSerializer):
     categoria_secundaria = CategoriaSerializer(read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     vinculos_familiares = serializers.SerializerMethodField()
+    tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
 
     def get_vinculos_familiares(self, player):
         return VinculoFamiliarSerializer(
@@ -724,7 +728,7 @@ class JugadorSerializerDetail(serializers.ModelSerializer):
 
     class Meta:
         model = Jugador
-        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "tallaIndumentaria", "vinculos_familiares", "estado"]
+        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "tallaIndumentaria", "vinculos_familiares", "estado", "tipo_baja"]
         read_only_fields = ["jugador_id"]
 
 

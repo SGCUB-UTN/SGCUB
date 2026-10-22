@@ -179,3 +179,14 @@ export const getContactsPayload = (entidad) => (entidad?.vinculos_familiares ?? 
   relacion: c.relacion ?? '',
   responsable_legal: Boolean(c.responsable_legal),
 }))
+
+export const getContactsPayloadWith = (entidad, contacto) => getContactsPayload(entidad).map((item) => (
+  item.vinculo_familiar_id === contacto.vinculo_familiar_id
+    ? {
+        vinculo_familiar_id: contacto.vinculo_familiar_id,
+        persona: contacto.persona,
+        relacion: contacto.relacion,
+        responsable_legal: Boolean(contacto.responsable_legal),
+      }
+    : item
+))

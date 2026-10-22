@@ -8,7 +8,7 @@ from drf_spectacular.utils import extend_schema
 from .services import recategorizar_jugadores
 from .services import pasr_de_anio_vigente_a_categoria
 
-from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria
+from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
 from .serializers import (
     CargoDocenteSerializer,
     DocenteCategoriaSerializer,
@@ -136,13 +136,16 @@ def persona_detail(request, pk):
 def socio_list_create(request):
     if request.method == "GET":
         members = Socio.objects.select_related(
-            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador"
+            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador__estado"
         )
         is_player = request.query_params.get("es_jugador")
         if is_player is not None:
             if is_player not in ("true", "false"):
                 return Response({"es_jugador": "Debe ser 'true' o 'false'."}, status=status.HTTP_400_BAD_REQUEST)
-            members = members.filter(jugador__isnull=is_player == "false")
+            members_only = Q(jugador__isnull=True) | (
+                Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
+            )
+            members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
         serializer = SocioSerializer(members, many=True)
         return Response(serializer.data)
 
@@ -363,7 +366,11 @@ def jugador_detail(request, pk):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     # Baja lógica: el registro se conserva con estado deportivo Inactivo
-    player.deactivate()
+    if request.query_params.get("completa") == "true":
+        player.socio.deactivate()
+        player.refresh_from_db()
+    else:
+        player.deactivate()
     return Response(JugadorSerializerDetail(player).data)
 
 

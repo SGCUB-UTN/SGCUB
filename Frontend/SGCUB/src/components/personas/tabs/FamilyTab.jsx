@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { formatDni } from '../format'
-import { PrimaryButton, Field, TabHeader, EmptyState } from './parts'
-import AddContactModal from '../../jugadores/AddContactModal'
+import { formatDni, formatPhone } from '../format'
+import { SecondaryButton, Field, TabHeader, EmptyState } from './parts'
+import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
 
 function formatearDomicilioContacto(person) {
@@ -61,7 +61,7 @@ function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true 
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="DNI" value={person.dni ? formatDni(person.dni) : ''} icon="badge" />
-          <Field label="Teléfono" value={person.telefono} icon="call" />
+          <Field label="Teléfono" value={person.telefono ? formatPhone(person.telefono) : ''} icon="call" />
           <Field label="Correo electrónico" value={person.email} icon="mail" className="sm:col-span-2" />
           <Field label="Domicilio" value={domicilioTexto} icon="home_pin" className="sm:col-span-2" />
           {entreCallesTexto && (
@@ -153,6 +153,7 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
 export default function FamilyTab({
   contacts = [],
   onAdd,
+  onEdit,
   onDelete,
   domicilioTitular = null,
   etiquetaTitular = 'jugador',
@@ -160,7 +161,16 @@ export default function FamilyTab({
 }) {
   const [selectedContact, setSelectedContact] = useState(null)
   const [contactToDelete, setContactToDelete] = useState(null)
+  const [contactToEdit, setContactToEdit] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
+
+  const ensureNotDuplicated = (contacto) => {
+    const dni = String(contacto.persona?.dni ?? '').trim()
+    const duplicated = contacts.some((item) => (
+      String(item.persona?.dni ?? '').trim() === dni && item.vinculo_familiar_id !== contacto.vinculo_familiar_id
+    ))
+    if (duplicated) throw new Error(`Esta persona ya figura entre los contactos del ${etiquetaTitular}.`)
+  }
 
   const description = mostrarResponsableLegal
     ? `Personas vinculadas al ${etiquetaTitular} para notificaciones y responsabilidad legal`
@@ -172,7 +182,7 @@ export default function FamilyTab({
         title="Vínculos familiares y contactos de emergencia"
         description={description}
         actions={onAdd && (
-          <PrimaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar contacto</PrimaryButton>
+          <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar familiar / contacto</SecondaryButton>
         )}
       />
 
@@ -186,6 +196,7 @@ export default function FamilyTab({
         <ContactosTable
           contacts={contacts}
           onSelect={setSelectedContact}
+          onEdit={onEdit ? setContactToEdit : undefined}
           onDelete={onDelete ? setContactToDelete : undefined}
           mostrarResponsableLegal={mostrarResponsableLegal}
         />
@@ -206,10 +217,26 @@ export default function FamilyTab({
           etiquetaTitular={etiquetaTitular}
         />
       )}
+      {contactToEdit && onEdit && (
+        <ContactModal
+          contact={contactToEdit}
+          onClose={() => setContactToEdit(null)}
+          onSubmit={async (contacto) => {
+            ensureNotDuplicated(contacto)
+            await onEdit(contacto)
+          }}
+          domicilioTitular={domicilioTitular}
+          etiquetaTitular={etiquetaTitular}
+          mostrarResponsableLegal={mostrarResponsableLegal}
+        />
+      )}
       {addModalOpen && (
-        <AddContactModal
+        <ContactModal
           onClose={() => setAddModalOpen(false)}
-          onSubmit={onAdd}
+          onSubmit={async (contacto) => {
+            ensureNotDuplicated(contacto)
+            await onAdd(contacto)
+          }}
           domicilioTitular={domicilioTitular}
           etiquetaTitular={etiquetaTitular}
           mostrarResponsableLegal={mostrarResponsableLegal}

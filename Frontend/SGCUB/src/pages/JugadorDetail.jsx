@@ -1,10 +1,12 @@
 import React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
+import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
-import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
+import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
+import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -12,22 +14,25 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
+import { categoryTags, socialStatus, sportStatus } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
-import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
-import { getContactsPayload } from '../components/jugadores/contacts'
+import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 
 function JugadorDetail() {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') ?? undefined
   const navigate = useNavigate()
+  const origin = useLocation().state?.from === 'socios'
+    ? { label: 'Socios', to: '/padron/socios' }
+    : { label: 'Jugadores', to: '/padron/jugadores' }
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -37,7 +42,6 @@ function JugadorDetail() {
 
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { openBenefit } = useAssignBenefit()
   const { documentosActivos: activos } = useDocumentacion(jugador?.socio?.persona)
   const badgeConfig = React.useMemo(() => buildDocumentBadges(activos), [activos])
   // Loaded here so the tab badge and the financial tab share a single request
@@ -68,6 +72,7 @@ function JugadorDetail() {
 
 
   const [modalBajaAbierto, setModalBajaAbierto] = useState(false)
+  const [modalBajaCompletaAbierto, setModalBajaCompletaAbierto] = useState(false)
   const [dandoDeBaja, setDandoDeBaja] = useState(false)
   const [errorBaja, setErrorBaja] = useState('')
   const [modalAltaAbierto, setModalAltaAbierto] = useState(false)
@@ -101,6 +106,17 @@ function JugadorDetail() {
     }
   }
 
+  const editarContacto = async (contacto) => {
+    try {
+      const actualizado = await patchJugador(jugador.jugador_id, {
+        vinculos_familiares: getContactsPayloadWith(jugador, contacto),
+      })
+      setJugador(actualizado)
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo modificar el contacto.'), { cause: requestError })
+    }
+  }
+
   const eliminarContacto = async (contacto) => {
     try {
       const contactosRestantes = getContactsPayload(jugador)
@@ -114,12 +130,18 @@ function JugadorDetail() {
     }
   }
 
-  const confirmarBaja = async () => {
+  const openModal = (setError, setOpened) => {
+    setError('')
+    setOpened(true)
+  }
+
+  const confirmarBaja = async (completa) => {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
-      await deactivateJugador(jugador.jugador_id)
+      await deactivateJugador(jugador.jugador_id, { completa })
       setModalBajaAbierto(false)
+      setModalBajaCompletaAbierto(false)
       navigate('/padron/jugadores')
     } catch (requestError) {
       setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el jugador.')
@@ -128,11 +150,17 @@ function JugadorDetail() {
     }
   }
 
-  const confirmarAlta = async () => {
+  const confirmarAlta = async (completa) => {
     setDandoDeAlta(true)
     setErrorAlta('')
     try {
-      setJugador(await activateJugador(jugador.jugador_id))
+      if (completa) {
+        setJugador(await activateJugador(jugador.jugador_id))
+      } else {
+        await activateSocio(jugador.socio.socio_id)
+        setJugador(await getJugador(jugador.jugador_id))
+      }
+      refreshFinances()
       setModalAltaAbierto(false)
     } catch (requestError) {
       setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el jugador.'))
@@ -155,6 +183,7 @@ function JugadorDetail() {
   const socio = jugador.socio ?? {}
   const contactos = jugador.vinculos_familiares ?? []
   const activo = isActiveStatus(jugador.estado?.nombre)
+  const bajaTemporal = jugador.tipo_baja === 'parcial'
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
 
@@ -167,6 +196,7 @@ function JugadorDetail() {
         <PersonalDataTab
           persona={socio}
           localidades={localidades}
+          onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           deportivo={{
             categoria: jugador.categoria?.nombre,
             categoria_secundaria: jugador.categoria_secundaria?.nombre,
@@ -186,6 +216,7 @@ function JugadorDetail() {
         <FamilyTab
           contacts={contactos}
           onAdd={agregarContacto}
+          onEdit={editarContacto}
           onDelete={eliminarContacto}
           domicilioTitular={socio}
           mostrarResponsableLegal={mostrarResponsableLegal}
@@ -221,42 +252,42 @@ function JugadorDetail() {
       <PersonHeader
         breadcrumb={[
           { label: 'Personas' },
-          { label: 'Jugadores', to: '/padron/jugadores' },
+          origin,
           { label: `Jugador ${formatNumber(jugador.jugador_id)}` },
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        status={jugador.estado?.nombre ? { label: jugador.estado.nombre, isActive: isActiveStatus(jugador.estado.nombre) } : null}
+        statuses={[socialStatus(socio, finances.account), sportStatus(jugador)]}
+        tags={categoryTags(jugador)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
-          { label: 'Categoría', value: jugador.categoria?.nombre || '—' },
-          { label: 'Fecha de alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Categoría', value: jugador.categoria?.nombre || 'Sin categoría' },
         ]}
-        actions={activo ? (
-          <>
-            <DeactivateButton
-              onClick={() => {
-                setErrorBaja('')
-                setModalBajaAbierto(true)
-              }}
-            />
-            <EditButton onClick={() => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)} />
-            {socio.socio_id && (
+        statusAction={activo
+          ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />
+          : !bajaTemporal && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
+        actions={(activo || bajaTemporal) && socio.socio_id && (
+          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+        )}
+        footer={bajaTemporal && (
+          <HeaderNotice
+            icon="pause_circle"
+            title="Baja temporal"
+            actions={(
               <>
-                <ActionsDivider />
-                <BenefitButton onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-                <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+                <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)}>
+                  Alta como jugador
+                </ActivateButton>
+                <DeactivateButton variant="outline" onClick={() => openModal(setErrorBaja, setModalBajaCompletaAbierto)}>
+                  Baja completa
+                </DeactivateButton>
               </>
             )}
-          </>
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorAlta('')
-              setModalAltaAbierto(true)
-            }}
-          />
+          >
+            Sin actividad deportiva. Sigue como socio y abona la cuota social.
+          </HeaderNotice>
         )}
       />
 
@@ -269,6 +300,15 @@ function JugadorDetail() {
         jugador={jugador}
         loading={dandoDeAlta}
         error={errorAlta}
+      />
+
+      <DeactivateSocioModal
+        opened={modalBajaCompletaAbierto}
+        onClose={() => !dandoDeBaja && setModalBajaCompletaAbierto(false)}
+        onConfirm={() => confirmarBaja(true)}
+        socio={socio}
+        loading={dandoDeBaja}
+        error={errorBaja}
       />
 
       <DeactivateJugadorModal

@@ -42,7 +42,7 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
           id={`panel-${activeTab.id}`}
           role="tabpanel"
           aria-labelledby={`tab-${activeTab.id}`}
-          className="bg-surface-container-lowest rounded-b-xl shadow-sm p-6"
+          className="bg-surface-container-lowest rounded-b-xl shadow-sm p-6 pt-3"
         >
           {activeTab.content}
         </div>

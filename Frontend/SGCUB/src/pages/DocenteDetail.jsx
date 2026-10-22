@@ -4,13 +4,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateDocente, deactivateDocente, getCargosDocente, getDocente, patchDocente } from '../api/docentes'
 import ActivateDocenteModal from '../components/docentes/ActivateDocenteModal'
 import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModal'
-import PersonHeader, { EditButton, DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
 import CategoriesTab from '../components/personas/tabs/CategoriesTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
-import { getContactsPayload } from '../components/jugadores/contacts'
+import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
@@ -85,6 +85,17 @@ function DocenteDetail() {
     }
   }
 
+  const editarContacto = async (contacto) => {
+    try {
+      const actualizado = await patchDocente(docente.docente_id, {
+        vinculos_familiares: getContactsPayloadWith(docente, contacto),
+      })
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
+    } catch (requestError) {
+      throw new Error(getErrorMessage(requestError, 'No se pudo modificar el contacto.'), { cause: requestError })
+    }
+  }
+
   const eliminarContacto = async (contacto) => {
     try {
       const contactosRestantes = getContactsPayload(docente)
@@ -147,7 +158,13 @@ function DocenteDetail() {
       id: 'datos-personales',
       label: 'Datos personales',
       icon: 'person',
-      content: <PersonalDataTab persona={persona} localidades={localidades} />,
+      content: (
+        <PersonalDataTab
+          persona={persona}
+          localidades={localidades}
+          onEdit={activo ? () => navigate(`/padron/docentes/${docente.docente_id}/editar`) : undefined}
+        />
+      ),
     },
     {
       id: 'familiar',
@@ -158,6 +175,7 @@ function DocenteDetail() {
         <FamilyTab
           contacts={contactos}
           onAdd={agregarContacto}
+          onEdit={editarContacto}
           onDelete={eliminarContacto}
           domicilioTitular={persona}
           etiquetaTitular="docente"
@@ -207,16 +225,13 @@ function DocenteDetail() {
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
           ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}
-        actions={activo ? (
-          <>
-            <EditButton onClick={() => navigate(`/padron/docentes/${docente.docente_id}/editar`)} />
-            <DeactivateButton
-              onClick={() => {
-                setErrorBaja('')
-                setModalBajaAbierto(true)
-              }}
-            />
-          </>
+        statusAction={activo ? (
+          <DeactivateButton
+            onClick={() => {
+              setErrorBaja('')
+              setModalBajaAbierto(true)
+            }}
+          />
         ) : (
           <ActivateButton
             onClick={() => {

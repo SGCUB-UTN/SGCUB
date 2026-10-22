@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, API_ORIGIN } from '../api/conf'
 import { getCargosDocente, getDocente, patchDocente, postDocente } from '../api/docentes'
 import { esCategoriaAsignable, etiquetaCategoria } from '../components/docentes/docentesUtils'
-import AddContactModal from '../components/jugadores/AddContactModal'
+import ContactModal from '../components/jugadores/ContactModal'
 import FilaContacto from '../components/jugadores/FilaContacto'
 import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
@@ -872,7 +872,7 @@ function DocenteForm() {
       </div>
 
       {agregandoContacto && (
-        <AddContactModal
+        <ContactModal
           onClose={() => setAgregandoContacto(false)}
           onSubmit={agregarContacto}
           domicilioTitular={formulario}

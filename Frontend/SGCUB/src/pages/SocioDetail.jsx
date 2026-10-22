@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActionsDivider, ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, DeactivateButton, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
+import { socialStatus } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useLocalidades from '../hooks/useLocalidades'
-import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
 
@@ -22,7 +22,6 @@ function SocioDetail() {
   const requestedTab = searchParams.get('tab') ?? undefined
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { openBenefit } = useAssignBenefit()
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -104,6 +103,9 @@ function SocioDetail() {
   if (error || !socio) {
     return <ErrorFile message={error || 'El socio solicitado no existe.'} backTo="/padron/socios" backText="Volver al padrón" />
   }
+  if (socio.jugador_id) {
+    return <Navigate to={`/padron/jugadores/${socio.jugador_id}`} replace state={{ from: 'socios' }} />
+  }
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)
 
@@ -112,7 +114,13 @@ function SocioDetail() {
       id: 'datos-personales',
       label: 'Datos personales',
       icon: 'person',
-      content: <PersonalDataTab persona={socio} localidades={localidades} />,
+      content: (
+        <PersonalDataTab
+          persona={socio}
+          localidades={localidades}
+          onEdit={activo ? () => navigate(`/padron/socios/${socio.socio_id}/editar`) : undefined}
+        />
+      ),
     },
     {
       id: 'financiero',
@@ -133,26 +141,20 @@ function SocioDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        status={socio.estado_administrativo_nombre ? { label: socio.estado_administrativo_nombre, isActive: isActiveStatus(socio.estado_administrativo_nombre) } : null}
+        statuses={[socialStatus(socio, finances.account)]}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
-          { label: 'Fecha de alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Alta', value: formatDate(socio.fecha_alta) },
           { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
         ]}
-        actions={activo ? (
-          <>
-            <DeactivateButton
-              onClick={() => {
-                setErrorEliminacion('')
-                setModaldeactivateAbierto(true)
-              }}
-            />
-            <EditButton onClick={() => navigate(`/padron/socios/${socio.socio_id}/editar`)} />
-            <ActionsDivider />
-            <BenefitButton onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-            <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-          </>
+        statusAction={activo ? (
+          <DeactivateButton
+            onClick={() => {
+              setErrorEliminacion('')
+              setModaldeactivateAbierto(true)
+            }}
+          />
         ) : (
           <ActivateButton
             onClick={() => {
@@ -160,6 +162,9 @@ function SocioDetail() {
               setModalActivarAbierto(true)
             }}
           />
+        )}
+        actions={activo && (
+          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
         )}
       />
 
