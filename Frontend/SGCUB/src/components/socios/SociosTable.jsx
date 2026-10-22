@@ -128,7 +128,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <th className="py-3 px-4 pl-5" scope="col">DNI</th>
             <th className="py-3 px-4" scope="col">Teléfono</th>
             <SortableHeader className="py-3 px-4" etiqueta="Fecha de Alta" columna="fechaAlta" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="py-3 px-4 w-36 whitespace-nowrap" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4 text-right" scope="col">Acciones</th>
           </>
         )}
