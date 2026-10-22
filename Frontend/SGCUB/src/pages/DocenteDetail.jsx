@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateDocente, deactivateDocente, getCargosDocente, getDocente, patchDocente } from '../api/docentes'
 import ActivateDocenteModal from '../components/docentes/ActivateDocenteModal'
 import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModal'
-import PersonHeader, { EditButton, DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -158,7 +158,13 @@ function DocenteDetail() {
       id: 'datos-personales',
       label: 'Datos personales',
       icon: 'person',
-      content: <PersonalDataTab persona={persona} localidades={localidades} />,
+      content: (
+        <PersonalDataTab
+          persona={persona}
+          localidades={localidades}
+          onEdit={activo ? () => navigate(`/padron/docentes/${docente.docente_id}/editar`) : undefined}
+        />
+      ),
     },
     {
       id: 'familiar',
@@ -235,7 +241,6 @@ function DocenteDetail() {
             }}
           />
         )}
-        actions={activo && <EditButton onClick={() => navigate(`/padron/docentes/${docente.docente_id}/editar`)} />}
       />
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />

@@ -11,7 +11,7 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
-const ACTION_GROUP_CLASS = 'flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center gap-2 [&>*]:justify-center'
+const ACTION_GRID_CLASS = 'grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
 export default function PersonHeader({ breadcrumb = [], name, surname, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
@@ -23,8 +23,8 @@ export default function PersonHeader({ breadcrumb = [], name, surname, status, s
 
       <div className="bg-surface-container-lowest rounded-xl shadow-sm p-6 mb-6 relative overflow-hidden">
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
-        <div className="relative z-10">
-          <div className="flex items-start sm:items-center gap-4">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
             <div className="w-20 h-20 shrink-0 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
               {getInitials(name, surname)}
             </div>
@@ -64,9 +64,9 @@ export default function PersonHeader({ breadcrumb = [], name, surname, status, s
             </div>
           </div>
           {(statusAction || actions) && (
-            <div className="mt-5 pt-4 border-t border-outline-variant/30 flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
-              <div className={ACTION_GROUP_CLASS}>{statusAction}</div>
-              {actions && <div className={`${ACTION_GROUP_CLASS} sm:justify-end`}>{actions}</div>}
+            <div className={ACTION_GRID_CLASS}>
+              {actions}
+              {statusAction}
             </div>
           )}
         </div>
@@ -81,7 +81,7 @@ export function EditButton({ onClick, children = 'Editar legajo' }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 h-10 px-4 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg text-base font-semibold border border-outline-variant/40 shadow-sm transition-all cursor-pointer select-none"
+      className="inline-flex items-center gap-2 h-10 px-4 !mb-1 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg text-base font-semibold border border-outline-variant/40 shadow-sm transition-all cursor-pointer select-none"
     >
       <span className="material-symbols-outlined text-[20px] text-outline">edit</span>
       <span>{children}</span>

@@ -1,11 +1,12 @@
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatPhone, yearsText } from '../format'
 import { Field, RecordSection } from './parts'
+import { EditButton } from '../HeaderPersona'
 
 const nombreGenero = (persona) => {
   if (!persona.genero_nombre) return ''
   return persona.genero_nombre === 'Otro' ? persona.genero_otro || 'Otro' : persona.genero_nombre
 }
-export default function PersonalDataTab({ persona, localidades = [], deportivo }) {
+export default function PersonalDataTab({ persona, localidades = [], deportivo, onEdit }) {
   if (!persona) return null
 
   const age = yearsSince(persona.fecha_nacimiento)
@@ -14,7 +15,7 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo }
 
   return (
     <div className="flex flex-col gap-8">
-      <RecordSection title="Datos personales">
+      <RecordSection title="Datos personales" extra={onEdit && <EditButton onClick={onEdit} />}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Field
             label="Documento Nacional de Identidad (DNI)"
@@ -38,16 +39,7 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo }
         <RecordSection
           title="Datos deportivos"
           color="bg-primary"
-          extra={deportivo.estado && (
-            <span
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-base font-semibold ${
-                isActiveStatus(deportivo.estado) ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-container-high text-on-surface-variant'
-              }`}
-            >
-              <span className="material-symbols-outlined">sports</span>
-              Estado deportivo: {deportivo.estado}
-            </span>
-          )}
+          
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
             <Field

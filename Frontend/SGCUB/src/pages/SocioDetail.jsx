@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActivateButton, BenefitButton, DeactivateButton, EditButton, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, DeactivateButton, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
@@ -12,7 +12,6 @@ import { socialStatus } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useLocalidades from '../hooks/useLocalidades'
-import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
 
@@ -23,7 +22,6 @@ function SocioDetail() {
   const requestedTab = searchParams.get('tab') ?? undefined
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { openBenefit } = useAssignBenefit()
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -116,7 +114,13 @@ function SocioDetail() {
       id: 'datos-personales',
       label: 'Datos personales',
       icon: 'person',
-      content: <PersonalDataTab persona={socio} localidades={localidades} />,
+      content: (
+        <PersonalDataTab
+          persona={socio}
+          localidades={localidades}
+          onEdit={activo ? () => navigate(`/padron/socios/${socio.socio_id}/editar`) : undefined}
+        />
+      ),
     },
     {
       id: 'financiero',
@@ -160,13 +164,7 @@ function SocioDetail() {
           />
         )}
         actions={activo && (
-          <>
-            <EditButton onClick={() => navigate(`/padron/socios/${socio.socio_id}/editar`)} />
-            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })}>
-              Beca o descuento
-            </BenefitButton>
-            <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-          </>
+          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
         )}
       />
 

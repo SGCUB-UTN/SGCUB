@@ -6,7 +6,7 @@ import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActivateButton, BenefitButton, DeactivateButton, EditButton, HeaderNotice, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -17,7 +17,6 @@ import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { categoryTags, socialStatus, sportStatus } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
-import useAssignBenefit from '../hooks/useAssignBenefit'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
@@ -43,7 +42,6 @@ function JugadorDetail() {
 
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { openBenefit } = useAssignBenefit()
   const { documentosActivos: activos } = useDocumentacion(jugador?.socio?.persona)
   const badgeConfig = React.useMemo(() => buildDocumentBadges(activos), [activos])
   // Loaded here so the tab badge and the financial tab share a single request
@@ -198,6 +196,7 @@ function JugadorDetail() {
         <PersonalDataTab
           persona={socio}
           localidades={localidades}
+          onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           deportivo={{
             categoria: jugador.categoria?.nombre,
             categoria_secundaria: jugador.categoria_secundaria?.nombre,
@@ -269,18 +268,8 @@ function JugadorDetail() {
         statusAction={activo
           ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />
           : !bajaTemporal && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
-        actions={(activo || bajaTemporal) && (
-          <>
-            <EditButton onClick={() => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)} />
-            {socio.socio_id && (
-              <>
-                <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId: socio.socio_id, onSuccess: refreshFinances })}>
-                  Beca o descuento
-                </BenefitButton>
-                <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
-              </>
-            )}
-          </>
+        actions={(activo || bajaTemporal) && socio.socio_id && (
+          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
         )}
         footer={bajaTemporal && (
           <HeaderNotice
