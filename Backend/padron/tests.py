@@ -171,6 +171,29 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
 
+    def buscar_personas(self, query):
+        response = self.client.get("/api/padron/persona/", {"q": query})
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        return [item["dni"] for item in response.data]
+
+    def test_persona_busqueda_ignora_mayusculas_y_tildes(self):
+        persona = self.crear_persona_orm(nombre="Facundo", apellido="Pérez", dni="45870058")
+        otra = self.crear_persona_orm(nombre="Ana", apellido="Gómez", dni="30111222")
+        for query in ["perez", "PEREZ", "Pérez", "PÉREZ", "facundo"]:
+            self.assertEqual([persona.dni], self.buscar_personas(query), query)
+        self.assertEqual([otra.dni], self.buscar_personas("gomez"))
+
+    def test_persona_busqueda_nombre_completo_en_cualquier_orden(self):
+        persona = self.crear_persona_orm(nombre="Facundo", apellido="Pérez", dni="45870058")
+        self.crear_persona_orm(nombre="Facundo", apellido="Gómez", dni="30111222")
+        for query in ["facundo perez", "Pérez Facundo", "per fac"]:
+            self.assertEqual([persona.dni], self.buscar_personas(query), query)
+
+    def test_persona_busqueda_ene_coincide_con_n(self):
+        persona = self.crear_persona_orm(nombre="Lucía", apellido="Muñoz", dni="45870058")
+        self.assertEqual([persona.dni], self.buscar_personas("munoz lucia"))
+        self.assertEqual([persona.dni], self.buscar_personas("Muñoz"))
+
     def test_persona_get_detail(self):
         persona = self.crear_persona_orm()
         response = self.client.get(f"/api/padron/persona/{persona.persona_id}/", format="json")

@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
+from .search import normalize_text, normalized_field
 from .services import recategorizar_jugadores
 from .services import pasr_de_anio_vigente_a_categoria
 
@@ -99,8 +100,16 @@ def persona_list_create(request):
         elif dni_prefix:
             people = people.filter(dni__startswith=dni_prefix).order_by("dni")[:5]
         elif search:
-            for term in search.split():
-                term_filter = Q(dni__startswith=term) | Q(nombre__icontains=term) | Q(apellido__icontains=term)
+            people = people.annotate(
+                normalized_name=normalized_field("nombre"),
+                normalized_surname=normalized_field("apellido"),
+            )
+            for term in normalize_text(search).split():
+                term_filter = (
+                    Q(dni__startswith=term)
+                    | Q(normalized_name__contains=term)
+                    | Q(normalized_surname__contains=term)
+                )
                 if term.isdigit():
                     term_filter |= Q(socio__numero_socio=int(term))
                 people = people.filter(term_filter)
