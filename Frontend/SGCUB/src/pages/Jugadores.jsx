@@ -11,14 +11,17 @@ function Jugadores() {
   const { jugadores, isLoading, error } = useJugadores()
   const { categorias } = useCategorias()
   const totales = useMemo(() => {
-    const activos = jugadores.filter((jugador) => {
-      const estado = (jugador.estado?.nombre ?? '').toLowerCase()
-      return estado.includes('activo') && !estado.includes('baja') && !estado.includes('inactivo')
-    }).length
+    const sportStatusOf = (jugador) => (jugador.estado?.nombre ?? '').toLowerCase()
+    const isDeactivated = (jugador) => {
+      const estado = sportStatusOf(jugador)
+      return estado.includes('baja') || estado.includes('inactivo')
+    }
+    const activos = jugadores.filter((jugador) => sportStatusOf(jugador).includes('activo') && !isDeactivated(jugador)).length
+    const bajas = jugadores.filter(isDeactivated).length
     return {
       total: jugadores.length.toLocaleString('es-AR'),
       activos: activos.toLocaleString('es-AR'),
-      bajas: (jugadores.length - activos).toLocaleString('es-AR'),
+      bajas: bajas.toLocaleString('es-AR'),
     }
   }, [jugadores])
 
