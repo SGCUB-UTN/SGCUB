@@ -10,8 +10,9 @@ import TableSearchInput from '../shared/TableSearchInput'
 import { formatDni, formatPhone } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import useRegisterPayment from '../../hooks/useRegisterPayment'
 
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 7
 
 const formatDate = (date) => {
   if (!date) return '—'
@@ -60,6 +61,7 @@ const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
 function SociosTable({ data, isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
+  const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
 
   const socios = useMemo(() => data ?? [], [data])
@@ -127,6 +129,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <th className="py-3 px-4" scope="col">Teléfono</th>
             <SortableHeader className="py-3 px-4" etiqueta="Fecha de Alta" columna="fechaAlta" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <th className="py-3 px-4 text-right" scope="col">Acciones</th>
           </>
         )}
       >
@@ -158,6 +161,20 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <td className="py-3 px-4 text-on-surface-variant">{formatPhone(phoneOf(socio))}</td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDate(socio.fecha_alta)}</td>
             <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
+            <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
+              <span title={isActive(socio) ? 'Registrar pago' : 'No se pueden registrar pagos a socios de baja'} className="inline-flex">
+                <button
+                  type="button"
+                  onClick={() => openPayment({ socioId: socio.socio_id })}
+                  disabled={!isActive(socio)}
+                  aria-label={`Registrar pago de ${socio.nombre} ${socio.apellido}`}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 shrink-0 rounded-md border border-primary/30 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-primary"
+                >
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">payments</span>
+                  Pagar
+                </button>
+              </span>
+            </td>
           </tr>
         ))}
       </DataTable>
