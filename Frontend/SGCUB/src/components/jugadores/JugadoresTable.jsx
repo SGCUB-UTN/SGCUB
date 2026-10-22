@@ -70,7 +70,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
     return jugadores.filter((jugador) => {
       if (category !== 'todas' && String(jugador.categoria?.categoria_id) !== category) return false
       if (status === 'activo' && !isActive(jugador)) return false
-      if (status === 'baja' && isActive(jugador)) return false
+      if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
       if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
       if (!text) return true
       return [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre]
@@ -114,7 +114,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           >
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
-            <option value="baja">De baja / Inactivo</option>
+            <option value="baja">De baja completa</option>
             <option value="baja_temporal">Baja temporal</option>
           </FilterSelect>
         </div>

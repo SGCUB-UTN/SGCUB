@@ -18,7 +18,7 @@ function Jugadores() {
       return estado.includes('baja') || estado.includes('inactivo')
     }
     const activos = jugadores.filter((jugador) => sportStatusOf(jugador).includes('activo') && !isDeactivated(jugador)).length
-    const bajas = jugadores.filter(isDeactivated).length
+    const bajas = jugadores.filter((jugador) => jugador.tipo_baja === 'completa').length
     return {
       total: jugadores.length.toLocaleString('es-AR'),
       activos: activos.toLocaleString('es-AR'),
