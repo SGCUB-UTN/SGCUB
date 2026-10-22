@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatDni } from '../format'
 import { PrimaryButton, Field, TabHeader, EmptyState } from './parts'
-import AddContactModal from '../../jugadores/AddContactModal'
+import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
 
 function formatearDomicilioContacto(person) {
@@ -207,7 +207,7 @@ export default function FamilyTab({
         />
       )}
       {addModalOpen && (
-        <AddContactModal
+        <ContactModal
           onClose={() => setAddModalOpen(false)}
           onSubmit={onAdd}
           domicilioTitular={domicilioTitular}

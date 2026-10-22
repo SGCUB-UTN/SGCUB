@@ -40,18 +40,45 @@ function InputField({ label, required, className = '', children }) {
   )
 }
 
-export default function AddContactModal({
+const personaAFormulario = (persona, domicilioTitular) => ({
+  dni: String(persona.dni ?? ''),
+  nombre: persona.nombre ?? '',
+  apellido: persona.apellido ?? '',
+  telefono: persona.telefono ?? '',
+  email: persona.email ?? '',
+  mismo_domicilio: sonMismoDomicilio(persona, domicilioTitular),
+  domicilio_calle: persona.domicilio_calle ?? '',
+  domicilio_numero: persona.domicilio_numero ?? '',
+  domicilio_piso: persona.domicilio_piso ?? '',
+  domicilio_departamento: persona.domicilio_departamento ?? '',
+  domicilio_entre_calle_1: persona.domicilio_entre_calle_1 ?? '',
+  domicilio_entre_calle_2: persona.domicilio_entre_calle_2 ?? '',
+  domicilio_localidad: persona.domicilio_localidad ? String(persona.domicilio_localidad) : '',
+  domicilio_barrio: persona.domicilio_barrio ? String(persona.domicilio_barrio) : '',
+})
+
+const contactoAFormulario = (contact, domicilioTitular) => ({
+  ...contactoVacio,
+  ...personaAFormulario(contact.persona ?? {}, domicilioTitular),
+  relacion: contact.relacion ?? '',
+  responsable_legal: Boolean(contact.responsable_legal),
+})
+
+export default function ContactModal({
+  contact = null,
   onClose,
   onSubmit,
   domicilioTitular = null,
   etiquetaTitular = 'jugador',
   mostrarResponsableLegal = true,
 }) {
-  const [form, setForm] = useState(contactoVacio)
+  const editando = Boolean(contact)
+  const [form, setForm] = useState(() => (editando ? contactoAFormulario(contact, domicilioTitular) : contactoVacio))
   const [saving, setSaving] = useState(false)
   const [searching, setSearching] = useState(false)
   const [coincidencias, setCoincidencias] = useState([])
-  const [personaSeleccionada, setPersonaSeleccionada] = useState(null)
+  const [personaSeleccionada, setPersonaSeleccionada] = useState(editando ? contact.persona ?? null : null)
+  const relaciones = [...new Set([...RELATIONS, ...(form.relacion ? [form.relacion] : [])])]
   const [error, setError] = useState('')
   const ultimaBusqueda = useRef(0)
 
@@ -106,23 +133,7 @@ export default function AddContactModal({
 
   const seleccionarPersona = (persona) => {
     setPersonaSeleccionada(persona)
-    setForm((actual) => ({
-      ...actual,
-      dni: String(persona.dni ?? ''),
-      nombre: persona.nombre ?? '',
-      apellido: persona.apellido ?? '',
-      telefono: persona.telefono ?? '',
-      email: persona.email ?? '',
-      mismo_domicilio: sonMismoDomicilio(persona, domicilioTitular),
-      domicilio_calle: persona.domicilio_calle ?? '',
-      domicilio_numero: persona.domicilio_numero ?? '',
-      domicilio_piso: persona.domicilio_piso ?? '',
-      domicilio_departamento: persona.domicilio_departamento ?? '',
-      domicilio_entre_calle_1: persona.domicilio_entre_calle_1 ?? '',
-      domicilio_entre_calle_2: persona.domicilio_entre_calle_2 ?? '',
-      domicilio_localidad: persona.domicilio_localidad ? String(persona.domicilio_localidad) : '',
-      domicilio_barrio: persona.domicilio_barrio ? String(persona.domicilio_barrio) : '',
-    }))
+    setForm((actual) => ({ ...actual, ...personaAFormulario(persona, domicilioTitular) }))
   }
 
   const quitarSeleccion = () => {
@@ -184,6 +195,7 @@ export default function AddContactModal({
     setSaving(true)
     try {
       await onSubmit({
+        ...(editando ? { vinculo_familiar_id: contact.vinculo_familiar_id } : {}),
         persona: {
           dni: form.dni,
           telefono: form.telefono,
@@ -199,7 +211,7 @@ export default function AddContactModal({
       })
       onClose()
     } catch (requestError) {
-      setError(requestError.message || 'No se pudo agregar el contacto.')
+      setError(requestError.message || (editando ? 'No se pudo modificar el contacto.' : 'No se pudo agregar el contacto.'))
     } finally {
       setSaving(false)
     }
@@ -220,7 +232,7 @@ export default function AddContactModal({
         onSubmit={submit}
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-4 pb-3 border-b border-surface-container shrink-0">
-          <h2 id="titulo-agregar-contacto" className="text-xl font-bold text-on-surface">Agregar contacto</h2>
+          <h2 id="titulo-agregar-contacto" className="text-xl font-bold text-on-surface">{editando ? 'Editar contacto' : 'Agregar contacto'}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -339,7 +351,7 @@ export default function AddContactModal({
           <InputField label="Relación" required className={!mostrarResponsableLegal ? 'sm:col-span-2' : ''}>
             <select className={inputClass} value={form.relacion} onChange={change('relacion')} required disabled={saving}>
               <option value="" disabled>Seleccionar...</option>
-              {RELATIONS.map((relacion) => <option key={relacion} value={relacion}>{relacion}</option>)}
+              {relaciones.map((relacion) => <option key={relacion} value={relacion}>{relacion}</option>)}
             </select>
           </InputField>
           {mostrarResponsableLegal && (
@@ -473,8 +485,8 @@ export default function AddContactModal({
 
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container shrink-0">
           <SecondaryButton onClick={onClose} disabled={saving}>Cancelar</SecondaryButton>
-          <PrimaryButton type="submit" icon="person_add" disabled={saving}>
-            {saving ? 'Guardando...' : 'Agregar contacto'}
+          <PrimaryButton type="submit" icon={editando ? 'save' : 'person_add'} disabled={saving}>
+            {saving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Agregar contacto'}
           </PrimaryButton>
         </div>
       </form>

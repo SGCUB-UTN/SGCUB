@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
 import { putSocio } from '../api/socios'
-import AddContactModal from '../components/jugadores/AddContactModal'
+import ContactModal from '../components/jugadores/ContactModal'
 import FilaContacto from '../components/jugadores/FilaContacto'
 import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
@@ -723,7 +723,7 @@ function JugadorForm() {
       </div>
 
       {agregandoContacto && (
-        <AddContactModal
+        <ContactModal
           onClose={() => setAgregandoContacto(false)}
           onSubmit={agregarContacto}
           domicilioTitular={formulario}
