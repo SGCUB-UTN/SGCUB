@@ -149,7 +149,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             onClick={() => navigate(`/padron/socios/${socio.socio_id}`)}
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
           >
-            <td className="py-3 px-4 font-bold text-primary text-base pl-6 tabular-nums">
+            <td className="py-3 px-4 font-bold text-primary text-base pl-6">
               {socio.numero_socio ? `#${socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
@@ -157,9 +157,9 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
                 {socio.nombre} {socio.apellido}
               </span>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant tabular-nums">{formatDni(socio.dni)}</td>
-            <td className="py-3 px-4 text-on-surface-variant tabular-nums whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>
-            <td className="py-3 px-4 text-on-surface-variant tabular-nums">{formatDate(socio.fecha_alta)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
+            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDate(socio.fecha_alta)}</td>
             <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
             <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
               <span title={isActive(socio) ? 'Registrar pago' : 'No se pueden registrar pagos a socios de baja'} className="inline-flex">
