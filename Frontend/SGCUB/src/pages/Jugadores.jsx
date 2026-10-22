@@ -46,8 +46,8 @@ function Jugadores() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
         <StatCard label="Total" value={totales.total} icon="sports_soccer" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
         <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         <StatCard label="Baja temporal" value={totales.bajasTemporales} icon="pause_circle" tone="warning" onClick={() => setStatus('baja_temporal')} isSelected={status === 'baja_temporal'} />
+        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Jugadores">
         <JugadoresTable
