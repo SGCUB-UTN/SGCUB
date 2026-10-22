@@ -317,6 +317,7 @@ class SocioSerializer(serializers.ModelSerializer):
         required=False
     )
     estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
+    es_jugador = serializers.BooleanField(source="is_player", read_only=True)
 
     class Meta:
         model = Socio
@@ -324,7 +325,7 @@ class SocioSerializer(serializers.ModelSerializer):
             "socio_id", "persona", "numero_socio", "nombre", "apellido", "dni", "telefono", "email",
             "fecha_nacimiento", "edad", "genero", "genero_nombre", "genero_otro",
             "domicilio_calle", "domicilio_numero", "domicilio_piso", "domicilio_departamento", "domicilio_entre_calle_1", "domicilio_entre_calle_2", "domicilio_barrio", "domicilio_barrio_nombre", "domicilio_localidad",
-            "estado_administrativo", "estado_administrativo_nombre", "fecha_alta"
+            "estado_administrativo", "estado_administrativo_nombre", "fecha_alta", "es_jugador"
         ]
         read_only_fields = ["numero_socio", "fecha_alta"]
 

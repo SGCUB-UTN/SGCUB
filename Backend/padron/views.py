@@ -136,7 +136,7 @@ def persona_detail(request, pk):
 def socio_list_create(request):
     if request.method == "GET":
         members = Socio.objects.select_related(
-            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo"
+            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador"
         )
         serializer = SocioSerializer(members, many=True)
         return Response(serializer.data)

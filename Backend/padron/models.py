@@ -177,6 +177,10 @@ class Socio(SequentialNumberMixin, models.Model):
     def is_inactive(self):
         return self.estado_administrativo.nombre == ESTADO_ADMINISTRATIVO_INACTIVO
 
+    @property
+    def is_player(self):
+        return hasattr(self, "jugador")
+
     @transaction.atomic
     def deactivate(self):
         self.estado_administrativo, _ = EstadoAdministrativo.objects.get_or_create(nombre=ESTADO_ADMINISTRATIVO_INACTIVO)
