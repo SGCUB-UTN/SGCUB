@@ -1,5 +1,5 @@
 import useBarrios from '../../hooks/useBarrios'
-import { claseInput } from '../socios/socioForm'
+import { bindPhone, claseInput } from '../socios/socioForm'
 import { Campo, InputConIcono, SelectConFlecha } from '../socios/SocioFormFields'
 import { idCampoContacto, RELATIONS, tieneDatosDomicilioParciales } from './contacts'
 
@@ -71,7 +71,7 @@ export default function FilaContacto({
           <input {...bind('apellido')} type="text" placeholder="Ej: Albarracín" className={claseInput(Boolean(error('apellido')))} />
         </Campo>
         <Campo id={idCampoContacto(fila, 'telefono')} label="Teléfono" requerido error={error('telefono')}>
-          <InputConIcono {...bind('telefono')} type="tel" placeholder="Ej: +54 221 459-2810" icono="call" conError={Boolean(error('telefono'))} />
+          <InputConIcono {...bindPhone(bind('telefono'))} type="tel" placeholder="Ej: 221 459-2810" icono="call" conError={Boolean(error('telefono'))} />
         </Campo>
         <Campo id={idCampoContacto(fila, 'email')} label="Correo electrónico" opcional error={error('email')}>
           <InputConIcono {...bind('email')} type="email" placeholder="Ej: marcos.albarracin@ejemplo.com" icono="mail" conError={Boolean(error('email'))} />

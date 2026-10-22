@@ -13,6 +13,7 @@ function Docentes() {
   const { docentes, isLoading, error } = useDocentes()
   const { categorias } = useCategorias()
   const [categoriasPorDocente, setCategoriasPorDocente] = useState({})
+  const [status, setStatus] = useState('activo')
 
   useEffect(() => {
     let cancelado = false
@@ -60,9 +61,9 @@ function Docentes() {
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-        <StatCard label="Total Docentes" value={totales.total} icon="school" tone="neutral" />
-        <StatCard label="Docentes Activos" value={totales.activos} icon="how_to_reg" tone="positive" />
-        <StatCard label="Docentes de Baja" value={totales.bajas} icon="person_off" tone="muted" />
+        <StatCard label="Total" value={totales.total} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+        <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Docentes">
         <DocentesTable
@@ -71,6 +72,8 @@ function Docentes() {
           categoriasPorDocente={categoriasPorDocente}
           isLoading={isLoading}
           error={error}
+          status={status}
+          onStatusChange={setStatus}
         />
       </section>
     </div>

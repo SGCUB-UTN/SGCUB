@@ -27,12 +27,11 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'legajo', direccion: 'desc' }
 
-function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error }) {
+function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [cargo, setCargo] = useState('todos')
   const [category, setCategory] = useState('todas')
-  const [status, setStatus] = useState('activo')
 
   const docentes = useMemo(() => data ?? [], [data])
 
@@ -56,8 +55,13 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
   }, [docentes, categoriasPorDocente, search, cargo, category, status])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const [previousStatus, setPreviousStatus] = useState(status)
+  if (status !== previousStatus) {
+    setPreviousStatus(status)
+    resetPage()
+  }
 
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
@@ -90,7 +94,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           <FilterSelect
             className={FILTER_CLASS}
             value={status}
-            onChange={(event) => withPageReset(setStatus)(event.target.value)}
+            onChange={(event) => onStatusChange(event.target.value)}
             aria-label="Filtrar por estado"
           >
             <option value="activo">Estado: Activo</option>

@@ -3,6 +3,8 @@ import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
 import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
+import { bindPhone } from '../socios/socioForm'
+import { phoneDigits, phoneError } from '../personas/format'
 import { RELATIONS, sonMismoDomicilio, tieneDatosDomicilioParciales, tieneDomicilioRegistrado } from './contacts'
 
 const contactoVacio = {
@@ -156,6 +158,12 @@ export default function ContactModal({
       return
     }
 
+    const telefonoInvalido = phoneError(form.telefono)
+    if (telefonoInvalido) {
+      setError(telefonoInvalido)
+      return
+    }
+
     const requiereDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
     if (requiereDomicilio) {
       if (!form.domicilio_calle.trim() || !form.domicilio_numero.trim() || !form.domicilio_localidad) {
@@ -198,7 +206,7 @@ export default function ContactModal({
         ...(editando ? { vinculo_familiar_id: contact.vinculo_familiar_id } : {}),
         persona: {
           dni: form.dni,
-          telefono: form.telefono,
+          telefono: phoneDigits(form.telefono),
           nombre: form.nombre,
           apellido: form.apellido,
           email: form.email || null,
@@ -341,9 +349,8 @@ export default function ContactModal({
             <input
               className={inputClass}
               type="tel"
-              placeholder="Ej: +54 221 459-2810"
-              value={form.telefono}
-              onChange={change('telefono')}
+              placeholder="Ej: 221 459-2810"
+              {...bindPhone({ value: form.telefono, onChange: change('telefono') })}
               required
               disabled={saving}
             />
