@@ -178,8 +178,16 @@ class Socio(SequentialNumberMixin, models.Model):
         return self.estado_administrativo.nombre == ESTADO_ADMINISTRATIVO_INACTIVO
 
     @property
+    def player_profile(self):
+        return getattr(self, "jugador", None)
+
+    @property
     def is_player(self):
-        return hasattr(self, "jugador")
+        return self.player_profile is not None and self.player_profile.is_active
+
+    @property
+    def is_former_player(self):
+        return self.player_profile is not None and not self.player_profile.is_active
 
     @transaction.atomic
     def deactivate(self):
@@ -261,6 +269,8 @@ class EstadoDeportivo(models.Model):
 
 ESTADO_DEPORTIVO_ACTIVO = "Activo"
 ESTADO_DEPORTIVO_INACTIVO = "Inactivo"
+TIPO_BAJA_PARCIAL = "parcial"
+TIPO_BAJA_COMPLETA = "completa"
 EDAD_MAYORIA = 18
 
 
@@ -330,6 +340,12 @@ class Jugador(models.Model):
     @property
     def is_active(self):
         return self.estado.nombre == ESTADO_DEPORTIVO_ACTIVO
+
+    @property
+    def deactivation_type(self):
+        if self.is_active:
+            return None
+        return TIPO_BAJA_COMPLETA if self.socio.is_inactive else TIPO_BAJA_PARCIAL
 
     def activate_member_if_inactive(self):
         """Un jugador activo requiere un socio activo: al darlo de alta se reactiva su socio."""
