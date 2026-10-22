@@ -102,6 +102,13 @@ function errorVinculos(contactos, fechaNacimiento) {
   return null
 }
 
+function errorResponsableEdicion(jugador, fechaNacimiento) {
+  const edad = edadActual(fechaNacimiento)
+  const tieneResponsable = (jugador?.vinculos_familiares ?? []).some((vinculo) => vinculo.responsable_legal)
+  if (edad === null || edad >= EDAD_MAYORIA || tieneResponsable) return null
+  return 'Con esta fecha de nacimiento el jugador es menor de edad y no tiene un responsable legal. Agregalo desde la pestaña Familiar / Contactos antes de guardar.'
+}
+
 function JugadorForm() {
   const { id } = useParams()
   const editando = Boolean(id)
@@ -133,7 +140,6 @@ function JugadorForm() {
         const formInicial = jugadorAFormulario(datos)
         setJugador(datos)
         setFormulario(formInicial)
-        setContactos((datos.vinculos_familiares ?? []).map((c) => contactoAFila(c, formInicial)))
       })
       .catch((requestError) => {
         if (activo) setErrorCarga(requestError.response?.data?.detail || 'No se pudo cargar el jugador.')
@@ -297,12 +303,12 @@ function JugadorForm() {
     const nuevosErrores = {
       ...validar(formulario, esGeneroOtro),
       ...validarDeportivo(formulario, editando),
-      ...validarContactos(contactos, dniIngresado, 'jugador'),
+      ...(editando ? {} : validarContactos(contactos, dniIngresado, 'jugador')),
     }
     if (socioDuplicado) nuevosErrores.dni = 'Ya existe otro socio registrado con este DNI.'
     if (jugadorDelSocio) nuevosErrores.dni = 'Este socio ya está registrado como jugador.'
     if (dniSinSeleccionar) nuevosErrores.dni = 'Este DNI ya está registrado: seleccioná la persona en la lista de sugerencias.'
-    const errorContactos = errorVinculos(contactos, formulario.fecha_nacimiento)
+    const errorContactos = editando ? null : errorVinculos(contactos, formulario.fecha_nacimiento)
     if (errorContactos) nuevosErrores.vinculos_familiares = errorContactos
     setErrores(nuevosErrores)
 
@@ -317,6 +323,13 @@ function JugadorForm() {
       return
     }
 
+    const errorResponsable = editando ? errorResponsableEdicion(jugador, formulario.fecha_nacimiento) : null
+    if (errorResponsable) {
+      setErrorGuardado(errorResponsable)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
     const { categoria, categoria_secundaria, estado, obra_social, obra_social_otra, tallaIndumentaria, ...datosSocio } = formulario
     if (!datosSocio.estado_administrativo) delete datosSocio.estado_administrativo
     if (!esGeneroOtro) datosSocio.genero_otro = ''
@@ -327,7 +340,7 @@ function JugadorForm() {
       ...(editando ? { estado } : {}),
       obra_social: obra_social === OBRA_SOCIAL_OTRA ? obra_social_otra.trim() : obra_social,
       tallaIndumentaria,
-      vinculos_familiares: contactos.map((fila) => filaAContacto(fila, formulario, mostrarResponsableLegal)),
+      ...(editando ? {} : { vinculos_familiares: contactos.map((fila) => filaAContacto(fila, formulario, mostrarResponsableLegal)) }),
     }
 
     setGuardando(true)
@@ -439,7 +452,9 @@ function JugadorForm() {
         <div className="px-6 py-4 border-b border-outline-variant/20 bg-surface-container-low/40 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-base">badge</span>
-            <h2 className="text-base font-semibold text-on-surface">Datos Personales, Deportivos y Contactos</h2>
+            <h2 className="text-base font-semibold text-on-surface">
+              {editando ? 'Datos Personales y Deportivos' : 'Datos Personales, Deportivos y Contactos'}
+            </h2>
           </div>
         </div>
 
@@ -627,7 +642,7 @@ function JugadorForm() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
+            {!editando && <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
               <SeccionTitulo
                 icono="family_restroom"
                 titulo="Vinculos familiares y contactos de emergencia"
@@ -670,7 +685,6 @@ function JugadorForm() {
                     indice={indice}
                     errores={errores}
                     localidades={localidades}
-                    mostrarSinGuardar={editando}
                     mostrarResponsableLegal={mostrarResponsableLegal}
                     resaltarResponsable={Boolean(errores.vinculos_familiares)}
                     onChange={(campo, valor) => actualizarContacto(fila.clave, campo, valor)}
@@ -678,7 +692,7 @@ function JugadorForm() {
                   />
                 ))
               )}
-            </div>
+            </div>}
 
             {/* Acciones */}
             <div className="mt-8 pt-6 border-t border-outline-variant/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
