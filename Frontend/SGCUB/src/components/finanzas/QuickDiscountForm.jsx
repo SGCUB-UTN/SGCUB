@@ -95,7 +95,6 @@ function QuickDiscountForm({ cuota, onSuccess }) {
 
       <div className="flex justify-end pt-1">
         <button type="submit" disabled={saving} className={`${SUBMIT_BUTTON_CLASS} h-11 justify-center text-base`}>
-          <span className={`material-symbols-outlined text-base ${saving ? 'animate-spin' : ''}`} aria-hidden="true">{saving ? 'progress_activity' : 'check'}</span>
           <span>{saving ? 'Aplicando...' : 'Aceptar'}</span>
         </button>
       </div>

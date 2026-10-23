@@ -84,7 +84,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
             type="button"
             onClick={() => setSocioId(null)}
             disabled={!socioId}
-            className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+            className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:grayscale disabled:cursor-default disabled:hover:bg-transparent"
           >
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
             Elegir otro socio

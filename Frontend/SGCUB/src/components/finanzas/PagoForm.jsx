@@ -7,7 +7,7 @@ import { SelectConFlecha } from '../socios/SocioFormFields'
 import ComprobantePago from './ComprobantePago'
 import LateFeeWaiverModal from './LateFeeWaiverModal'
 import { FormSection, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { cuotaStateBadgeClass, cuotaStateLabel, isOverdue } from './cuotaStates'
+import { cuotaStateLabel, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
 
@@ -238,8 +238,8 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
-              <span className={`inline-flex items-center px-2 py-px rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>
-                {cuotaStateLabel(cuota.estado_cuota)}
+              <span className="w-2 h-2 rounded-full bg-error shrink-0" title={cuotaStateLabel(cuota.estado_cuota)}>
+                <span className="sr-only">{cuotaStateLabel(cuota.estado_cuota)}</span>
               </span>
             )}
           </div>
@@ -493,7 +493,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
 
   return (
     <form onSubmit={confirmPayment} className="flex flex-col" noValidate>
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch">
+      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
           <FormSection
             icon="receipt_long"
@@ -524,7 +524,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
           <FormSection
             icon="payments"
             title="Formas de pago"
-            description={noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
+            description={socio && noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
             disabled={!socio || noDebt}
           >
             <div className="flex flex-col gap-3">
@@ -578,7 +578,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
           </FormSection>
         </div>
 
-        <div className={TICKET_CLASS} role="region" aria-labelledby="payment-summary-title">
+        <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>
           <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
@@ -642,9 +642,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
               disabled={!socio || saving || noDebt || exceedsDebt || !(enteredTotal > 0)}
               className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}
             >
-              <span className={`material-symbols-outlined text-base ${saving ? 'animate-spin' : ''}`} aria-hidden="true">
-                {saving ? 'progress_activity' : 'payments'}
-              </span>
               <span>{confirmLabel()}</span>
             </button>
           </div>

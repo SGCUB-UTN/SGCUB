@@ -120,7 +120,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-stretch">
+      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
           <FormSection icon="category" title="Tipo de beneficio" disabled={!socio}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -206,7 +206,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
           </FormSection>
         </div>
 
-        <div className={TICKET_CLASS} role="region" aria-labelledby="benefit-summary-title">
+        <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="benefit-summary-title" aria-disabled={!socio || undefined}>
           <h3 id="benefit-summary-title" className="text-lg font-bold text-on-surface">Resumen del beneficio</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
@@ -263,9 +263,6 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
               </div>
             )}
             <button type="submit" disabled={!socio || saving} className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}>
-              <span className={`material-symbols-outlined text-base ${saving ? 'animate-spin' : ''}`} aria-hidden="true">
-                {saving ? 'progress_activity' : isScholarship ? 'school' : 'sell'}
-              </span>
               <span>{submitLabel()}</span>
             </button>
           </div>
