@@ -3,7 +3,7 @@ import { postBeneficio } from '../../api/cuotas'
 import { formatAmount, formatDate, getErrorMessage } from '../personas/format'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { formatPeriod } from '../shared/periodFormat'
-import { FIELD_CLASS, NO_SPINNER_CLASS, StepSection, SUMMARY_GROUP_CLASS, SummaryLine } from './formParts'
+import { FIELD_CLASS, FieldLabel, NO_SPINNER_CLASS, StepSection, SUMMARY_GROUP_CLASS, SummaryLine } from './formParts'
 import { isPaid } from './accountStatement'
 import { cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 
@@ -85,15 +85,6 @@ function KindOption({ kind, selected, disabled, onSelect }) {
         <span className="text-base font-semibold text-on-surface">{kind.label}</span>
         <span className="text-sm text-on-surface-variant">{kind.description}</span>
       </div>
-    </label>
-  )
-}
-
-function FieldLabel({ htmlFor, children, optional = false }) {
-  return (
-    <label htmlFor={htmlFor} className="text-sm font-semibold text-on-surface-variant">
-      {children}
-      {optional ? <span className="font-normal text-outline"> (opcional)</span> : <span className="text-error"> *</span>}
     </label>
   )
 }

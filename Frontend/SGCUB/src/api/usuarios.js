@@ -7,6 +7,11 @@ export const getUsuarios = async () => {
   return response.data
 }
 
+export const getAutorizantes = async () => {
+  const response = await api.get(`${usuariosEndpoint}autorizantes/`)
+  return response.data
+}
+
 export const getRoles = async () => {
   const response = await api.get(`${usuariosEndpoint}roles/`)
   return response.data
