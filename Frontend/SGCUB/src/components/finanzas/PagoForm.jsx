@@ -66,8 +66,6 @@ const firstCuotasTotal = (cuotas, waivedIds, count) => roundCents(cuotas
   .slice(0, count)
   .reduce((total, cuota) => total + cuotaDue(cuota, waivedIds.includes(cuota.cuota_id)), 0))
 
-const LINK_BUTTON_CLASS = 'inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer'
-
 const ACTION_BUTTON_CLASS = 'inline-flex items-center justify-center p-1 rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 
 function ActionButton({ icon, label, active = false, disabled = false, onClick }) {
@@ -275,71 +273,58 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
 
 const ROW_ICON_BUTTON_CLASS = 'w-11 h-11 shrink-0 rounded-lg flex items-center justify-center transition-colors cursor-pointer'
 
-function PaymentRow({ row, index, takenMethods, missingAmount, canRemove, showActionSlot, showErrors, onChange, onRemove }) {
+function PaymentRow({ row, index, takenMethods, canRemove, showActionSlot, showErrors, onChange, onRemove }) {
   const methodError = showErrors && !row.medio
   const amountError = showErrors && !(Number(row.monto) > 0)
-  const showFill = missingAmount > 0 && roundCents(missingAmount) !== roundCents(Number(row.monto || 0))
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <SelectConFlecha
-            value={row.medio}
-            onChange={(event) => onChange({ medio: event.target.value })}
-            aria-label={`Medio de pago ${index + 1}`}
-            conError={methodError}
-          >
-            <option value="">Seleccioná un medio</option>
-            {PAYMENT_METHODS.map((method) => (
-              <option key={method.value} value={method.value} disabled={takenMethods.includes(method.value)}>
-                {method.label}
-              </option>
-            ))}
-          </SelectConFlecha>
-        </div>
-
-        <div className="relative w-36 sm:w-48 shrink-0">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0.01"
-            step="0.01"
-            value={row.monto}
-            onChange={(event) => onChange({ monto: event.target.value, edited: true })}
-            placeholder="0.00"
-            aria-label={`Monto del medio de pago ${index + 1}`}
-            aria-invalid={amountError || undefined}
-            className={claseInput(amountError, `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`)}
-          />
-        </div>
-
-        {showActionSlot && (
-          <div className="w-11 shrink-0">
-            {canRemove && (
-              <button
-                type="button"
-                onClick={onRemove}
-                title="Quitar medio de pago"
-                aria-label={`Quitar medio de pago ${index + 1}`}
-                className={`${ROW_ICON_BUTTON_CLASS} text-error hover:bg-error-container/60`}
-              >
-                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">delete</span>
-              </button>
-            )}
-          </div>
-        )}
+    <div className="flex items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <SelectConFlecha
+          value={row.medio}
+          onChange={(event) => onChange({ medio: event.target.value })}
+          aria-label={`Medio de pago ${index + 1}`}
+          conError={methodError}
+        >
+          <option value="">Seleccioná un medio</option>
+          {PAYMENT_METHODS.map((method) => (
+            <option key={method.value} value={method.value} disabled={takenMethods.includes(method.value)}>
+              {method.label}
+            </option>
+          ))}
+        </SelectConFlecha>
       </div>
 
-      {showFill && (
-        <button
-          type="button"
-          onClick={() => onChange({ monto: amountInput(missingAmount), edited: true })}
-          className={`self-end ${LINK_BUTTON_CLASS}`}
-        >
-          Completar con {formatAmount(missingAmount)}
-        </button>
+      <div className="relative w-36 sm:w-48 shrink-0">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0.01"
+          step="0.01"
+          value={row.monto}
+          onChange={(event) => onChange({ monto: event.target.value, edited: true })}
+          placeholder="0.00"
+          aria-label={`Monto del medio de pago ${index + 1}`}
+          aria-invalid={amountError || undefined}
+          className={claseInput(amountError, `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`)}
+        />
+      </div>
+
+      {showActionSlot && (
+        <div className="w-11 shrink-0">
+          {canRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              title="Quitar medio de pago"
+              aria-label={`Quitar medio de pago ${index + 1}`}
+              className={`${ROW_ICON_BUTTON_CLASS} text-error hover:bg-error-container/60`}
+            >
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">delete</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -568,7 +553,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
                   row={row}
                   index={index}
                   takenMethods={paymentRows.filter((_, position) => position !== index).map((other) => other.medio).filter(Boolean)}
-                  missingAmount={roundCents(debtTotal - (enteredTotal - Number(row.monto || 0)))}
                   canRemove={paymentRows.length > 1}
                   showActionSlot={showActionSlot}
                   showErrors={showErrors}
@@ -635,20 +619,15 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
               <SummaryLine label="Total pagado" value={formatAmount(enteredTotal)} />
             </TicketSection>
 
-            <div className="flex flex-col gap-1">
-              <SummaryLine
-                label="Saldo pendiente"
-                value={formatAmount(Math.max(pendingBalance, 0))}
-                isTotal
-                valueClassName={pendingBalance <= 0 ? 'text-emerald-700' : 'text-amber-700'}
-              />
-              {socio && pendingBalance > 0 && enteredTotal > 0 && (
-                <p className="text-sm text-on-surface-variant">Pago parcial: el socio queda debiendo {formatAmount(pendingBalance)}.</p>
-              )}
-            </div>
+            <SummaryLine
+              label="Saldo pendiente"
+              value={formatAmount(Math.max(pendingBalance, 0))}
+              isTotal
+              valueClassName={pendingBalance <= 0 ? 'text-emerald-700' : 'text-amber-700'}
+            />
           </div>
 
-          <div className="flex flex-col items-end gap-3">
+          <div className="flex flex-col gap-3">
             {submitError && (
               <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
                 <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>
@@ -661,7 +640,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
             <button
               type="submit"
               disabled={!socio || saving || noDebt || exceedsDebt || !(enteredTotal > 0)}
-              className={`${SUBMIT_BUTTON_CLASS} h-11 justify-center text-base`}
+              className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}
             >
               <span className={`material-symbols-outlined text-base ${saving ? 'animate-spin' : ''}`} aria-hidden="true">
                 {saving ? 'progress_activity' : 'payments'}

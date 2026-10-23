@@ -30,7 +30,7 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => ({
   key: `beca-${beca.beca_id}`,
   type: TYPES.beca,
   sortDate: beca.fecha_aplicacion,
-  validity: `${monthYear(beca.fecha_aplicacion)} → ${monthYear(beca.fecha_fin)}`,
+  validity: `${monthYear(beca.fecha_aplicacion)} → ${beca.fecha_fin ? monthYear(beca.fecha_fin) : 'Sin fecha de fin'}`,
   reason: beca.motivo,
   value: scholarshipValue(beca),
   state: SCHOLARSHIP_STATES[scholarshipState(beca, today)],
