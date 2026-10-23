@@ -14,7 +14,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { categoryTags, socialStatus, sportStatus } from '../components/personas/profileStatus'
+import { categoryTags, memberStatuses } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -257,7 +257,8 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        statuses={[socialStatus(socio, finances.account), sportStatus(jugador)]}
+        isActive={activo}
+        statuses={memberStatuses(socio, finances.account, jugador)}
         tags={categoryTags(jugador)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },

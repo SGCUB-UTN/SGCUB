@@ -3,6 +3,7 @@ const TONES = {
   positive: { icon: 'bg-emerald-50 text-emerald-700 border border-emerald-100' },
   muted: { icon: 'bg-surface-container-high text-on-surface-variant' },
   warning: { icon: 'bg-secondary-fixed text-on-secondary-fixed', accent: 'text-secondary' },
+  info: { icon: 'bg-secondary-fixed text-on-secondary-fixed' },
   error: { icon: 'bg-error-container text-error', accent: 'text-error' },
 }
 

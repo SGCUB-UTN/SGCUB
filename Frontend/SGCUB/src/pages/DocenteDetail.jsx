@@ -12,6 +12,7 @@ import CategoriesTab from '../components/personas/tabs/CategoriesTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
+import { teacherStatuses } from '../components/personas/profileStatus'
 import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useLocalidades from '../hooks/useLocalidades'
@@ -217,7 +218,8 @@ function DocenteDetail() {
         ]}
         name={persona.nombre}
         surname={persona.apellido}
-        status={docente.estado_nombre ? { label: docente.estado_nombre, isActive: activo } : null}
+        isActive={activo}
+        statuses={teacherStatuses(activo)}
         metadata={[
           { label: 'DNI', value: formatDni(persona.dni) },
           { label: 'Legajo', value: `#${docente.legajo}`, highlighted: true },

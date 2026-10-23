@@ -1,19 +1,19 @@
 import { isOverdue } from '../finanzas/cuotaStates'
 import { isActiveStatus } from './format'
 
-export const socialStatus = (socio, account) => {
-  if (!isActiveStatus(socio?.estado_administrativo_nombre)) {
-    return { label: 'Socio inactivo', tone: 'muted', icon: 'block' }
-  }
-  if ((account?.cuotas ?? []).some(isOverdue)) {
-    return { label: 'Socio con deuda', tone: 'error', icon: 'error' }
-  }
-  return { label: 'Socio activo', tone: 'positive', icon: 'check_circle' }
+const DEACTIVATED = { label: 'De Baja', tone: 'muted', icon: 'block' }
+const TEMPORARY_LEAVE = { label: 'Baja temporal', tone: 'warning', icon: 'pause_circle' }
+const IN_DEBT = { label: 'Con deuda', tone: 'error', icon: 'error' }
+
+export const memberStatuses = (socio, account, jugador = null) => {
+  if (!isActiveStatus(socio?.estado_administrativo_nombre)) return [DEACTIVATED]
+  return [
+    jugador?.tipo_baja === 'parcial' && TEMPORARY_LEAVE,
+    (account?.cuotas ?? []).some(isOverdue) && IN_DEBT,
+  ].filter(Boolean)
 }
 
-export const sportStatus = (jugador) => (isActiveStatus(jugador?.estado?.nombre)
-  ? { label: 'Jugador activo', tone: 'positive', icon: 'sports_soccer' }
-  : { label: 'Jugador inactivo', tone: 'muted', icon: 'sports_soccer' })
+export const teacherStatuses = (isActive) => (isActive ? [] : [DEACTIVATED])
 
 export const categoryTags = (jugador) => [jugador?.categoria, jugador?.categoria_secundaria]
   .filter((categoria) => categoria?.nombre)
