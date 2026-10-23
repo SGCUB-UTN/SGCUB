@@ -5,7 +5,7 @@ import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
 import { formatAmount, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import StatCard from '../../shared/StatCard'
-import { EmptyState } from './parts'
+import { EmptyState, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
@@ -46,12 +46,11 @@ export function FinancialStatement({ socio, finances }) {
     return <EmptyState icon="account_balance_wallet" title="Sin cuenta corriente" description="Este socio todavía no tiene una cuenta corriente asociada." />
   }
 
+  const title = `Cuenta Corriente ${formatNumber(account.cuenta_corriente_id)}`
+
   return (
-    <section className="flex flex-col gap-6 mt-2" aria-labelledby="estado-cuenta-title">
-      <div className="mb-4">
-        <h2 id="estado-cuenta-title" className="text-2xl font-bold text-on-surface">Cuenta Corriente {formatNumber(account.cuenta_corriente_id)}</h2>
-        <p className="text-base text-on-surface-variant mt-1">Detalle de cuotas, pagos y beneficios del socio.</p>
-      </div>
+    <section className="flex flex-col gap-6" aria-label={title}>
+      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-10">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />

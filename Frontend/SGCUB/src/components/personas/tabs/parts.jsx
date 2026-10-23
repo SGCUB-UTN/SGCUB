@@ -4,10 +4,10 @@ export function RecordSection({ title, color = 'bg-primary-container', extra, ch
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between pb-1 border-b border-surface-container mb-4">
-        <div className="flex items-center gap-2">
-          <span className={`w-1 h-5 rounded ${color}`} />
-          <h2 className="text-xl text-on-surface font-bold tracking-tight">{title}</h2>
-        </div>
+        <h2 className="flex items-baseline gap-2 text-2xl text-on-surface font-bold tracking-tight">
+          <span className={`w-1 h-[0.7em] shrink-0 rounded ${color}`} aria-hidden="true" />
+          {title}
+        </h2>
         {extra}
       </div>
       {children}
@@ -19,10 +19,10 @@ export function TabHeader({ title, description, actions }) {
   return (
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-surface-container ">
       <div className="flex flex-col gap-1 ">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="w-1 h-5 bg-primary-container rounded " />
-          <h2 className="text-xl text-on-surface font-bold tracking-tight">{title}</h2>
-        </div>
+        <h2 className="flex items-baseline gap-2 mt-2 text-2xl text-on-surface font-bold tracking-tight">
+          <span className="w-1 h-[0.7em] shrink-0 bg-primary-container rounded" aria-hidden="true" />
+          {title}
+        </h2>
         {description && <p className="text-base text-on-surface-variant">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 flex-wrap shrink-0">{actions}</div>}
