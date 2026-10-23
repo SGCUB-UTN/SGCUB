@@ -67,6 +67,14 @@ def _to_drf_error(validator, value):
         raise serializers.ValidationError(error.messages)
 
 
+class AutorizanteSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    full_name = serializers.SerializerMethodField()
+
+    def get_full_name(self, user) -> str:
+        return user.get_full_name() or user.username
+
+
 class UsuarioSerializer(serializers.ModelSerializer):
     dni = serializers.CharField(source="username", max_length=12)
     full_name = serializers.SerializerMethodField()
