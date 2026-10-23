@@ -36,9 +36,11 @@ function ReceiptRow({ comprobante, onOpen }) {
         <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-base font-semibold ${annulled ? 'text-on-surface-variant line-through' : 'text-on-surface'}`}>Comprobante #{comprobante.numero}</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${annulled ? 'bg-error-container text-on-error-container border-error/20' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-              {comprobante.estado ?? 'Vigente'}
-            </span>
+            {annulled && (
+              <span className="px-2 py-0.5 rounded text-xs font-bold border bg-error-container text-on-error-container border-error/20">
+                {comprobante.estado}
+              </span>
+            )}
           </div>
           <span className="text-sm text-on-surface-variant">Emitido el {formatDate(comprobante.fecha_emision)}</span>
         </div>
@@ -87,7 +89,7 @@ function CuotaBreakdown({ cuota }) {
         <DetailLine label="1° vencimiento" value={formatDate(cuota.fecha_venc1)} className="text-on-surface-variant" />
         <DetailLine label="2° vencimiento" value={formatDate(cuota.fecha_venc2)} className="text-on-surface-variant" />
       </div>
-      <div className="flex flex-col flex-1 gap-1.5 pt-3 border-t border-outline-variant/30 text-base">
+      <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30 text-base">
         {(cuota.items ?? []).map((item) => {
           const tone = itemTone(item)
           return (
@@ -99,32 +101,42 @@ function CuotaBreakdown({ cuota }) {
             />
           )
         })}
-        <div className="pt-2 mt-auto border-t border-outline-variant/30">
-          <DetailLine label="Total" value={formatAmount(Number(cuota.monto_total ?? 0))} strong />
-        </div>
       </div>
     </section>
   )
 }
 
 function PaymentSummary({ cuota }) {
-  const pending = Number(cuota.saldo_pendiente ?? 0)
   return (
     <section className="flex flex-col gap-1.5 mt-auto text-base" aria-label="Resumen de pago">
       <h4 className={SUMMARY_GROUP_CLASS}>Resumen</h4>
       <DetailLine label="Total de la cuota" value={formatAmount(Number(cuota.monto_total ?? 0))} />
       <DetailLine label="Pagado" value={formatAmount(Number(cuota.monto_pagado ?? 0))} />
+    </section>
+  )
+}
+
+function CuotaTotal({ cuota }) {
+  return (
+    <div className="pt-3 border-t border-outline-variant/30 text-base">
+      <DetailLine label="Total" value={formatAmount(Number(cuota.monto_total ?? 0))} strong />
+    </div>
+  )
+}
+
+function PaymentStatus({ cuota }) {
+  const pending = Number(cuota.saldo_pendiente ?? 0)
+  return (
+    <div className="pt-3 border-t border-outline-variant/30 text-base">
       {isPaid(cuota) || pending <= 0 ? (
-        <p className="flex items-center gap-1.5 pt-2 mt-1 border-t border-outline-variant/30 font-semibold text-emerald-700">
+        <p className="flex items-center gap-1.5 font-semibold text-emerald-700">
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">task_alt</span>
-          Cuota paga
+          Cuota pagada
         </p>
       ) : (
-        <div className="pt-2 mt-1 border-t border-outline-variant/30">
-          <DetailLine label="Pendiente" value={formatAmount(pending)} className="text-error" strong />
-        </div>
+        <DetailLine label="Pendiente" value={formatAmount(pending)} className="text-error" strong />
       )}
-    </section>
+    </div>
   )
 }
 
@@ -174,7 +186,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit }) {
   return (
     <tr className="bg-surface-container-low/60">
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-[1fr_auto] gap-x-6 gap-y-4">
           <CuotaBreakdown cuota={cuota} />
           <div className="flex flex-col gap-6 min-w-0">
             <section className="min-w-0 flex flex-col gap-2" aria-label="Comprobantes asociados">
@@ -201,6 +213,8 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit }) {
             {(onPay || onAssignBenefit) && <CuotaActions cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} />}
             <PaymentSummary cuota={cuota} />
           </div>
+          <CuotaTotal cuota={cuota} />
+          <PaymentStatus cuota={cuota} />
         </div>
 
         <ComprobanteDetailModal
