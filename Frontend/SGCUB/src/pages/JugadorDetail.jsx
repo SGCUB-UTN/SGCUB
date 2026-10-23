@@ -211,7 +211,6 @@ function JugadorDetail() {
       id: 'familiar',
       label: 'Familiar / Contactos',
       icon: 'family_restroom',
-      badge: contactos.length ? { label: contactos.length, tono: 'info' } : undefined,
       content: (
         <FamilyTab
           contacts={contactos}
