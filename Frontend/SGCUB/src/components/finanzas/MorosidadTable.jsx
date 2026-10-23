@@ -15,11 +15,11 @@ function MorosidadTable({ filas }) {
       tableClassName="min-w-[760px]"
       headers={(
         <>
-          <th className="px-3 py-3" scope="col">Socio</th>
-          <th className="px-3 py-3" scope="col">DNI</th>
-          <th className="px-3 py-3" scope="col">Categoría deportiva</th>
-          <th className="px-3 py-3 text-right" scope="col">Monto adeudado</th>
-          <th className="px-3 py-3 text-right" scope="col">Días de mora</th>
+          <th className="px-4 py-3" scope="col">Socio</th>
+          <th className="px-4 py-3" scope="col">DNI</th>
+          <th className="px-4 py-3" scope="col">Categoría deportiva</th>
+          <th className="px-4 py-3 text-right" scope="col">Monto adeudado</th>
+          <th className="px-4 py-3 text-right" scope="col">Días de mora</th>
         </>
       )}
     >
@@ -28,7 +28,7 @@ function MorosidadTable({ filas }) {
         return (
           <Fragment key={fila.socio_id}>
             <tr className="hover:bg-surface-container-low/70">
-              <td className="px-3 py-2.5">
+              <td className="px-4 py-3">
                 <button
                   type="button"
                   aria-expanded={expanded}
@@ -40,10 +40,10 @@ function MorosidadTable({ filas }) {
                 </button>
                 <span className="block pl-7 text-xs text-on-surface-variant">Socio {formatNumber(fila.numero_socio)}</span>
               </td>
-              <td className="px-3 py-2.5 text-on-surface-variant">{formatDni(fila.dni)}</td>
-              <td className="px-3 py-2.5 text-on-surface-variant">{fila.categoria_deportiva}</td>
-              <td className="px-3 py-2.5 text-right font-semibold text-error">{formatAmount(fila.monto_adeudado)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-on-surface">{fila.dias_mora}</td>
+              <td className="px-4 py-3 text-on-surface-variant">{formatDni(fila.dni)}</td>
+              <td className="px-4 py-3 text-on-surface-variant">{fila.categoria_deportiva}</td>
+              <td className="px-4 py-3 text-right font-semibold text-error">{formatAmount(fila.monto_adeudado)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-on-surface">{fila.dias_mora}</td>
             </tr>
             {expanded && (
               <tr className="bg-surface-container-low/50">

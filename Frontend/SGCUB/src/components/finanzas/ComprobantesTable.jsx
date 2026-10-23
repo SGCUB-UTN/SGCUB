@@ -9,6 +9,7 @@ import { formatPeriod, periodOf, periodOptions } from '../shared/periodFormat'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
@@ -41,13 +42,13 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
   )
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     const textDigits = text.replace(/[.#]/g, '')
     return comprobantes.filter((comprobante) => {
       if (status !== ALL && comprobante.estado !== status) return false
       if (month !== ALL && periodOf(comprobante.fecha_emision) !== month) return false
       if (!text) return true
-      return socioName(comprobante).toLowerCase().includes(text)
+      return matchesSearch(text, [socioName(comprobante)])
         || (textDigits !== '' && [comprobante.numero, comprobante.pago, comprobante.socio?.dni]
           .some((field) => String(field ?? '').includes(textDigits)))
     })
@@ -129,14 +130,14 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
             role="button"
             className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
           >
-            <td className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap">
+            <td className="py-3 px-4 font-semibold text-primary whitespace-nowrap">
               #{comprobante.numero}
               {comprobante.estado === 'Anulado' && (
                 <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-error-container text-on-error-container">Anulado</span>
               )}
             </td>
-            <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(comprobante.fecha_emision)}</td>
-            <td className="py-3.5 px-4">
+            <td className="py-3 px-4 text-on-surface-variant">{formatDate(comprobante.fecha_emision)}</td>
+            <td className="py-3 px-4">
               {comprobante.socio ? (
                 <>
                   <span className="block font-medium text-on-surface">{socioName(comprobante)}</span>
@@ -146,8 +147,8 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
                 <span className="text-on-surface-variant">—</span>
               )}
             </td>
-            <td className="py-3.5 px-4 text-on-surface-variant">Pago #{comprobante.pago}</td>
-            <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">Pago #{comprobante.pago}</td>
+            <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</td>
           </tr>
         ))}
       </DataTable>

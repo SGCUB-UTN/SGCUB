@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 4
 
@@ -47,11 +48,10 @@ export default function InscripcionesTable({ data, isLoading, error }) {
   const inscripciones = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return inscripciones
     return inscripciones.filter((i) =>
-      [i.jugador_id, i.competicion_id, i.estado]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [i.jugador_id, i.competicion_id, i.estado]),
     )
   }, [inscripciones, search])
 
@@ -71,8 +71,6 @@ export default function InscripcionesTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Jugador (ID COMET)" columna="jugador" orden={sort} onOrdenar={sortAndReset} />
@@ -94,10 +92,10 @@ export default function InscripcionesTable({ data, isLoading, error }) {
 
         {!isLoading && visibleRows.map((i) => (
           <tr key={i.id} className="hover:bg-surface-container-low/80 transition-colors">
-            <td className="py-3 px-4 pl-6 font-mono text-sm text-on-surface">{i.jugador_id || '—'}</td>
-            <td className="py-3 px-4 font-mono text-sm text-on-surface-variant">{i.competicion_id || '—'}</td>
+            <td className="py-3 px-4 pl-6 text-on-surface">{i.jugador_id || '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{i.competicion_id || '—'}</td>
             <td className="py-3 px-4"><EstadoInscripcion estado={i.estado} /></td>
-            <td className="py-3 px-4 text-on-surface-variant text-sm">{i.fecha_inscripcion || '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{i.fecha_inscripcion || '—'}</td>
           </tr>
         ))}
       </DataTable>

@@ -1,3 +1,5 @@
+import { formatDni } from '../personas/format'
+
 export default function ExcludedListModal({ isOpen, onClose, excluidos = [] }) {
   if (!isOpen) return null
 
@@ -51,7 +53,7 @@ export default function ExcludedListModal({ isOpen, onClose, excluidos = [] }) {
                       {item.nombre}
                     </span>
                     <span className="text-xs text-on-surface-variant">
-                      DNI {item.dni} • {item.categoria}
+                      DNI {formatDni(item.dni)} • {item.categoria}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

@@ -1,3 +1,5 @@
+import { phoneDigits, phoneError } from '../personas/format'
+
 export const RELATIONS = ['Madre', 'Padre', 'Tutor', 'Abuelo/a', 'Hermano/a', 'Pareja', 'Otro']
 
 export const CAMPOS_CONTACTO = ['dni', 'nombre', 'apellido', 'telefono', 'relacion']
@@ -102,7 +104,7 @@ export const filaAContacto = (fila, titular = null, incluirResponsableLegal = tr
       dni: fila.dni.trim(),
       nombre: fila.nombre.trim(),
       apellido: fila.apellido.trim(),
-      telefono: fila.telefono.trim(),
+      telefono: phoneDigits(fila.telefono),
       email: fila.email.trim() || null,
       ...datosDomicilio,
     },
@@ -139,6 +141,8 @@ export function validarContactos(contactos, dniTitular = '', etiquetaTitular = '
     dnis.add(dni)
     const email = fila.email.trim()
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errores[idCampoContacto(fila, 'email')] = 'Correo inválido.'
+    const telefonoInvalido = phoneError(fila.telefono)
+    if (telefonoInvalido) errores[idCampoContacto(fila, 'telefono')] = telefonoInvalido
 
     if (!fila.mismo_domicilio && tieneDatosDomicilioParciales(fila)) {
       if (!String(fila.domicilio_calle ?? '').trim()) {

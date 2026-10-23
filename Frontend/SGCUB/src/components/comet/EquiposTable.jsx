@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 3
 
@@ -21,10 +22,10 @@ export default function EquiposTable({ data, isLoading, error }) {
   const equipos = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return equipos
     return equipos.filter((e) =>
-      [e.nombre, e.categoria].some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [e.nombre, e.categoria]),
     )
   }, [equipos, search])
 
@@ -44,8 +45,6 @@ export default function EquiposTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Equipo" columna="nombre" orden={sort} onOrdenar={sortAndReset} />

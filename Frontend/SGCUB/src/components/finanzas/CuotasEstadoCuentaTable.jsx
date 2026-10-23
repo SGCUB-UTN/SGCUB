@@ -2,16 +2,16 @@ import { Fragment, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import TablePagination from '../shared/TablePagination'
 import usePagination from '../../hooks/usePagination'
-import { formatAmount, formatDate } from '../personas/format'
-import { cuotaAmount, cuotaConcepts } from './accountStatement'
+import { formatAmount } from '../personas/format'
+import { formatPeriod } from '../shared/periodFormat'
 import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 import CuotaDetailPanel from './CuotaDetailPanel'
 
-const COLUMN_COUNT = 9
+const COLUMN_COUNT = 4
 
 const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.saldo_pendiente}`
 
-function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
+function CuotasEstadoCuentaTable({ cuotas }) {
   const [expandedId, setExpandedId] = useState(null)
   const { visibleRows, paginationProps } = usePagination(cuotas, 5)
 
@@ -28,19 +28,13 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
     <div className="flex flex-col gap-4">
       <DataTable
         className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
-        tableClassName="min-w-[960px]"
-        bodyClassName="text-base"
+        tableClassName="min-w-[560px]"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
             <th className="py-3 px-4" scope="col">Período</th>
-            <th className="py-3 px-4" scope="col">Venc. 1</th>
-            <th className="py-3 px-4" scope="col">Venc. 2</th>
-            <th className="py-3 px-4" scope="col">Conceptos</th>
-            <th className="py-3 px-4 text-right" scope="col">Importe</th>
-            <th className="py-3 px-4 text-right" scope="col">Pagado</th>
-            <th className="py-3 px-4 text-right" scope="col">Pendiente</th>
-            <th className="py-3 px-4 text-center" scope="col">Estado</th>
+            <th className="py-3 px-4 text-right" scope="col">Monto pendiente</th>
+            <th className="py-3 px-4 text-center w-56" scope="col">Estado</th>
           </>
         )}
       >
@@ -56,18 +50,13 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
                 onKeyDown={(event) => handleKeyDown(event, cuota.cuota_id)}
                 className={`cursor-pointer transition-colors ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
               >
-                <td className="py-3.5 pl-4 pr-0 text-outline">
+                <td className="py-3 pl-4 pr-0 text-outline">
                   <span className={`material-symbols-outlined text-[22px] transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
                 </td>
-                <td className="py-3.5 px-4 font-semibold text-on-surface">{cuota.periodo || '—'}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc1)}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{formatDate(cuota.fecha_venc2)}</td>
-                <td className="py-3.5 px-4 text-on-surface-variant">{cuotaConcepts(cuota)}</td>
-                <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(cuotaAmount(cuota))}</td>
-                <td className="py-3.5 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_pagado ?? 0))}</td>
-                <td className="py-3.5 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
-                <td className="py-3.5 px-4 text-center">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border ${cuotaStateBadgeClass(state)}`}>
+                <td className="py-3 px-4 font-medium text-on-surface text-base">{cuota.periodo ? formatPeriod(cuota.periodo) : '—'}</td>
+                <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
+                <td className="py-3 px-4 text-center">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(state)}`}>
                     {cuotaStateLabel(state)}
                   </span>
                 </td>
@@ -77,8 +66,6 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit }) {
                   key={panelKey(cuota)}
                   cuota={cuota}
                   colSpan={COLUMN_COUNT}
-                  onPay={onPay}
-                  onAssignBenefit={onAssignBenefit}
                 />
               )}
             </Fragment>

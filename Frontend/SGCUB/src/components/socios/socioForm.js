@@ -1,3 +1,13 @@
+import { formatPhoneInput, isPhoneTooLong, phoneDigits, phoneError } from '../personas/format'
+
+export const bindPhone = (binding) => ({
+  ...binding,
+  value: formatPhoneInput(binding.value),
+  onChange: (event) => {
+    if (isPhoneTooLong(event.target.value)) return
+    binding.onChange({ target: { value: phoneDigits(event.target.value) } })
+  },
+})
 
 export const FORM_INICIAL = {
   nombre: '', apellido: '', dni: '', telefono: '', email: '', estado_administrativo: '',
@@ -22,7 +32,7 @@ export const socioAFormulario = (socio) => ({
   nombre: socio.nombre || '',
   apellido: socio.apellido || '',
   dni: socio.dni ? String(socio.dni) : '',
-  telefono: socio.telefono || '',
+  telefono: phoneDigits(socio.telefono),
   email: socio.email || '',
   estado_administrativo: socio.estado_administrativo ? String(socio.estado_administrativo) : '',
   fecha_nacimiento: socio.fecha_nacimiento || '',
@@ -53,6 +63,9 @@ export function validar(formulario, esGeneroOtro) {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errores.email = 'Ingrese un correo electrónico válido.'
   }
+
+  const telefonoInvalido = phoneError(formulario.telefono)
+  if (telefonoInvalido) errores.telefono = telefonoInvalido
 
   if (formulario.fecha_nacimiento && new Date(`${formulario.fecha_nacimiento}T00:00:00`) > new Date()) {
     errores.fecha_nacimiento = 'La fecha de nacimiento no puede ser futura.'

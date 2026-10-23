@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
-import { DiscountsTable, ScholarshipsTable } from '../../finanzas/BenefitTables'
+import { BenefitsTable } from '../../finanzas/BenefitTables'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
 import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
 import { formatAmount, formatNumber } from '../format'
-import { EmptyState, KPI } from './parts'
+import { BenefitButton, PayButton } from '../HeaderPersona'
+import StatCard from '../../shared/StatCard'
+import { EmptyState, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
@@ -15,6 +17,16 @@ export function FinancialStatement({ socio, finances }) {
   const socioId = socio.socio_id
   const { loading, error, account, becas, reload: reloadFinances } = finances
   const cuotas = useMemo(() => account?.cuotas ?? [], [account])
+
+  const scrollToSection = (id) => {
+    const heading = document.getElementById(id)
+    if (!heading) return
+    heading.focus({ preventScroll: true })
+    heading.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    })
+  }
 
   const summary = useMemo(() => ({
     pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
@@ -34,42 +46,36 @@ export function FinancialStatement({ socio, finances }) {
     return <EmptyState icon="account_balance_wallet" title="Sin cuenta corriente" description="Este socio todavía no tiene una cuenta corriente asociada." />
   }
 
-  return (
-    <section className="flex flex-col gap-6" aria-labelledby="estado-cuenta-title">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-wider font-semibold text-primary">Cuenta corriente {formatNumber(account.cuenta_corriente_id)}</p>
-          <h2 id="estado-cuenta-title" className="text-2xl font-bold text-on-surface mt-1">Estado de cuenta</h2>
-          <p className="text-base text-on-surface-variant mt-1">Detalle de cuotas, pagos y beneficios del socio.</p>
-        </div>
-      </div>
+  const title = `Cuenta Corriente ${formatNumber(account.cuenta_corriente_id)}`
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 my-4">
-        <KPI label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'alert' : 'ok'} />
-        <KPI label="Saldo total adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'ok'} />
-        <KPI label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" />
+  return (
+    <section className="flex flex-col gap-6" aria-label={title}>
+      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-10">
+        <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
+        <StatCard label="Saldo adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'neutral'} />
+        <StatCard label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" tone="neutral" onClick={() => scrollToSection('beneficios-title')} />
       </div>
 
       <section className="flex flex-col gap-6 my-4" aria-labelledby="cuotas-title">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 id="cuotas-title" tabIndex="-1" className="text-lg font-bold text-on-surface">Cuotas</h3>
-          <span className="text-sm text-on-surface-variant">{cuotas.length} {cuotas.length === 1 ? 'cuota' : 'cuotas'}</span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 id="cuotas-title" tabIndex="-1" className="text-lg font-bold text-on-surface scroll-mt-6 focus:outline-none">Cuotas</h3>
+          <div className="flex flex-col sm:flex-row gap-2 [&>button]:justify-center">
+            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
+              Beca o descuento
+            </BenefitButton>
+            <PayButton onClick={() => openPayment({ socioId, onSuccess: reloadFinances })}>Pagar cuota</PayButton>
+          </div>
         </div>
         {cuotas.length === 0 ? (
           <EmptyState icon="receipt_long" title="Sin cuotas generadas" description="La cuenta corriente no tiene cuotas registradas." />
         ) : (
-          <CuotasEstadoCuentaTable
-            cuotas={cuotas}
-            onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
-            onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
-          />
+          <CuotasEstadoCuentaTable cuotas={cuotas} />
         )}
       </section>
 
-      <ScholarshipsTable becas={becas} />
-      <div className="my-4">
-        <DiscountsTable cuotas={cuotas} />
-      </div>
+      <BenefitsTable becas={becas} cuotas={cuotas} />
     </section>
   )
 }

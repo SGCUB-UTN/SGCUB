@@ -2,14 +2,13 @@ import { useMemo, useState } from 'react'
 import TableSearchInput from '../shared/TableSearchInput'
 import CategoriasGeneroTable from './CategoriasGeneroTable'
 import { GENERO_OPTIONS } from './categoriaFormat'
+import { matchesSearch } from '../shared/search'
 
 function CategoriasTable({ data, isLoading, error }) {
   const [search, setSearch] = useState('')
 
   const byGenero = useMemo(() => {
-    const text = search.trim().toLowerCase()
-    const filtered = (data ?? []).filter((categoria) =>
-      !text || String(categoria.nombre ?? '').toLowerCase().includes(text))
+    const filtered = (data ?? []).filter((categoria) => matchesSearch(search, [categoria.nombre]))
     return Object.fromEntries(GENERO_OPTIONS.map(({ value }) => [
       value,
       filtered.filter((categoria) => categoria.genero === value),

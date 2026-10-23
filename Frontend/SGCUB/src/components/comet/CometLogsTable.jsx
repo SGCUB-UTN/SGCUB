@@ -8,6 +8,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -67,7 +68,7 @@ function JsonBlock({ label, value }) {
 function FilaDetalle({ log }) {
   return (
     <tr className="bg-surface-container-low/50">
-      <td colSpan={COLUMN_COUNT} className="px-6 py-4">
+      <td colSpan={COLUMN_COUNT} className="px-4 py-3">
         <div className="flex flex-col gap-3 max-w-4xl">
           <JsonBlock label="Payload enviado" value={log.payload_enviado} />
           <JsonBlock label="Respuesta de COMET" value={log.respuesta} />
@@ -93,14 +94,13 @@ export default function CometLogsTable({ data, isLoading, error }) {
   const logs = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return logs.filter((log) => {
       if (operacion !== 'todas' && log.operacion !== operacion) return false
       if (estado === 'ok' && !log.exitoso) return false
       if (estado === 'error' && log.exitoso) return false
       if (!text) return true
-      return [log.jugador_nombre, log.operacion_nombre, log.mensaje, log.exportado_por]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [log.jugador_nombre, log.operacion_nombre, log.mensaje, log.exportado_por])
     })
   }, [logs, search, operacion, estado])
 
@@ -140,8 +140,6 @@ export default function CometLogsTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <th className="py-3 px-2 w-10" scope="col"></th>
@@ -177,7 +175,7 @@ export default function CometLogsTable({ data, isLoading, error }) {
                     chevron_right
                   </span>
                 </td>
-                <td className="py-3 px-4 font-mono text-sm text-on-surface">{formatearFecha(log.fecha)}</td>
+                <td className="py-3 px-4 text-on-surface">{formatearFecha(log.fecha)}</td>
                 <td className="py-3 px-4 font-medium text-on-surface">{log.operacion_nombre || log.operacion}</td>
                 <td className="py-3 px-4">
                   {log.jugador ? (
@@ -190,7 +188,7 @@ export default function CometLogsTable({ data, isLoading, error }) {
                     </button>
                   ) : <span className="text-on-surface-variant">—</span>}
                 </td>
-                <td className="py-3 px-4 text-on-surface-variant text-sm">{log.exportado_por || '—'}</td>
+                <td className="py-3 px-4 text-on-surface-variant">{log.exportado_por || '—'}</td>
                 <td className="py-3 px-4"><EstadoBadge exitoso={log.exitoso} /></td>
               </tr>
               {abierto && <FilaDetalle key={`${log.log_id}-detalle`} log={log} />}

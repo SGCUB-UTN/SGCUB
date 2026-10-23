@@ -5,6 +5,7 @@ import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
+import { matchesSearch } from '../shared/search'
 
 const PAGE_SIZE = 5
 
@@ -41,11 +42,8 @@ const TONES = {
   },
 }
 
-const matchesSearch = (doc, search, getTypeName) => {
-  const text = search.toLowerCase()
-  return (doc.persona_nombre_completo || '').toLowerCase().includes(text) ||
-    getTypeName(doc.tipo_documento).toLowerCase().includes(text)
-}
+const matchesDocumentSearch = (doc, search, getTypeName) =>
+  matchesSearch(search, [doc.persona_nombre_completo, getTypeName(doc.tipo_documento)])
 
 const matchesFilters = (doc, category, docType) =>
   (category === ALL || doc.categoria_nombre === category) &&
@@ -67,7 +65,7 @@ export default function DocumentAlertTable({ title, icon, tone = 'warning', docu
   const [limit, setLimit] = useState(PAGE_SIZE)
   const style = TONES[tone] ?? TONES.warning
 
-  const filteredRows = rows.filter(doc => matchesSearch(doc, search, getTypeName) && matchesFilters(doc, category, docType))
+  const filteredRows = rows.filter(doc => matchesDocumentSearch(doc, search, getTypeName) && matchesFilters(doc, category, docType))
   const { ordenadas: sortedRows, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
   const visibleRows = sortedRows.slice(0, limit)
   const openProfile = (doc) => navigate(`${doc.url_perfil}?tab=documentacion`)
@@ -129,10 +127,10 @@ export default function DocumentAlertTable({ title, icon, tone = 'warning', docu
               </div>
             </td>
             <td className="py-3 px-4">
-              <span className={`text-base font-medium ${style.document}`}>{getTypeName(doc.tipo_documento)}</span>
+              <span className={`font-medium ${style.document}`}>{getTypeName(doc.tipo_documento)}</span>
             </td>
             <td className="py-3 px-4 whitespace-nowrap">
-              <span className="block text-base font-medium text-on-surface">{doc.dueDateLabel}</span>
+              <span className="block font-medium text-on-surface">{doc.dueDateLabel}</span>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold mt-1 ${style.badge}`}>
                 {getBadgeLabel(doc)}
               </span>

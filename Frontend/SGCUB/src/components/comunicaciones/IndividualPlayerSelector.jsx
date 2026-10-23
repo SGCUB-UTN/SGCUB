@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { formatDni, formatPhone } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 export default function IndividualPlayerSelector({
   socios = [],
@@ -13,18 +15,9 @@ export default function IndividualPlayerSelector({
 
   // Filtrado reactivo de socios reales del backend
   const filteredSocios = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
+    const q = searchQuery.trim()
     if (!q) return socios.slice(0, 10) // Mostrar los primeros 10 si no escribe nada
-    return socios.filter((s) => {
-      const nombreCompleto = `${s.nombre ?? ''} ${s.apellido ?? ''}`.toLowerCase()
-      const dni = String(s.dni ?? '')
-      const numSocio = String(s.numero_socio ?? '')
-      return (
-        nombreCompleto.includes(q) ||
-        dni.includes(q) ||
-        numSocio.includes(q)
-      )
-    })
+    return socios.filter((s) => matchesSearch(q, [s.nombre, s.apellido, s.dni, s.numero_socio]))
   }, [socios, searchQuery])
 
   // Canales de contacto del socio seleccionado
@@ -37,7 +30,7 @@ export default function IndividualPlayerSelector({
         id: 'socio_tel',
         nombre: `${selectedSocio.nombre} ${selectedSocio.apellido}`.trim(),
         tipo: 'Teléfono celular',
-        dato: `Tel: ${selectedSocio.telefono}`,
+        dato: `Tel: ${formatPhone(selectedSocio.telefono)}`,
         canal: 'WhatsApp',
       })
     }
@@ -127,7 +120,7 @@ export default function IndividualPlayerSelector({
                           {nombre}
                         </span>
                         <span className="text-xs text-on-surface-variant">
-                          DNI {dni} • {num} {s.telefono ? `• Tel: ${s.telefono}` : ''} {s.email ? `• ${s.email}` : ''}
+                          DNI {formatDni(dni)} • {num} {s.telefono ? `• Tel: ${formatPhone(s.telefono)}` : ''} {s.email ? `• ${s.email}` : ''}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -162,7 +155,7 @@ export default function IndividualPlayerSelector({
                   {selectedSocio.nombre} {selectedSocio.apellido}
                 </span>
                 <span className="text-xs text-on-surface-variant">
-                  DNI {selectedSocio.dni} • Socio N° {selectedSocio.numero_socio ?? 'S/N'}
+                  DNI {formatDni(selectedSocio.dni)} • Socio N° {selectedSocio.numero_socio ?? 'S/N'}
                 </span>
               </div>
             </div>

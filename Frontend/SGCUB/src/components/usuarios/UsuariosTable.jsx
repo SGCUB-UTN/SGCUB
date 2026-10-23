@@ -9,6 +9,7 @@ import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni, getRoleStyle } from './usuarioFormat'
+import { matchesSearch } from '../shared/search'
 
 const filterClass = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm focus:outline-none focus:border-primary cursor-pointer'
 const iconButtonClass = 'inline-flex items-center justify-center p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer'
@@ -30,15 +31,14 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
   const usuarios = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     const textDigits = text.replace(/\./g, '')
     return usuarios.filter((usuario) => {
       if (status === 'activo' && !usuario.is_active) return false
       if (status === 'baja' && usuario.is_active) return false
       if (role !== 'todos' && usuario.role !== role) return false
       if (!text) return true
-      return [usuario.first_name, usuario.last_name, usuario.full_name, usuario.email]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [usuario.first_name, usuario.last_name, usuario.full_name, usuario.email])
         || (textDigits !== '' && usuario.dni.includes(textDigits))
     })
   }, [usuarios, search, status, role])
@@ -127,7 +127,7 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
           const isSelf = usuario.id === currentUserId
           return (
             <tr key={usuario.id} className="hover:bg-surface-container-low/80 transition-colors">
-              <td className="py-3 px-12 pl-6 font-semibold text-on-surface text-base whitespace-nowrap">{formatDni(usuario.dni)}</td>
+              <td className="py-3 px-4 pl-6 font-semibold text-on-surface text-base whitespace-nowrap">{formatDni(usuario.dni)}</td>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-2.5">
                   
@@ -151,7 +151,7 @@ function UsuariosTable({ data, roles, isLoading, error, currentUserId, canEdit, 
                 <ActiveStatusBadge isActive={usuario.is_active} label={usuario.is_active ? 'Activo' : 'Dado de baja'} />
               </td>
               {canEdit && (
-                <td className="py-2 px-4 pr-6">
+                <td className="py-3 px-4 pr-6">
                   <div className="flex items-center justify-end gap-1">
                     <button type="button" className={iconButtonClass} onClick={() => onEdit(usuario)} title="Editar datos y rol" aria-label={`Editar a ${usuario.full_name}`}>
                       <span className="material-symbols-outlined text-[20px]" aria-hidden="true">edit</span>

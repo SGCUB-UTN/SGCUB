@@ -23,6 +23,7 @@ const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 
 const HEADER_CLASS = 'py-3 px-4'
 const COLUMN_COUNT = 8
 import { formatDate } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 const ALL = 'todos'
 
@@ -68,19 +69,17 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
   const availablePeriods = useMemo(() => periodOptions(cuotas, (cuota) => cuota.periodo), [cuotas])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
 
     return cuotas.filter((cuota) => {
       if (status !== ALL && !matchesStateFilter(cuota, status)) return false
       if (period !== ALL && cuota.periodo !== period) return false
       if (!text) return true
 
-      return [
-        cuota.periodo,
+      return matchesSearch(text, [cuota.periodo,
         cuota.cuota_id,
         socioName(cuota),
-        cuota.socio?.dni,
-      ].some((field) => String(field ?? '').toLowerCase().includes(text))
+        cuota.socio?.dni,])
     })
   }, [cuotas, search, status, period])
 
@@ -132,7 +131,6 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-3 xl:shrink-0">
-          
           <button
             type="button"
             onClick={onAdd}
@@ -145,8 +143,6 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-lg"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>

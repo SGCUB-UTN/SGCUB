@@ -8,7 +8,7 @@ import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { socialStatus } from '../components/personas/profileStatus'
+import { memberStatuses } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useLocalidades from '../hooks/useLocalidades'
@@ -141,7 +141,8 @@ function SocioDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
-        statuses={[socialStatus(socio, finances.account)]}
+        isActive={activo}
+        statuses={memberStatuses(socio, finances.account)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },

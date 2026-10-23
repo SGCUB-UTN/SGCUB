@@ -6,6 +6,7 @@ const getInitials = (name, surname) =>
 const STATUS_TONES = {
   positive: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   error: 'bg-error-container text-error border-error/30',
+  warning: 'bg-secondary-fixed text-on-secondary-fixed border-secondary/30',
   muted: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
 }
 
@@ -13,7 +14,7 @@ const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
 const ACTION_GRID_CLASS = 'grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
   const statusList = statuses ?? (status ? [status] : [])
 
@@ -25,8 +26,17 @@ export default function PersonHeader({ breadcrumb = [], name, surname, status, s
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-            <div className="w-20 h-20 shrink-0 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
-              {getInitials(name, surname)}
+            <div className="relative shrink-0">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
+                {getInitials(name, surname)}
+              </div>
+              {isActive && (
+                <span
+                  className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
+                  title="Activo"
+                  aria-label="Activo"
+                />
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">

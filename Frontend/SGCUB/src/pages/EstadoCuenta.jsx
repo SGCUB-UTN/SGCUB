@@ -4,6 +4,7 @@ import { formatDni, formatNumber } from '../components/personas/format'
 import PageHeader from '../components/shared/PageHeader'
 import FinancialTab from '../components/personas/tabs/FinancialTab'
 import useSocio from '../hooks/useSocio'
+import { matchesSearch } from '../components/shared/search'
 
 function EstadoCuenta() {
   const navigate = useNavigate()
@@ -21,10 +22,9 @@ function EstadoCuenta() {
   }, [socioInicialId, socios, socioSeleccionado])
 
   const resultados = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase()
+    const termino = busqueda.trim()
     if (!termino) return []
-    return socios.filter((socio) => [socio.dni, socio.numero_socio, socio.nombre, socio.apellido]
-      .some((valor) => String(valor ?? '').toLowerCase().includes(termino))).slice(0, 8)
+    return socios.filter((socio) => matchesSearch(termino, [socio.dni, socio.numero_socio, socio.nombre, socio.apellido])).slice(0, 8)
   }, [busqueda, socios])
 
   return (

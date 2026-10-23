@@ -10,6 +10,8 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { formatDni } from '../personas/format'
+import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
@@ -17,6 +19,11 @@ const COLUMN_COUNT = 6
 const isActive = (jugador) => {
   const estado = (jugador.estado?.nombre ?? '').toLowerCase()
   return estado.includes('activo') && !estado.includes('baja') && !estado.includes('inactivo')
+}
+
+const statusLabel = (jugador) => {
+  if (isActive(jugador)) return 'Activo'
+  return jugador.tipo_baja === 'parcial' ? 'Baja temporal' : 'De baja'
 }
 
 const secondaryCategoryName = (jugador) => {
@@ -33,7 +40,7 @@ const exportCsv = (jugadores) => {
   const headers = ['N° Socio', 'Nombre y apellido', 'DNI', 'Categoría principal', 'Categoría secundaria', 'Estado']
   const rows = jugadores.map((jugador) => [
     jugador.socio?.numero_socio ?? '',
-    `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim(),
+    `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() ,
     jugador.socio?.dni ?? '',
     jugador.categoria?.nombre ?? '',
     secondaryCategoryName(jugador),
@@ -66,15 +73,14 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
   const jugadores = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     return jugadores.filter((jugador) => {
       if (category !== 'todas' && String(jugador.categoria?.categoria_id) !== category) return false
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
       if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
       if (!text) return true
-      return [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre]
-        .some((field) => String(field ?? '').toLowerCase().includes(text))
+      return matchesSearch(text, [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre])
     })
   }, [jugadores, search, category, status])
 
@@ -132,8 +138,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
@@ -165,17 +169,17 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               {jugador.socio?.numero_socio ? `#${jugador.socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
-              <span className="font-medium text-on-surface block text-base">{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-on-surface block text-base">{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+                {jugador.socio?.es_ex_jugador && <ProfileBadge>Socio activo</ProfileBadge>}
+              </div>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">{jugador.socio?.dni ?? '—'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
             <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{secondaryCategoryName(jugador)}</td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <ActiveStatusBadge isActive={isActive(jugador)} label={isActive(jugador) ? 'Activo' : 'De baja'} />
-                {jugador.tipo_baja === 'parcial' && (
-                  <ProfileBadge icon="badge">Socio activo</ProfileBadge>
-                )}
+                <ActiveStatusBadge isActive={isActive(jugador)} label={statusLabel(jugador)} />
               </div>
             </td>
           </tr>

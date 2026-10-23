@@ -1,3 +1,27 @@
+import { AsYouType, isValidPhoneNumber, parsePhoneNumberFromString, validatePhoneNumberLength } from 'libphonenumber-js'
+
+const PHONE_MAX_LENGTH = 20
+
+export const phoneDigits = (value) => {
+  const text = String(value ?? '').trim()
+  return `${text.startsWith('+') ? '+' : ''}${text.replace(/\D/g, '')}`.slice(0, PHONE_MAX_LENGTH)
+}
+
+export const isPhoneTooLong = (value) => validatePhoneNumberLength(phoneDigits(value), 'AR') === 'TOO_LONG'
+
+export const phoneError = (value) => {
+  const digits = phoneDigits(value)
+  if (!digits || isValidPhoneNumber(digits, 'AR')) return null
+  return validatePhoneNumberLength(digits, 'AR') === 'TOO_SHORT'
+    ? 'Faltan dígitos: ingresá el código de área y el número (ej: 221 459-2810).'
+    : 'Ingresá un teléfono válido con código de área (ej: 221 459-2810).'
+}
+
+export const formatPhoneInput = (value) => {
+  const digits = phoneDigits(value)
+  return digits ? new AsYouType('AR').input(digits) : ''
+}
+
 export const formatDate = (date) => {
   if (!date) return '—'
   const dateOnly = String(date).split('T')[0]
@@ -13,12 +37,11 @@ export const formatDni = (dni) => {
 
 export const formatPhone = (phone) => {
   if (!phone) return '—'
-  const digits = String(phone).replace(/\D/g, '')
-  if (digits.length !== 10) return phone
-  const areaLength = digits.startsWith('11') ? 2 : 3
-  const area = digits.slice(0, areaLength)
-  const local = digits.slice(areaLength)
-  return `(${area}) ${local.slice(0, -4)}-${local.slice(-4)}`
+  const parsed = parsePhoneNumberFromString(String(phone), 'AR')
+  if (!parsed?.isValid()) return phone
+  if (parsed.country !== 'AR') return parsed.formatInternational()
+  const [, area, local] = parsed.formatNational().match(/^0(\d+)\s(.+)$/) ?? []
+  return area ? `(${area}) ${local}` : parsed.formatNational()
 }
 
 export const formatNumber =(number) => (number ? `#${String(number).padStart(4, '0')}` : '—')

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { claseInput } from './socioForm'
+import { bindPhone, claseInput } from './socioForm'
 import useBarrios from '../../hooks/useBarrios'
 
 export function Campo({ id, label, requerido = false, opcional = false, hint, extra, error, children, className = '' }) {
@@ -114,7 +114,7 @@ export function SeccionDatosPersonales({ campoDni, bindInput, errores, generos, 
             </span>
           )}*/
         >
-          <InputConIcono {...bindInput('telefono')} type="tel" placeholder="Ej: +54 221 459-2810" icono="call" conError={Boolean(errores.telefono)} />
+          <InputConIcono {...bindPhone(bindInput('telefono'))} type="tel" placeholder="Ej: 221 459-2810" icono="call" conError={Boolean(errores.telefono)} />
         </Campo>
         <Campo id="email" label="Correo Electrónico" requerido error={errores.email}>
           <InputConIcono {...bindInput('email')} type="email" placeholder="Ej: marcos.albarracin@ejemplo.com" icono="mail" conError={Boolean(errores.email)} />

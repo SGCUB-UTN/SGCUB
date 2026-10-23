@@ -6,6 +6,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 4
 
@@ -46,11 +47,10 @@ export default function PartidosTable({ data, isLoading, error }) {
   const partidos = useMemo(() => data ?? [], [data])
 
   const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
+    const text = search.trim()
     if (!text) return partidos
     return partidos.filter((p) =>
-      [p.local, p.visitante, p.estado, p.fecha]
-        .some((field) => String(field ?? '').toLowerCase().includes(text)),
+      matchesSearch(text, [p.local, p.visitante, p.estado, p.fecha]),
     )
   }, [partidos, search])
 
@@ -70,8 +70,6 @@ export default function PartidosTable({ data, isLoading, error }) {
       </div>
 
       <DataTable
-        tableClassName="text-base"
-        bodyClassName="text-sm"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Fecha" columna="fecha" orden={sort} onOrdenar={sortAndReset} />
@@ -93,7 +91,7 @@ export default function PartidosTable({ data, isLoading, error }) {
 
         {!isLoading && visibleRows.map((p) => (
           <tr key={p.id} className="hover:bg-surface-container-low/80 transition-colors">
-            <td className="py-3 px-4 pl-6 font-mono text-sm text-on-surface">{p.fecha || '—'}{p.hora ? ` ${p.hora}` : ''}</td>
+            <td className="py-3 px-4 pl-6 text-on-surface">{p.fecha || '—'}{p.hora ? ` ${p.hora}` : ''}</td>
             <td className="py-3 px-4 font-medium text-on-surface">{p.local || '—'}</td>
             <td className="py-3 px-4 text-on-surface-variant">{p.visitante || '—'}</td>
             <td className="py-3 px-4"><EstadoPartido estado={p.estado} /></td>
