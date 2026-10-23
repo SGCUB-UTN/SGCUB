@@ -577,7 +577,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
             {formErrors.montos && <p className="text-sm text-error font-medium" role="alert">{formErrors.montos}</p>}
           </FormSection>
 
-          <FormSection icon="notes" title="Observaciones" disabled={!socio} className="mt-auto">
+          <FormSection icon="notes" title="Observaciones" disabled={!socio}>
             <input
               type="text"
               value={observacion}
