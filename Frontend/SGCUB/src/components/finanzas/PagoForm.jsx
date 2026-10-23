@@ -386,8 +386,11 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const waivedLines = coveredLines.filter((line) => line.waived)
   const debtTotal = roundCents(lines.filter((line) => !isFuture(line.cuota, period)).reduce((total, line) => total + line.due, 0))
   const pendingTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
-  const chargeTotal = roundCents(coveredLines.reduce((total, line) => total + line.applied, 0))
-  const pendingBalance = roundCents(debtTotal - enteredTotal)
+  const billedLines = lines.filter((line) => !isFuture(line.cuota, period) || line.applied > 0)
+  const billedTotal = roundCents(billedLines.reduce((total, line) => total + line.due, 0))
+  const settledLines = coveredLines.filter((line) => line.applied >= line.due)
+  const partialLines = coveredLines.filter((line) => line.applied < line.due)
+  const pendingBalance = roundCents(billedTotal - enteredTotal)
 
   const applyWaivers = (nextWaivedIds) => {
     setWaivedIds(nextWaivedIds)
@@ -591,15 +594,16 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
           <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
-            <TicketSection title="Cuotas a cancelar">
-              {coveredLines.length
-                ? coveredLines.map((line) => (
-                  <div key={line.cuota.cuota_id} className="flex flex-col">
-                    <SummaryLine label={`Cuota ${formatPeriod(line.cuota.periodo)}`} value={formatAmount(roundCents(line.applied + line.fee))} />
-                    {line.applied < line.due && <span className="text-xs text-on-surface-variant">Pago parcial · quedan {formatAmount(roundCents(line.due - line.applied))}</span>}
-                  </div>
+            <TicketSection title="Cuotas a pagar">
+              {billedLines.length
+                ? billedLines.map((line) => (
+                  <SummaryLine
+                    key={line.cuota.cuota_id}
+                    label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
+                    value={formatAmount(roundCents(line.due + line.fee))}
+                  />
                 ))
-                : <p className="text-base text-on-surface-variant">Ingresá el pago para ver las cuotas que cancela.</p>}
+                : <p className="text-base text-on-surface-variant">Sin cuotas a pagar.</p>}
             </TicketSection>
 
             {waivedLines.length > 0 && (
@@ -616,20 +620,46 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
             )}
 
             <div className="pb-3 border-b border-dashed border-slate-300">
-              <SummaryLine label="Total de cuotas" value={formatAmount(chargeTotal)} isTotal />
+              <SummaryLine label="Total de cuotas" value={formatAmount(billedTotal)} isTotal />
             </div>
 
-            <TicketSection title="Medios de pago ingresados">
+            <TicketSection title="Medios de pago">
               {paymentRows.some(isRowComplete)
                 ? paymentRows.filter(isRowComplete).map((row) => (
                   <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
                 ))
                 : <p className="text-base text-on-surface-variant">Ningún medio de pago cargado.</p>}
-              <SummaryLine label="Total pagado" value={formatAmount(enteredTotal)} />
+            </TicketSection>
+
+            <div className="pb-3 border-b border-dashed border-slate-300">
+              <SummaryLine label="Total de medios de pago" value={formatAmount(enteredTotal)} isTotal />
+            </div>
+
+            <TicketSection title="Resultado del pago">
+              {coveredLines.length ? (
+                <>
+                  {settledLines.map((line) => (
+                    <SummaryLine
+                      key={line.cuota.cuota_id}
+                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
+                      value="Se salda"
+                      valueClassName="text-emerald-700"
+                    />
+                  ))}
+                  {partialLines.map((line) => (
+                    <SummaryLine
+                      key={line.cuota.cuota_id}
+                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
+                      value="Parcial"
+                      valueClassName="text-amber-700"
+                    />
+                  ))}
+                </>
+              ) : <p className="text-base text-on-surface-variant">Ingresá el pago para ver qué cuotas se saldan.</p>}
             </TicketSection>
 
             <SummaryLine
-              label="Saldo pendiente"
+              label="Deuda pendiente"
               value={formatAmount(Math.max(pendingBalance, 0))}
               isTotal
               valueClassName={pendingBalance <= 0 ? 'text-emerald-700' : 'text-amber-700'}
