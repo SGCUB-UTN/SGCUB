@@ -222,6 +222,7 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
   const expanded = expandedIds.includes(cuotaId)
   const editing = editingIds.includes(cuotaId)
   const partial = applied > 0 && applied < due
+  const settled = applied > 0 && applied >= due
   return (
     <Fragment>
       <tr
@@ -245,8 +246,16 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
           </div>
         </td>
         <td className="py-1.5 px-3 text-right">
-          <span className="block font-semibold text-on-surface text-base">{formatAmount(due)}</span>
-          {partial && <span className="block text-xs text-sky-700">Quedan {formatAmount(roundCents(due - applied))}</span>}
+          <span className="inline-flex items-center gap-1 font-semibold text-on-surface text-base">
+            {settled && <span className="material-symbols-outlined text-[16px] text-emerald-600" aria-hidden="true">check_circle</span>}
+            {formatAmount(due)}
+          </span>
+          {settled && <span className="block text-xs text-emerald-700">Se pagará completa</span>}
+          {partial && (
+            <span className="block text-xs text-amber-700">
+              Pago parcial: {formatAmount(applied)} · faltarán {formatAmount(roundCents(due - applied))}
+            </span>
+          )}
         </td>
         <td className="py-1.5 px-3">
           <div className="flex items-center justify-center gap-0.5">
