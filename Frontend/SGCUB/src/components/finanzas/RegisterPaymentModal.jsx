@@ -61,7 +61,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
       return (
         <p className="min-w-0 truncate text-base text-on-surface-variant">
           <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
-          {' '}(DNI {formatDni(socio.dni)} • Socio #{formatNumber(socio.numero_socio)})
+          {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
         </p>
       )
     }

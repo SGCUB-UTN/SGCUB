@@ -109,9 +109,9 @@ export function FormFooter({ children }) {
 
 export function TicketSection({ title, children }) {
   return (
-    <section className="flex flex-1 flex-col gap-1.5 pb-3 border-b border-dashed border-slate-300">
+    <div className="flex flex-1 flex-col gap-1.5 pb-3 border-b border-dashed border-slate-300">
       <h4 className={SUMMARY_GROUP_CLASS}>{title}</h4>
       <div className="flex flex-1 flex-col justify-evenly gap-1.5">{children}</div>
-    </section>
+    </div>
   )
 }

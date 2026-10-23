@@ -144,7 +144,7 @@ function CuotaBreakdownRow({ line, editing, onWaiveChange }) {
   )
 }
 
-function CuotasTable({ lines, debtTotal, expandedIds, editingIds, onToggleExpand, onToggleEdit, onWaiveChange, onAssignBenefit }) {
+function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, expandedIds, editingIds, onToggleExpand, onToggleEdit, onWaiveChange, onAssignBenefit }) {
   const handleKeyDown = (event, cuotaId) => {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {
@@ -152,6 +152,22 @@ function CuotasTable({ lines, debtTotal, expandedIds, editingIds, onToggleExpand
       onToggleExpand(cuotaId)
     }
   }
+
+  const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
+  const futureLines = lines.filter((line) => isFuture(line.cuota, period))
+  const renderLine = (line) => (
+    <CuotaLine
+      key={line.cuota.cuota_id}
+      line={line}
+      expandedIds={expandedIds}
+      editingIds={editingIds}
+      onToggleExpand={onToggleExpand}
+      onToggleEdit={onToggleEdit}
+      onWaiveChange={onWaiveChange}
+      onAssignBenefit={onAssignBenefit}
+      onKeyDown={handleKeyDown}
+    />
+  )
 
   return (
     <DataTable
@@ -174,61 +190,86 @@ function CuotasTable({ lines, debtTotal, expandedIds, editingIds, onToggleExpand
         </>
       )}
     >
-      {lines.map((line) => {
-        const { cuota, due, applied } = line
-        const cuotaId = cuota.cuota_id
-        const expanded = expandedIds.includes(cuotaId)
-        const editing = editingIds.includes(cuotaId)
-        const partial = applied > 0 && applied < due
-        return (
-          <Fragment key={cuotaId}>
-            <tr
-              tabIndex={0}
-              aria-expanded={expanded}
-              onClick={() => onToggleExpand(cuotaId)}
-              onKeyDown={(event) => handleKeyDown(event, cuotaId)}
-              className={`cursor-pointer transition-colors ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
+      {dueLines.length === 0 && (
+        <tr>
+          <td colSpan={COLUMN_COUNT} className="py-3 px-4 text-center text-base text-on-surface-variant">
+            No hay cuotas vencidas ni del mes actual.
+          </td>
+        </tr>
+      )}
+      {dueLines.map(renderLine)}
+      {futureLines.length > 0 && (
+        <tr>
+          <td colSpan={COLUMN_COUNT} className="py-1 px-3">
+            <button
+              type="button"
+              onClick={onToggleFuture}
+              aria-expanded={showFuture}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
             >
-              <td className="py-1.5 pl-3 pr-0 text-outline">
-                <span className={`material-symbols-outlined text-[20px] align-middle transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
-              </td>
-              <td className="py-1.5 px-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
-                  {isOverdue(cuota) && (
-                    <span className={`inline-flex items-center px-2 py-px rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>
-                      {cuotaStateLabel(cuota.estado_cuota)}
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="py-1.5 px-3 text-right">
-                <span className="block font-semibold text-on-surface text-base">{formatAmount(due)}</span>
-                {partial && <span className="block text-xs text-sky-700">Quedan {formatAmount(roundCents(due - applied))}</span>}
-              </td>
-              <td className="py-1.5 px-3">
-                <div className="flex items-center justify-center gap-0.5">
-                  <ActionButton
-                    icon="edit"
-                    label={canWaive(cuota) ? `Eximir recargo de ${formatPeriod(cuota.periodo)}` : 'La cuota no tiene recargo por mora para eximir'}
-                    active={editing}
-                    disabled={!canWaive(cuota)}
-                    onClick={() => onToggleEdit(cuotaId)}
-                  />
-                  <ActionButton
-                    icon="sell"
-                    label={`Asignar descuento a ${formatPeriod(cuota.periodo)}`}
-                    disabled={!onAssignBenefit}
-                    onClick={() => onAssignBenefit(cuotaId)}
-                  />
-                </div>
-              </td>
-            </tr>
-            {expanded && <CuotaBreakdownRow line={line} editing={editing} onWaiveChange={onWaiveChange} />}
-          </Fragment>
-        )
-      })}
+              <span className={`material-symbols-outlined text-[18px] transition-transform ${showFuture ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
+              {showFuture ? 'Ocultar cuotas futuras' : `Ver cuotas futuras (${futureLines.length})`}
+            </button>
+          </td>
+        </tr>
+      )}
+      {showFuture && futureLines.map(renderLine)}
     </DataTable>
+  )
+}
+
+function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit, onWaiveChange, onAssignBenefit, onKeyDown }) {
+  const { cuota, due, applied } = line
+  const cuotaId = cuota.cuota_id
+  const expanded = expandedIds.includes(cuotaId)
+  const editing = editingIds.includes(cuotaId)
+  const partial = applied > 0 && applied < due
+  return (
+    <Fragment>
+      <tr
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => onToggleExpand(cuotaId)}
+        onKeyDown={(event) => onKeyDown(event, cuotaId)}
+        className={`cursor-pointer transition-colors ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
+      >
+        <td className="py-1.5 pl-3 pr-0 text-outline">
+          <span className={`material-symbols-outlined text-[20px] align-middle transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
+        </td>
+        <td className="py-1.5 px-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
+            {isOverdue(cuota) && (
+              <span className={`inline-flex items-center px-2 py-px rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>
+                {cuotaStateLabel(cuota.estado_cuota)}
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="py-1.5 px-3 text-right">
+          <span className="block font-semibold text-on-surface text-base">{formatAmount(due)}</span>
+          {partial && <span className="block text-xs text-sky-700">Quedan {formatAmount(roundCents(due - applied))}</span>}
+        </td>
+        <td className="py-1.5 px-3">
+          <div className="flex items-center justify-center gap-0.5">
+            <ActionButton
+              icon="edit"
+              label={canWaive(cuota) ? `Eximir recargo de ${formatPeriod(cuota.periodo)}` : 'La cuota no tiene recargo por mora para eximir'}
+              active={editing}
+              disabled={!canWaive(cuota)}
+              onClick={() => onToggleEdit(cuotaId)}
+            />
+            <ActionButton
+              icon="sell"
+              label={`Asignar descuento a ${formatPeriod(cuota.periodo)}`}
+              disabled={!onAssignBenefit}
+              onClick={() => onAssignBenefit(cuotaId)}
+            />
+          </div>
+        </td>
+      </tr>
+      {expanded && <CuotaBreakdownRow line={line} editing={editing} onWaiveChange={onWaiveChange} />}
+    </Fragment>
   )
 }
 
@@ -306,9 +347,16 @@ function PaymentRow({ row, index, takenMethods, missingAmount, canRemove, showAc
 
 const NO_CUOTAS = []
 
-const initialCount = (cuotas, ids) => {
+const currentPeriod = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+}
+
+const isFuture = (cuota, period) => String(cuota.periodo) > period
+
+const initialCount = (cuotas, ids, period) => {
   const lastIndex = cuotas.reduce((last, cuota, index) => (ids.includes(cuota.cuota_id) ? index : last), -1)
-  return lastIndex >= 0 ? lastIndex + 1 : cuotas.length
+  return lastIndex >= 0 ? lastIndex + 1 : cuotas.filter((cuota) => !isFuture(cuota, period)).length
 }
 
 const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => current !== id) : [...ids, id])
@@ -322,7 +370,10 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
       .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || a.cuota_id - b.cuota_id),
     [cuenta],
   )
-  const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds))
+  const period = currentPeriod()
+  const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
+  const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
+  const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [waivedIds, setWaivedIds] = useState([])
   const [waiver, setWaiver] = useState(null)
   const [waiverPrompt, setWaiverPrompt] = useState(null)
@@ -339,7 +390,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const lines = allocate(pendingCuotas, waivedIds, enteredTotal)
   const coveredLines = lines.filter((line) => line.applied > 0)
   const waivedLines = coveredLines.filter((line) => line.waived)
-  const debtTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
+  const debtTotal = roundCents(lines.filter((line) => !isFuture(line.cuota, period)).reduce((total, line) => total + line.due, 0))
+  const pendingTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
   const chargeTotal = roundCents(coveredLines.reduce((total, line) => total + line.applied, 0))
   const pendingBalance = roundCents(debtTotal - enteredTotal)
 
@@ -395,10 +447,10 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const canAddRow = paymentRows.length < PAYMENT_METHODS.length
   const showActionSlot = canAddRow || paymentRows.length > 1
 
-  const exceedsDebt = enteredTotal > debtTotal
+  const exceedsDebt = enteredTotal > pendingTotal
   const formErrors = {
     medios: paymentRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá el monto de cada pago.' : '',
-    montos: exceedsDebt ? `El pago no puede superar la deuda total (${formatAmount(debtTotal)}).` : '',
+    montos: exceedsDebt ? `El pago no puede superar el total de cuotas pendientes, incluidas las futuras (${formatAmount(pendingTotal)}).` : '',
   }
   const isValid = !formErrors.medios && !formErrors.montos && coveredLines.length > 0
 
@@ -449,7 +501,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
 
   const confirmLabel = () => {
     if (saving) return 'Registrando...'
-    if (exceedsDebt) return `Excede la deuda en ${formatAmount(roundCents(enteredTotal - debtTotal))}`
+    if (exceedsDebt) return `Excede las cuotas pendientes en ${formatAmount(roundCents(enteredTotal - pendingTotal))}`
     if (!(enteredTotal > 0)) return 'Ingresá el monto del pago'
     return `Confirmar pago • ${formatAmount(enteredTotal)}`
   }
@@ -467,6 +519,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
               <CuotasTable
                 lines={lines}
                 debtTotal={debtTotal}
+                period={period}
+                showFuture={showFuture}
+                onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
                 editingIds={editingIds}
                 onToggleExpand={toggleExpand}
@@ -539,7 +594,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
           </FormSection>
         </div>
 
-        <aside className={TICKET_CLASS} aria-labelledby="payment-summary-title">
+        <div className={TICKET_CLASS} role="region" aria-labelledby="payment-summary-title">
           <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
@@ -614,7 +669,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
               <span>{confirmLabel()}</span>
             </button>
           </div>
-        </aside>
+        </div>
       </div>
 
       <LateFeeWaiverModal
