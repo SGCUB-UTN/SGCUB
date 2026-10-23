@@ -372,8 +372,9 @@ class Beca(models.Model):
     monto = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     porcentaje = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     fecha_aplicacion = models.DateField()
-    fecha_fin = models.DateField()
+    fecha_fin = models.DateField(null=True, blank=True)
     motivo = models.CharField(max_length=200)
+    autorizado_por = models.CharField(max_length=120, blank=True)
     fecha_creacion = models.DateTimeField(default=timezone.now)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -394,7 +395,7 @@ class Beca(models.Model):
                 name="beca_monto_o_porcentaje",
             ),
             models.CheckConstraint(
-                condition=models.Q(fecha_fin__gte=models.F("fecha_aplicacion")),
+                condition=models.Q(fecha_fin__isnull=True) | models.Q(fecha_fin__gte=models.F("fecha_aplicacion")),
                 name="beca_fecha_fin_posterior_a_alta",
             ),
         ]
@@ -404,7 +405,7 @@ class Beca(models.Model):
 
     def covers_period(self, first_day):
         last_day = first_day.replace(day=monthrange(first_day.year, first_day.month)[1])
-        return self.fecha_aplicacion <= last_day and self.fecha_fin >= first_day
+        return self.fecha_aplicacion <= last_day and (self.fecha_fin is None or self.fecha_fin >= first_day)
 
     def discount_for(self, base_amount):
         if self.porcentaje is not None:

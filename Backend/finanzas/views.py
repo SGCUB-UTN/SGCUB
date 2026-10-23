@@ -33,6 +33,7 @@ from .financial_summary_pdf import financial_summary_filename, render_financial_
 from .receipts import receipt_filename, render_receipt_pdf
 from .serializers import (
 	BecaSerializer,
+	OtorgarBecaSerializer,
 	BeneficioSerializer,
 	ConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
@@ -65,6 +66,7 @@ from .services import (
 	delete_cuota,
 	ensure_cuota_without_payments,
 	generar_cuotas_mensuales,
+	grant_scholarship,
 	pending_amounts,
 	register_payment,
 	reschedule_cuota,
@@ -432,8 +434,9 @@ def cuota_beneficio(request, pk):
 			data["valor"],
 			data["fecha_aplicacion"],
 			data["motivo"],
-			data.get("fecha_fin"),
+			data["fecha_fin"],
 			request.user if request.user.is_authenticated else None,
+			data["autorizado_por"],
 		)
 	except (BeneficioInvalidoError, CuotaConPagosError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
@@ -442,6 +445,36 @@ def cuota_beneficio(request, pk):
 		"beca": BecaSerializer(beca).data if beca else None,
 		"item": ItemCuotaSerializer(item).data if item else None,
 		"aplicado_a_cuota": item is not None,
+	}, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Beca"], request=OtorgarBecaSerializer)
+@api_view(["POST"])
+def socio_beca(request, socio_id):
+	serializer = OtorgarBecaSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		beca, items = grant_scholarship(
+			socio_id,
+			data["modalidad"],
+			data["valor"],
+			data["fecha_aplicacion"],
+			data["motivo"],
+			data["autorizado_por"],
+			data["fecha_fin"],
+			request.user if request.user.is_authenticated else None,
+		)
+	except CuentaCorriente.DoesNotExist:
+		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
+	except BeneficioInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+	return Response({
+		"beca": BecaSerializer(beca).data,
+		"items": ItemCuotaSerializer(items, many=True).data,
 	}, status=status.HTTP_201_CREATED)
 
 

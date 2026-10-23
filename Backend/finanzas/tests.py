@@ -247,6 +247,13 @@ class BecaModeloTests(TestCase):
 				with self.assertRaises(IntegrityError), transaction.atomic():
 					self.beca(**datos).save()
 
+	def test_sin_fecha_de_fin_cubre_todos_los_periodos_desde_el_alta(self):
+		beca = self.beca(monto=Decimal("100.00"), fecha_aplicacion=date(2026, 7, 15), fecha_fin=None)
+
+		self.assertFalse(beca.covers_period(date(2026, 6, 1)))
+		self.assertTrue(beca.covers_period(date(2026, 7, 1)))
+		self.assertTrue(beca.covers_period(date(2030, 1, 1)))
+
 	def test_la_base_exige_fin_no_anterior_al_alta(self):
 		with self.assertRaises(IntegrityError), transaction.atomic():
 			self.beca(monto=Decimal("100.00"), fecha_fin=date(2026, 9, 1)).save()
@@ -885,6 +892,7 @@ class BeneficioCuotaTests(APITestCase):
 			"valor": "500.00",
 			"fecha_aplicacion": "2026-10-01",
 			"motivo": "Hermanos en el club",
+			"autorizado_por": "Tesorería",
 		}
 		valores.update(datos)
 		return self.client.post(reverse("cuota-beneficio", args=[self.cuota.pk]), valores, format="json")
@@ -917,7 +925,7 @@ class BeneficioCuotaTests(APITestCase):
 			({"modalidad": "Porcentaje", "valor": "0.50"}, "valor"),
 			({"modalidad": "Porcentaje", "valor": "101"}, "valor"),
 			({"motivo": ""}, "motivo"),
-			({"tipo": "Beca"}, "fecha_fin"),
+			({"autorizado_por": ""}, "autorizado_por"),
 			({"tipo": "Beca", "fecha_fin": "2026-09-30"}, "fecha_fin"),
 			({"tipo": "Otro"}, "tipo"),
 		]
@@ -1064,6 +1072,102 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual([beca["socio"] for beca in response.data], [self.socio.pk])
 
 
+class OtorgarBecaTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.socio = crear_socio("60000010", con_jugador=True)
+		self.julio, self.agosto, self.septiembre = (self.generar(periodo) for periodo in ("2026-07", "2026-08", "2026-09"))
+
+	def generar(self, periodo):
+		response = self.client.post(reverse("cuota-list"), {"socio_id": self.socio.pk, "periodo": periodo}, format="json")
+		return Cuota.objects.get(pk=response.data["cuota_id"])
+
+	def otorgar(self, socio=None, **datos):
+		valores = {
+			"modalidad": "Porcentaje",
+			"valor": "10",
+			"fecha_aplicacion": "2026-07-01",
+			"motivo": "Situación económica",
+			"autorizado_por": "Comisión directiva",
+		}
+		valores.update(datos)
+		return self.client.post(reverse("socio-beca", args=[(socio or self.socio).pk]), valores, format="json")
+
+	def becas_de(self, cuota):
+		return list(cuota.items.filter(concepto="Beca").values_list("monto", flat=True))
+
+	def test_aplica_a_las_cuotas_impagas_desde_el_periodo_de_alta(self):
+		response = self.otorgar()
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertIsNone(response.data["beca"]["fecha_fin"])
+		self.assertEqual(response.data["beca"]["autorizado_por"], "Comisión directiva")
+		self.assertEqual(len(response.data["items"]), 3)
+		for cuota in (self.julio, self.agosto, self.septiembre):
+			self.assertEqual(self.becas_de(cuota), [Decimal("250.00")])
+		item = self.agosto.items.get(concepto="Beca")
+		self.assertEqual(item.autorizado_por, "Comisión directiva")
+		self.assertEqual(item.motivo, "Situación económica")
+
+	def test_no_alcanza_periodos_anteriores_al_alta(self):
+		self.otorgar(fecha_aplicacion="2026-08-20")
+
+		self.assertEqual(self.becas_de(self.julio), [])
+		self.assertEqual(self.becas_de(self.agosto), [Decimal("250.00")])
+
+	def test_respeta_la_vigencia_hasta(self):
+		self.otorgar(fecha_fin="2026-08-31")
+
+		self.assertEqual(self.becas_de(self.agosto), [Decimal("250.00")])
+		self.assertEqual(self.becas_de(self.septiembre), [])
+
+	def test_las_cuotas_pagas_no_se_modifican(self):
+		monto = MovimientoCuenta.objects.get(cuota=self.julio).monto
+		self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.julio.pk],
+			"monto_total": str(monto),
+			"medios": [{"medio_de_pago": "Efectivo", "monto": str(monto)}],
+		}, format="json")
+
+		response = self.otorgar()
+
+		self.assertEqual(len(response.data["items"]), 2)
+		self.assertEqual(self.becas_de(self.julio), [])
+		self.assertEqual(MovimientoCuenta.objects.get(cuota=self.julio).monto, monto)
+
+	def test_las_cuotas_generadas_despues_reciben_la_beca(self):
+		self.otorgar()
+
+		octubre = self.generar("2026-10")
+
+		item = octubre.items.get(concepto="Beca")
+		self.assertEqual(item.monto, Decimal("250.00"))
+		self.assertEqual(item.autorizado_por, "Comisión directiva")
+
+	def test_socio_de_baja_no_recibe_beca(self):
+		inactivo = crear_socio("60000011", socio_inactivo=True)
+
+		response = self.otorgar(socio=inactivo)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Beca.objects.exists())
+
+	def test_validaciones_del_formulario(self):
+		casos = [
+			({"autorizado_por": ""}, "autorizado_por"),
+			({"motivo": ""}, "motivo"),
+			({"valor": "101"}, "valor"),
+			({"fecha_fin": "2026-06-30"}, "fecha_fin"),
+		]
+		for datos, campo in casos:
+			with self.subTest(datos=datos):
+				response = self.otorgar(**datos)
+				self.assertEqual(response.status_code, 400)
+				self.assertIn(campo, response.data)
+		self.assertFalse(Beca.objects.exists())
+
+
 class CuotaSettledStateTests(APITestCase):
 	def setUp(self):
 		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
@@ -1078,6 +1182,7 @@ class CuotaSettledStateTests(APITestCase):
 			"valor": "100",
 			"fecha_aplicacion": "2026-10-01",
 			"motivo": "Beneficio total",
+			"autorizado_por": "Tesorería",
 		}
 		values.update(data)
 		return self.client.post(reverse("cuota-beneficio", args=[self.cuota.pk]), values, format="json")
@@ -1156,6 +1261,7 @@ class ItemCuotaLabelTests(APITestCase):
 			"valor": "100.00",
 			"fecha_aplicacion": "2026-10-01",
 			"motivo": "Hermanos en el club",
+			"autorizado_por": "Tesorería",
 		}, format="json")
 
 	def test_account_status_items_include_concept_labels(self):
@@ -1297,7 +1403,7 @@ class ComprobanteTestBase(APITestCase):
 			reverse("cuota-beneficio", args=[self.cuota.pk]),
 			{
 				"tipo": "Beca", "modalidad": "MontoFijo", "valor": monto,
-				"fecha_aplicacion": "2026-10-01", "fecha_fin": "2026-12-31", "motivo": "Beca deportiva",
+				"fecha_aplicacion": "2026-10-01", "fecha_fin": "2026-12-31", "motivo": "Beca deportiva", "autorizado_por": "Tesorería",
 			},
 			format="json",
 		)

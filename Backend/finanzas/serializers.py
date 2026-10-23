@@ -437,26 +437,27 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class BeneficioSerializer(serializers.Serializer):
-    tipo = serializers.ChoiceField(choices=[BENEFIT_SCHOLARSHIP, BENEFIT_DISCOUNT])
+class OtorgarBecaSerializer(serializers.Serializer):
     modalidad = serializers.ChoiceField(choices=ModalidadMontoChoices.choices)
     valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
     fecha_aplicacion = serializers.DateField()
-    fecha_fin = serializers.DateField(required=False, allow_null=True)
+    fecha_fin = serializers.DateField(required=False, allow_null=True, default=None)
     motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+    autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
 
     def validate(self, attrs):
         errors = {}
         if attrs["modalidad"] == ModalidadMontoChoices.PORCENTAJE and not Decimal("1") <= attrs["valor"] <= Decimal("100"):
             errors["valor"] = "El porcentaje debe estar entre 1% y 100%."
-        if attrs["tipo"] == BENEFIT_SCHOLARSHIP:
-            if not attrs.get("fecha_fin"):
-                errors["fecha_fin"] = "La beca requiere fecha de finalización."
-            elif attrs["fecha_fin"] < attrs["fecha_aplicacion"]:
-                errors["fecha_fin"] = "La finalización no puede ser anterior a la fecha de alta del beneficio."
+        if attrs["fecha_fin"] and attrs["fecha_fin"] < attrs["fecha_aplicacion"]:
+            errors["fecha_fin"] = "La finalización no puede ser anterior a la fecha de alta del beneficio."
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+class BeneficioSerializer(OtorgarBecaSerializer):
+    tipo = serializers.ChoiceField(choices=[BENEFIT_SCHOLARSHIP, BENEFIT_DISCOUNT])
 
 
 class BecaSerializer(serializers.ModelSerializer):

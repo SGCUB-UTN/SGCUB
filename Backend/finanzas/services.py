@@ -745,7 +745,7 @@ def benefit_amount(mode, value, base):
 
 
 @transaction.atomic
-def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=None, user=None):
+def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=None, user=None, authorized_by=""):
     cuota = lock_cuota(cuota_id)
     items = list(cuota.items.all())
     base = discount_base(items)
@@ -768,30 +768,62 @@ def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=Non
             fecha_aplicacion=start_date,
             monto=amount,
             motivo=benefit_reason(reason),
+            autorizado_por=authorized_by,
         )
         sync_cuota_charge(cuota)
         return None, item
 
-    scholarship = Beca.objects.create(
-        socio_id=cuota.movimiento.cuenta_corriente.socio_id,
+    scholarship = create_scholarship(
+        cuota.movimiento.cuenta_corriente.socio_id, mode, value, start_date, end_date, reason, authorized_by, user,
+    )
+    return scholarship, apply_scholarship(scholarship, cuota)
+
+
+def create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user):
+    return Beca.objects.create(
+        socio_id=socio_id,
         monto=value if mode == ModalidadMontoChoices.MONTO_FIJO else None,
         porcentaje=value if mode == ModalidadMontoChoices.PORCENTAJE else None,
         fecha_aplicacion=start_date,
         fecha_fin=end_date,
         motivo=reason,
+        autorizado_por=authorized_by,
         usuario=user,
     )
-    item = None
+
+
+def apply_scholarship(scholarship, cuota):
+    items = list(cuota.items.all())
+    pending = pending_amounts([cuota])[cuota.pk]
+    if pending <= 0 or not scholarship.covers_period(cuota_period_start(cuota)):
+        return None
     # A scholarship larger than what is left to pay only covers the remaining amount
-    scholarship_amount = min(scholarship.discount_for(base), remaining)
-    if not paid and scholarship.covers_period(cuota_period_start(cuota)) and scholarship_amount > 0:
-        item = ItemCuota.objects.create(
-            cuota=cuota,
-            concepto=ConceptoItemChoices.BECA,
-            es_descuento=True,
-            fecha_aplicacion=start_date,
-            monto=scholarship_amount,
-            motivo=benefit_reason(reason),
-        )
-        sync_cuota_charge(cuota)
-    return scholarship, item
+    amount = min(scholarship.discount_for(discount_base(items)), discountable_pending(cuota, items, pending))
+    if amount <= 0:
+        return None
+    item = ItemCuota.objects.create(
+        cuota=cuota,
+        concepto=ConceptoItemChoices.BECA,
+        es_descuento=True,
+        fecha_aplicacion=scholarship.fecha_aplicacion,
+        monto=amount,
+        motivo=benefit_reason(scholarship.motivo),
+        autorizado_por=scholarship.autorizado_por,
+    )
+    sync_cuota_charge(cuota)
+    return item
+
+
+@transaction.atomic
+def grant_scholarship(socio_id, mode, value, start_date, reason, authorized_by, end_date=None, user=None):
+    account = CuentaCorriente.objects.select_for_update().select_related("socio__estado_administrativo").get(socio_id=socio_id)
+    if account.socio.is_inactive:
+        raise BeneficioInvalidoError("El socio está dado de baja: no corresponde otorgarle una beca.")
+    scholarship = create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
+    cuotas = (
+        Cuota.objects.select_for_update(of=("self",))
+        .filter(movimiento__cuenta_corriente=account)
+        .select_related("movimiento")
+    )
+    applied = [apply_scholarship(scholarship, cuota) for cuota in by_period(cuotas)]
+    return scholarship, [item for item in applied if item]
