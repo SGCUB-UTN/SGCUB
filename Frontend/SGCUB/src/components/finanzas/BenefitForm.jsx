@@ -47,6 +47,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
   const [cuotaId, setCuotaId] = useState('')
   const [startDate, setStartDate] = useState(todayIso)
   const [endDate, setEndDate] = useState('')
+  const [noEndDate, setNoEndDate] = useState(false)
   const [mode, setMode] = useState(PERCENTAGE)
   const [value, setValue] = useState('')
   const [authorizer, setAuthorizer] = useState('')
@@ -76,7 +77,11 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
 
   const errors = {
     startDate: isScholarship && !startDate ? 'Indicá desde cuándo rige la beca.' : '',
-    endDate: isScholarship && endDate && endDate < startDate ? 'No puede ser anterior a la fecha de inicio.' : '',
+    endDate: (() => {
+      if (!isScholarship || noEndDate) return ''
+      if (!endDate) return 'Indicá hasta cuándo rige o marcá "Sin fecha de finalización".'
+      return endDate < startDate ? 'No puede ser anterior a la fecha de inicio.' : ''
+    })(),
     cuota: !isScholarship && !cuota ? 'Elegí la cuota a descontar.' : '',
     value: benefitValueError(mode, numericValue, !isScholarship && cuota ? remaining : null),
     authorizer: !authorizer ? 'Elegí quién autoriza.' : '',
@@ -100,7 +105,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
     const common = benefitPayload(mode, numericValue, reason, authorizer)
     try {
       if (isScholarship) {
-        await postBecaSocio(socio.socio_id, { ...common, fecha_aplicacion: startDate, fecha_fin: endDate || null })
+        await postBecaSocio(socio.socio_id, { ...common, fecha_aplicacion: startDate, fecha_fin: noEndDate ? null : endDate })
       } else {
         await postBeneficio(cuota.cuota_id, { ...common, tipo: 'Descuento', fecha_aplicacion: todayIso() })
       }
@@ -142,16 +147,28 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
                     className={claseInput(Boolean(fieldError('startDate')))}
                   />
                 </Campo>
-                <Campo id="benefit-end" label="Hasta" error={fieldError('endDate')}>
+                <Campo id="benefit-end" label="Hasta" requerido={!noEndDate} error={fieldError('endDate')}>
                   <input
                     id="benefit-end"
                     type="date"
                     min={startDate}
                     value={endDate}
                     onChange={(event) => setEndDate(event.target.value)}
-                    title="Si se deja vacío, la beca no tiene fecha de fin"
+                    disabled={noEndDate}
                     className={claseInput(Boolean(fieldError('endDate')))}
                   />
+                  <label className="self-start flex items-center gap-2 text-sm font-medium text-on-surface-variant cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={noEndDate}
+                      onChange={(event) => {
+                        setNoEndDate(event.target.checked)
+                        if (event.target.checked) setEndDate('')
+                      }}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    Sin fecha de finalización
+                  </label>
                 </Campo>
               </div>
             </FormSection>
@@ -215,7 +232,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
               {isScholarship ? (
                 <>
                   <SummaryLine label="Desde" value={startDate ? formatDate(startDate) : '—'} />
-                  <SummaryLine label="Hasta" value={endDate ? formatDate(endDate) : 'Sin fecha de fin'} />
+                  <SummaryLine label="Hasta" value={noEndDate ? 'Sin fecha de finalización' : endDate ? formatDate(endDate) : '—'} />
                 </>
               ) : (
                 <SummaryLine label="Cuota" value={cuota ? formatPeriod(cuota.periodo) : '—'} />
