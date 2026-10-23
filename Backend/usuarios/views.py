@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairVi
 
 from .models import set_must_change_password
 from .permissions import CanChangeUsuarios, CanManageUsuarios
-from .serializers import ROLES, CambioPasswordSerializer, LoginSerializer, UsuarioActualSerializer, UsuarioSerializer
+from .serializers import ROLES, AutorizanteSerializer, CambioPasswordSerializer, LoginSerializer, UsuarioActualSerializer, UsuarioSerializer
 
 User = get_user_model()
 
@@ -46,6 +46,13 @@ def change_password(request):
     request.user.save(update_fields=["password"])
     set_must_change_password(request.user, required=False)
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["Usuarios"], responses=AutorizanteSerializer(many=True))
+@api_view(["GET"])
+def authorizer_list(request):
+    users = User.objects.filter(is_active=True).order_by("last_name", "first_name", "username")
+    return Response(AutorizanteSerializer(users, many=True).data)
 
 
 def _usuarios_queryset():

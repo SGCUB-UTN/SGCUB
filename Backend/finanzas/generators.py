@@ -1,6 +1,8 @@
 from calendar import monthrange
 from decimal import Decimal
 
+from django.db.models import Q
+
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
 
 from .models import Beca, ConceptoItemChoices, ConfiguracionFinanciera, ItemCuota
@@ -16,7 +18,11 @@ def period_bounds(first_day):
 
 def scholarships_for_period(first_day):
     start, end = period_bounds(first_day)
-    return Beca.objects.filter(fecha_aplicacion__lte=end, fecha_fin__gte=start).order_by("fecha_aplicacion", "pk")
+    return (
+        Beca.objects.filter(fecha_aplicacion__lte=end)
+        .filter(Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=start))
+        .order_by("fecha_aplicacion", "pk")
+    )
 
 
 class GeneradorItemsCuota:
@@ -55,6 +61,7 @@ class GeneradorItemsCuota:
                 amount,
                 is_discount=True,
                 reason=benefit_reason(scholarship.motivo),
+                authorized_by=scholarship.autorizado_por,
             ))
             available -= amount
         return benefits
@@ -65,11 +72,12 @@ class GeneradorItemsCuota:
             return prefetched
         return scholarships_for_period(self.application_date).filter(socio=self.socio)
 
-    def _item(self, concept, amount, is_discount=False, reason=""):
+    def _item(self, concept, amount, is_discount=False, reason="", authorized_by=""):
         return ItemCuota(
             concepto=concept,
             es_descuento=is_discount,
             fecha_aplicacion=self.application_date,
             monto=amount,
             motivo=reason,
+            autorizado_por=authorized_by,
         )

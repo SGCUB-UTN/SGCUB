@@ -1,165 +1,94 @@
 import { useMemo, useState } from 'react'
+import { postBecaSocio } from '../../api/becas'
 import { postBeneficio } from '../../api/cuotas'
 import { formatAmount, formatDate, getErrorMessage } from '../personas/format'
-import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { formatPeriod } from '../shared/periodFormat'
-import { FIELD_CLASS, NO_SPINNER_CLASS, StepSection, SUMMARY_GROUP_CLASS, SummaryLine } from './formParts'
-import { isPaid } from './accountStatement'
-import { cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
+import { claseInput } from '../socios/socioForm'
+import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
+import { AmountModeInput, AuthorizerSelect, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { PERCENTAGE, benefitFor, benefitPayload, benefitValueError, discountBase, isOpen, previousBenefits, remainingWithoutFees, roundCents, todayIso } from './benefitMath'
+import { isOverdue } from './cuotaStates'
+
+const SCHOLARSHIP = 'beca'
+
+const DISCOUNT = 'descuento'
 
 const KINDS = [
-  { value: 'descuento', label: 'Descuento', description: 'Se aplica una sola vez, sobre esta cuota.' },
-  { value: 'beca', label: 'Beca', description: 'Se aplica a esta cuota y a las siguientes mientras esté vigente.' },
-]
-
-const MODES = [
-  { value: 'fijo', label: 'Monto fijo' },
-  { value: 'porcentaje', label: 'Porcentaje' },
+  { value: SCHOLARSHIP, label: 'Beca', description: 'Se aplica a todas las cuotas dentro de su vigencia.'},
+  { value: DISCOUNT, label: 'Descuento puntual', description: 'Ajuste sobre una sola cuota.' },
 ]
 
 const REASON_MAX_LENGTH = 140
 
-const LATE_FEE_CONCEPT = 'Mora'
-
-const todayIso = () => {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-}
-
-const roundCents = (value) => Math.round((value + Number.EPSILON) * 100) / 100
-
-const sumItems = (cuota, predicate) => roundCents((cuota?.items ?? [])
-  .filter(predicate)
-  .reduce((total, item) => total + Number(item.monto ?? 0), 0))
-
-// The benefit is calculated over the whole cuota, late fees excluded
-const discountBase = (cuota) => sumItems(cuota, (item) => !item.es_descuento && item.concepto !== LATE_FEE_CONCEPT)
-
-const previousDiscounts = (cuota) => sumItems(cuota, (item) => item.es_descuento)
-
-// What is left to pay without the late fees still unpaid: the most a benefit can take off the cuota
-const remainingWithoutFees = (cuota) => roundCents(Number(cuota?.saldo_sin_recargo ?? 0))
-
-const isOpen = (cuota) => !isPaid(cuota) && Number(cuota.saldo_pendiente ?? 0) > 0
-
-function CuotaChoice({ cuota, selected, onSelect }) {
+function KindOption({ kind, selected, onSelect }) {
   return (
-    <label className={`flex items-center gap-3 p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low'}`}>
-      <input
-        type="radio"
-        name="benefit-cuota"
-        checked={selected}
-        onChange={() => onSelect(cuota.cuota_id)}
-        className="h-4 w-4 accent-primary shrink-0"
-      />
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-base font-semibold text-on-surface">Cuota {formatPeriod(cuota.periodo)}</span>
-          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${cuotaStateBadgeClass(cuota.estado_cuota)}`}>{cuotaStateLabel(cuota.estado_cuota)}</span>
-        </div>
-        <span className="text-sm text-on-surface-variant">
-          {cuota.fecha_venc1 ? `Vence el ${formatDate(cuota.fecha_venc1)}` : 'Sin fecha de vencimiento'}
-          {Number(cuota.monto_pagado ?? 0) > 0 && ` · Pagado ${formatAmount(Number(cuota.monto_pagado))}`}
-        </span>
-      </div>
-      <div className="text-right shrink-0">
-        <span className="block text-xs text-on-surface-variant">Falta pagar sin recargo</span>
-        <span className="text-base font-bold text-on-surface">{formatAmount(remainingWithoutFees(cuota))}</span>
-      </div>
-    </label>
-  )
-}
-
-function KindOption({ kind, selected, disabled, onSelect }) {
-  return (
-    <label className={`flex items-start gap-3 p-3 sm:p-4 rounded-lg border transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/40 bg-surface-container-lowest'} ${!selected && !disabled ? 'hover:bg-surface-container-low' : ''}`}>
-      <input
-        type="radio"
-        name="benefit-kind"
-        checked={selected}
-        disabled={disabled}
-        onChange={() => onSelect(kind.value)}
-        className="mt-1 h-4 w-4 accent-primary shrink-0"
-      />
-      <div className="flex flex-col gap-0.5 min-w-0">
+    <button
+      type="button"
+      onClick={() => onSelect(kind.value)}
+      aria-pressed={selected}
+      className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low'}`}
+    >
+      <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{kind.icon}</span>
+      <span className="flex flex-col min-w-0">
         <span className="text-base font-semibold text-on-surface">{kind.label}</span>
         <span className="text-sm text-on-surface-variant">{kind.description}</span>
-      </div>
-    </label>
+      </span>
+    </button>
   )
 }
 
-function FieldLabel({ htmlFor, children, optional = false }) {
-  return (
-    <label htmlFor={htmlFor} className="text-sm font-semibold text-on-surface-variant">
-      {children}
-      {optional ? <span className="font-normal text-outline"> (opcional)</span> : <span className="text-error"> *</span>}
-    </label>
-  )
-}
-
-// Without `socio`, renders the empty layout so the modal keeps its shape while the account loads.
-// Without `initialCuotaId`, the first step asks which cuota the benefit is calculated on.
-function BenefitForm({ socio = null, cuenta = null, initialCuotaId = null, onCancel, onSuccess }) {
+// Without `socio`, renders the empty layout so the modal keeps its shape while the account loads
+function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
   const openCuotas = useMemo(
-    () => (cuenta?.cuotas ?? []).filter(isOpen).sort((a, b) => String(b.periodo).localeCompare(String(a.periodo))),
+    () => (cuenta?.cuotas ?? []).filter(isOpen).sort((a, b) => String(a.periodo).localeCompare(String(b.periodo))),
     [cuenta],
   )
-  const askCuota = !initialCuotaId
-  const [cuotaId, setCuotaId] = useState(initialCuotaId)
-  const [kind, setKind] = useState(null)
-  const [mode, setMode] = useState('fijo')
-  const [value, setValue] = useState('')
+  const [kind, setKind] = useState(SCHOLARSHIP)
+  const [cuotaId, setCuotaId] = useState('')
   const [startDate, setStartDate] = useState(todayIso)
   const [endDate, setEndDate] = useState('')
+  const [noEndDate, setNoEndDate] = useState(false)
+  const [mode, setMode] = useState(PERCENTAGE)
+  const [value, setValue] = useState('')
+  const [authorizer, setAuthorizer] = useState('')
   const [reason, setReason] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  const cuota = (cuenta?.cuotas ?? []).find((item) => item.cuota_id === cuotaId) ?? null
-  const paid = Boolean(cuota) && !isOpen(cuota)
-  const selectedKind = paid ? 'beca' : (kind ?? 'descuento')
-  const isScholarship = selectedKind === 'beca'
+  const isScholarship = kind === SCHOLARSHIP
+  const cuota = openCuotas.find((item) => String(item.cuota_id) === cuotaId) ?? null
+  const numericValue = Number(value)
+  const hasValue = Number.isFinite(numericValue) && numericValue > 0
 
-  const base = discountBase(cuota)
-  const discounts = previousDiscounts(cuota)
+  const startPeriod = startDate.slice(0, 7)
+  const endPeriod = endDate.slice(0, 7)
+  const reachedCuotas = isScholarship && startDate && hasValue
+    ? openCuotas
+      .filter((item) => item.periodo >= startPeriod && (!endPeriod || item.periodo <= endPeriod))
+      .map((item) => ({ cuota: item, amount: benefitFor(item, mode, numericValue) }))
+      .filter((item) => item.amount > 0)
+    : []
+  const scholarshipTotal = roundCents(reachedCuotas.reduce((total, item) => total + item.amount, 0))
+
+  const discountAmount = cuota && hasValue ? benefitFor(cuota, mode, numericValue) : 0
   const remaining = remainingWithoutFees(cuota)
   const pending = roundCents(Number(cuota?.saldo_pendiente ?? 0))
-  const paidWithoutFees = Math.max(roundCents(base - discounts - remaining), 0)
-  const unpaidFees = Math.max(roundCents(pending - remaining), 0)
-  const numericValue = Number(value)
-  const requestedAmount = Number.isFinite(numericValue) && numericValue > 0
-    ? roundCents(mode === 'porcentaje' ? base * numericValue / 100 : numericValue)
-    : 0
-  const appliedAmount = paid ? 0 : Math.min(requestedAmount, remaining)
-  const newPending = roundCents(pending - appliedAmount)
-  const scholarshipCapped = isScholarship && !paid && requestedAmount > remaining
 
-  const valueError = (() => {
-    if (!isScholarship && remaining <= 0) return 'La cuota no tiene saldo pendiente para descontar.'
-    if (!(numericValue > 0)) return mode === 'porcentaje' ? 'Ingresá un porcentaje.' : 'Ingresá un monto.'
-    if (mode === 'porcentaje' && (numericValue < 1 || numericValue > 100)) return 'El porcentaje debe estar entre 1% y 100%.'
-    if (mode === 'fijo' && numericValue > base) return `El monto no puede superar el total de la cuota (${formatAmount(base)}).`
-    if (!isScholarship && requestedAmount > remaining) return `El descuento no puede superar lo que falta pagar (${formatAmount(remaining)}).`
-    return ''
-  })()
-
-  const formErrors = {
-    cuota: !cuota ? 'Elegí una cuota.' : '',
-    value: cuota ? valueError : '',
-    startDate: !startDate ? 'Indicá la fecha de alta del beneficio.' : '',
-    endDate: isScholarship && !endDate
-      ? 'Indicá hasta cuándo rige la beca.'
-      : isScholarship && endDate < startDate ? 'La finalización no puede ser anterior a la fecha de alta.' : '',
-    reason: !reason.trim() ? 'Indicá el motivo del beneficio.' : '',
+  const errors = {
+    startDate: isScholarship && !startDate ? 'Indicá desde cuándo rige la beca.' : '',
+    endDate: (() => {
+      if (!isScholarship || noEndDate) return ''
+      if (!endDate) return 'Indicá hasta cuándo rige o marcá "Sin fecha de finalización".'
+      return endDate < startDate ? 'No puede ser anterior a la fecha de inicio.' : ''
+    })(),
+    cuota: !isScholarship && !cuota ? 'Elegí la cuota a descontar.' : '',
+    value: benefitValueError(mode, numericValue, !isScholarship && cuota ? remaining : null),
+    authorizer: !authorizer ? 'Elegí quién autoriza.' : '',
+    reason: !reason.trim() ? 'Indicá el motivo.' : '',
   }
-  const isValid = Object.values(formErrors).every((error) => !error)
-
-  const selectCuota = (id) => {
-    setCuotaId(id)
-    setSubmitError('')
-  }
+  const isValid = Object.values(errors).every((error) => !error)
+  const fieldError = (key) => (showErrors ? errors[key] : '')
 
   const changeMode = (nextMode) => {
     setMode(nextMode)
@@ -173,216 +102,188 @@ function BenefitForm({ socio = null, cuenta = null, initialCuotaId = null, onCan
     if (!isValid) return
     setSaving(true)
     setSubmitError('')
+    const common = benefitPayload(mode, numericValue, reason, authorizer)
     try {
-      await postBeneficio(cuota.cuota_id, {
-        tipo: isScholarship ? 'Beca' : 'Descuento',
-        modalidad: mode === 'porcentaje' ? 'Porcentaje' : 'MontoFijo',
-        valor: numericValue,
-        fecha_aplicacion: startDate,
-        ...(isScholarship && { fecha_fin: endDate }),
-        motivo: reason.trim(),
-      })
+      if (isScholarship) {
+        await postBecaSocio(socio.socio_id, { ...common, fecha_aplicacion: startDate, fecha_fin: noEndDate ? null : endDate })
+      } else {
+        await postBeneficio(cuota.cuota_id, { ...common, tipo: 'Descuento', fecha_aplicacion: todayIso() })
+      }
       onSuccess?.()
     } catch (error) {
-      setSubmitError(getErrorMessage(error, 'No se pudo aplicar el beneficio.'))
+      setSubmitError(getErrorMessage(error, isScholarship ? 'No se pudo otorgar la beca.' : 'No se pudo aplicar el descuento.'))
     } finally {
       setSaving(false)
     }
   }
 
-  const noCuota = !cuota
-  const stepOffset = askCuota ? 1 : 0
-  const fieldError = (key) => showErrors && formErrors[key]
+  const valueLabel = hasValue ? (mode === PERCENTAGE ? `${numericValue}%` : formatAmount(numericValue)) : '—'
+  const submitLabel = () => {
+    if (saving) return isScholarship ? 'Otorgando...' : 'Aplicando...'
+    return isScholarship ? 'Otorgar beca' : 'Aplicar descuento'
+  }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-6" noValidate>
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
-        <div className="flex flex-col gap-8 min-w-0">
-          {askCuota && (
-            <StepSection
-              step={1}
-              title="Cuota"
-              description={socio ? 'Elegí la cuota sobre la que se calcula el beneficio.' : 'Cargando las cuotas del socio...'}
-              disabled={!socio}
-            >
-              <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
-                {openCuotas.length
-                  ? openCuotas.map((item) => (
-                    <CuotaChoice key={item.cuota_id} cuota={item} selected={item.cuota_id === cuotaId} onSelect={selectCuota} />
-                  ))
-                  : (
-                    <p className="text-base text-on-surface-variant text-center py-6 border border-dashed border-outline-variant/40 rounded-lg">
-                      {socio ? 'El socio no tiene cuotas vencidas ni en fecha.' : 'Las cuotas del socio aparecerán aquí.'}
-                    </p>
-                  )}
-              </div>
-              {fieldError('cuota') && <p className="text-sm text-error" role="alert">{formErrors.cuota}</p>}
-            </StepSection>
-          )}
-
-          <StepSection
-            step={1 + stepOffset}
-            title="Tipo de beneficio"
-            description={noCuota ? 'Primero elegí una cuota.' : paid ? 'La cuota ya está paga, por eso solo admite una beca para los próximos períodos.' : 'Elegí si es un descuento puntual o una beca con vigencia.'}
-            disabled={noCuota}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <form onSubmit={submit} className="flex flex-col" noValidate>
+      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
+        <div className="flex flex-col gap-5 min-w-0">
+          <FormSection icon="category" title="Tipo de beneficio" disabled={!socio}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {KINDS.map((option) => (
-                <KindOption
-                  key={option.value}
-                  kind={option}
-                  selected={!noCuota && selectedKind === option.value}
-                  disabled={option.value === 'descuento' && paid}
-                  onSelect={setKind}
-                />
+                <KindOption key={option.value} kind={option} selected={kind === option.value} onSelect={setKind} />
               ))}
             </div>
-          </StepSection>
+          </FormSection>
 
-          <StepSection
-            step={2 + stepOffset}
-            title="Monto"
-            description={noCuota ? 'Primero elegí una cuota.' : isScholarship ? 'Indicá un monto fijo o un porcentaje del total de la cuota.' : `Indicá un monto fijo o un porcentaje del total de la cuota, hasta ${formatAmount(remaining)}.`}
-            disabled={noCuota}
-          >
-            <div className="flex flex-col gap-3 p-4 rounded-lg border border-outline-variant/40 bg-surface-container-lowest">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="inline-flex self-start p-1 rounded-lg bg-surface-container-low border border-outline-variant/40" role="group" aria-label="Modalidad">
-                  {MODES.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => changeMode(option.value)}
-                      aria-pressed={mode === option.value}
-                      className={`h-8 px-3 rounded-md text-sm font-semibold transition-colors cursor-pointer ${mode === option.value ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="relative w-full sm:w-48">
-                  {mode === 'fijo' && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>}
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={mode === 'porcentaje' ? '1' : '0.01'}
-                    max={mode === 'porcentaje' ? '100' : undefined}
-                    step={mode === 'porcentaje' ? '1' : '0.01'}
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    placeholder={mode === 'porcentaje' ? '0' : '0.00'}
-                    aria-label={mode === 'porcentaje' ? 'Porcentaje del beneficio' : 'Monto del beneficio'}
-                    aria-invalid={Boolean(fieldError('value')) || undefined}
-                    className={`${FIELD_CLASS} ${NO_SPINNER_CLASS} ${mode === 'fijo' ? 'pl-7 pr-3' : 'pl-3 pr-8'} font-semibold text-right ${fieldError('value') ? 'border-error' : 'border-outline-variant/50'}`}
-                  />
-                  {mode === 'porcentaje' && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">%</span>}
-                </div>
-              </div>
-              {mode === 'porcentaje' && requestedAmount > 0 && (
-                <p className="text-sm text-on-surface-variant">Equivale a <strong className="text-on-surface">{formatAmount(requestedAmount)}</strong> sobre {formatAmount(base)}.</p>
-              )}
-            </div>
-            {fieldError('value') && <p className="text-sm text-error" role="alert">{formErrors.value}</p>}
-          </StepSection>
-
-          <StepSection
-            step={3 + stepOffset}
-            title={isScholarship ? 'Vigencia y motivo' : 'Fecha y motivo'}
-            description={noCuota ? 'Primero elegí una cuota.' : isScholarship ? 'La beca se aplica a las cuotas de los períodos dentro de su vigencia.' : 'Registrá desde cuándo rige y por qué se otorga.'}
-            disabled={noCuota}
-          >
-            <div className="flex flex-col gap-4 p-4 rounded-lg border border-outline-variant/40 bg-surface-container-lowest">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <FieldLabel htmlFor="benefit-start">Fecha de alta</FieldLabel>
+          {isScholarship ? (
+            <FormSection icon="event" title="Vigencia" disabled={!socio}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                <Campo id="benefit-start" label="Desde" requerido error={fieldError('startDate')}>
                   <input
                     id="benefit-start"
                     type="date"
                     value={startDate}
                     onChange={(event) => setStartDate(event.target.value)}
-                    className={`${FIELD_CLASS} px-3 ${fieldError('startDate') ? 'border-error' : 'border-outline-variant/50'}`}
+                    className={claseInput(Boolean(fieldError('startDate')))}
                   />
-                  {fieldError('startDate') && <p className="text-sm text-error" role="alert">{formErrors.startDate}</p>}
-                </div>
-                {isScholarship && (
-                  <div className="flex flex-col gap-1.5">
-                    <FieldLabel htmlFor="benefit-end">Vigente hasta</FieldLabel>
+                </Campo>
+                <Campo id="benefit-end" label="Hasta" requerido={!noEndDate} error={fieldError('endDate')}>
+                  <input
+                    id="benefit-end"
+                    type="date"
+                    min={startDate}
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    disabled={noEndDate}
+                    className={claseInput(Boolean(fieldError('endDate')))}
+                  />
+                  <label className="self-start flex items-center gap-2 text-sm font-medium text-on-surface-variant cursor-pointer">
                     <input
-                      id="benefit-end"
-                      type="date"
-                      min={startDate}
-                      value={endDate}
-                      onChange={(event) => setEndDate(event.target.value)}
-                      className={`${FIELD_CLASS} px-3 ${fieldError('endDate') ? 'border-error' : 'border-outline-variant/50'}`}
+                      type="checkbox"
+                      checked={noEndDate}
+                      onChange={(event) => {
+                        setNoEndDate(event.target.checked)
+                        if (event.target.checked) setEndDate('')
+                      }}
+                      className="h-4 w-4 accent-primary"
                     />
-                    {fieldError('endDate') && <p className="text-sm text-error" role="alert">{formErrors.endDate}</p>}
-                  </div>
-                )}
+                    Sin fecha de finalización
+                  </label>
+                </Campo>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel htmlFor="benefit-reason">Motivo</FieldLabel>
-                <textarea
+            </FormSection>
+          ) : (
+            <FormSection icon="receipt_long" title="Cuota" disabled={!socio}>
+              <Campo id="benefit-cuota" label="Cuota a descontar" requerido error={fieldError('cuota')}>
+                <SelectConFlecha
+                  id="benefit-cuota"
+                  value={cuotaId}
+                  onChange={(event) => setCuotaId(event.target.value)}
+                  conError={Boolean(fieldError('cuota'))}
+                >
+                  <option value="">{openCuotas.length ? 'Seleccioná una cuota' : 'El socio no tiene cuotas impagas'}</option>
+                  {openCuotas.map((item) => (
+                    <option key={item.cuota_id} value={String(item.cuota_id)}>
+                      {formatPeriod(item.periodo)} · {formatAmount(remainingWithoutFees(item))}{isOverdue(item) ? ' · Vencida' : ''}
+                    </option>
+                  ))}
+                </SelectConFlecha>
+              </Campo>
+            </FormSection>
+          )}
+
+          <FormSection icon="payments" title="Monto" disabled={!socio}>
+            <AmountModeInput
+              mode={mode}
+              value={value}
+              onModeChange={changeMode}
+              onValueChange={setValue}
+              invalid={Boolean(fieldError('value'))}
+            />
+            {fieldError('value') && <p className="text-sm text-error font-medium" role="alert">{errors.value}</p>}
+          </FormSection>
+
+          <FormSection icon="verified_user" title="Autorización" disabled={!socio} className="mt-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+              <Campo id="benefit-authorizer" label="Autorizado por" requerido error={fieldError('authorizer')}>
+                <AuthorizerSelect id="benefit-authorizer" value={authorizer} onChange={setAuthorizer} invalid={Boolean(fieldError('authorizer'))} />
+              </Campo>
+              <Campo id="benefit-reason" label="Motivo" requerido error={fieldError('reason')}>
+                <input
                   id="benefit-reason"
+                  type="text"
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   maxLength={REASON_MAX_LENGTH}
-                  rows={3}
                   placeholder="Ej: Hermanos en el club"
-                  className={`w-full px-3 py-2 bg-surface-container-low rounded-lg border text-base text-on-surface placeholder:text-outline resize-none focus:outline-none focus:border-primary ${fieldError('reason') ? 'border-error' : 'border-outline-variant/50'}`}
+                  className={claseInput(Boolean(fieldError('reason')))}
                 />
-                <div className="flex justify-between gap-3">
-                  {fieldError('reason') ? <p className="text-sm text-error" role="alert">{formErrors.reason}</p> : <span />}
-                  <span className="text-xs text-on-surface-variant">{reason.length}/{REASON_MAX_LENGTH}</span>
-                </div>
-              </div>
+              </Campo>
             </div>
-          </StepSection>
+          </FormSection>
         </div>
 
-        <aside className="lg:sticky lg:top-4 flex flex-col gap-6 p-6 rounded-xl border border-outline-variant/30 bg-surface-container-low" aria-labelledby="benefit-summary-title">
-          <h3 id="benefit-summary-title" className="text-xl font-bold text-on-surface">Resumen del beneficio</h3>
+        <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="benefit-summary-title" aria-disabled={!socio || undefined}>
+          <h3 id="benefit-summary-title" className="text-lg font-bold text-on-surface">Resumen del beneficio</h3>
 
-          {cuota ? (
-            <div className="flex flex-col gap-2.5">
-              <h4 className={SUMMARY_GROUP_CLASS}>Cuota {formatPeriod(cuota.periodo)}</h4>
-              <SummaryLine label="Total sin recargo" value={formatAmount(base)} />
-              {discounts > 0 && <SummaryLine label="Beneficios anteriores" value={`− ${formatAmount(discounts)}`} />}
-              {paidWithoutFees > 0 && <SummaryLine label="Pagado" value={`− ${formatAmount(paidWithoutFees)}`} />}
-              <SummaryLine label={isScholarship ? 'Beca' : 'Descuento'} value={`− ${formatAmount(appliedAmount)}`} />
-              {unpaidFees > 0 && <SummaryLine label="Recargo por mora pendiente" value={`+ ${formatAmount(unpaidFees)}`} />}
-              <div className="pt-3 mt-1 border-t border-outline-variant/30">
-                <SummaryLine label="Nuevo saldo pendiente" value={formatAmount(newPending)} isTotal />
-              </div>
-              {!paid && newPending <= 0 && appliedAmount > 0 && (
-                <p className="mt-2 flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm font-semibold text-emerald-700">
-                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">task_alt</span>
-                  La cuota quedará registrada como paga.
-                </p>
+          <div className="flex flex-1 flex-col justify-between gap-3">
+            <TicketSection title={isScholarship ? 'Beca institucional' : 'Descuento puntual'}>
+              <SummaryLine label="Valor" value={valueLabel} />
+              {isScholarship ? (
+                <>
+                  <SummaryLine label="Desde" value={startDate ? formatDate(startDate) : '—'} />
+                  <SummaryLine label="Hasta" value={noEndDate ? 'Sin fecha de finalización' : endDate ? formatDate(endDate) : '—'} />
+                </>
+              ) : (
+                <SummaryLine label="Cuota" value={cuota ? formatPeriod(cuota.periodo) : '—'} />
               )}
-              {scholarshipCapped && (
-                <p className="mt-2 p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-sm text-on-surface-variant">
-                  La beca supera lo que falta pagar: en esta cuota se aplicarán {formatAmount(remaining)}. En los próximos períodos se aplicará completa.
-                </p>
-              )}
-              {paid && (
-                <p className="mt-2 p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-sm text-on-surface-variant">
-                  Esta cuota ya está paga, así que no cambia. La beca se aplicará a las cuotas de los próximos períodos dentro de su vigencia.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-base text-on-surface-variant">Ninguna cuota seleccionada.</p>
-          )}
+              <SummaryLine label="Autoriza" value={authorizer || '—'} />
+            </TicketSection>
 
-          {submitError && <p className="text-sm text-error bg-error-container p-3 rounded-lg" role="alert">{submitError}</p>}
-
-          <div className="mt-2 flex flex-col gap-3 [&>button]:justify-center">
-            <PrimaryButton type="submit" disabled={!socio || saving}>
-              {saving ? 'Aplicando...' : `Aplicar ${isScholarship ? 'beca' : 'descuento'}${requestedAmount > 0 ? ` · ${formatAmount(requestedAmount)}` : ''}`}
-            </PrimaryButton>
-            <SecondaryButton icon="close" onClick={onCancel} disabled={saving}>Cancelar</SecondaryButton>
+            {isScholarship ? (
+              <>
+                <TicketSection title="Cuotas impagas alcanzadas">
+                  {reachedCuotas.length
+                    ? reachedCuotas.map((item) => (
+                      <SummaryLine
+                        key={item.cuota.cuota_id}
+                        label={`Cuota ${formatPeriod(item.cuota.periodo)}`}
+                        value={`− ${formatAmount(item.amount)}`}
+                        valueClassName="text-emerald-700"
+                      />
+                    ))
+                    : <p className="text-base text-on-surface-variant">Ninguna por ahora.</p>}
+                </TicketSection>
+                <div className="flex flex-col gap-1">
+                  <SummaryLine label="Descuento total" value={formatAmount(scholarshipTotal)} isTotal valueClassName="text-emerald-700" />
+                  <p className="text-sm text-on-surface-variant">También se aplica a las cuotas que se generen dentro de la vigencia.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <TicketSection title={cuota ? `Cuota ${formatPeriod(cuota.periodo)}` : 'Cuota'}>
+                  <SummaryLine label="Total sin recargo" value={formatAmount(discountBase(cuota))} />
+                  {previousBenefits(cuota) > 0 && <SummaryLine label="Beneficios anteriores" value={`− ${formatAmount(previousBenefits(cuota))}`} />}
+                  <SummaryLine label="Descuento" value={`− ${formatAmount(discountAmount)}`} valueClassName="text-emerald-700" />
+                  {pending - remaining > 0 && <SummaryLine label="Recargo por mora pendiente" value={`+ ${formatAmount(roundCents(pending - remaining))}`} />}
+                </TicketSection>
+                <SummaryLine label="Nuevo saldo" value={formatAmount(roundCents(pending - discountAmount))} isTotal />
+              </>
+            )}
           </div>
-        </aside>
+
+          <div className="flex flex-col gap-3">
+            {submitError && (
+              <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
+                <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>
+                <p className="text-sm break-words">{submitError}</p>
+              </div>
+            )}
+            <button type="submit" disabled={!socio || saving} className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}>
+              <span>{submitLabel()}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </form>
   )

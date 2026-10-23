@@ -346,7 +346,7 @@ def apply_payment(payment_movement, cuotas, amount):
 
 
 RECEIPT_TYPE = "X"
-DISCOUNT_CONCEPTS = (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
 
 
 def detail_lines(totals):
@@ -478,11 +478,58 @@ def create_payment(account, payment_methods, total, note, user, concept):
     return payment, receipt, movement
 
 
+def by_period(cuotas):
+    return sorted(cuotas, key=lambda cuota: (cuota.periodo, cuota.pk))
+
+
+def validate_payment_order(account, cuotas):
+    account_cuotas = Cuota.objects.filter(movimiento__cuenta_corriente=account).select_related("movimiento")
+    pending = pending_amounts(account_cuotas)
+    open_ids = [cuota.pk for cuota in by_period(account_cuotas) if pending[cuota.pk] > 0]
+    selected_ids = {cuota.pk for cuota in cuotas}
+    if not selected_ids <= set(open_ids):
+        raise PagoInvalidoError("No se pueden pagar cuotas ya saldadas.")
+    if selected_ids != set(open_ids[:len(selected_ids)]):
+        raise PagoInvalidoError("Las cuotas deben pagarse en orden, empezando por la más antigua.")
+
+
+def validate_every_cuota_receives_payment(cuotas, total):
+    pending = pending_amounts(cuotas)
+    previous = sum((pending[cuota.pk] for cuota in by_period(cuotas)[:-1]), Decimal("0.00"))
+    if total <= previous:
+        raise PagoInvalidoError("El monto no alcanza para cubrir todas las cuotas seleccionadas.")
+
+
+def waive_late_fees(cuotas, reason, authorized_by):
+    pending = pending_amounts(cuotas)
+    for cuota in by_period(cuotas):
+        amount = unpaid_late_fees(cuota, list(cuota.items.all()), pending[cuota.pk])
+        if amount <= 0:
+            raise PagoInvalidoError(f"La cuota {cuota.periodo} no tiene recargos por mora pendientes.")
+        ItemCuota.objects.create(
+            cuota=cuota,
+            concepto=ConceptoItemChoices.CONDONACION_MORA,
+            es_descuento=True,
+            fecha_aplicacion=timezone.localdate(),
+            monto=amount,
+            motivo=benefit_reason(reason),
+            autorizado_por=authorized_by,
+        )
+        sync_cuota_charge(cuota)
+
+
 @transaction.atomic
-def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None):
+def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None):
     account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
+    validate_payment_order(account, cuotas)
+    if late_fee_waiver:
+        waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]
+        waive_late_fees(waived, late_fee_waiver["motivo"], late_fee_waiver["autorizado_por"])
+        account.refresh_from_db(fields=["saldo"])
+        cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_amount(pending_amounts(cuotas), total, "No se pueden pagar cuotas ya saldadas.")
+    validate_every_cuota_receives_payment(cuotas, total)
 
     payment, receipt, movement = create_payment(account, payment_methods, total, note, user, "Pago de cuotas")
     account.saldo += total
@@ -567,6 +614,9 @@ def discount_base(items):
 def unpaid_late_fees(cuota, items, pending):
     fees = sum(
         (item.monto for item in items if not item.es_descuento and item.concepto == ConceptoItemChoices.MORA),
+        Decimal("0.00"),
+    ) - sum(
+        (item.monto for item in items if item.concepto == ConceptoItemChoices.CONDONACION_MORA),
         Decimal("0.00"),
     )
     if fees <= 0:
@@ -695,7 +745,7 @@ def benefit_amount(mode, value, base):
 
 
 @transaction.atomic
-def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=None, user=None):
+def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=None, user=None, authorized_by=""):
     cuota = lock_cuota(cuota_id)
     items = list(cuota.items.all())
     base = discount_base(items)
@@ -718,30 +768,62 @@ def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=Non
             fecha_aplicacion=start_date,
             monto=amount,
             motivo=benefit_reason(reason),
+            autorizado_por=authorized_by,
         )
         sync_cuota_charge(cuota)
         return None, item
 
-    scholarship = Beca.objects.create(
-        socio_id=cuota.movimiento.cuenta_corriente.socio_id,
+    scholarship = create_scholarship(
+        cuota.movimiento.cuenta_corriente.socio_id, mode, value, start_date, end_date, reason, authorized_by, user,
+    )
+    return scholarship, apply_scholarship(scholarship, cuota)
+
+
+def create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user):
+    return Beca.objects.create(
+        socio_id=socio_id,
         monto=value if mode == ModalidadMontoChoices.MONTO_FIJO else None,
         porcentaje=value if mode == ModalidadMontoChoices.PORCENTAJE else None,
         fecha_aplicacion=start_date,
         fecha_fin=end_date,
         motivo=reason,
+        autorizado_por=authorized_by,
         usuario=user,
     )
-    item = None
+
+
+def apply_scholarship(scholarship, cuota):
+    items = list(cuota.items.all())
+    pending = pending_amounts([cuota])[cuota.pk]
+    if pending <= 0 or not scholarship.covers_period(cuota_period_start(cuota)):
+        return None
     # A scholarship larger than what is left to pay only covers the remaining amount
-    scholarship_amount = min(scholarship.discount_for(base), remaining)
-    if not paid and scholarship.covers_period(cuota_period_start(cuota)) and scholarship_amount > 0:
-        item = ItemCuota.objects.create(
-            cuota=cuota,
-            concepto=ConceptoItemChoices.BECA,
-            es_descuento=True,
-            fecha_aplicacion=start_date,
-            monto=scholarship_amount,
-            motivo=benefit_reason(reason),
-        )
-        sync_cuota_charge(cuota)
-    return scholarship, item
+    amount = min(scholarship.discount_for(discount_base(items)), discountable_pending(cuota, items, pending))
+    if amount <= 0:
+        return None
+    item = ItemCuota.objects.create(
+        cuota=cuota,
+        concepto=ConceptoItemChoices.BECA,
+        es_descuento=True,
+        fecha_aplicacion=scholarship.fecha_aplicacion,
+        monto=amount,
+        motivo=benefit_reason(scholarship.motivo),
+        autorizado_por=scholarship.autorizado_por,
+    )
+    sync_cuota_charge(cuota)
+    return item
+
+
+@transaction.atomic
+def grant_scholarship(socio_id, mode, value, start_date, reason, authorized_by, end_date=None, user=None):
+    account = CuentaCorriente.objects.select_for_update().select_related("socio__estado_administrativo").get(socio_id=socio_id)
+    if account.socio.is_inactive:
+        raise BeneficioInvalidoError("El socio está dado de baja: no corresponde otorgarle una beca.")
+    scholarship = create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
+    cuotas = (
+        Cuota.objects.select_for_update(of=("self",))
+        .filter(movimiento__cuenta_corriente=account)
+        .select_related("movimiento")
+    )
+    applied = [apply_scholarship(scholarship, cuota) for cuota in by_period(cuotas)]
+    return scholarship, [item for item in applied if item]

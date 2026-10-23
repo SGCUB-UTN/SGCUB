@@ -29,6 +29,7 @@ from .views import (
     registrar_pago,
     resumen_financiero,
     resumen_financiero_pdf,
+    socio_beca,
     reporte_morosidad,
 )
 
@@ -40,6 +41,7 @@ urlpatterns = [
     path("cuota/<int:pk>/", cuota_detail, name="cuota-detail"),
     path("cuota/<int:pk>/beneficio/", cuota_beneficio, name="cuota-beneficio"),
     path("beca/", beca_list, name="beca-list"),
+    path("socio/<int:socio_id>/beca/", socio_beca, name="socio-beca"),
     path("item-cuota/", cuota_item_list, name="item-cuota-list"),
     path("item-cuota/<int:pk>/", cuota_item_detail, name="item-cuota-detail"),
     path("pago/", pago_list, name="pago-list"),

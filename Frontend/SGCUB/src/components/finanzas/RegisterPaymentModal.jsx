@@ -4,7 +4,8 @@ import { useMediaQuery } from '@mantine/hooks'
 import { getSocio } from '../../api/socios'
 import { getEstadoCuenta } from '../../api/estadoCuenta'
 import useAssignBenefit from '../../hooks/useAssignBenefit'
-import { isActiveStatus } from '../personas/format'
+import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
+import { BenefitButton } from '../personas/HeaderPersona'
 import PagoForm from './PagoForm'
 import SocioPicker from './SocioPicker'
 
@@ -12,15 +13,15 @@ const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
 function HeaderMessage({ icon, tone = 'text-on-surface-variant', spin = false, children }) {
   return (
-    <p className={`flex items-center gap-2 h-11 text-base ${tone}`} role={tone === 'text-error' ? 'alert' : 'status'}>
+    <p className={`flex items-center gap-2 h-10 text-base ${tone}`} role={tone === 'text-error' ? 'alert' : 'status'}>
       <span className={`material-symbols-outlined text-[20px] ${spin ? 'animate-spin' : ''}`} aria-hidden="true">{icon}</span>
       {children}
     </p>
   )
 }
 
-// Always shows the payment form layout. Until a valid socio is loaded the form is empty and its
-// header holds the socio search (or the loading / error state); then the sections fill in.
+// Always shows the payment form layout. Until a valid socio is loaded the form is empty and the
+// modal header holds the socio search (or the loading / error state); then the sections fill in.
 // Without `initialSocioId` the modal starts with the search.
 function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, onClose, onSuccess }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
@@ -41,8 +42,9 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
     .then((cuenta) => setLoad((current) => (current.socioId === loadedSocioId ? { ...current, cuenta } : current)))
     .catch(() => {})
 
-  const assignBenefit = () => openBenefit({
+  const assignBenefit = (cuotaId = null) => openBenefit({
     socioId: load.socioId,
+    cuotaId,
     onSuccess: () => {
       reloadAccount(load.socioId)
       onSuccess?.()
@@ -53,7 +55,16 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
   const loaded = Boolean(socioId) && !loading && !load.error && load.socio && load.cuenta
   const ready = loaded && isActiveStatus(load.socio.estado_administrativo_nombre)
 
-  const emptyHeader = () => {
+  const socioSummary = () => {
+    if (ready) {
+      const socio = load.socio
+      return (
+        <p className="min-w-0 truncate text-base text-on-surface-variant">
+          <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
+          {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
+        </p>
+      )
+    }
     if (!socioId) return <SocioPicker compact onSelect={(socio) => setSocioId(socio.socio_id)} />
     if (loading) return <HeaderMessage icon="progress_activity" spin>Cargando estado de cuenta...</HeaderMessage>
     if (!loaded) {
@@ -68,20 +79,26 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
       onClose={onClose}
       aria-label="Registrar pago"
       title={(
-        <button
-          type="button"
-          onClick={() => setSocioId(null)}
-          disabled={!socioId}
-          className="inline-flex items-center gap-1 ml-2 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
-        >
-          <span className="material-symbols-outlined text-[18px] -ml-1" aria-hidden="true">arrow_back</span>
-          Elegir otro socio
-        </button>
+        <div className="flex items-center gap-4 min-w-0">
+          <button
+            type="button"
+            onClick={() => setSocioId(null)}
+            disabled={!socioId}
+            className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:grayscale disabled:cursor-default disabled:hover:bg-transparent"
+          >
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
+            Elegir otro socio
+          </button>
+          <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
+          <div className="flex-1 min-w-0">{socioSummary()}</div>
+          <BenefitButton onClick={() => assignBenefit()} disabled={!ready} />
+        </div>
       )}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered
-      padding="xl"
+      padding="lg"
     >
       {ready ? (
         // Keyed by socio so the selection state starts fresh for each one
@@ -95,7 +112,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
           onAssignBenefit={assignBenefit}
         />
       ) : (
-        <PagoForm key="empty" emptyHeader={emptyHeader()} onCancel={onClose} />
+        <PagoForm key="empty" onCancel={onClose} />
       )}
     </Modal>
   )

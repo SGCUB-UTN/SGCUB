@@ -6,6 +6,8 @@ import { getSocio } from '../../api/socios'
 import { formatDni, formatNumber } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
 import BenefitForm from './BenefitForm'
+import { isOpen } from './benefitMath'
+import QuickDiscountForm from './QuickDiscountForm'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
@@ -33,57 +35,80 @@ function AssignBenefitModal({ opened, socioId, cuotaId, onClose, onSuccess }) {
     return () => { active = false }
   }, [opened, socioId])
 
-  const loading = load.socioId !== socioId
-  const ready = !loading && !load.error && load.socio && load.cuenta
-  const socio = load.socio
-  const cuota = cuotaId ? load.cuenta?.cuotas?.find((item) => item.cuota_id === cuotaId) : null
-
   const handleSuccess = () => {
     onSuccess?.()
     onClose()
   }
 
-  const title = (
-    <span className="flex flex-col min-w-0">
-      <span className="text-sm uppercase tracking-wider font-semibold text-primary">Asignar beca o descuento a</span>
-      {ready ? (
-        <>
-          <span className="text-xl font-bold text-on-surface truncate">{socio.apellido}, {socio.nombre}</span>
-          <span className="text-base font-normal text-on-surface-variant">
-            DNI {formatDni(socio.dni)} · Socio {formatNumber(socio.numero_socio)}
-            {cuota && ` · Cuota ${formatPeriod(cuota.periodo)}`}
-          </span>
-        </>
-      ) : loading ? (
-        <HeaderMessage icon="progress_activity" spin>Cargando estado de cuenta...</HeaderMessage>
-      ) : (
-        <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
-      )}
-    </span>
+  const loading = load.socioId !== socioId
+  const ready = !loading && !load.error && load.socio && load.cuenta
+  const socio = load.socio
+  const quick = Boolean(cuotaId)
+  const cuota = quick ? load.cuenta?.cuotas?.find((item) => item.cuota_id === cuotaId) ?? null : null
+
+  const statusMessage = loading
+    ? <HeaderMessage icon="progress_activity" spin>Cargando estado de cuenta...</HeaderMessage>
+    : <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
+
+  const quickTitle = (
+    <div className="flex flex-col min-w-0">
+      <span className="text-lg font-bold text-on-surface">Descuento{cuota ? ` · Cuota ${formatPeriod(cuota.periodo)}` : ''}</span>
+      {ready ? <span className="truncate text-sm font-normal text-on-surface-variant">{socio.apellido}, {socio.nombre}</span> : statusMessage}
+    </div>
   )
 
-  return (
+  const quickBody = () => {
+    if (!ready) return null
+    if (!cuota) return <HeaderMessage icon="error" tone="text-error">No se encontró la cuota.</HeaderMessage>
+    if (!isOpen(cuota)) return <HeaderMessage icon="task_alt">La cuota ya está paga: no admite descuentos.</HeaderMessage>
+    return <QuickDiscountForm cuota={cuota} onSuccess={handleSuccess} />
+  }
+
+  const title = (
+    <div className="flex items-center gap-4 min-w-0">
+      <span className="shrink-0 text-sm uppercase tracking-wider font-semibold text-primary">Asignar beca o descuento</span>
+      <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        {ready ? (
+          <p className="truncate text-base text-on-surface-variant">
+            <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
+            {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
+          </p>
+        ) : statusMessage}
+      </div>
+    </div>
+  )
+
+  return quick ? (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={quickTitle}
+      styles={{ title: { flex: 1, minWidth: 0 } }}
+      size="md"
+      fullScreen={isMobile}
+      centered
+      padding="lg"
+      zIndex={MODAL_Z_INDEX}
+    >
+      {quickBody()}
+    </Modal>
+  ) : (
     <Modal
       opened={opened}
       onClose={onClose}
       title={title}
-      styles={{ header: { alignItems: 'flex-start' }, title: { flex: 1, minWidth: 0 } }}
-      size="min(1240px, 95vw)"
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
+      size="min(1100px, 95vw)"
       fullScreen={isMobile}
       centered
-      padding="xl"
+      padding="lg"
       zIndex={MODAL_Z_INDEX}
     >
       {ready ? (
-        <BenefitForm
-          socio={load.socio}
-          cuenta={load.cuenta}
-          initialCuotaId={cuotaId}
-          onCancel={onClose}
-          onSuccess={handleSuccess}
-        />
+        <BenefitForm socio={load.socio} cuenta={load.cuenta} onSuccess={handleSuccess} />
       ) : (
-        <BenefitForm key="empty" initialCuotaId={cuotaId} onCancel={onClose} />
+        <BenefitForm key="empty" />
       )}
     </Modal>
   )

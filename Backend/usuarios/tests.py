@@ -253,6 +253,24 @@ class DniUsernameAdminFormTests(TestCase):
         self.assertIn("username", form.errors)
 
 
+class AutorizantesTests(APITestCase):
+    def test_any_authenticated_user_lists_active_users_by_full_name(self):
+        tesorero = User.objects.create_user(username="30111222", first_name="Ana", last_name="Sosa")
+        tesorero.groups.add(Group.objects.get(name="Tesorero"))
+        User.objects.create_user(username="30111223", first_name="Luis", last_name="Báez")
+        User.objects.create_user(username="30111224", first_name="Inés", last_name="Ruiz", is_active=False)
+        self.client.force_authenticate(tesorero)
+
+        response = self.client.get(reverse("usuario-autorizantes"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([user["full_name"] for user in response.data], ["Luis Báez", "Ana Sosa"])
+        self.assertEqual(set(response.data[0]), {"id", "full_name"})
+
+    def test_requires_authentication(self):
+        self.assertEqual(self.client.get(reverse("usuario-autorizantes")).status_code, status.HTTP_401_UNAUTHORIZED)
+
+
 class UsuarioApiTests(APITestCase):
     def setUp(self):
         cache.clear()

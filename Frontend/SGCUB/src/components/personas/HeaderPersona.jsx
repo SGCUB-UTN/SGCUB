@@ -124,7 +124,7 @@ export function BenefitButton({ onClick, disabled = false, variant = 'outline', 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 h-10 px-4 border rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${style.button}`}
+      className={`inline-flex items-center gap-2 h-10 px-4 border rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none whitespace-nowrap disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed ${style.button}`}
     >
       <span className={`material-symbols-outlined text-[20px] ${style.icon}`}>sell</span>
       <span>{children}</span>
