@@ -346,7 +346,7 @@ def apply_payment(payment_movement, cuotas, amount):
 
 
 RECEIPT_TYPE = "X"
-DISCOUNT_CONCEPTS = (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
 
 
 def detail_lines(totals):
@@ -478,11 +478,58 @@ def create_payment(account, payment_methods, total, note, user, concept):
     return payment, receipt, movement
 
 
+def by_period(cuotas):
+    return sorted(cuotas, key=lambda cuota: (cuota.periodo, cuota.pk))
+
+
+def validate_payment_order(account, cuotas):
+    account_cuotas = Cuota.objects.filter(movimiento__cuenta_corriente=account).select_related("movimiento")
+    pending = pending_amounts(account_cuotas)
+    open_ids = [cuota.pk for cuota in by_period(account_cuotas) if pending[cuota.pk] > 0]
+    selected_ids = {cuota.pk for cuota in cuotas}
+    if not selected_ids <= set(open_ids):
+        raise PagoInvalidoError("No se pueden pagar cuotas ya saldadas.")
+    if selected_ids != set(open_ids[:len(selected_ids)]):
+        raise PagoInvalidoError("Las cuotas deben pagarse en orden, empezando por la más antigua.")
+
+
+def validate_every_cuota_receives_payment(cuotas, total):
+    pending = pending_amounts(cuotas)
+    previous = sum((pending[cuota.pk] for cuota in by_period(cuotas)[:-1]), Decimal("0.00"))
+    if total <= previous:
+        raise PagoInvalidoError("El monto no alcanza para cubrir todas las cuotas seleccionadas.")
+
+
+def waive_late_fees(cuotas, reason, authorized_by):
+    pending = pending_amounts(cuotas)
+    for cuota in by_period(cuotas):
+        amount = unpaid_late_fees(cuota, list(cuota.items.all()), pending[cuota.pk])
+        if amount <= 0:
+            raise PagoInvalidoError(f"La cuota {cuota.periodo} no tiene recargos por mora pendientes.")
+        ItemCuota.objects.create(
+            cuota=cuota,
+            concepto=ConceptoItemChoices.CONDONACION_MORA,
+            es_descuento=True,
+            fecha_aplicacion=timezone.localdate(),
+            monto=amount,
+            motivo=benefit_reason(reason),
+            autorizado_por=authorized_by,
+        )
+        sync_cuota_charge(cuota)
+
+
 @transaction.atomic
-def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None):
+def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None):
     account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
+    validate_payment_order(account, cuotas)
+    if late_fee_waiver:
+        waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]
+        waive_late_fees(waived, late_fee_waiver["motivo"], late_fee_waiver["autorizado_por"])
+        account.refresh_from_db(fields=["saldo"])
+        cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_amount(pending_amounts(cuotas), total, "No se pueden pagar cuotas ya saldadas.")
+    validate_every_cuota_receives_payment(cuotas, total)
 
     payment, receipt, movement = create_payment(account, payment_methods, total, note, user, "Pago de cuotas")
     account.saldo += total
@@ -567,6 +614,9 @@ def discount_base(items):
 def unpaid_late_fees(cuota, items, pending):
     fees = sum(
         (item.monto for item in items if not item.es_descuento and item.concepto == ConceptoItemChoices.MORA),
+        Decimal("0.00"),
+    ) - sum(
+        (item.monto for item in items if item.concepto == ConceptoItemChoices.CONDONACION_MORA),
         Decimal("0.00"),
     )
     if fees <= 0:

@@ -34,6 +34,7 @@ from .models import (
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
+	DetalleImputacion,
 	EstadoPagoChoices,
 	EstadoCuotaChoices,
 	Imputacion,
@@ -45,6 +46,7 @@ from .models import (
 	SecuenciaComprobante,
 )
 from .pdf_utils import format_amount
+from .serializers import CuentaCorrienteEstadoSerializer
 from .services import apply_surcharges, create_cuota, cuota_state, generar_cuotas_mensuales, next_receipt_number, sync_cuota_charge
 from .views import _build_financial_report
 
@@ -80,6 +82,12 @@ def account_for(socio, balance=None):
 		account.saldo = balance
 		account.save(update_fields=["saldo"])
 	return account
+
+
+def historical_account_id(apps, dni):
+	persona = apps.get_model("padron", "Persona").objects.create(nombre="Socio", apellido="Historico", dni=dni)
+	socio = apps.get_model("padron", "Socio").objects.create(persona=persona)
+	return apps.get_model("finanzas", "CuentaCorriente").objects.create(socio=socio).pk
 
 
 def crear_cuota_con_cargo(cuenta, periodo, monto, estado=EstadoCuotaChoices.EN_FECHA, venc1=date(2026, 9, 10), venc2=date(2026, 9, 20)):
@@ -647,6 +655,111 @@ class RegistroPagoTests(PagoTestBase):
 			movimiento_origen__reversion__isnull=True,
 		)
 		self.assertEqual(sum(activo.values_list("monto_aplicado", flat=True)), Decimal("800.00"))
+
+
+class CobroSecuencialTests(PagoTestBase):
+	def test_no_permite_saltear_la_cuota_mas_antigua(self):
+		response = self.pagar([self.septiembre], "500.00")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("orden", response.data["detail"])
+		self.assertFalse(Pago.objects.exists())
+
+	def test_saldada_la_mas_antigua_se_puede_pagar_la_siguiente(self):
+		self.pagar([self.agosto], "1000.00")
+
+		response = self.pagar([self.septiembre], "500.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(self.aplicado(self.septiembre), Decimal("500.00"))
+
+	def test_el_monto_debe_alcanzar_a_todas_las_cuotas_seleccionadas(self):
+		response = self.pagar([self.agosto, self.septiembre], "1000.00")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Pago.objects.exists())
+
+
+class CondonacionMoraTests(PagoTestBase):
+	def setUp(self):
+		super().setUp()
+		ItemCuota.objects.create(
+			cuota=self.agosto,
+			concepto="Mora",
+			fecha_aplicacion=date(2026, 9, 11),
+			monto=Decimal("200.00"),
+		)
+		sync_cuota_charge(self.agosto)
+
+	def condonacion(self, cuotas, **extra):
+		datos = {"cuota_ids": [cuota.pk for cuota in cuotas], "autorizado_por": "Presidente", "motivo": "Socio vitalicio"}
+		datos.update(extra)
+		return datos
+
+	def condonaciones(self):
+		return ItemCuota.objects.filter(concepto="CondonacionMora")
+
+	def test_condona_el_recargo_y_cobra_solo_el_valor_base(self):
+		response = self.pagar([self.agosto], "1000.00", condonacion_mora=self.condonacion([self.agosto]))
+
+		self.assertEqual(response.status_code, 201, response.data)
+		condonacion = self.condonaciones().get()
+		self.assertEqual(condonacion.cuota, self.agosto)
+		self.assertTrue(condonacion.es_descuento)
+		self.assertEqual(condonacion.monto, Decimal("200.00"))
+		self.assertEqual(condonacion.autorizado_por, "Presidente")
+		self.assertEqual(condonacion.motivo, "Socio vitalicio")
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.cuenta.refresh_from_db()
+		self.assertEqual(self.cuenta.saldo, Decimal("-1000.00"))
+		detalle = dict(DetalleImputacion.objects.values_list("concepto", "monto"))
+		self.assertEqual(detalle["Mora"], Decimal("200.00"))
+		self.assertEqual(detalle["CondonacionMora"], Decimal("-200.00"))
+
+	def test_el_estado_de_cuenta_no_cuenta_la_mora_condonada(self):
+		self.pagar([self.agosto], "1000.00", condonacion_mora=self.condonacion([self.agosto]))
+
+		self.assertEqual(CuentaCorrienteEstadoSerializer(self.cuenta).data["total_mora"], Decimal("0.00"))
+
+	def test_sin_condonacion_el_valor_base_deja_el_recargo_pendiente(self):
+		response = self.pagar([self.agosto], "1000.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.agosto.refresh_from_db()
+		self.assertNotEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertFalse(self.condonaciones().exists())
+
+	def test_solo_condona_cuotas_que_se_estan_pagando(self):
+		response = self.pagar([self.agosto], "1000.00", condonacion_mora=self.condonacion([self.septiembre]))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("condonacion_mora", response.data)
+		self.assertFalse(Pago.objects.exists())
+
+	def test_cuota_sin_recargo_no_se_condona_y_no_registra_nada(self):
+		response = self.pagar(
+			[self.agosto, self.septiembre],
+			"2200.00",
+			condonacion_mora=self.condonacion([self.agosto, self.septiembre]),
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(self.condonaciones().exists())
+		self.assertFalse(Pago.objects.exists())
+		self.cuenta.refresh_from_db()
+		self.assertEqual(self.cuenta.saldo, Decimal("-2200.00"))
+
+	def test_requiere_autorizante_y_motivo(self):
+		response = self.pagar(
+			[self.agosto],
+			"1000.00",
+			condonacion_mora={"cuota_ids": [self.agosto.pk]},
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("autorizado_por", response.data["condonacion_mora"])
+		self.assertIn("motivo", response.data["condonacion_mora"])
 
 
 class EstadoCuentaPendienteTests(PagoTestBase):
@@ -1356,9 +1469,10 @@ class ComprobanteListTests(ComprobanteTestBase):
 		)
 
 	def test_cuota_without_payments_has_no_receipts(self):
-		self.pagar("2500.00", cuotas=[self.generar("2026-11")])
+		november = self.generar("2026-11")
+		self.pagar("2500.00")
 
-		response = self.list_by_cuota(self.cuota.pk)
+		response = self.list_by_cuota(november.pk)
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data, [])
@@ -2238,16 +2352,15 @@ class DetalleImputacionMigrationTests(TransactionTestCase):
 		OldMovimiento = old_apps.get_model("finanzas", "MovimientoCuenta")
 		OldImputacion = old_apps.get_model("finanzas", "Imputacion")
 
-		persona = Persona.objects.create(nombre="Ana", apellido="Sur", dni="91234567")
-		cuenta = account_for(Socio.objects.create(persona=persona))
+		cuenta_id = historical_account_id(old_apps, "91234567")
 		cuota = OldCuota.objects.create(fecha_venc1=date(2026, 10, 10), fecha_venc2=date(2026, 10, 20), periodo="2026-10")
 		for concepto, monto in (("CuotaSocial", "1000.00"), ("CuotaDeportiva", "1500.00"), ("Mora", "200.00")):
 			OldItemCuota.objects.create(cuota=cuota, concepto=concepto, fecha_aplicacion=date(2026, 10, 1), monto=Decimal(monto))
-		cargo = OldMovimiento.objects.create(cuenta_corriente_id=cuenta.pk, cuota=cuota, tipo_movimiento="Cargo", fecha="2026-10-01T12:00:00Z", monto=Decimal("2700.00"))
+		cargo = OldMovimiento.objects.create(cuenta_corriente_id=cuenta_id, cuota=cuota, tipo_movimiento="Cargo", fecha="2026-10-01T12:00:00Z", monto=Decimal("2700.00"))
 		imputaciones = []
 		for dia, monto in ((5, "400.00"), (6, "1000.00")):
 			pago = OldPago.objects.create(fecha=date(2026, 10, dia))
-			abono = OldMovimiento.objects.create(cuenta_corriente_id=cuenta.pk, pago=pago, tipo_movimiento="Abono", fecha=f"2026-10-0{dia}T12:00:00Z", monto=Decimal(monto))
+			abono = OldMovimiento.objects.create(cuenta_corriente_id=cuenta_id, pago=pago, tipo_movimiento="Abono", fecha=f"2026-10-0{dia}T12:00:00Z", monto=Decimal(monto))
 			imputaciones.append(OldImputacion.objects.create(movimiento_origen=abono, movimiento_destino=cargo, fecha=f"2026-10-0{dia}T12:00:00Z", monto_aplicado=Decimal(monto)))
 
 		new_apps = self.migrate(self.migrate_to)
@@ -2278,10 +2391,9 @@ class PagoFechaHoraMigrationTests(TransactionTestCase):
 		OldPago = old_apps.get_model("finanzas", "Pago")
 		OldMovimiento = old_apps.get_model("finanzas", "MovimientoCuenta")
 
-		persona = Persona.objects.create(nombre="Ana", apellido="Este", dni="92345678")
-		cuenta = account_for(Socio.objects.create(persona=persona))
+		cuenta_id = historical_account_id(old_apps, "92345678")
 		con_movimiento = OldPago.objects.create(fecha=date(2026, 10, 5))
-		OldMovimiento.objects.create(cuenta_corriente_id=cuenta.pk, pago=con_movimiento, tipo_movimiento="Abono", fecha="2026-10-05T14:30:00Z", monto=Decimal("100.00"))
+		OldMovimiento.objects.create(cuenta_corriente_id=cuenta_id, pago=con_movimiento, tipo_movimiento="Abono", fecha="2026-10-05T14:30:00Z", monto=Decimal("100.00"))
 		sin_movimiento = OldPago.objects.create(fecha=date(2026, 10, 6))
 
 		new_apps = self.migrate(self.migrate_to)
@@ -2317,8 +2429,7 @@ class RefreshSettledCuotasMigrationTests(TransactionTestCase):
 		OldMovimiento = old_apps.get_model("finanzas", "MovimientoCuenta")
 		OldImputacion = old_apps.get_model("finanzas", "Imputacion")
 
-		persona = Persona.objects.create(nombre="Eva", apellido="Norte", dni="93456789")
-		account_id = account_for(Socio.objects.create(persona=persona)).pk
+		account_id = historical_account_id(old_apps, "93456789")
 
 		def cuota_with_charge(period, amount):
 			cuota = OldCuota.objects.create(estado_cuota="Vencida", fecha_venc1=date(2026, 9, 10), fecha_venc2=date(2026, 9, 20), periodo=period)

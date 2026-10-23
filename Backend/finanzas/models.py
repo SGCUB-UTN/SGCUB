@@ -20,6 +20,7 @@ class ConceptoItemChoices(models.TextChoices):
     CUOTA_SOCIAL = "CuotaSocial", "Cuota Social"
     CUOTA_DEPORTIVA = "CuotaDeportiva", "Cuota Deportiva"
     MORA = "Mora", "Mora"
+    CONDONACION_MORA = "CondonacionMora", "Condonación de recargo por mora"
     DESCUENTO_UNICO = "DescuentoUnico", "Descuento único"
     BECA = "Beca", "Beca"
     OTRO = "Otro", "Otro"
@@ -93,6 +94,7 @@ class ItemCuota(models.Model):
     fecha_aplicacion = models.DateField()
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     motivo = models.CharField(max_length=200, blank=True)
+    autorizado_por = models.CharField(max_length=120, blank=True)
 
     class Meta:
         db_table = "item_cuota"

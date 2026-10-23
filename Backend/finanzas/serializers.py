@@ -5,6 +5,7 @@ from rest_framework import serializers
 from .models import (
     Beca,
     Comprobante,
+    ConceptoItemChoices,
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
@@ -83,6 +84,15 @@ class CorreccionPagoSerializer(serializers.Serializer):
         return attrs
 
 
+class CondonacionMoraSerializer(serializers.Serializer):
+    cuota_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+    autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
+    motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+
+
 class RegistroPagoSerializer(serializers.Serializer):
     socio_id = serializers.IntegerField(min_value=1)
     cuota_ids = serializers.ListField(
@@ -96,6 +106,7 @@ class RegistroPagoSerializer(serializers.Serializer):
     )
     medios = MedioPagoSerializer(many=True, allow_empty=False)
     observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    condonacion_mora = CondonacionMoraSerializer(required=False, allow_null=True, default=None)
 
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
@@ -107,6 +118,11 @@ class RegistroPagoSerializer(serializers.Serializer):
         if total_medios != attrs["monto_total"]:
             raise serializers.ValidationError({
                 "medios": "La suma de los medios debe coincidir con el monto total."
+            })
+        waiver = attrs.get("condonacion_mora")
+        if waiver and not set(waiver["cuota_ids"]) <= set(attrs["cuota_ids"]):
+            raise serializers.ValidationError({
+                "condonacion_mora": "Solo se puede condonar el recargo de las cuotas que se están pagando."
             })
         return attrs
 
@@ -369,10 +385,10 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     def get_total_mora(self, obj):
         return sum(
             (
-                item.monto
+                -item.monto if item.es_descuento else item.monto
                 for cuota in self._account_cuotas(obj)
                 for item in cuota.items.all()
-                if "mora" in item.concepto.lower()
+                if item.concepto in (ConceptoItemChoices.MORA, ConceptoItemChoices.CONDONACION_MORA)
             ),
             Decimal("0.00"),
         )
