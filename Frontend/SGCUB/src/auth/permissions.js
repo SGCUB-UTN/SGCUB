@@ -6,4 +6,5 @@ export const PERMISSIONS = {
   createUsers: 'auth.add_user',
   editUsers: 'auth.change_user',
   manageAutomations: 'django_q.view_schedule',
+  editAutomations: 'django_q.change_schedule',
 }
