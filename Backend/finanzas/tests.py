@@ -35,8 +35,11 @@ from .models import (
 	CuentaCorriente,
 	Cuota,
 	DetalleImputacion,
+	EstadoBecaChoices,
+	EstadoItemCuotaChoices,
 	EstadoPagoChoices,
 	EstadoCuotaChoices,
+	ExclusionBeca,
 	Imputacion,
 	ItemCuota,
 	ItemPago,
@@ -47,7 +50,15 @@ from .models import (
 )
 from .pdf_utils import format_amount
 from .serializers import CuentaCorrienteEstadoSerializer
-from .services import apply_surcharges, create_cuota, cuota_state, generar_cuotas_mensuales, next_receipt_number, sync_cuota_charge
+from .services import (
+	apply_surcharges,
+	create_cuota,
+	cuota_state,
+	finish_expired_scholarships,
+	generar_cuotas_mensuales,
+	next_receipt_number,
+	sync_cuota_charge,
+)
 from .views import _build_financial_report
 
 
@@ -2152,9 +2163,9 @@ class RecargosPorMoraTests(APITestCase):
 
 		recargos = self.recargos(cuota)
 		self.assertEqual([item.monto for item in recargos], [Decimal("200.00"), Decimal("100.00")])
-		self.assertIn("Recargo por primer vencimiento", recargos[0].motivo)
+		self.assertIn("Recargo por 1° vencimiento", recargos[0].motivo)
 		self.assertIn(cuota.fecha_venc1.strftime("%d/%m/%Y"), recargos[0].motivo)
-		self.assertIn("Recargo por segundo vencimiento", recargos[1].motivo)
+		self.assertIn("Recargo por 2° vencimiento", recargos[1].motivo)
 		cuota.refresh_from_db()
 		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.VENCIDA_2)
 		self.assertEqual(cuota.recargos_aplicados, 2)
@@ -3038,3 +3049,388 @@ class CuotaEstadoVencimientosMigrationTests(TransactionTestCase):
 		self.assertEqual(states[second_due_passed], "Vencida")
 		self.assertEqual(states[second_due_ahead], "Vencida")
 		self.assertEqual(states[paid], "Paga")
+
+
+class ScholarshipLifecycleTests(APITestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(username="tesorero")
+		self.client.force_authenticate(user=self.user)
+		self.socio = crear_socio("60000050", con_jugador=True)
+		self.july, self.august, self.september = (self.generate(period) for period in ("2026-07", "2026-08", "2026-09"))
+		response = self.client.post(reverse("socio-beca", args=[self.socio.pk]), {
+			"modalidad": "Porcentaje",
+			"valor": "10",
+			"fecha_aplicacion": "2026-07-01",
+			"motivo": "Situación económica",
+			"autorizado_por": "Comisión directiva",
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+		self.scholarship = Beca.objects.get()
+
+	def generate(self, period):
+		response = self.client.post(reverse("cuota-list"), {"socio_id": self.socio.pk, "periodo": period}, format="json")
+		return Cuota.objects.get(pk=response.data["cuota_id"])
+
+	def scholarship_amounts(self, cuota):
+		return list(cuota.items.filter(concepto="Beca").values_list("monto", flat=True))
+
+	def charge(self, cuota):
+		return MovimientoCuenta.objects.get(cuota=cuota).monto
+
+	def cancel(self, **data):
+		values = {"motivo": "Dejó de cumplir los requisitos", "autorizado_por": "Comisión directiva"}
+		values.update(data)
+		return self.client.post(reverse("beca-cancelar", args=[self.scholarship.pk]), values, format="json")
+
+	def update(self, **data):
+		values = {
+			"modalidad": "Porcentaje",
+			"valor": "20",
+			"fecha_aplicacion": "2026-07-01",
+			"fecha_fin": None,
+			"motivo": "Situación económica",
+			"autorizado_por": "Comisión directiva",
+		}
+		values.update(data)
+		return self.client.put(reverse("beca-detail", args=[self.scholarship.pk]), values, format="json")
+
+	def pay(self, cuota):
+		amount = str(self.charge(cuota))
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [cuota.pk],
+			"monto_total": amount,
+			"medios": [{"medio_de_pago": "Efectivo", "monto": amount}],
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def test_cancel_removes_the_scholarship_from_unpaid_cuotas_and_keeps_the_history(self):
+		response = self.cancel()
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.scholarship.refresh_from_db()
+		self.assertEqual(self.scholarship.estado, EstadoBecaChoices.CANCELADA)
+		self.assertEqual(self.scholarship.motivo_cancelacion, "Dejó de cumplir los requisitos")
+		self.assertEqual(self.scholarship.cancelado_por, "Comisión directiva")
+		self.assertEqual(self.scholarship.usuario_cancelacion, self.user)
+		for cuota in (self.july, self.august, self.september):
+			self.assertEqual(self.scholarship_amounts(cuota), [])
+			self.assertEqual(self.charge(cuota), Decimal("2500.00"))
+			annulled = ItemCuota.all_objects.get(cuota=cuota, concepto="Beca")
+			self.assertEqual(annulled.estado, EstadoItemCuotaChoices.ANULADO)
+			self.assertTrue(annulled.motivo_anulacion.startswith("Beca cancelada"))
+
+	def test_cancel_leaves_paid_cuotas_untouched(self):
+		self.pay(self.july)
+
+		self.cancel()
+
+		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("250.00")])
+		self.assertEqual(self.scholarship_amounts(self.august), [])
+
+	def test_cancelled_scholarship_is_not_applied_to_new_cuotas(self):
+		self.cancel()
+
+		october = self.generate("2026-10")
+
+		self.assertEqual(self.scholarship_amounts(october), [])
+
+	def test_only_applied_scholarships_can_be_cancelled_or_updated(self):
+		self.cancel()
+
+		self.assertEqual(self.cancel().status_code, 400)
+		self.assertEqual(self.update().status_code, 400)
+
+	def test_cancel_requires_reason_and_authorizer(self):
+		for field in ("motivo", "autorizado_por"):
+			with self.subTest(field=field):
+				response = self.cancel(**{field: ""})
+				self.assertEqual(response.status_code, 400)
+				self.assertIn(field, response.data)
+		self.scholarship.refresh_from_db()
+		self.assertEqual(self.scholarship.estado, EstadoBecaChoices.APLICADA)
+
+	def test_update_recalculates_unpaid_cuotas(self):
+		response = self.update()
+
+		self.assertEqual(response.status_code, 200, response.data)
+		for cuota in (self.july, self.august, self.september):
+			self.assertEqual(self.scholarship_amounts(cuota), [Decimal("500.00")])
+			self.assertEqual(self.charge(cuota), Decimal("2000.00"))
+		previous = ItemCuota.all_objects.get(cuota=self.july, concepto="Beca", estado=EstadoItemCuotaChoices.ANULADO)
+		self.assertEqual(previous.monto, Decimal("250.00"))
+		self.assertEqual(previous.motivo_anulacion, "Beca modificada")
+
+	def test_update_without_changes_keeps_the_items(self):
+		before = list(ItemCuota.all_objects.filter(concepto="Beca").values_list("pk", flat=True))
+
+		self.update(valor="10")
+
+		self.assertEqual(list(ItemCuota.all_objects.filter(concepto="Beca").values_list("pk", flat=True)), before)
+
+	def test_update_with_a_past_end_date_finishes_the_scholarship(self):
+		response = self.update(fecha_fin="2026-08-31")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], EstadoBecaChoices.FINALIZADA)
+		self.assertEqual(self.scholarship_amounts(self.august), [Decimal("500.00")])
+		self.assertEqual(self.scholarship_amounts(self.september), [])
+
+	def test_removing_the_scholarship_from_one_cuota_excludes_only_that_period(self):
+		item = self.august.items.get(concepto="Beca")
+
+		response = self.client.post(reverse("item-cuota-anular", args=[item.pk]), {
+			"motivo": "No asistió en agosto",
+			"autorizado_por": "Tesorería",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		exclusion = ExclusionBeca.objects.get()
+		self.assertEqual((exclusion.beca, exclusion.periodo, exclusion.usuario), (self.scholarship, "2026-08", self.user))
+		self.assertEqual(self.scholarship_amounts(self.august), [])
+		self.assertEqual(self.charge(self.august), Decimal("2500.00"))
+
+		self.update()
+
+		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("500.00")])
+		self.assertEqual(self.scholarship_amounts(self.august), [])
+		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("500.00")])
+		listed = self.client.get(reverse("beca-list"), {"socio_id": self.socio.pk}).data[0]
+		self.assertEqual([row["periodo"] for row in listed["exclusiones"]], ["2026-08"])
+
+	def test_excluded_period_is_skipped_when_the_cuota_is_generated(self):
+		ExclusionBeca.objects.create(beca=self.scholarship, periodo="2026-10", motivo="Viaje", autorizado_por="Tesorería")
+
+		october = self.generate("2026-10")
+
+		self.assertEqual(self.scholarship_amounts(october), [])
+
+	def test_scholarship_items_keep_the_scholarship_that_created_them(self):
+		october = self.generate("2026-10")
+
+		self.assertEqual(october.items.get(concepto="Beca").beca, self.scholarship)
+		self.assertEqual(self.july.items.get(concepto="Beca").beca, self.scholarship)
+
+	def test_expired_scholarships_are_finished(self):
+		other = Beca.objects.create(
+			socio=self.socio,
+			monto=Decimal("100.00"),
+			fecha_aplicacion=date(2026, 1, 1),
+			fecha_fin=date(2026, 3, 31),
+			motivo="Temporada",
+		)
+
+		result = finish_expired_scholarships(today=date(2026, 4, 1))
+
+		self.assertEqual(result["becas_finalizadas"], 1)
+		other.refresh_from_db()
+		self.scholarship.refresh_from_db()
+		self.assertEqual(other.estado, EstadoBecaChoices.FINALIZADA)
+		self.assertEqual(self.scholarship.estado, EstadoBecaChoices.APLICADA)
+
+
+class CuotaItemAnnulmentTests(APITestCase):
+	def setUp(self):
+		self.user = get_user_model().objects.create_user(username="tesorero")
+		self.client.force_authenticate(user=self.user)
+		self.socio = crear_socio("60000060", con_jugador=True)
+		response = self.client.post(reverse("cuota-list"), {"socio_id": self.socio.pk, "periodo": "2026-10"}, format="json")
+		self.cuota = Cuota.objects.get(pk=response.data["cuota_id"])
+
+	def annul(self, item, **data):
+		values = {"motivo": "Error de carga", "autorizado_por": "Tesorería"}
+		values.update(data)
+		return self.client.post(reverse("item-cuota-anular", args=[item.pk]), values, format="json")
+
+	def add_item(self, concept, amount, is_discount=False, due_number=None):
+		item = ItemCuota.objects.create(
+			cuota=self.cuota,
+			concepto=concept,
+			es_descuento=is_discount,
+			fecha_aplicacion=date(2026, 10, 11),
+			monto=Decimal(amount),
+			vencimiento=due_number,
+		)
+		sync_cuota_charge(self.cuota)
+		return item
+
+	def pay(self, amount):
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.cuota.pk],
+			"monto_total": amount,
+			"medios": [{"medio_de_pago": "Efectivo", "monto": amount}],
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def charge(self):
+		return MovimientoCuenta.objects.get(cuota=self.cuota).monto
+
+	def account_cuota(self):
+		return self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["cuotas"][0]
+
+	def test_discount_is_annulled_and_kept_for_the_history(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		response = self.annul(discount)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], EstadoItemCuotaChoices.ANULADO)
+		self.assertEqual(self.charge(), Decimal("2500.00"))
+		cuota = self.account_cuota()
+		self.assertNotIn(discount.pk, [item["item_cuota_id"] for item in cuota["items"]])
+		annulled = cuota["items_anulados"][0]
+		self.assertEqual(annulled["item_cuota_id"], discount.pk)
+		self.assertEqual(annulled["motivo_anulacion"], "Error de carga")
+		self.assertEqual(annulled["anulado_por"], "Tesorería")
+		self.assertEqual(annulled["usuario_anulacion"], self.user.pk)
+
+	def test_unpaid_late_fee_is_annulled(self):
+		fee = self.add_item("Mora", "300.00", due_number=1)
+
+		response = self.annul(fee)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(self.charge(), Decimal("2500.00"))
+		self.assertFalse(self.cuota.items.filter(concepto="Mora").exists())
+
+	def test_late_fee_of_a_partially_paid_cuota_is_waived_for_what_is_left(self):
+		fee = self.add_item("Mora", "300.00", due_number=2)
+		self.pay("100.00")
+
+		response = self.annul(fee)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		waiver = self.cuota.items.get(concepto="CondonacionMora")
+		self.assertEqual((waiver.monto, waiver.vencimiento, waiver.autorizado_por), (Decimal("200.00"), 2, "Tesorería"))
+		self.assertEqual(Decimal(str(self.account_cuota()["saldo_pendiente"])), Decimal("2500.00"))
+		self.assertEqual(self.annul(fee).status_code, 400)
+
+	def test_benefits_cannot_be_removed_from_cuotas_with_payments(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+		self.pay("100.00")
+
+		response = self.annul(discount)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(self.charge(), Decimal("2000.00"))
+
+	def test_items_of_a_paid_cuota_cannot_be_removed(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+		self.pay("2000.00")
+
+		self.assertEqual(self.annul(discount).status_code, 400)
+
+	def test_base_charges_cannot_be_removed(self):
+		response = self.annul(self.cuota.items.get(concepto="CuotaSocial"))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(self.charge(), Decimal("2500.00"))
+
+	def test_requires_reason_and_authorizer(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		for field in ("motivo", "autorizado_por"):
+			with self.subTest(field=field):
+				response = self.annul(discount, **{field: ""})
+				self.assertEqual(response.status_code, 400)
+				self.assertIn(field, response.data)
+		self.assertEqual(self.charge(), Decimal("2000.00"))
+
+	def test_annulled_item_cannot_be_annulled_again(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+		self.annul(discount)
+
+		self.assertEqual(self.annul(discount).status_code, 404)
+
+	def edit_discount(self, item, **data):
+		values = {"modalidad": "MontoFijo", "valor": "800.00", "motivo": "Hermanos en el club", "autorizado_por": "Tesorería"}
+		values.update(data)
+		return self.client.put(reverse("item-cuota-descuento", args=[item.pk]), values, format="json")
+
+	def test_editing_a_discount_replaces_it_and_keeps_the_previous_one(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		response = self.edit_discount(discount)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(Decimal(response.data["monto"]), Decimal("800.00"))
+		self.assertEqual(self.charge(), Decimal("1700.00"))
+		previous = ItemCuota.all_objects.get(pk=discount.pk)
+		self.assertEqual((previous.estado, previous.motivo_anulacion), (EstadoItemCuotaChoices.ANULADO, "Descuento modificado"))
+
+	def test_edited_discount_is_validated_against_the_cuota_without_the_previous_one(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		too_much = self.edit_discount(discount, valor="2500.01")
+		whole = self.edit_discount(discount, valor="2500.00")
+
+		self.assertEqual(too_much.status_code, 400)
+		self.assertEqual(whole.status_code, 200, whole.data)
+		self.assertEqual(self.charge(), Decimal("0.00"))
+
+	def test_discount_of_a_cuota_with_payments_cannot_be_edited(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+		self.pay("100.00")
+
+		self.assertEqual(self.edit_discount(discount).status_code, 400)
+		self.assertEqual(self.charge(), Decimal("2000.00"))
+
+	def test_only_discounts_can_be_edited(self):
+		fee = self.add_item("Mora", "300.00", due_number=1)
+
+		self.assertEqual(self.edit_discount(fee).status_code, 404)
+
+	def test_items_describe_their_origin(self):
+		self.add_item("Mora", "300.00", due_number=1)
+		self.add_item("Mora", "30.00", due_number=2)
+
+		descriptions = [item["descripcion"] for item in self.account_cuota()["items"]]
+
+		self.assertEqual(descriptions, [
+			"Cuota Social",
+			"Cuota Deportiva",
+			"Recargo por 1° vencimiento",
+			"Recargo por 2° vencimiento",
+		])
+
+
+class BecaItemsBackfillMigrationTests(TransactionTestCase):
+	migrate_from = [("finanzas", "0033_beca_estados_y_anulacion_items")]
+	migrate_to = [("finanzas", "0034_backfill_beca_items")]
+
+	def migrate(self, targets):
+		executor = MigrationExecutor(connection)
+		executor.loader.build_graph()
+		executor.migrate(targets)
+		return executor.loader.project_state(targets).apps
+
+	def tearDown(self):
+		self.migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())
+
+	def test_links_scholarship_items_numbers_surcharges_and_finishes_expired_scholarships(self):
+		apps = self.migrate(self.migrate_from)
+		Beca = apps.get_model("finanzas", "Beca")
+		Cuota = apps.get_model("finanzas", "Cuota")
+		ItemCuota = apps.get_model("finanzas", "ItemCuota")
+		MovimientoCuenta = apps.get_model("finanzas", "MovimientoCuenta")
+		account_id = historical_account_id(apps, "60000070")
+		socio_id = apps.get_model("finanzas", "CuentaCorriente").objects.get(pk=account_id).socio_id
+
+		cuota = Cuota.objects.create(fecha_venc1=date(2026, 8, 10), fecha_venc2=date(2026, 8, 20), periodo="2026-08")
+		MovimientoCuenta.objects.create(cuenta_corriente_id=account_id, cuota=cuota, tipo_movimiento="Cargo", fecha=timezone.now(), monto=Decimal("900.00"))
+		expired = Beca.objects.create(socio_id=socio_id, monto=Decimal("50.00"), fecha_aplicacion=date(2026, 1, 1), fecha_fin=date(2026, 3, 31), motivo="Temporada")
+		current = Beca.objects.create(socio_id=socio_id, monto=Decimal("100.00"), fecha_aplicacion=date(2026, 7, 1), motivo="Hermanos")
+		scholarship = ItemCuota.objects.create(cuota=cuota, concepto="Beca", es_descuento=True, fecha_aplicacion=date(2026, 8, 1), monto=Decimal("100.00"), motivo="Hermanos")
+		first = ItemCuota.objects.create(cuota=cuota, concepto="Mora", fecha_aplicacion=date(2026, 8, 11), monto=Decimal("10.00"), motivo="Recargo por primer vencimiento (10/08/2026)")
+		second = ItemCuota.objects.create(cuota=cuota, concepto="Mora", fecha_aplicacion=date(2026, 8, 21), monto=Decimal("5.00"), motivo="Recargo por segundo vencimiento (20/08/2026)")
+
+		apps = self.migrate(self.migrate_to)
+		ItemCuota = apps.get_model("finanzas", "ItemCuota")
+		Beca = apps.get_model("finanzas", "Beca")
+
+		self.assertEqual(ItemCuota.objects.get(pk=scholarship.pk).beca_id, current.pk)
+		self.assertEqual(ItemCuota.objects.get(pk=first.pk).vencimiento, 1)
+		self.assertEqual(ItemCuota.objects.get(pk=second.pk).vencimiento, 2)
+		self.assertEqual(Beca.objects.get(pk=expired.pk).estado, "Finalizada")
+		self.assertEqual(Beca.objects.get(pk=current.pk).estado, "Aplicada")

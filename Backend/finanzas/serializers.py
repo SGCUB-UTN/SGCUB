@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db.models import Prefetch
 from rest_framework import serializers
 
 from .models import (
@@ -9,6 +10,7 @@ from .models import (
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
+    ExclusionBeca,
     Imputacion,
     ItemPago,
     ItemCuota,
@@ -28,6 +30,12 @@ from .services import (
     parse_period,
     pending_amounts,
     receipt_detail,
+    surcharge_reason,
+)
+
+CUOTA_ITEM_PREFETCHES = (
+    Prefetch("items", queryset=ItemCuota.objects.select_related("beca")),
+    Prefetch("items", queryset=ItemCuota.all_objects.anulados().select_related("beca"), to_attr="items_anulados"),
 )
 
 
@@ -132,6 +140,7 @@ class RegistroPagoSerializer(serializers.Serializer):
 class CuotaSerializer(serializers.ModelSerializer):
     socio = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
+    items_anulados = serializers.SerializerMethodField()
     monto_total = serializers.SerializerMethodField()
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
@@ -148,6 +157,7 @@ class CuotaSerializer(serializers.ModelSerializer):
             "fecha_venc2",
             "periodo",
             "items",
+            "items_anulados",
             "monto_total",
             "monto_pagado",
             "saldo_pendiente",
@@ -164,6 +174,12 @@ class CuotaSerializer(serializers.ModelSerializer):
 
     def get_items(self, obj):
         return ItemCuotaSerializer(obj.items.all(), many=True).data
+
+    def get_items_anulados(self, obj):
+        annulled = getattr(obj, "items_anulados", None)
+        if annulled is None:
+            annulled = ItemCuota.all_objects.anulados().filter(cuota=obj).select_related("beca")
+        return ItemCuotaSerializer(annulled, many=True).data
 
     def get_monto_total(self, obj):
         return monto_total_cuota(obj)
@@ -222,8 +238,22 @@ class CuotaUpdateSerializer(serializers.ModelSerializer):
         return validate_due_dates(attrs, self.instance)
 
 
+def item_description(item):
+    if item.concepto == ConceptoItemChoices.MORA and item.vencimiento:
+        return surcharge_reason(item.vencimiento)
+    if item.concepto == ConceptoItemChoices.CONDONACION_MORA and item.vencimiento:
+        return f"Condonación del recargo por {item.vencimiento}° vencimiento"
+    if item.concepto == ConceptoItemChoices.BECA and item.beca_id and item.beca.porcentaje is not None:
+        return f"Beca {item.beca.porcentaje.normalize():f}%"
+    return item.get_concepto_display()
+
+
 class ItemCuotaSerializer(serializers.ModelSerializer):
     concepto_nombre = serializers.CharField(source="get_concepto_display", read_only=True)
+    descripcion = serializers.SerializerMethodField()
+
+    def get_descripcion(self, obj):
+        return item_description(obj)
 
     class Meta:
         model = ItemCuota
@@ -346,7 +376,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
         if obj.pk not in cache:
             cache[obj.pk] = list(
                 obj.cuotas.select_related("movimiento__cuenta_corriente__socio__persona")
-                .prefetch_related("items")
+                .prefetch_related(*CUOTA_ITEM_PREFETCHES)
                 .order_by("pk")
             )
         return cache[obj.pk]
@@ -541,7 +571,32 @@ class BeneficioSerializer(OtorgarBecaSerializer):
     tipo = serializers.ChoiceField(choices=[BENEFIT_SCHOLARSHIP, BENEFIT_DISCOUNT])
 
 
+class EdicionDescuentoSerializer(serializers.Serializer):
+    modalidad = serializers.ChoiceField(choices=ModalidadMontoChoices.choices)
+    valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+    autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
+
+    def validate(self, attrs):
+        if attrs["modalidad"] == ModalidadMontoChoices.PORCENTAJE and not Decimal("1") <= attrs["valor"] <= Decimal("100"):
+            raise serializers.ValidationError({"valor": "El porcentaje debe estar entre 1% y 100%."})
+        return attrs
+
+
+class AnulacionSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+    autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
+
+
+class ExclusionBecaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExclusionBeca
+        fields = ["exclusion_beca_id", "periodo", "motivo", "autorizado_por", "fecha_creacion"]
+
+
 class BecaSerializer(serializers.ModelSerializer):
+    exclusiones = ExclusionBecaSerializer(many=True, read_only=True)
+
     class Meta:
         model = Beca
         fields = "__all__"

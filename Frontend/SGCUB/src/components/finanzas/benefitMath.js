@@ -9,6 +9,10 @@ export const PERCENTAGE = 'porcentaje'
 
 export const FIXED = 'fijo'
 
+export const SCHOLARSHIP_TARGET = 'beca'
+
+export const DISCOUNT_TARGET = 'descuento'
+
 export const todayIso = () => {
   const today = new Date()
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`

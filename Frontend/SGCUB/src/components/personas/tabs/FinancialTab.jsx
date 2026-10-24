@@ -3,7 +3,7 @@ import { BenefitsTable } from '../../finanzas/BenefitTables'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
 import MovimientoManualDetailModal from '../../finanzas/MovimientoManualDetailModal'
 import MovimientoManualModal from '../../finanzas/MovimientoManualModal'
-import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
+import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatDate, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
@@ -82,7 +82,7 @@ export function FinancialStatement({ socio, finances }) {
       pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
       debt: Number(account?.total_adeudado ?? 0),
       creditBalance,
-      activeScholarships: becas ? becas.filter((beca) => scholarshipState(beca) === 'active').length : null,
+      activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
     }
   }, [account, cuotas, becas, movimientos])
 
@@ -102,7 +102,7 @@ export function FinancialStatement({ socio, finances }) {
 
   return (
     <section className="flex flex-col gap-6" aria-label={title}>
-      <TabHeader title={title} description="Detalle de cuotas, pagos, otros movimientos y beneficios del socio." />
+      <TabHeader title={title} description="Detalle de cuotas, pagos, otros movimientos y beneficios del socio." divider={false} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-6">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
@@ -133,7 +133,12 @@ export function FinancialStatement({ socio, finances }) {
         {cuotas.length === 0 ? (
           <EmptyState icon="receipt_long" title="Sin cuotas generadas" description="La cuenta corriente no tiene cuotas registradas." />
         ) : (
-          <CuotasEstadoCuentaTable cuotas={cuotas} />
+          <CuotasEstadoCuentaTable
+            cuotas={cuotas}
+            onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
+            onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+            onChanged={reloadFinances}
+          />
         )}
       </section>
 
@@ -204,7 +209,7 @@ export function FinancialStatement({ socio, finances }) {
         )}
       </section>
 
-      <BenefitsTable becas={becas} cuotas={cuotas} />
+      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
 
       <MovimientoManualDetailModal
         movimiento={movimientoSeleccionado}

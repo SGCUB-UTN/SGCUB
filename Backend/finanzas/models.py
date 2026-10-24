@@ -19,7 +19,7 @@ OVERDUE_CUOTA_STATES = (EstadoCuotaChoices.VENCIDA_1, EstadoCuotaChoices.VENCIDA
 class ConceptoItemChoices(models.TextChoices):
     CUOTA_SOCIAL = "CuotaSocial", "Cuota Social"
     CUOTA_DEPORTIVA = "CuotaDeportiva", "Cuota Deportiva"
-    MORA = "Mora", "Mora"
+    MORA = "Mora", "Recargo por mora"
     CONDONACION_MORA = "CondonacionMora", "Condonación de recargo por mora"
     DESCUENTO_UNICO = "DescuentoUnico", "Descuento único"
     BECA = "Beca", "Beca"
@@ -59,6 +59,17 @@ class ModalidadMontoChoices(models.TextChoices):
     PORCENTAJE = "Porcentaje", "Porcentaje"
 
 
+class EstadoItemCuotaChoices(models.TextChoices):
+    VIGENTE = "Vigente", "Vigente"
+    ANULADO = "Anulado", "Anulado"
+
+
+class EstadoBecaChoices(models.TextChoices):
+    APLICADA = "Aplicada", "Aplicada"
+    FINALIZADA = "Finalizada", "Finalizada"
+    CANCELADA = "Cancelada", "Cancelada"
+
+
 class EstadoCuentaCorrienteChoices(models.TextChoices):
     ACTIVO = "Activo", "Activo"
     INACTIVO = "Inactivo", "Inactivo"
@@ -84,6 +95,19 @@ class Cuota(models.Model):
         return f"Cuota {self.periodo}"
 
 
+class ItemCuotaQuerySet(models.QuerySet):
+    def vigentes(self):
+        return self.filter(estado=EstadoItemCuotaChoices.VIGENTE)
+
+    def anulados(self):
+        return self.filter(estado=EstadoItemCuotaChoices.ANULADO)
+
+
+class ItemCuotaManager(models.Manager.from_queryset(ItemCuotaQuerySet)):
+    def get_queryset(self):
+        return super().get_queryset().vigentes()
+
+
 class ItemCuota(models.Model):
     item_cuota_id = models.AutoField(primary_key=True)
     cuota = models.ForeignKey(
@@ -101,9 +125,36 @@ class ItemCuota(models.Model):
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     motivo = models.CharField(max_length=200, blank=True)
     autorizado_por = models.CharField(max_length=120, blank=True)
+    beca = models.ForeignKey(
+        "Beca",
+        on_delete=models.PROTECT,
+        related_name="items",
+        null=True,
+        blank=True,
+    )
+    vencimiento = models.PositiveSmallIntegerField(null=True, blank=True)
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoItemCuotaChoices.choices,
+        default=EstadoItemCuotaChoices.VIGENTE,
+    )
+    fecha_anulacion = models.DateTimeField(null=True, blank=True)
+    motivo_anulacion = models.CharField(max_length=200, blank=True)
+    anulado_por = models.CharField(max_length=120, blank=True)
+    usuario_anulacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="items_cuota_anulados",
+        null=True,
+        blank=True,
+    )
+
+    objects = ItemCuotaManager()
+    all_objects = ItemCuotaQuerySet.as_manager()
 
     class Meta:
         db_table = "item_cuota"
+        base_manager_name = "all_objects"
 
     def __str__(self):
         return f"{self.concepto} - {self.monto}"
@@ -414,6 +465,21 @@ class Beca(models.Model):
         null=True,
         blank=True,
     )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoBecaChoices.choices,
+        default=EstadoBecaChoices.APLICADA,
+    )
+    fecha_cancelacion = models.DateTimeField(null=True, blank=True)
+    motivo_cancelacion = models.CharField(max_length=200, blank=True)
+    cancelado_por = models.CharField(max_length=120, blank=True)
+    usuario_cancelacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="becas_canceladas",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "beca"
@@ -444,3 +510,32 @@ class Beca(models.Model):
         else:
             amount = self.monto
         return max(min(amount, base_amount), Decimal("0.00"))
+
+
+class ExclusionBeca(models.Model):
+    exclusion_beca_id = models.AutoField(primary_key=True)
+    beca = models.ForeignKey(
+        Beca,
+        on_delete=models.PROTECT,
+        related_name="exclusiones",
+    )
+    periodo = models.CharField(max_length=20)
+    motivo = models.CharField(max_length=200)
+    autorizado_por = models.CharField(max_length=120)
+    fecha_creacion = models.DateTimeField(default=timezone.now)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="exclusiones_beca",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "exclusion_beca"
+        constraints = [
+            models.UniqueConstraint(fields=["beca", "periodo"], name="exclusion_beca_unica_por_periodo"),
+        ]
+
+    def __str__(self):
+        return f"Exclusión de beca {self.beca_id} - {self.periodo}"

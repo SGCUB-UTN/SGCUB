@@ -22,7 +22,7 @@ def assign_correlative_numbers(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("finanzas", "0033_movimientos_manuales"),
+        ("finanzas", "0036_movimientos_manuales"),
     ]
 
     operations = [

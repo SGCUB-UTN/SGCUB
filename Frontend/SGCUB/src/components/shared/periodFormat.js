@@ -14,3 +14,5 @@ export const formatPeriod = (period) => {
 // Distinct periods of the given rows, most recent first.
 export const periodOptions = (rows, getPeriod) =>
   [...new Set(rows.map(getPeriod).filter(Boolean))].sort().reverse()
+
+export const currentPeriod = (today = new Date()) => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`

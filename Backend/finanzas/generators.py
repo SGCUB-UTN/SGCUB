@@ -5,7 +5,9 @@ from django.db.models import Q
 
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
 
-from .models import Beca, ConceptoItemChoices, ConfiguracionFinanciera, ItemCuota
+from .models import Beca, ConceptoItemChoices, ConfiguracionFinanciera, EstadoBecaChoices, ItemCuota
+
+PERIOD_FORMAT = "%Y-%m"
 
 
 def benefit_reason(reason):
@@ -19,8 +21,10 @@ def period_bounds(first_day):
 def scholarships_for_period(first_day):
     start, end = period_bounds(first_day)
     return (
-        Beca.objects.filter(fecha_aplicacion__lte=end)
+        Beca.objects.exclude(estado=EstadoBecaChoices.CANCELADA)
+        .filter(fecha_aplicacion__lte=end)
         .filter(Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=start))
+        .exclude(exclusiones__periodo=start.strftime(PERIOD_FORMAT))
         .order_by("fecha_aplicacion", "pk")
     )
 
@@ -62,6 +66,7 @@ class GeneradorItemsCuota:
                 is_discount=True,
                 reason=benefit_reason(scholarship.motivo),
                 authorized_by=scholarship.autorizado_por,
+                scholarship=scholarship,
             ))
             available -= amount
         return benefits
@@ -72,7 +77,7 @@ class GeneradorItemsCuota:
             return prefetched
         return scholarships_for_period(self.application_date).filter(socio=self.socio)
 
-    def _item(self, concept, amount, is_discount=False, reason="", authorized_by=""):
+    def _item(self, concept, amount, is_discount=False, reason="", authorized_by="", scholarship=None):
         return ItemCuota(
             concepto=concept,
             es_descuento=is_discount,
@@ -80,4 +85,5 @@ class GeneradorItemsCuota:
             monto=amount,
             motivo=reason,
             autorizado_por=authorized_by,
+            beca=scholarship,
         )

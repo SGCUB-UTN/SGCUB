@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("finanzas", "0032_beca_sin_fin_y_autorizante"),
+        ("finanzas", "0035_tarea_finalizacion_becas"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

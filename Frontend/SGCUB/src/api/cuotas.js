@@ -26,3 +26,13 @@ export const postBeneficio = async (cuotaId, beneficio) => {
   const response = await api.post(`${cuotasEndpoint}${cuotaId}/beneficio/`, beneficio)
   return response.data
 }
+
+export const annulItemCuota = async (itemId, authorization) => {
+  const response = await api.post(`finanzas/item-cuota/${itemId}/anular/`, authorization)
+  return response.data
+}
+
+export const putDescuento = async (itemId, descuento) => {
+  const response = await api.put(`finanzas/item-cuota/${itemId}/descuento/`, descuento)
+  return response.data
+}

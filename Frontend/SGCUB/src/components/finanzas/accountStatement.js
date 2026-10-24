@@ -13,16 +13,23 @@ export const todayIso = () => {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 }
 
-// 'upcoming' before its start date, 'finished' after its end date, 'active' otherwise
-export const scholarshipState = (beca, today = todayIso()) => {
-  if (beca.fecha_aplicacion > today) return 'upcoming'
-  if (beca.fecha_fin && beca.fecha_fin < today) return 'finished'
-  return 'active'
+export const SCHOLARSHIP_STATES = {
+  APPLIED: 'Aplicada',
+  FINISHED: 'Finalizada',
+  CANCELLED: 'Cancelada',
 }
 
-// One-off discounts applied to the given cuotas, most recent first
+export const scholarshipState = (beca, today = todayIso()) => {
+  if (beca.estado === SCHOLARSHIP_STATES.APPLIED && beca.fecha_fin && beca.fecha_fin < today) return SCHOLARSHIP_STATES.FINISHED
+  return beca.estado ?? SCHOLARSHIP_STATES.APPLIED
+}
+
+export const isActiveScholarship = (beca, today = todayIso()) => (
+  scholarshipState(beca, today) === SCHOLARSHIP_STATES.APPLIED && beca.fecha_aplicacion <= today
+)
+
 export const cuotaDiscounts = (cuotas) => cuotas
-  .flatMap((cuota) => (cuota.items ?? [])
+  .flatMap((cuota) => [...(cuota.items ?? []), ...(cuota.items_anulados ?? [])]
     .filter((item) => item.es_descuento && item.concepto === DISCOUNT_CONCEPT)
-    .map((item) => ({ ...item, periodo: cuota.periodo })))
-  .sort((a, b) => String(b.fecha_aplicacion).localeCompare(String(a.fecha_aplicacion)))
+    .map((item) => ({ item, cuota })))
+  .sort((a, b) => String(b.item.fecha_aplicacion).localeCompare(String(a.item.fecha_aplicacion)))

@@ -1,13 +1,14 @@
 import { Fragment, useMemo, useState } from 'react'
 import { collectErrorMessages, formatAmount, formatDate } from '../personas/format'
-import { formatPeriod } from '../shared/periodFormat'
+import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 import ComprobantePago from './ComprobantePago'
-import LateFeeWaiverModal from './LateFeeWaiverModal'
+import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { FormSection, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { cuotaStateLabel, isOverdue } from './cuotaStates'
+import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
 
@@ -17,11 +18,7 @@ const PAYMENT_METHODS = [
   { value: 'BilleteraVirtual', label: 'Billetera virtual', icon: 'wallet' },
 ]
 
-const LATE_FEE_CONCEPT = 'Mora'
-
-const LATE_FEE_WAIVER_CONCEPT = 'CondonacionMora'
-
-const COLUMN_COUNT = 4
+const COLUMN_COUNT = 3
 
 const methodLabel = (value) => PAYMENT_METHODS.find((option) => option.value === value)?.label ?? value
 
@@ -33,108 +30,85 @@ const emptyPaymentRow = (monto = '') => ({ medio: '', monto, edited: false })
 
 const isRowComplete = (row) => Boolean(row.medio) && Number(row.monto) > 0
 
-const sumItems = (cuota, predicate) => (cuota.items ?? [])
-  .filter(predicate)
-  .reduce((total, item) => total + Number(item.monto || 0), 0)
+const cuotaDue = (cuota) => roundCents(Number(cuota.saldo_pendiente || 0))
 
-const lateFee = (cuota) => roundCents(
-  sumItems(cuota, (item) => !item.es_descuento && item.concepto === LATE_FEE_CONCEPT)
-  - sumItems(cuota, (item) => item.concepto === LATE_FEE_WAIVER_CONCEPT),
-)
-
-const unpaidLateFee = (cuota) => roundCents(Math.max(
-  Number(cuota.saldo_pendiente || 0) - Number(cuota.saldo_sin_recargo ?? cuota.saldo_pendiente ?? 0),
-  0,
-))
-
-const canWaive = (cuota) => isOverdue(cuota) && unpaidLateFee(cuota) > 0
-
-const cuotaDue = (cuota, waived) => roundCents(Number(cuota.saldo_pendiente || 0) - (waived ? unpaidLateFee(cuota) : 0))
-
-const allocate = (cuotas, waivedIds, amount) => {
+const allocate = (cuotas, amount) => {
   let remaining = amount
   return cuotas.map((cuota) => {
-    const waived = waivedIds.includes(cuota.cuota_id)
-    const due = cuotaDue(cuota, waived)
+    const due = cuotaDue(cuota)
     const applied = roundCents(Math.min(Math.max(remaining, 0), due))
     remaining = roundCents(remaining - applied)
-    return { cuota, waived, due, applied, fee: waived ? unpaidLateFee(cuota) : 0 }
+    return { cuota, due, applied }
   })
 }
 
-const firstCuotasTotal = (cuotas, waivedIds, count) => roundCents(cuotas
+const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
   .slice(0, count)
-  .reduce((total, cuota) => total + cuotaDue(cuota, waivedIds.includes(cuota.cuota_id)), 0))
+  .reduce((total, cuota) => total + cuotaDue(cuota), 0))
 
-const ACTION_BUTTON_CLASS = 'inline-flex items-center justify-center p-1 rounded-md transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-
-function ActionButton({ icon, label, active = false, disabled = false, onClick }) {
+function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false, action = null }) {
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      aria-pressed={active || undefined}
-      className={`${ACTION_BUTTON_CLASS} ${active ? 'bg-primary/10 text-primary' : 'text-primary hover:bg-primary-fixed/30'}`}
-    >
-      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{icon}</span>
-    </button>
-  )
-}
-
-function BreakdownLine({ label, value, tone = 'text-on-surface-variant', strong = false }) {
-  return (
-    <div className={`flex items-baseline justify-between gap-3 text-base ${tone} ${strong ? 'font-bold' : ''}`}>
-      <span>{label}</span>
-      <span className="tabular-nums whitespace-nowrap">{value}</span>
+    <div className={`flex items-center justify-between gap-3 text-base ${tone} ${strong ? 'font-bold' : ''}`}>
+      <div className="flex flex-col min-w-0">
+        <span>{label}</span>
+        {detail && <span className="text-sm font-normal text-on-surface-variant truncate" title={detail}>{detail}</span>}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="tabular-nums whitespace-nowrap">{value}</span>
+        <span className="w-6 shrink-0">{action}</span>
+      </div>
     </div>
   )
 }
 
-function CuotaBreakdownRow({ line, editing, onWaiveChange }) {
-  const { cuota, waived, due, applied } = line
-  const fee = lateFee(cuota)
-  const unpaidFee = unpaidLateFee(cuota)
+function CuotaBreakdownRow({ line, onRemoveItem, onAssignBenefit }) {
+  const { cuota, due } = line
+  const items = cuota.items ?? []
   const paid = Number(cuota.monto_pagado || 0)
-  const total = Number(cuota.monto_total || 0)
 
   return (
     <tr className="bg-surface-container-low/40">
       <td colSpan={COLUMN_COUNT} className="px-4 py-3 sm:pl-12">
         <div className="flex flex-col gap-2.5 max-w-xl">
-          <div className="flex flex-col gap-1.5">
-            <BreakdownLine label="1° vencimiento" value={formatDate(cuota.fecha_venc1)} />
-            <BreakdownLine label="2° vencimiento" value={formatDate(cuota.fecha_venc2)} />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-on-surface-variant">
+            <span>1° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc1)}</span></span>
+            <span className="text-outline-variant" aria-hidden="true">|</span>
+            <span>2° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc2)}</span></span>
           </div>
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
-            <BreakdownLine label="Cuota" value={formatAmount(roundCents(total - fee))} tone="text-on-surface" />
-            {fee > 0 && <BreakdownLine label="Recargo por mora" value={`+ ${formatAmount(fee)}`} tone="text-error" />}
-            {waived && <BreakdownLine label="Condonación de recargo" value={`− ${formatAmount(unpaidFee)}`} tone="text-emerald-700" />}
+            {items.filter((item) => !isAdjustment(item)).map((item) => (
+              <BreakdownLine key={item.item_cuota_id} label={itemLabel(item)} value={formatAmount(Number(item.monto || 0))} tone="text-on-surface" />
+            ))}
+            {items.filter(isAdjustment).map((item) => {
+              const tone = itemTone(item)
+              const blocker = onRemoveItem ? removalBlocker(cuota, item) : null
+              return (
+                <BreakdownLine
+                  key={item.item_cuota_id}
+                  label={itemLabel(item)}
+                  detail={item.es_descuento ? item.motivo : ''}
+                  value={`${tone.sign}${formatAmount(Number(item.monto || 0))}`}
+                  tone={tone.className}
+                  action={blocker === null ? null : (
+                    <RemoveItemButton label={`Quitar ${itemLabel(item)}`} blocker={blocker} onClick={() => onRemoveItem(cuota, item)} />
+                  )}
+                />
+              )
+            })}
             {paid > 0 && <BreakdownLine label="Pagado" value={`− ${formatAmount(paid)}`} />}
             <div className="pt-2 mt-1 border-t border-outline-variant/30">
               <BreakdownLine label="Total" value={formatAmount(due)} tone="text-on-surface" strong />
             </div>
           </div>
-          {editing && (
-            <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
-              <label className="self-start flex items-center gap-2 text-base font-semibold text-on-surface cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={waived}
-                  onChange={(event) => onWaiveChange(cuota, event.target.checked)}
-                  className="h-4 w-4 accent-primary"
-                />
-                Eximir recargo por mora
-              </label>
-              {waived && applied <= 0 && (
-                <p className="text-sm text-on-surface-variant">El recargo se exime solo si el pago alcanza a esta cuota.</p>
-              )}
-            </div>
+          {onAssignBenefit && (
+            <button
+              type="button"
+              onClick={() => onAssignBenefit(cuota.cuota_id)}
+              className="self-start inline-flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sell</span>
+              Agregar descuento
+            </button>
           )}
         </div>
       </td>
@@ -142,7 +116,7 @@ function CuotaBreakdownRow({ line, editing, onWaiveChange }) {
   )
 }
 
-function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, expandedIds, editingIds, onToggleExpand, onToggleEdit, onWaiveChange, onAssignBenefit }) {
+function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, expandedIds, onToggleExpand, onRemoveItem, onAssignBenefit }) {
   const handleKeyDown = (event, cuotaId) => {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {
@@ -158,10 +132,8 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
       key={line.cuota.cuota_id}
       line={line}
       expandedIds={expandedIds}
-      editingIds={editingIds}
       onToggleExpand={onToggleExpand}
-      onToggleEdit={onToggleEdit}
-      onWaiveChange={onWaiveChange}
+      onRemoveItem={onRemoveItem}
       onAssignBenefit={onAssignBenefit}
       onKeyDown={handleKeyDown}
     />
@@ -176,7 +148,6 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
           <th className="py-1.5 pl-3 pr-0 w-8 text-xs" scope="col"><span className="sr-only">Desglose</span></th>
           <th className="py-1.5 px-3 text-xs" scope="col">Período</th>
           <th className="py-1.5 px-3 text-xs text-right" scope="col">Total</th>
-          <th className="py-1.5 px-3 text-xs text-center w-20" scope="col">Acciones</th>
         </>
       )}
       footer={(
@@ -184,7 +155,6 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
           <td className="py-2 pl-3 pr-0" />
           <th className="py-2 px-3 text-base font-semibold text-on-surface-variant" scope="row">Deuda total</th>
           <td className="py-2 px-3 text-right text-base font-bold text-on-surface">{formatAmount(debtTotal)}</td>
-          <td className="py-2 px-3" />
         </>
       )}
     >
@@ -216,11 +186,10 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
   )
 }
 
-function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit, onWaiveChange, onAssignBenefit, onKeyDown }) {
+function CuotaLine({ line, expandedIds, onToggleExpand, onRemoveItem, onAssignBenefit, onKeyDown }) {
   const { cuota, due, applied } = line
   const cuotaId = cuota.cuota_id
   const expanded = expandedIds.includes(cuotaId)
-  const editing = editingIds.includes(cuotaId)
   const partial = applied > 0 && applied < due
   const settled = applied > 0 && applied >= due
   return (
@@ -237,12 +206,15 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
         </td>
         <td className="py-1.5 px-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
-              <span className="w-2 h-2 rounded-full bg-error shrink-0" title={cuotaStateLabel(cuota.estado_cuota)}>
-                <span className="sr-only">{cuotaStateLabel(cuota.estado_cuota)}</span>
+              <span
+                className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
+                title={cuotaStateLabel(cuota.estado_cuota)}
+              >
+                {cuotaStateShortLabel(cuota.estado_cuota)}
               </span>
             )}
+            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
           </div>
         </td>
         <td className="py-1.5 px-3 text-right">
@@ -257,25 +229,8 @@ function CuotaLine({ line, expandedIds, editingIds, onToggleExpand, onToggleEdit
             </span>
           )}
         </td>
-        <td className="py-1.5 px-3">
-          <div className="flex items-center justify-center gap-0.5">
-            <ActionButton
-              icon="edit"
-              label={canWaive(cuota) ? `Eximir recargo de ${formatPeriod(cuota.periodo)}` : 'La cuota no tiene recargo por mora para eximir'}
-              active={editing}
-              disabled={!canWaive(cuota)}
-              onClick={() => onToggleEdit(cuotaId)}
-            />
-            <ActionButton
-              icon="sell"
-              label={`Asignar descuento a ${formatPeriod(cuota.periodo)}`}
-              disabled={!onAssignBenefit}
-              onClick={() => onAssignBenefit(cuotaId)}
-            />
-          </div>
-        </td>
       </tr>
-      {expanded && <CuotaBreakdownRow line={line} editing={editing} onWaiveChange={onWaiveChange} />}
+      {expanded && <CuotaBreakdownRow line={line} onRemoveItem={onRemoveItem} onAssignBenefit={onAssignBenefit} />}
     </Fragment>
   )
 }
@@ -341,11 +296,6 @@ function PaymentRow({ row, index, takenMethods, canRemove, showActionSlot, showE
 
 const NO_CUOTAS = []
 
-const currentPeriod = () => {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-}
-
 const isFuture = (cuota, period) => String(cuota.periodo) > period
 
 const initialCount = (cuotas, ids, period) => {
@@ -357,7 +307,7 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 
 // Without `socio`, renders the empty layout (disabled sections, empty summary)
 // so the payment modal keeps its shape while a socio is chosen.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, onCancel, onSuccess, onAssignBenefit }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
@@ -368,12 +318,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
-  const [waivedIds, setWaivedIds] = useState([])
-  const [waiver, setWaiver] = useState(null)
-  const [waiverPrompt, setWaiverPrompt] = useState(null)
   const [expandedIds, setExpandedIds] = useState([])
-  const [editingIds, setEditingIds] = useState([])
-  const [paymentRows, setPaymentRows] = useState(() => [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, [], suggestedCount)))])
+  const [removal, setRemoval] = useState(null)
+  const [paymentRows, setPaymentRows] = useState(() => [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))])
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [receipt, setReceipt] = useState(null)
@@ -381,9 +328,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const [submitError, setSubmitError] = useState('')
 
   const enteredTotal = roundCents(paymentRows.reduce((total, row) => total + Number(row.monto || 0), 0))
-  const lines = allocate(pendingCuotas, waivedIds, enteredTotal)
+  const lines = allocate(pendingCuotas, enteredTotal)
   const coveredLines = lines.filter((line) => line.applied > 0)
-  const waivedLines = coveredLines.filter((line) => line.waived)
   const debtTotal = roundCents(lines.filter((line) => !isFuture(line.cuota, period)).reduce((total, line) => total + line.due, 0))
   const pendingTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
   const billedLines = lines.filter((line) => !isFuture(line.cuota, period) || line.applied > 0)
@@ -392,46 +338,14 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const partialLines = coveredLines.filter((line) => line.applied < line.due)
   const pendingBalance = roundCents(billedTotal - enteredTotal)
 
-  const applyWaivers = (nextWaivedIds) => {
-    setWaivedIds(nextWaivedIds)
-    if (!nextWaivedIds.length) setWaiver(null)
-    const suggested = amountInput(firstCuotasTotal(pendingCuotas, nextWaivedIds, suggestedCount))
-    setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
-  }
-
-  // A benefit applied from here reloads the account: keep the waivers and follow the new balances
   const [syncedCuenta, setSyncedCuenta] = useState(cuenta)
   if (cuenta !== syncedCuenta) {
     setSyncedCuenta(cuenta)
-    applyWaivers(waivedIds.filter((id) => pendingCuotas.some((cuota) => cuota.cuota_id === id && canWaive(cuota))))
+    const suggested = amountInput(firstCuotasTotal(pendingCuotas, suggestedCount))
+    setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
   }
 
-  const toggleExpand = (cuotaId) => {
-    setExpandedIds((ids) => toggleId(ids, cuotaId))
-    if (expandedIds.includes(cuotaId)) setEditingIds((ids) => ids.filter((id) => id !== cuotaId))
-  }
-
-  const toggleEdit = (cuotaId) => {
-    const editing = editingIds.includes(cuotaId)
-    setEditingIds((ids) => toggleId(ids, cuotaId))
-    if (!editing) setExpandedIds((ids) => (ids.includes(cuotaId) ? ids : [...ids, cuotaId]))
-  }
-
-  const changeWaiver = (cuota, checked) => {
-    if (!checked) {
-      applyWaivers(waivedIds.filter((id) => id !== cuota.cuota_id))
-    } else if (waiver) {
-      applyWaivers([...waivedIds, cuota.cuota_id])
-    } else {
-      setWaiverPrompt({ cuota })
-    }
-  }
-
-  const confirmWaiver = (authorization) => {
-    setWaiver(authorization)
-    if (waiverPrompt?.cuota) applyWaivers([...waivedIds, waiverPrompt.cuota.cuota_id])
-    setWaiverPrompt(null)
-  }
+  const toggleExpand = (cuotaId) => setExpandedIds((ids) => toggleId(ids, cuotaId))
 
   const updateRow = (index, changes) => {
     setPaymentRows((rows) => rows.map((row, position) => (position === index ? { ...row, ...changes } : row)))
@@ -465,13 +379,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
         monto_total: enteredTotal,
         medios: paymentRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion,
-        ...(waivedLines.length && waiver && {
-          condonacion_mora: {
-            cuota_ids: waivedLines.map((line) => line.cuota.cuota_id),
-            autorizado_por: waiver.autorizadoPor,
-            motivo: waiver.motivo,
-          },
-        }),
       })
       const detalle = await getComprobante(response.comprobante?.comprobante_id).catch(() => null)
       setReceipt({
@@ -520,10 +427,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
                 showFuture={showFuture}
                 onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
-                editingIds={editingIds}
                 onToggleExpand={toggleExpand}
-                onToggleEdit={toggleEdit}
-                onWaiveChange={changeWaiver}
+                onRemoveItem={onAccountChanged ? (cuota, item) => setRemoval({ cuota, item }) : undefined}
                 onAssignBenefit={onAssignBenefit}
               />
             ) : (
@@ -600,24 +505,11 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
                   <SummaryLine
                     key={line.cuota.cuota_id}
                     label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                    value={formatAmount(roundCents(line.due + line.fee))}
+                    value={formatAmount(line.due)}
                   />
                 ))
                 : <p className="text-base text-on-surface-variant">Sin cuotas a pagar.</p>}
             </TicketSection>
-
-            {waivedLines.length > 0 && (
-              <TicketSection title="Descuentos / condonación">
-                {waivedLines.map((line) => (
-                  <SummaryLine
-                    key={line.cuota.cuota_id}
-                    label={`Condonación recargo ${formatPeriod(line.cuota.periodo)}`}
-                    value={`− ${formatAmount(line.fee)}`}
-                    valueClassName="text-emerald-700"
-                  />
-                ))}
-              </TicketSection>
-            )}
 
             <div className="pb-3 border-b border-dashed border-slate-300">
               <SummaryLine label="Total de cuotas" value={formatAmount(billedTotal)} isTotal />
@@ -687,13 +579,11 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
         </div>
       </div>
 
-      <LateFeeWaiverModal
-        opened={Boolean(waiverPrompt)}
-        cuota={waiverPrompt?.cuota ?? null}
-        amount={waiverPrompt?.cuota ? unpaidLateFee(waiverPrompt.cuota) : 0}
-        initial={waiver}
-        onConfirm={confirmWaiver}
-        onClose={() => setWaiverPrompt(null)}
+      <RemoveCuotaItemModal
+        cuota={removal?.cuota ?? null}
+        item={removal?.item ?? null}
+        onClose={() => setRemoval(null)}
+        onRemoved={onAccountChanged}
       />
     </form>
   )

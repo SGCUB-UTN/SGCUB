@@ -9,7 +9,7 @@ from django.utils import timezone
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .allocation import allocate_payment, charge_order, concept_totals
-from .generators import GeneradorItemsCuota, benefit_reason, scholarships_for_period
+from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, scholarships_for_period
 from .models import (
     Beca,
     Comprobante,
@@ -18,9 +18,12 @@ from .models import (
     CuentaCorriente,
     Cuota,
     DetalleImputacion,
+    EstadoBecaChoices,
     EstadoComprobanteChoices,
     EstadoCuotaChoices,
+    EstadoItemCuotaChoices,
     EstadoPagoChoices,
+    ExclusionBeca,
     Imputacion,
     ItemCuota,
     ItemPago,
@@ -31,9 +34,6 @@ from .models import (
     TipoMovimientoChoices,
     TipoMovimientoOrigenChoices,
 )
-
-PERIOD_FORMAT = "%Y-%m"
-
 
 class CuotaDuplicadaError(Exception):
     pass
@@ -231,6 +231,7 @@ def create_or_update_player_current_cuota(socio_id):
     sports_item.cuota = cuota
     sports_item.save()
     sync_cuota_charge(cuota)
+    refresh_cuota_scholarships(cuota, socio_id, "Beca recalculada por el alta de la cuota deportiva")
     return cuota
 
 
@@ -703,7 +704,8 @@ def lock_cuota(cuota_id):
     )
 
 
-SURCHARGE_LABELS = {1: "primer", 2: "segundo"}
+def surcharge_reason(number):
+    return f"Recargo por {number}° vencimiento"
 
 
 def apply_cuota_surcharges(cuota_id, today=None, configuration=None):
@@ -728,7 +730,8 @@ def apply_cuota_surcharges(cuota_id, today=None, configuration=None):
                     concepto=ConceptoItemChoices.MORA,
                     fecha_aplicacion=today,
                     monto=amount,
-                    motivo=f"Recargo por {SURCHARGE_LABELS[number]} vencimiento ({due:%d/%m/%Y})",
+                    motivo=f"{surcharge_reason(number)} ({due:%d/%m/%Y})",
+                    vencimiento=number,
                 )))
             cuota.recargos_aplicados = number
         cuota.save(update_fields=["recargos_aplicados"])
@@ -798,6 +801,24 @@ def benefit_amount(mode, value, base):
     return value
 
 
+def has_active_payments(cuota):
+    return applied_amount(cuota) > 0
+
+
+def ensure_cuota_not_paid(cuota):
+    if cuota.estado_cuota == EstadoCuotaChoices.PAGA:
+        raise CuotaConPagosError("La cuota está paga: no se le pueden agregar ni quitar conceptos.")
+
+
+def annul_item(item, reason, authorized_by="", user=None):
+    item.estado = EstadoItemCuotaChoices.ANULADO
+    item.fecha_anulacion = timezone.now()
+    item.motivo_anulacion = benefit_reason(reason)
+    item.anulado_por = authorized_by
+    item.usuario_anulacion = user
+    item.save(update_fields=["estado", "fecha_anulacion", "motivo_anulacion", "anulado_por", "usuario_anulacion"])
+
+
 @transaction.atomic
 def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=None, user=None, authorized_by=""):
     cuota = lock_cuota(cuota_id)
@@ -827,10 +848,16 @@ def assign_benefit(cuota_id, kind, mode, value, start_date, reason, end_date=Non
         sync_cuota_charge(cuota)
         return None, item
 
-    scholarship = create_scholarship(
-        cuota.movimiento.cuenta_corriente.socio_id, mode, value, start_date, end_date, reason, authorized_by, user,
-    )
-    return scholarship, apply_scholarship(scholarship, cuota)
+    account = cuota.movimiento.cuenta_corriente
+    scholarship = create_scholarship(account.socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
+    items = refresh_scholarship_items(account, SCHOLARSHIP_GRANTED_REASON, authorized_by, user)
+    return scholarship, next((item for item in items if item.cuota_id == cuota.pk), None)
+
+
+def scholarship_state(end_date, today=None):
+    if end_date and end_date < (today or timezone.localdate()):
+        return EstadoBecaChoices.FINALIZADA
+    return EstadoBecaChoices.APLICADA
 
 
 def create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user):
@@ -843,6 +870,20 @@ def create_scholarship(socio_id, mode, value, start_date, end_date, reason, auth
         motivo=reason,
         autorizado_por=authorized_by,
         usuario=user,
+        estado=scholarship_state(end_date),
+    )
+
+
+def scholarship_item(scholarship, cuota, amount):
+    return ItemCuota.objects.create(
+        cuota=cuota,
+        concepto=ConceptoItemChoices.BECA,
+        es_descuento=True,
+        fecha_aplicacion=scholarship.fecha_aplicacion,
+        monto=amount,
+        motivo=benefit_reason(scholarship.motivo),
+        autorizado_por=scholarship.autorizado_por,
+        beca=scholarship,
     )
 
 
@@ -855,17 +896,94 @@ def apply_scholarship(scholarship, cuota):
     amount = min(scholarship.discount_for(discount_base(items)), discountable_pending(cuota, items, pending))
     if amount <= 0:
         return None
-    item = ItemCuota.objects.create(
-        cuota=cuota,
-        concepto=ConceptoItemChoices.BECA,
-        es_descuento=True,
-        fecha_aplicacion=scholarship.fecha_aplicacion,
-        monto=amount,
-        motivo=benefit_reason(scholarship.motivo),
-        autorizado_por=scholarship.autorizado_por,
-    )
+    item = scholarship_item(scholarship, cuota, amount)
     sync_cuota_charge(cuota)
     return item
+
+
+SCHOLARSHIP_GRANTED_REASON = "Beca recalculada por el alta de otra beca"
+SCHOLARSHIP_UPDATED_REASON = "Beca modificada"
+
+
+def is_linked_scholarship(item):
+    return item.concepto == ConceptoItemChoices.BECA and item.beca_id is not None
+
+
+def scholarship_amounts(items, scholarships):
+    base = discount_base(items)
+    available = base - sum(
+        (item.monto for item in items if item.es_descuento and item.concepto != ConceptoItemChoices.CONDONACION_MORA),
+        Decimal("0.00"),
+    )
+    amounts = {}
+    for scholarship in scholarships:
+        amount = min(scholarship.discount_for(base), max(available, Decimal("0.00")))
+        if amount > 0:
+            amounts[scholarship.pk] = amount
+            available -= amount
+    return amounts
+
+
+def item_matches(item, scholarship, amount):
+    return (
+        item.monto == amount
+        and item.motivo == benefit_reason(scholarship.motivo)
+        and item.autorizado_por == scholarship.autorizado_por
+    )
+
+
+def rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user):
+    items = list(cuota.items.all())
+    current = {item.beca_id: item for item in items if is_linked_scholarship(item)}
+    desired = scholarship_amounts([item for item in items if not is_linked_scholarship(item)], scholarships)
+    by_id = {scholarship.pk: scholarship for scholarship in scholarships}
+
+    outdated = [
+        item for scholarship_id, item in current.items()
+        if scholarship_id not in desired or not item_matches(item, by_id[scholarship_id], desired[scholarship_id])
+    ]
+    for item in outdated:
+        annul_item(item, reason, authorized_by, user)
+    kept = set(current) - {item.beca_id for item in outdated}
+    created = [
+        scholarship_item(by_id[scholarship_id], cuota, amount)
+        for scholarship_id, amount in desired.items()
+        if scholarship_id not in kept
+    ]
+    if outdated or created:
+        sync_cuota_charge(cuota)
+    return created
+
+
+def add_missing_scholarships(cuota, scholarships):
+    present = {item.beca_id for item in cuota.items.all() if is_linked_scholarship(item)}
+    applied = [apply_scholarship(scholarship, cuota) for scholarship in scholarships if scholarship.pk not in present]
+    return [item for item in applied if item]
+
+
+def is_paid_with_money(cuota):
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA and cuota.movimiento.monto > 0
+
+
+def refresh_cuota_scholarships(cuota, socio_id, reason, authorized_by="", user=None):
+    if has_active_payments(cuota):
+        return add_missing_scholarships(cuota, list(scholarships_for_period(cuota_period_start(cuota)).filter(socio_id=socio_id)))
+    if is_paid_with_money(cuota):
+        return []
+    scholarships = list(scholarships_for_period(cuota_period_start(cuota)).filter(socio_id=socio_id))
+    return rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
+
+
+def refresh_scholarship_items(account, reason, authorized_by="", user=None):
+    cuotas = (
+        Cuota.objects.select_for_update(of=("self",))
+        .filter(movimiento__cuenta_corriente=account)
+        .select_related("movimiento")
+    )
+    created = []
+    for cuota in by_period(cuotas):
+        created.extend(refresh_cuota_scholarships(cuota, account.socio_id, reason, authorized_by, user))
+    return created
 
 
 @transaction.atomic
@@ -874,10 +992,119 @@ def grant_scholarship(socio_id, mode, value, start_date, reason, authorized_by, 
     if account.socio.is_inactive:
         raise BeneficioInvalidoError("El socio está dado de baja: no corresponde otorgarle una beca.")
     scholarship = create_scholarship(socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
-    cuotas = (
-        Cuota.objects.select_for_update(of=("self",))
-        .filter(movimiento__cuenta_corriente=account)
-        .select_related("movimiento")
+    return scholarship, refresh_scholarship_items(account, SCHOLARSHIP_GRANTED_REASON, authorized_by, user)
+
+
+def lock_scholarship(scholarship_id):
+    socio_id = Beca.objects.values_list("socio_id", flat=True).get(pk=scholarship_id)
+    account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
+    scholarship = Beca.objects.select_for_update().get(pk=scholarship_id)
+    if scholarship.estado != EstadoBecaChoices.APLICADA:
+        raise BeneficioInvalidoError("Solo se pueden modificar o cancelar becas en estado Aplicada.")
+    return account, scholarship
+
+
+@transaction.atomic
+def cancel_scholarship(scholarship_id, reason, authorized_by, user=None):
+    account, scholarship = lock_scholarship(scholarship_id)
+    scholarship.estado = EstadoBecaChoices.CANCELADA
+    scholarship.fecha_cancelacion = timezone.now()
+    scholarship.motivo_cancelacion = benefit_reason(reason)
+    scholarship.cancelado_por = authorized_by
+    scholarship.usuario_cancelacion = user
+    scholarship.save(update_fields=[
+        "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion",
+    ])
+    refresh_scholarship_items(account, f"Beca cancelada: {reason}", authorized_by, user)
+    return scholarship
+
+
+@transaction.atomic
+def update_scholarship(scholarship_id, mode, value, start_date, end_date, reason, authorized_by, user=None):
+    account, scholarship = lock_scholarship(scholarship_id)
+    scholarship.monto = value if mode == ModalidadMontoChoices.MONTO_FIJO else None
+    scholarship.porcentaje = value if mode == ModalidadMontoChoices.PORCENTAJE else None
+    scholarship.fecha_aplicacion = start_date
+    scholarship.fecha_fin = end_date
+    scholarship.motivo = reason
+    scholarship.autorizado_por = authorized_by
+    scholarship.estado = scholarship_state(end_date)
+    scholarship.save(update_fields=[
+        "monto", "porcentaje", "fecha_aplicacion", "fecha_fin", "motivo", "autorizado_por", "estado",
+    ])
+    refresh_scholarship_items(account, SCHOLARSHIP_UPDATED_REASON, authorized_by, user)
+    return scholarship
+
+
+def finish_expired_scholarships(today=None):
+    today = today or timezone.localdate()
+    finished = Beca.objects.filter(estado=EstadoBecaChoices.APLICADA, fecha_fin__lt=today).update(
+        estado=EstadoBecaChoices.FINALIZADA,
     )
-    applied = [apply_scholarship(scholarship, cuota) for cuota in by_period(cuotas)]
-    return scholarship, [item for item in applied if item]
+    return {"fecha": today.isoformat(), "becas_finalizadas": finished}
+
+
+REMOVABLE_BENEFITS = (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+
+
+def remove_late_fee(cuota, item, reason, authorized_by, user):
+    if not has_active_payments(cuota):
+        annul_item(item, reason, authorized_by, user)
+        return
+    unpaid = unpaid_late_fees(cuota, list(cuota.items.all()), pending_amounts([cuota])[cuota.pk])
+    amount = min(item.monto, unpaid)
+    if amount <= 0:
+        raise BeneficioInvalidoError("El recargo ya fue pagado y no puede quitarse.")
+    ItemCuota.objects.create(
+        cuota=cuota,
+        concepto=ConceptoItemChoices.CONDONACION_MORA,
+        es_descuento=True,
+        fecha_aplicacion=timezone.localdate(),
+        monto=amount,
+        motivo=benefit_reason(reason),
+        autorizado_por=authorized_by,
+        vencimiento=item.vencimiento,
+    )
+
+
+def remove_benefit(cuota, item, reason, authorized_by, user):
+    if has_active_payments(cuota):
+        raise CuotaConPagosError("La cuota tiene pagos aplicados: no se le pueden quitar becas ni descuentos.")
+    if item.beca_id:
+        ExclusionBeca.objects.get_or_create(
+            beca_id=item.beca_id,
+            periodo=cuota.periodo,
+            defaults={"motivo": benefit_reason(reason), "autorizado_por": authorized_by, "usuario": user},
+        )
+    annul_item(item, reason, authorized_by, user)
+
+
+@transaction.atomic
+def remove_cuota_item(item_id, reason, authorized_by, user=None):
+    cuota = lock_cuota(ItemCuota.objects.values_list("cuota_id", flat=True).get(pk=item_id))
+    item = ItemCuota.objects.select_for_update().get(pk=item_id)
+    ensure_cuota_not_paid(cuota)
+    if item.concepto == ConceptoItemChoices.MORA:
+        remove_late_fee(cuota, item, reason, authorized_by, user)
+    elif item.concepto in REMOVABLE_BENEFITS:
+        remove_benefit(cuota, item, reason, authorized_by, user)
+    else:
+        raise BeneficioInvalidoError("Solo se pueden quitar recargos, becas y descuentos de la cuota.")
+    sync_cuota_charge(cuota)
+    return item
+
+
+@transaction.atomic
+def update_discount(item_id, mode, value, reason, authorized_by, user=None):
+    cuota_id = ItemCuota.objects.values_list("cuota_id", flat=True).get(pk=item_id, concepto=ConceptoItemChoices.DESCUENTO_UNICO)
+    cuota = lock_cuota(cuota_id)
+    item = ItemCuota.objects.select_for_update().get(pk=item_id)
+    ensure_cuota_not_paid(cuota)
+    if has_active_payments(cuota):
+        raise CuotaConPagosError("La cuota tiene pagos aplicados: no se puede modificar el descuento.")
+    annul_item(item, "Descuento modificado", authorized_by, user)
+    sync_cuota_charge(cuota)
+    _, replacement = assign_benefit(
+        cuota.pk, BENEFIT_DISCOUNT, mode, value, item.fecha_aplicacion, reason, user=user, authorized_by=authorized_by,
+    )
+    return replacement
