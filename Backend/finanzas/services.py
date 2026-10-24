@@ -93,6 +93,7 @@ def create_manual_movement(
         concepto=concept,
         medio_de_pago=payment_method,
         origen_manual=origin,
+        numero_comprobante=next_receipt_number(),
         usuario=user,
     )
     account.saldo += amount if movement_type == TipoMovimientoChoices.ABONO else -amount

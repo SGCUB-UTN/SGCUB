@@ -312,6 +312,43 @@ class MovimientosManualesTests(APITestCase):
 		self.assertEqual(resumen.data["transferencia_bancaria"], Decimal("2500.00"))
 		self.assertEqual(resumen.data["pago_efectivo"], Decimal("-200.00"))
 
+	def test_genera_pdf_de_nota_de_credito_y_movimiento_manual(self):
+		crear_cuota_con_cargo(account_for(self.socio), "2026-10", "2000.00")
+
+		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación · Aporte extraordinario",
+			"monto": "1500.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(ingreso.status_code, 201)
+		self.assertEqual(ingreso.data["numero_comprobante"], 1)
+
+		nota_credito = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución total de operación · Ref. #" + str(ingreso.data["numero_comprobante"]),
+			"monto": "1500.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+		self.assertEqual(nota_credito.status_code, 201)
+		self.assertEqual(nota_credito.data["numero_comprobante"], 2)
+
+		pdf_nc = self.client.get(reverse("movimiento-cuenta-pdf", args=[nota_credito.data["movimiento_cuenta_id"]]))
+		self.assertEqual(pdf_nc.status_code, 200)
+		self.assertEqual(pdf_nc["Content-Type"], "application/pdf")
+		self.assertIn("nota-credito-X-00000002.pdf", pdf_nc["Content-Disposition"])
+		self.assertIn(b"NOTA DE CR", pdf_nc.content)
+		self.assertIn(b"NC-X 00000002", pdf_nc.content)
+
+		pdf_ing = self.client.get(reverse("movimiento-cuenta-pdf", args=[ingreso.data["movimiento_cuenta_id"]]))
+		self.assertEqual(pdf_ing.status_code, 200)
+		self.assertIn(b"REVERTIDO POR NOTA DE CR", pdf_ing.content)
+		self.assertIn(b"NC-X 00000002", pdf_ing.content)
+
 
 class BecaModeloTests(TestCase):
 	def setUp(self):

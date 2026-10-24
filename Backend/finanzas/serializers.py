@@ -405,12 +405,12 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovimientoCuenta
         fields = [
-            "movimiento_cuenta_id", "cuenta_corriente", "socio", "pago", "cuota",
+            "movimiento_cuenta_id", "numero_comprobante", "cuenta_corriente", "socio", "pago", "cuota",
             "movimiento_revertido", "tipo_movimiento", "tipo_movimiento_nombre",
             "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
             "origen_manual", "origen_manual_nombre", "usuario",
         ]
-        read_only_fields = ["movimiento_cuenta_id"]
+        read_only_fields = ["movimiento_cuenta_id", "numero_comprobante"]
 
     def get_socio(self, obj):
         account = getattr(obj, "cuenta_corriente", None)

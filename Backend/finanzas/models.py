@@ -260,6 +260,11 @@ class MovimientoCuenta(models.Model):
         null=True,
         blank=True,
     )
+    numero_comprobante = models.PositiveIntegerField(
+        unique=True,
+        null=True,
+        blank=True,
+    )
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

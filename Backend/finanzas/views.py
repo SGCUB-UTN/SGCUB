@@ -31,7 +31,12 @@ from .models import (
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
 from .financial_summary_pdf import financial_summary_filename, render_financial_summary_pdf
-from .receipts import receipt_filename, render_receipt_pdf
+from .receipts import (
+	manual_movement_filename,
+	receipt_filename,
+	render_manual_movement_pdf,
+	render_receipt_pdf,
+)
 from .serializers import (
 	BecaSerializer,
 	OtorgarBecaSerializer,
@@ -447,6 +452,23 @@ def movimiento_cuenta_manual(request):
 @api_view(["GET"])
 def movimiento_cuenta_detail(request, pk):
 	return Response(MovimientoCuentaSerializer(get_object_or_404(MovimientoCuenta, pk=pk)).data)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def movimiento_cuenta_pdf(request, pk):
+	movement = get_object_or_404(
+		MovimientoCuenta.objects.select_related(
+			"cuenta_corriente__socio__persona",
+			"movimiento_revertido",
+			"reversion",
+		),
+		pk=pk,
+		origen_manual__isnull=False,
+	)
+	response = HttpResponse(render_manual_movement_pdf(movement), content_type="application/pdf")
+	response["Content-Disposition"] = f'attachment; filename="{manual_movement_filename(movement)}"'
+	return response
 
 
 @extend_schema(tags=["Finanzas/Imputacion"], responses=ImputacionSerializer)
