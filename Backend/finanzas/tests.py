@@ -1989,9 +1989,9 @@ class RecargosPorMoraTests(APITestCase):
 
 		recargos = self.recargos(cuota)
 		self.assertEqual([item.monto for item in recargos], [Decimal("200.00"), Decimal("100.00")])
-		self.assertIn("Recargo por primer vencimiento", recargos[0].motivo)
+		self.assertIn("Recargo por 1° vencimiento", recargos[0].motivo)
 		self.assertIn(cuota.fecha_venc1.strftime("%d/%m/%Y"), recargos[0].motivo)
-		self.assertIn("Recargo por segundo vencimiento", recargos[1].motivo)
+		self.assertIn("Recargo por 2° vencimiento", recargos[1].motivo)
 		cuota.refresh_from_db()
 		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.VENCIDA_2)
 		self.assertEqual(cuota.recargos_aplicados, 2)
