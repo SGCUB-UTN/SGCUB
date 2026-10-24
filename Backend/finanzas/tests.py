@@ -3180,6 +3180,44 @@ class CuotaItemAnnulmentTests(APITestCase):
 
 		self.assertEqual(self.annul(discount).status_code, 404)
 
+	def edit_discount(self, item, **data):
+		values = {"modalidad": "MontoFijo", "valor": "800.00", "motivo": "Hermanos en el club", "autorizado_por": "Tesorería"}
+		values.update(data)
+		return self.client.put(reverse("item-cuota-descuento", args=[item.pk]), values, format="json")
+
+	def test_editing_a_discount_replaces_it_and_keeps_the_previous_one(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		response = self.edit_discount(discount)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(Decimal(response.data["monto"]), Decimal("800.00"))
+		self.assertEqual(self.charge(), Decimal("1700.00"))
+		previous = ItemCuota.all_objects.get(pk=discount.pk)
+		self.assertEqual((previous.estado, previous.motivo_anulacion), (EstadoItemCuotaChoices.ANULADO, "Descuento modificado"))
+
+	def test_edited_discount_is_validated_against_the_cuota_without_the_previous_one(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+
+		too_much = self.edit_discount(discount, valor="2500.01")
+		whole = self.edit_discount(discount, valor="2500.00")
+
+		self.assertEqual(too_much.status_code, 400)
+		self.assertEqual(whole.status_code, 200, whole.data)
+		self.assertEqual(self.charge(), Decimal("0.00"))
+
+	def test_discount_of_a_cuota_with_payments_cannot_be_edited(self):
+		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
+		self.pay("100.00")
+
+		self.assertEqual(self.edit_discount(discount).status_code, 400)
+		self.assertEqual(self.charge(), Decimal("2000.00"))
+
+	def test_only_discounts_can_be_edited(self):
+		fee = self.add_item("Mora", "300.00", due_number=1)
+
+		self.assertEqual(self.edit_discount(fee).status_code, 404)
+
 	def test_items_describe_their_origin(self):
 		self.add_item("Mora", "300.00", due_number=1)
 		self.add_item("Mora", "30.00", due_number=2)

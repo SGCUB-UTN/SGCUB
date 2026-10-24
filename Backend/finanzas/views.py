@@ -15,6 +15,7 @@ from padron.models import Socio
 from .models import (
 	Beca,
 	Comprobante,
+	ConceptoItemChoices,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -39,6 +40,7 @@ from .serializers import (
 	CUOTA_ITEM_PREFETCHES,
 	ConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
+	EdicionDescuentoSerializer,
 	ComprobanteListSerializer,
 	ComprobanteSerializer,
 	CuentaCorrienteSerializer,
@@ -74,6 +76,7 @@ from .services import (
 	register_payment,
 	remove_cuota_item,
 	reschedule_cuota,
+	update_discount,
 	update_scholarship,
 )
 
@@ -167,6 +170,22 @@ def cuota_item_detail(request, pk):
 
 def _current_user(request):
 	return request.user if request.user.is_authenticated else None
+
+
+@extend_schema(tags=["Finanzas/ItemCuota"], request=EdicionDescuentoSerializer, responses=ItemCuotaSerializer)
+@api_view(["PUT"])
+def cuota_item_discount(request, pk):
+	get_object_or_404(ItemCuota, pk=pk, concepto=ConceptoItemChoices.DESCUENTO_UNICO)
+	serializer = EdicionDescuentoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		item = update_discount(pk, data["modalidad"], data["valor"], data["motivo"], data["autorizado_por"], _current_user(request))
+	except (BeneficioInvalidoError, CuotaConPagosError) as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(ItemCuotaSerializer(item).data)
 
 
 @extend_schema(tags=["Finanzas/ItemCuota"], request=AnulacionSerializer, responses=ItemCuotaSerializer)

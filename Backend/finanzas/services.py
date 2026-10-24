@@ -1038,3 +1038,19 @@ def remove_cuota_item(item_id, reason, authorized_by, user=None):
         raise BeneficioInvalidoError("Solo se pueden quitar recargos, becas y descuentos de la cuota.")
     sync_cuota_charge(cuota)
     return item
+
+
+@transaction.atomic
+def update_discount(item_id, mode, value, reason, authorized_by, user=None):
+    cuota_id = ItemCuota.objects.values_list("cuota_id", flat=True).get(pk=item_id, concepto=ConceptoItemChoices.DESCUENTO_UNICO)
+    cuota = lock_cuota(cuota_id)
+    item = ItemCuota.objects.select_for_update().get(pk=item_id)
+    ensure_cuota_not_paid(cuota)
+    if has_active_payments(cuota):
+        raise CuotaConPagosError("La cuota tiene pagos aplicados: no se puede modificar el descuento.")
+    annul_item(item, "Descuento modificado", authorized_by, user)
+    sync_cuota_charge(cuota)
+    _, replacement = assign_benefit(
+        cuota.pk, BENEFIT_DISCOUNT, mode, value, item.fecha_aplicacion, reason, user=user, authorized_by=authorized_by,
+    )
+    return replacement

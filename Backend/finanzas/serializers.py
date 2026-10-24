@@ -490,6 +490,18 @@ class BeneficioSerializer(OtorgarBecaSerializer):
     tipo = serializers.ChoiceField(choices=[BENEFIT_SCHOLARSHIP, BENEFIT_DISCOUNT])
 
 
+class EdicionDescuentoSerializer(serializers.Serializer):
+    modalidad = serializers.ChoiceField(choices=ModalidadMontoChoices.choices)
+    valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+    autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
+
+    def validate(self, attrs):
+        if attrs["modalidad"] == ModalidadMontoChoices.PORCENTAJE and not Decimal("1") <= attrs["valor"] <= Decimal("100"):
+            raise serializers.ValidationError({"valor": "El porcentaje debe estar entre 1% y 100%."})
+        return attrs
+
+
 class AnulacionSerializer(serializers.Serializer):
     motivo = serializers.CharField(max_length=180, trim_whitespace=True)
     autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
