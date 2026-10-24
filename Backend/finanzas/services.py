@@ -29,6 +29,7 @@ from .models import (
     Pago,
     SecuenciaComprobante,
     TipoMovimientoChoices,
+    TipoMovimientoOrigenChoices,
 )
 
 PERIOD_FORMAT = "%Y-%m"
@@ -56,6 +57,45 @@ class BeneficioInvalidoError(Exception):
 
 class ComprobanteInvalidoError(Exception):
     pass
+
+
+@transaction.atomic
+def create_manual_movement(
+    socio_id,
+    movement_type,
+    origin,
+    concept,
+    amount,
+    payment_method=None,
+    reversed_movement_id=None,
+    user=None,
+):
+    account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
+    reversed_movement = None
+    if reversed_movement_id:
+        reversed_movement = MovimientoCuenta.objects.select_for_update().filter(
+            pk=reversed_movement_id,
+            cuenta_corriente=account,
+        ).first()
+        if reversed_movement is None:
+            raise PagoInvalidoError("El movimiento a revertir no pertenece al socio indicado.")
+        if hasattr(reversed_movement, "reversion"):
+            raise PagoInvalidoError("El movimiento indicado ya fue revertido.")
+
+    movement = MovimientoCuenta.objects.create(
+        cuenta_corriente=account,
+        movimiento_revertido=reversed_movement,
+        tipo_movimiento=movement_type,
+        fecha=timezone.now(),
+        monto=amount,
+        concepto=concept,
+        medio_de_pago=payment_method,
+        origen_manual=origin,
+        usuario=user,
+    )
+    account.saldo += amount if movement_type == TipoMovimientoChoices.ABONO else -amount
+    account.save(update_fields=["saldo"])
+    return movement
 
 
 def next_receipt_number():

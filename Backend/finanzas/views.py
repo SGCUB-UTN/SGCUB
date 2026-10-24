@@ -48,6 +48,7 @@ from .serializers import (
 	ItemPagoSerializer,
 	ItemCuotaSerializer,
 	MovimientoCuentaSerializer,
+	MovimientoManualSerializer,
 	PagoSerializer,
 	CuentaCorrienteEstadoSerializer,
 	ComprobanteDetalleSerializer,
@@ -69,6 +70,7 @@ from .services import (
 	grant_scholarship,
 	pending_amounts,
 	register_payment,
+	create_manual_movement,
 	reschedule_cuota,
 )
 
@@ -382,7 +384,38 @@ def delinquency_report_pdf(request):
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)
 @api_view(["GET"])
 def movimiento_cuenta_list(request):
-	return Response(MovimientoCuentaSerializer(MovimientoCuenta.objects.order_by("pk"), many=True).data)
+	movements = MovimientoCuenta.objects.order_by("pk")
+	socio_id = request.query_params.get("socio_id")
+	if socio_id:
+		if not socio_id.isdigit():
+			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+		movements = movements.filter(cuenta_corriente__socio_id=int(socio_id))
+	return Response(MovimientoCuentaSerializer(movements, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], request=MovimientoManualSerializer, responses=MovimientoCuentaSerializer)
+@api_view(["POST"])
+def movimiento_cuenta_manual(request):
+	serializer = MovimientoManualSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	data = serializer.validated_data
+	try:
+		movement = create_manual_movement(
+			data["socio_id"],
+			data["tipo"],
+			data["origen"],
+			data["concepto"],
+			data["monto"],
+			data["medio_de_pago"],
+			data["movimiento_revertido_id"],
+			request.user if request.user.is_authenticated else None,
+		)
+	except CuentaCorriente.DoesNotExist:
+		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
+	except PagoInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(MovimientoCuentaSerializer(movement).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)

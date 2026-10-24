@@ -14,6 +14,8 @@ from .models import (
     ItemCuota,
     MovimientoCuenta,
     Pago,
+    TipoMovimientoChoices,
+    TipoMovimientoOrigenChoices,
     EstadoCuotaChoices,
     MedioDePagoChoices,
     ModalidadMontoChoices,
@@ -395,10 +397,50 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
 
 class MovimientoCuentaSerializer(serializers.ModelSerializer):
+    tipo_movimiento_nombre = serializers.CharField(source="get_tipo_movimiento_display", read_only=True)
+    origen_manual_nombre = serializers.CharField(source="get_origen_manual_display", read_only=True)
+    medio_de_pago_nombre = serializers.CharField(source="get_medio_de_pago_display", read_only=True)
+
     class Meta:
         model = MovimientoCuenta
-        fields = "__all__"
+        fields = [
+            "movimiento_cuenta_id", "cuenta_corriente", "pago", "cuota",
+            "movimiento_revertido", "tipo_movimiento", "tipo_movimiento_nombre",
+            "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
+            "origen_manual", "origen_manual_nombre", "usuario",
+        ]
         read_only_fields = ["movimiento_cuenta_id"]
+
+
+class MovimientoManualSerializer(serializers.Serializer):
+    socio_id = serializers.IntegerField(min_value=1)
+    tipo = serializers.ChoiceField(choices=TipoMovimientoChoices.choices)
+    origen = serializers.ChoiceField(choices=TipoMovimientoOrigenChoices.choices)
+    concepto = serializers.CharField(max_length=200, trim_whitespace=True)
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    medio_de_pago = serializers.ChoiceField(
+        choices=MedioDePagoChoices.choices,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    movimiento_revertido_id = serializers.IntegerField(required=False, min_value=1, allow_null=True, default=None)
+
+    def validate(self, attrs):
+        if attrs["tipo"] == TipoMovimientoChoices.CARGO and attrs["origen"] == TipoMovimientoOrigenChoices.INGRESO_MANUAL:
+            raise serializers.ValidationError({"origen": "Un cargo no puede ser un ingreso manual."})
+        if attrs["tipo"] == TipoMovimientoChoices.ABONO and attrs["origen"] == TipoMovimientoOrigenChoices.EGRESO:
+            raise serializers.ValidationError({"origen": "Un abono no puede ser un egreso."})
+        if attrs["origen"] == TipoMovimientoOrigenChoices.NOTA_CREDITO:
+            if attrs["tipo"] != TipoMovimientoChoices.CARGO or not attrs.get("movimiento_revertido_id"):
+                raise serializers.ValidationError({
+                    "movimiento_revertido_id": "La nota de crédito debe revertir un movimiento y ser un cargo."
+                })
+        elif attrs.get("movimiento_revertido_id"):
+            raise serializers.ValidationError({
+                "movimiento_revertido_id": "Solo las notas de crédito pueden revertir un movimiento."
+            })
+        return attrs
 
 
 class ImputacionSerializer(serializers.ModelSerializer):

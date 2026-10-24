@@ -210,6 +210,75 @@ class ConfiguracionFinancieraTests(APITestCase):
 		self.assertEqual(configuracion.surcharge(2, Decimal("1333.33")), Decimal("133.33"))
 
 
+class MovimientosManualesTests(APITestCase):
+	def setUp(self):
+		self.usuario = get_user_model().objects.create_user(username="caja")
+		self.client.force_authenticate(user=self.usuario)
+		self.socio = crear_socio("49000001")
+		account_for(self.socio)
+
+	def test_registra_ingreso_manual_y_actualiza_saldo(self):
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "2500.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["monto"]), Decimal("2500.00"))
+		self.assertEqual(response.data["origen_manual"], "IngresoManual")
+		self.assertEqual(account_for(self.socio).saldo, Decimal("2500.00"))
+
+	def test_registra_nota_de_credito_revirtiendo_movimiento(self):
+		original = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Transferencia duplicada",
+			"monto": "1000.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(original.status_code, 201, original.data)
+
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución de transferencia duplicada",
+			"monto": "1000.00",
+			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["movimiento_revertido"], original.data["movimiento_cuenta_id"])
+		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
+
+	def test_no_permite_revertir_otro_socio_ni_revertir_dos_veces(self):
+		original = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "100.00",
+		}, format="json")
+		otra_persona = crear_socio("49000002")
+		account_for(otra_persona)
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": otra_persona.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución inválida",
+			"monto": "100.00",
+			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("socio", response.data["detail"].lower())
+
+
 class BecaModeloTests(TestCase):
 	def setUp(self):
 		self.socio = crear_socio("50000001")
