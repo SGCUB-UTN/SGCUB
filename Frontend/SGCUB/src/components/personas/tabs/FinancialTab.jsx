@@ -71,7 +71,12 @@ export function FinancialStatement({ socio, finances }) {
         {cuotas.length === 0 ? (
           <EmptyState icon="receipt_long" title="Sin cuotas generadas" description="La cuenta corriente no tiene cuotas registradas." />
         ) : (
-          <CuotasEstadoCuentaTable cuotas={cuotas} />
+          <CuotasEstadoCuentaTable
+            cuotas={cuotas}
+            onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
+            onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+            onChanged={reloadFinances}
+          />
         )}
       </section>
 
