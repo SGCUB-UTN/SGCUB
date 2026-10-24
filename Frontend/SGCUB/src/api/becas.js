@@ -11,3 +11,13 @@ export const getBecasBySocio = async (socioId) => {
   const response = await api.get(becasEndpoint, { params: { socio_id: socioId } })
   return response.data
 }
+
+export const putBeca = async (becaId, beca) => {
+  const response = await api.put(`${becasEndpoint}${becaId}/`, beca)
+  return response.data
+}
+
+export const cancelBeca = async (becaId, authorization) => {
+  const response = await api.post(`${becasEndpoint}${becaId}/cancelar/`, authorization)
+  return response.data
+}
