@@ -77,7 +77,7 @@ function Caja() {
         title="Caja y cobros"
         actions={(
           <div className="flex flex-wrap gap-2">
-            <PrimaryButton icon="add_card" onClick={() => setMovimientoManualAbierto(true)}>Registrar movimiento</PrimaryButton>
+            <PrimaryButton icon="add_card" onClick={() => setMovimientoManualAbierto(true)}>Otros movimientos</PrimaryButton>
             <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: cargarComprobantes })}>Registrar pago</PrimaryButton>
           </div>
         )}
