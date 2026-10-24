@@ -7,6 +7,7 @@ import PagoForm from '../components/finanzas/PagoForm'
 import ComprobantesTable from '../components/finanzas/ComprobantesTable'
 import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
 import AmendPagoModal from '../components/finanzas/AmendPagoModal'
+import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
 import PageHeader from '../components/shared/PageHeader'
 import SocioPicker from '../components/finanzas/SocioPicker'
 import { PrimaryButton } from '../components/personas/tabs/parts'
@@ -27,6 +28,7 @@ function Caja() {
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
   const [errorDetalle, setErrorDetalle] = useState(null)
   const [pagoEnCorreccion, setPagoEnCorreccion] = useState(null)
+  const [movimientoManualAbierto, setMovimientoManualAbierto] = useState(false)
 
   const cargarComprobantes = useCallback(async () => {
     try {
@@ -73,7 +75,12 @@ function Caja() {
       <PageHeader
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Caja y cobros' }]}
         title="Caja y cobros"
-        actions={<PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: cargarComprobantes })}>Registrar pago</PrimaryButton>}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <PrimaryButton icon="add_card" onClick={() => setMovimientoManualAbierto(true)}>Registrar movimiento</PrimaryButton>
+            <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: cargarComprobantes })}>Registrar pago</PrimaryButton>
+          </div>
+        )}
       />
       {carga.loading && socioId && <LoadingFile text="Cargando formulario de pago..." />}
       {!carga.loading && socioId && (carga.error || !carga.socio || !carga.cuenta) && <ErrorFile message={carga.error || 'No se encontró la cuenta corriente.'} backTo="/finanzas/estado-cuenta" backText="Volver a estado de cuenta" />}
@@ -110,6 +117,13 @@ function Caja() {
           }
           setPagoEnCorreccion(null)
           setComprobanteSeleccionado(null)
+        }}
+      />
+      <MovimientoManualModal
+        opened={movimientoManualAbierto}
+        onClose={() => setMovimientoManualAbierto(false)}
+        onSuccess={() => {
+          if (socioId) getEstadoCuenta(socioId).then((cuenta) => setCarga((actual) => ({ ...actual, cuenta }))).catch(() => {})
         }}
       />
     </div>
