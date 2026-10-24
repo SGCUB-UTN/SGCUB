@@ -93,7 +93,7 @@ function DueDatesBar({ cuota }) {
   )
 }
 
-export function ConceptsCard({ cuota, onRemove }) {
+function ConceptsCard({ cuota, onRemove }) {
   const items = cuota.items ?? []
   const charges = items.filter((item) => !isAdjustment(item))
   const adjustments = items.filter(isAdjustment)

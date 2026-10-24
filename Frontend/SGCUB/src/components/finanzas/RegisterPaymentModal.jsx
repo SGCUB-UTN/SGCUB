@@ -42,14 +42,12 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
     .then((cuenta) => setLoad((current) => (current.socioId === loadedSocioId ? { ...current, cuenta } : current)))
     .catch(() => {})
 
-  const assignBenefit = (cuotaId = null) => openBenefit({
-    socioId: load.socioId,
-    cuotaId,
-    onSuccess: () => {
-      reloadAccount(load.socioId)
-      onSuccess?.()
-    },
-  })
+  const refreshAccount = () => {
+    reloadAccount(load.socioId)
+    onSuccess?.()
+  }
+
+  const assignBenefit = (cuotaId = null) => openBenefit({ socioId: load.socioId, cuotaId, onSuccess: refreshAccount })
 
   const loading = Boolean(socioId) && load.socioId !== socioId
   const loaded = Boolean(socioId) && !loading && !load.error && load.socio && load.cuenta
@@ -110,6 +108,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
           onCancel={onClose}
           onSuccess={onSuccess}
           onAssignBenefit={assignBenefit}
+          onAccountChanged={refreshAccount}
         />
       ) : (
         <PagoForm key="empty" onCancel={onClose} />
