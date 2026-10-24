@@ -121,8 +121,10 @@ function Caja() {
       />
       <MovimientoManualModal
         opened={movimientoManualAbierto}
+        initialSocio={carga.socio}
         onClose={() => setMovimientoManualAbierto(false)}
         onSuccess={() => {
+          cargarComprobantes()
           if (socioId) getEstadoCuenta(socioId).then((cuenta) => setCarga((actual) => ({ ...actual, cuenta }))).catch(() => {})
         }}
       />
