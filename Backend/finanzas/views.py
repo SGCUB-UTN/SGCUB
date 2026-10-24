@@ -35,6 +35,8 @@ from .serializers import (
 	BecaSerializer,
 	OtorgarBecaSerializer,
 	BeneficioSerializer,
+	AnulacionSerializer,
+	CUOTA_ITEM_PREFETCHES,
 	ConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
 	ComprobanteListSerializer,
@@ -61,6 +63,7 @@ from .services import (
 	SocioInactivoError,
 	apply_surcharges,
 	assign_benefit,
+	cancel_scholarship,
 	correct_payment,
 	create_cuota,
 	delete_cuota,
@@ -69,7 +72,9 @@ from .services import (
 	grant_scholarship,
 	pending_amounts,
 	register_payment,
+	remove_cuota_item,
 	reschedule_cuota,
+	update_scholarship,
 )
 
 
@@ -81,7 +86,7 @@ def _cuotas_queryset():
 	return Cuota.objects.select_related(
 		"movimiento__cuenta_corriente__socio__persona",
 		"movimiento__cuenta_corriente__socio__jugador",
-	).prefetch_related("items")
+	).prefetch_related(*CUOTA_ITEM_PREFETCHES)
 
 
 @extend_schema(tags=["Finanzas/Cuota"], request=CuotaCreateSerializer, responses=CuotaSerializer)
@@ -158,6 +163,26 @@ def cuota_item_list(request):
 @api_view(["GET"])
 def cuota_item_detail(request, pk):
 	return Response(ItemCuotaSerializer(get_object_or_404(ItemCuota, pk=pk)).data)
+
+
+def _current_user(request):
+	return request.user if request.user.is_authenticated else None
+
+
+@extend_schema(tags=["Finanzas/ItemCuota"], request=AnulacionSerializer, responses=ItemCuotaSerializer)
+@api_view(["POST"])
+def cuota_item_annul(request, pk):
+	get_object_or_404(ItemCuota, pk=pk)
+	serializer = AnulacionSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		item = remove_cuota_item(pk, data["motivo"], data["autorizado_por"], _current_user(request))
+	except (BeneficioInvalidoError, CuotaConPagosError) as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(ItemCuotaSerializer(ItemCuota.all_objects.get(pk=item.pk)).data)
 
 
 @extend_schema(tags=["Finanzas/Pago"], responses=PagoSerializer)
@@ -481,13 +506,54 @@ def socio_beca(request, socio_id):
 @extend_schema(tags=["Finanzas/Beca"], responses=BecaSerializer)
 @api_view(["GET"])
 def beca_list(request):
-	becas = Beca.objects.order_by("-fecha_aplicacion", "-pk")
+	becas = Beca.objects.prefetch_related("exclusiones").order_by("-fecha_aplicacion", "-pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
 			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
 		becas = becas.filter(socio_id=int(socio_id))
 	return Response(BecaSerializer(becas, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/Beca"], request=OtorgarBecaSerializer, responses=BecaSerializer)
+@api_view(["PUT"])
+def beca_detail(request, pk):
+	get_object_or_404(Beca, pk=pk)
+	serializer = OtorgarBecaSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		beca = update_scholarship(
+			pk,
+			data["modalidad"],
+			data["valor"],
+			data["fecha_aplicacion"],
+			data["fecha_fin"],
+			data["motivo"],
+			data["autorizado_por"],
+			_current_user(request),
+		)
+	except BeneficioInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(BecaSerializer(beca).data)
+
+
+@extend_schema(tags=["Finanzas/Beca"], request=AnulacionSerializer, responses=BecaSerializer)
+@api_view(["POST"])
+def beca_cancel(request, pk):
+	get_object_or_404(Beca, pk=pk)
+	serializer = AnulacionSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		beca = cancel_scholarship(pk, data["motivo"], data["autorizado_por"], _current_user(request))
+	except BeneficioInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(BecaSerializer(beca).data)
 
 MONTHS_ES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
