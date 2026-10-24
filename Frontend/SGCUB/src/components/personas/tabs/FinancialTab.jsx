@@ -49,7 +49,7 @@ export function FinancialStatement({ socio, finances }) {
 
   return (
     <section className="flex flex-col gap-6" aria-label={title}>
-      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." />
+      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." divider={false} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-10">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />

@@ -15,9 +15,9 @@ export function RecordSection({ title, color = 'bg-primary-container', extra, ch
   )
 }
 
-export function TabHeader({ title, description, actions }) {
+export function TabHeader({ title, description, actions, divider = true }) {
   return (
-    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-surface-container ">
+    <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${divider ? 'pb-4 border-b border-surface-container' : 'mb-4'}`}>
       <div className="flex flex-col gap-1 ">
         <h2 className="flex items-baseline gap-2 mt-2 text-2xl text-on-surface font-bold tracking-tight">
           <span className="w-1 h-[0.7em] shrink-0 bg-primary-container rounded" aria-hidden="true" />
