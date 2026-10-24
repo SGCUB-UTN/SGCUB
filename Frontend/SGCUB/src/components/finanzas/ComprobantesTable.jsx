@@ -74,14 +74,16 @@ function ComprobantesTable({
   const [typeFilter, setTypeFilter] = useState(ALL)
   const [month, setMonth] = useState(ALL)
 
-  const creditNoteByReversedId = useMemo(() => {
-    const map = new Map()
+  const { movementById, creditNoteByReversedId } = useMemo(() => {
+    const byId = new Map()
+    const byReversed = new Map()
     movimientosManuales.forEach((movement) => {
+      byId.set(movement.movimiento_cuenta_id, movement)
       if (movement.movimiento_revertido) {
-        map.set(movement.movimiento_revertido, movement)
+        byReversed.set(movement.movimiento_revertido, movement)
       }
     })
-    return map
+    return { movementById: byId, creditNoteByReversedId: byReversed }
   }, [movimientosManuales])
 
   const unifiedItems = useMemo(() => {
@@ -97,12 +99,12 @@ function ComprobantesTable({
         badgeLabel: isAnulado ? 'Comprobante anulado' : 'Comprobante de cuota',
         badgeClass: BADGE_STYLES[filterCode],
         date: comprobante.fecha_emision,
-        sortDate: `${comprobante.fecha_emision || ''}-${String(comprobante.comprobante_id).padStart(8, '0')}`,
+        sortDate: `${comprobante.fecha_emision || ''}-${String(comprobante.numero).padStart(8, '0')}`,
         sortNumber: comprobante.numero,
         socio: comprobante.socio,
         socioLabel: socioName(comprobante.socio),
         concept: 'Cobro de cuota societaria',
-        subConcept: `Pago #${comprobante.pago} · Comprobante #${comprobante.numero}`,
+        subConcept: `Recibo X #${comprobante.numero} · Pago #${comprobante.pago}`,
         paymentMethod: 'Ver comprobante',
         amount: Number(comprobante.monto_total ?? 0),
         isPositive: true,
@@ -113,16 +115,23 @@ function ComprobantesTable({
     const manualItems = movimientosManuales.map((movement) => {
       const isAbono = movement.tipo_movimiento === 'Abono'
       const filterCode = movement.origen_manual || (isAbono ? 'IngresoManual' : 'Egreso')
+      const receiptNumber = movement.numero_comprobante ?? movement.movimiento_cuenta_id
+      const codePrefix = filterCode === 'NotaCredito' ? 'NC-X' : filterCode === 'Egreso' ? 'EGR-X' : 'X'
+      const reversedOrigin = movement.movimiento_revertido
+        ? movementById.get(movement.movimiento_revertido)
+        : null
       const reversedBy = creditNoteByReversedId.get(movement.movimiento_cuenta_id)
       const subParts = []
       if (movement.movimiento_revertido) {
-        subParts.push(`Revierte al ingreso #${movement.movimiento_revertido}`)
+        const origNum = reversedOrigin?.numero_comprobante ?? movement.movimiento_revertido
+        subParts.push(`Revierte al comprobante X #${origNum}`)
       }
       if (reversedBy) {
-        subParts.push(`Revertido por Nota de crédito #${reversedBy.movimiento_cuenta_id}`)
+        const ncNum = reversedBy.numero_comprobante ?? reversedBy.movimiento_cuenta_id
+        subParts.push(`Revertido por Nota de crédito NC-X #${ncNum}`)
       }
       if (!subParts.length) {
-        subParts.push(`Movimiento de cuenta #${movement.movimiento_cuenta_id}`)
+        subParts.push(`Comprobante ${codePrefix} #${receiptNumber}`)
       }
 
       const dateOnly = movement.fecha ? String(movement.fecha).slice(0, 10) : ''
@@ -131,12 +140,12 @@ function ComprobantesTable({
         kind: 'manual',
         raw: movement,
         filterCode,
-        refCode: `Mov. #${movement.movimiento_cuenta_id}`,
+        refCode: `#${receiptNumber}`,
         badgeLabel: movement.origen_manual_nombre || movement.origen_manual || 'Movimiento',
         badgeClass: BADGE_STYLES[filterCode] || BADGE_STYLES.IngresoManual,
         date: movement.fecha,
-        sortDate: `${dateOnly}-${String(movement.movimiento_cuenta_id).padStart(8, '0')}`,
-        sortNumber: movement.movimiento_cuenta_id,
+        sortDate: `${dateOnly}-${String(receiptNumber).padStart(8, '0')}`,
+        sortNumber: receiptNumber,
         socio: movement.socio,
         socioLabel: socioName(movement.socio),
         concept: movement.concepto || 'Movimiento manual',
@@ -149,7 +158,7 @@ function ComprobantesTable({
     })
 
     return [...receiptItems, ...manualItems]
-  }, [comprobantes, movimientosManuales, creditNoteByReversedId])
+  }, [comprobantes, movimientosManuales, movementById, creditNoteByReversedId])
 
   const availableMonths = useMemo(
     () => periodOptions(unifiedItems, (item) => periodOf(item.date)),

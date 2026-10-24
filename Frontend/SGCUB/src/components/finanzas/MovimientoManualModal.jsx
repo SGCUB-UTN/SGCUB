@@ -87,12 +87,14 @@ const PAYMENT_METHODS = [
   { value: 'BilleteraVirtual', label: 'Billetera virtual', icon: 'account_balance_wallet' },
 ]
 
+const movementReceiptNumber = (movement) => movement?.numero_comprobante ?? movement?.movimiento_cuenta_id
+
 const buildEmptyForm = (socio = null, reversedMovement = null) => ({
   socio: reversedMovement?.socio ?? socio,
   operation: reversedMovement ? 'NotaCredito' : 'IngresoManual',
   conceptType: reversedMovement ? 'Devolución total de operación' : '',
   detail: reversedMovement
-    ? `Ref. #${reversedMovement.movimiento_cuenta_id} (${reversedMovement.concepto})`.slice(0, DETAIL_MAX_LENGTH)
+    ? `Ref. Recibo X #${movementReceiptNumber(reversedMovement)} (${reversedMovement.concepto})`.slice(0, DETAIL_MAX_LENGTH)
     : '',
   amount: reversedMovement ? String(reversedMovement.monto) : '',
   paymentMethod: 'Efectivo',
@@ -164,7 +166,7 @@ function MovementRow({ movement, selected, onSelect }) {
           <span className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-base text-on-surface truncate">{movement.concepto}</span>
             <span className="px-1.5 py-0.5 rounded bg-surface-container text-xs font-medium text-on-surface-variant">
-              #{movement.movimiento_cuenta_id}
+              X #{movementReceiptNumber(movement)}
             </span>
           </span>
           <span className="block text-sm text-on-surface-variant">
@@ -296,7 +298,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
       reversedMovement: movement,
       amount: String(movement.monto),
       conceptType: current.conceptType || 'Devolución total de operación',
-      detail: current.detail.trim() ? current.detail : `Ref. #${movement.movimiento_cuenta_id} (${movement.concepto})`.slice(0, DETAIL_MAX_LENGTH),
+      detail: current.detail.trim() ? current.detail : `Ref. Recibo X #${movementReceiptNumber(movement)} (${movement.concepto})`.slice(0, DETAIL_MAX_LENGTH),
     }))
     setSubmitError('')
   }
@@ -541,7 +543,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                     {form.reversedMovement ? (
                       <>
                         <p className="text-sm font-semibold text-on-surface truncate">
-                          #{form.reversedMovement.movimiento_cuenta_id} · {form.reversedMovement.concepto}
+                          X #{movementReceiptNumber(form.reversedMovement)} · {form.reversedMovement.concepto}
                         </p>
                         <p className="text-xs text-on-surface-variant">
                           Registrado el {formatDate(form.reversedMovement.fecha)} por {formatAmount(maxCredit)}
@@ -658,7 +660,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                   <>
                     <SummaryLine
                       label="Ingreso original"
-                      value={form.reversedMovement ? `#${form.reversedMovement.movimiento_cuenta_id}` : '—'}
+                      value={form.reversedMovement ? `X #${movementReceiptNumber(form.reversedMovement)}` : '—'}
                     />
                     <SummaryLine
                       label="Importe original"
