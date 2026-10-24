@@ -81,7 +81,9 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
           Volver
         </button>
         <button type="submit" disabled={saving} className={DANGER_BUTTON_CLASS}>
-          <span className="material-symbols-outlined text-base" aria-hidden="true">{saving ? 'progress_activity' : confirmIcon}</span>
+          {(saving || confirmIcon) && (
+            <span className="material-symbols-outlined text-base" aria-hidden="true">{saving ? 'progress_activity' : confirmIcon}</span>
+          )}
           <span>{saving ? 'Guardando...' : confirmLabel}</span>
         </button>
       </div>

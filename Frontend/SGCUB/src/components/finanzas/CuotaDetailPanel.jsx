@@ -122,7 +122,7 @@ function ConceptsCard({ cuota, onRemove }) {
                   value={`${tone.sign}${formatAmount(Number(item.monto ?? 0))}`}
                   className={tone.className}
                   action={blocker === null ? null : (
-                    <RemoveItemButton label={`Quitar ${itemLabel(item)}`} blocker={blocker} onClick={() => onRemove(item)} />
+                    <RemoveItemButton label={`Remover ${itemLabel(item)}`} blocker={blocker} onClick={() => onRemove(item)} />
                   )}
                 />
               )

@@ -5,10 +5,24 @@ import usePagination from '../../hooks/usePagination'
 import { formatAmount } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import { isPaid } from './accountStatement'
-import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel, cuotaStateShortLabel, isOverdue } from './cuotaStates'
+import { CUOTA_STATES, cuotaState, cuotaStateBadgeClass, cuotaStateLabel, isOverdue } from './cuotaStates'
 import CuotaDetailPanel from './CuotaDetailPanel'
 
 const COLUMN_COUNT = 4
+
+const OVERDUE_BADGE_LABELS = {
+  [CUOTA_STATES.VENCIDA_1]: '1er venc.',
+  [CUOTA_STATES.VENCIDA_2]: '2do venc.',
+}
+
+const PAID_BADGE_CLASS = 'bg-gray-100 text-gray-600 border-gray-200'
+
+const rowBadge = (cuota) => {
+  if (isPaid(cuota)) return { label: 'Paga', title: cuotaStateLabel(CUOTA_STATES.PAGA), className: PAID_BADGE_CLASS }
+  if (!isOverdue(cuota)) return null
+  const state = cuotaState(cuota)
+  return { label: OVERDUE_BADGE_LABELS[state], title: cuotaStateLabel(state), className: cuotaStateBadgeClass(state) }
+}
 
 const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.saldo_pendiente}`
 
@@ -37,7 +51,7 @@ function SectionRow({ title, count }) {
 }
 
 function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged }) {
-  const state = cuotaState(cuota)
+  const badge = rowBadge(cuota)
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -59,13 +73,15 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
         </td>
         <td className="py-3 px-4">
           <div className="flex items-center gap-3">
-            <span
-              className={`inline-flex justify-center min-w-20 px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(state)}`}
-              title={cuotaStateLabel(state)}
-            >
-              {cuotaStateShortLabel(state)}
-            </span>
             <span className="font-medium text-on-surface text-base">{cuota.periodo ? formatPeriod(cuota.periodo) : '—'}</span>
+            {badge && (
+              <span
+                className={`inline-flex justify-center min-w-20 px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${badge.className}`}
+                title={badge.title}
+              >
+                {badge.label}
+              </span>
+            )}
             {isPartiallyPaid(cuota) && <span className="text-sm text-amber-700">Pago parcial</span>}
           </div>
         </td>
