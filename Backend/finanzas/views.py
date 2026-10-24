@@ -26,6 +26,7 @@ from .models import (
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
 	MedioDePagoChoices,
+	TipoMovimientoChoices,
 )
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
@@ -318,16 +319,36 @@ def estado_cuenta_socio(request, socio_id):
 	return Response(CuentaCorrienteEstadoSerializer(cuenta).data)
 
 
-@extend_schema(tags=["Finanzas/Resumen"])
-@api_view(["GET"])
-def resumen_financiero(request):
-	reporte = delinquency_report("activos")
-	pagos_por_medio = {
+def _totales_por_medio_de_pago():
+	totales = {
 		item["medio_de_pago"]: item["total"]
 		for item in ItemPago.objects.filter(
 			pago__estado_pago=EstadoPagoChoices.ACREDITADO,
 		).values("medio_de_pago").annotate(total=Sum("monto"))
 	}
+	movimientos_manuales = (
+		MovimientoCuenta.objects.filter(origen_manual__isnull=False)
+		.select_related("movimiento_revertido")
+	)
+	for mov in movimientos_manuales:
+		medio = mov.medio_de_pago or (
+			mov.movimiento_revertido.medio_de_pago if mov.movimiento_revertido else None
+		)
+		if not medio:
+			continue
+		actual = totales.get(medio, Decimal("0.00"))
+		if mov.tipo_movimiento == TipoMovimientoChoices.ABONO:
+			totales[medio] = actual + mov.monto
+		else:
+			totales[medio] = actual - mov.monto
+	return totales
+
+
+@extend_schema(tags=["Finanzas/Resumen"])
+@api_view(["GET"])
+def resumen_financiero(request):
+	reporte = delinquency_report("activos")
+	pagos_por_medio = _totales_por_medio_de_pago()
 	filas_morosas = reporte["filas"]
 
 	return Response({
@@ -384,12 +405,16 @@ def delinquency_report_pdf(request):
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)
 @api_view(["GET"])
 def movimiento_cuenta_list(request):
-	movements = MovimientoCuenta.objects.order_by("pk")
+	movements = MovimientoCuenta.objects.select_related(
+		"cuenta_corriente__socio__persona",
+	).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
 			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
 		movements = movements.filter(cuenta_corriente__socio_id=int(socio_id))
+	if request.query_params.get("solo_manuales") == "true":
+		movements = movements.filter(origen_manual__isnull=False)
 	return Response(MovimientoCuentaSerializer(movements, many=True).data)
 
 
@@ -548,16 +573,20 @@ def _build_financial_report(period_date):
         ).aggregate(total=Sum("monto_total"))["total"]
         or Decimal("0.00")
     )
+    movimientos_periodo = MovimientoCuenta.objects.filter(
+        origen_manual__isnull=False,
+        fecha__year=period_date.year,
+        fecha__month=period_date.month,
+    )
+    total_recaudado_periodo += sum(
+        (m.monto if m.tipo_movimiento == TipoMovimientoChoices.ABONO else -m.monto for m in movimientos_periodo),
+        Decimal("0.00"),
+    )
 
     reporte_mora = delinquency_report("activos")
     filas_mora = reporte_mora["filas"]
 
-    pagos_por_medio = {
-        item["medio_de_pago"]: item["total"]
-        for item in ItemPago.objects.filter(
-            pago__estado_pago=EstadoPagoChoices.ACREDITADO,
-        ).values("medio_de_pago").annotate(total=Sum("monto"))
-    }
+    pagos_por_medio = _totales_por_medio_de_pago()
 
     unpaid_cuotas = list(
         Cuota.objects.exclude(estado_cuota=EstadoCuotaChoices.PAGA)

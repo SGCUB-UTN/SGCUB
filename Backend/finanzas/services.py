@@ -81,6 +81,8 @@ def create_manual_movement(
             raise PagoInvalidoError("El movimiento a revertir no pertenece al socio indicado.")
         if hasattr(reversed_movement, "reversion"):
             raise PagoInvalidoError("El movimiento indicado ya fue revertido.")
+        if payment_method is None:
+            payment_method = reversed_movement.medio_de_pago
 
     movement = MovimientoCuenta.objects.create(
         cuenta_corriente=account,

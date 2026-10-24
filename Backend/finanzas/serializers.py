@@ -400,16 +400,21 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
     tipo_movimiento_nombre = serializers.CharField(source="get_tipo_movimiento_display", read_only=True)
     origen_manual_nombre = serializers.CharField(source="get_origen_manual_display", read_only=True)
     medio_de_pago_nombre = serializers.CharField(source="get_medio_de_pago_display", read_only=True)
+    socio = serializers.SerializerMethodField()
 
     class Meta:
         model = MovimientoCuenta
         fields = [
-            "movimiento_cuenta_id", "cuenta_corriente", "pago", "cuota",
+            "movimiento_cuenta_id", "cuenta_corriente", "socio", "pago", "cuota",
             "movimiento_revertido", "tipo_movimiento", "tipo_movimiento_nombre",
             "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
             "origen_manual", "origen_manual_nombre", "usuario",
         ]
         read_only_fields = ["movimiento_cuenta_id"]
+
+    def get_socio(self, obj):
+        account = getattr(obj, "cuenta_corriente", None)
+        return socio_data(account.socio) if account and getattr(account, "socio", None) else None
 
 
 class MovimientoManualSerializer(serializers.Serializer):

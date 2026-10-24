@@ -278,6 +278,40 @@ class MovimientosManualesTests(APITestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("socio", response.data["detail"].lower())
 
+	def test_movimientos_manuales_impactan_en_resumen_financiero_por_medio(self):
+		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "3000.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(ingreso.status_code, 201)
+
+		self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución parcial",
+			"monto": "500.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "Egreso",
+			"concepto": "Reintegro de gastos",
+			"monto": "200.00",
+			"medio_de_pago": "Efectivo",
+		}, format="json")
+
+		resumen = self.client.get(reverse("resumen-financiero"))
+		self.assertEqual(resumen.status_code, 200)
+		self.assertEqual(resumen.data["transferencia_bancaria"], Decimal("2500.00"))
+		self.assertEqual(resumen.data["pago_efectivo"], Decimal("-200.00"))
+
 
 class BecaModeloTests(TestCase):
 	def setUp(self):
