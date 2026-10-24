@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'documental',
     'comunicaciones',
     'django_q',
+    'automatizaciones',
     'drf_spectacular',
     'usuarios',
     'django_cleanup.apps.CleanupConfig',
