@@ -1,22 +1,54 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { BenefitsTable } from '../../finanzas/BenefitTables'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
+import MovimientoManualDetailModal from '../../finanzas/MovimientoManualDetailModal'
+import MovimientoManualModal from '../../finanzas/MovimientoManualModal'
 import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
-import { formatAmount, formatNumber } from '../format'
+import { formatAmount, formatDate, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
+import DataTable from '../../shared/DataTable'
 import StatCard from '../../shared/StatCard'
-import { EmptyState, TabHeader } from './parts'
+import { EmptyState, SecondaryButton, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
+
+const TABLE_CLASS = 'border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm'
+const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
+
+const MOVEMENT_BADGES = {
+  IngresoManual: {
+    label: 'Ingreso manual',
+    prefix: 'X',
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  Egreso: {
+    label: 'Egreso de caja',
+    prefix: 'EGR-X',
+    className: 'bg-error/10 text-error border-error/20',
+  },
+  NotaCredito: {
+    label: 'Nota de crédito',
+    prefix: 'NC-X',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+}
 
 // Renders finances already loaded with useSocioFinances, so the page can share them (e.g. for the tab badge)
 export function FinancialStatement({ socio, finances }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
   const socioId = socio.socio_id
-  const { loading, error, account, becas, reload: reloadFinances } = finances
+  const { loading, error, account, becas, movimientos, reload: reloadFinances } = finances
   const cuotas = useMemo(() => account?.cuotas ?? [], [account])
+  const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null)
+  const [modalManualAbierto, setModalManualAbierto] = useState(false)
+  const [ingresoARevertir, setIngresoARevertir] = useState(null)
+
+  const movimientosOrdenados = useMemo(
+    () => [...(movimientos ?? [])].sort((a, b) => b.movimiento_cuenta_id - a.movimiento_cuenta_id),
+    [movimientos],
+  )
 
   const scrollToSection = (id) => {
     const heading = document.getElementById(id)
@@ -28,11 +60,31 @@ export function FinancialStatement({ socio, finances }) {
     })
   }
 
-  const summary = useMemo(() => ({
-    pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
-    debt: Number(account?.total_adeudado ?? 0),
-    activeScholarships: becas ? becas.filter((beca) => scholarshipState(beca) === 'active').length : null,
-  }), [account, cuotas, becas])
+  const summary = useMemo(() => {
+    const manualList = movimientos ?? []
+    const excedenteIds = new Set(
+      manualList
+        .filter((m) => m.origen_manual === 'IngresoManual' && (m.concepto || '').startsWith('Excedente de transferencia / Saldo a favor'))
+        .map((m) => m.movimiento_cuenta_id),
+    )
+    const computedCredit = manualList.reduce((acc, m) => {
+      const amount = Number(m.monto ?? 0)
+      if (excedenteIds.has(m.movimiento_cuenta_id)) return acc + amount
+      if (m.origen_manual === 'NotaCredito' && excedenteIds.has(m.movimiento_revertido)) return acc - amount
+      if (m.origen_manual === 'Egreso' && (m.concepto || '').startsWith('Devolución de saldo / Excedente')) return acc - amount
+      return acc
+    }, 0)
+    const creditBalance = account?.saldo_a_favor != null
+      ? Number(account.saldo_a_favor)
+      : Math.max(0, computedCredit)
+
+    return {
+      pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
+      debt: Number(account?.total_adeudado ?? 0),
+      creditBalance,
+      activeScholarships: becas ? becas.filter((beca) => scholarshipState(beca) === 'active').length : null,
+    }
+  }, [account, cuotas, becas, movimientos])
 
   if (loading) {
     return <div className="py-16 flex flex-col items-center gap-3 text-on-surface-variant"><span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span><p>Cargando estado de cuenta...</p></div>
@@ -50,11 +102,12 @@ export function FinancialStatement({ socio, finances }) {
 
   return (
     <section className="flex flex-col gap-6" aria-label={title}>
-      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." />
+      <TabHeader title={title} description="Detalle de cuotas, pagos, otros movimientos y beneficios del socio." />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-6">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
-        <StatCard label="Saldo adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'neutral'} />
+        <StatCard label="Saldo adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
+        <StatCard label="Saldo a favor" value={formatAmount(summary.creditBalance)} icon="account_balance_wallet" tone={summary.creditBalance > 0 ? 'positive' : 'neutral'} onClick={() => scrollToSection('movimientos-manuales-title')} />
         <StatCard label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" tone="neutral" onClick={() => scrollToSection('beneficios-title')} />
       </div>
 
@@ -62,6 +115,15 @@ export function FinancialStatement({ socio, finances }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 id="cuotas-title" tabIndex="-1" className="text-lg font-bold text-on-surface scroll-mt-6 focus:outline-none">Cuotas</h3>
           <div className="flex flex-col sm:flex-row gap-2 [&>button]:justify-center">
+            <SecondaryButton
+              icon="add_card"
+              onClick={() => {
+                setIngresoARevertir(null)
+                setModalManualAbierto(true)
+              }}
+            >
+              Otro movimiento
+            </SecondaryButton>
             <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
               Beca o descuento
             </BenefitButton>
@@ -75,7 +137,98 @@ export function FinancialStatement({ socio, finances }) {
         )}
       </section>
 
+      <section className="flex flex-col gap-3" aria-labelledby="movimientos-manuales-title">
+        <h3 id="movimientos-manuales-title" tabIndex="-1" className="text-lg font-bold text-on-surface py-2 scroll-mt-6 focus:outline-none">
+          Otros movimientos de cuenta corriente
+        </h3>
+        {movimientos === null && (
+          <p className="text-sm text-error" role="alert">No se pudieron cargar los movimientos manuales del socio.</p>
+        )}
+        {movimientosOrdenados.length ? (
+          <DataTable
+            className={TABLE_CLASS}
+            tableClassName="min-w-[760px]"
+            headers={(
+              <>
+                <th className="py-3 px-4 w-[16%]" scope="col">Comprobante</th>
+                <th className="py-3 px-4 w-[16%]" scope="col">Tipo</th>
+                <th className="py-3 px-4 w-[14%]" scope="col">Fecha</th>
+                <th className="py-3 px-4" scope="col">Concepto</th>
+                <th className="py-3 px-4 w-[16%]" scope="col">Medio</th>
+                <th className="py-3 px-4 w-[15%] text-right" scope="col">Monto</th>
+              </>
+            )}
+          >
+            {movimientosOrdenados.map((mov) => {
+              const isAbono = mov.tipo_movimiento === 'Abono'
+              const meta = MOVEMENT_BADGES[mov.origen_manual] ?? MOVEMENT_BADGES.IngresoManual
+              const receiptNum = mov.numero_comprobante ?? mov.movimiento_cuenta_id
+              return (
+                <tr
+                  key={mov.movimiento_cuenta_id}
+                  tabIndex={0}
+                  role="button"
+                  onClick={() => setMovimientoSeleccionado(mov)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setMovimientoSeleccionado(mov)
+                    }
+                  }}
+                  className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+                >
+                  <td className="py-3 px-4 font-bold text-primary whitespace-nowrap tabular-nums">
+                    {meta.prefix} #{receiptNum}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`${BADGE_CLASS} ${meta.className}`}>{meta.label}</span>
+                  </td>
+                  <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(mov.fecha)}</td>
+                  <td className="py-3 px-4 text-on-surface font-medium break-words">{mov.concepto || '—'}</td>
+                  <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">
+                    {mov.medio_de_pago_nombre || mov.medio_de_pago || 'Cuenta corriente'}
+                  </td>
+                  <td className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${isAbono ? 'text-emerald-700' : 'text-error'}`}>
+                    {isAbono ? '+ ' : '− '}{formatAmount(mov.monto)}
+                  </td>
+                </tr>
+              )
+            })}
+          </DataTable>
+        ) : (
+          movimientos !== null && (
+            <p className="text-base text-on-surface-variant py-6 text-center border border-dashed border-outline-variant/40 rounded-xl">
+              Sin otros movimientos registrados (ingresos por excedentes, donaciones, egresos o notas de crédito).
+            </p>
+          )
+        )}
+      </section>
+
       <BenefitsTable becas={becas} cuotas={cuotas} />
+
+      <MovimientoManualDetailModal
+        movimiento={movimientoSeleccionado}
+        movimientos={movimientosOrdenados}
+        opened={Boolean(movimientoSeleccionado)}
+        onClose={() => setMovimientoSeleccionado(null)}
+        onSelectMovimiento={setMovimientoSeleccionado}
+        onIssueCreditNote={(mov) => {
+          setMovimientoSeleccionado(null)
+          setIngresoARevertir(mov)
+          setModalManualAbierto(true)
+        }}
+      />
+
+      <MovimientoManualModal
+        opened={modalManualAbierto}
+        initialSocio={socio}
+        initialReversedMovement={ingresoARevertir}
+        onClose={() => {
+          setModalManualAbierto(false)
+          setIngresoARevertir(null)
+        }}
+        onSuccess={reloadFinances}
+      />
     </section>
   )
 }
