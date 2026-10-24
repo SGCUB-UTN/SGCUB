@@ -320,6 +320,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     cuotas_impagas = serializers.SerializerMethodField()
     total_adeudado = serializers.SerializerMethodField()
     total_mora = serializers.SerializerMethodField()
+    saldo_a_favor = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCorriente
@@ -327,6 +328,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             "cuenta_corriente_id",
             "socio",
             "saldo",
+            "saldo_a_favor",
             "estado_cuenta_corriente",
             "cuotas",
             "cuotas_generadas",
@@ -383,6 +385,38 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
     def get_total_adeudado(self, obj):
         return sum(self._account_pending(obj).values(), Decimal("0.00"))
+
+    def get_saldo_a_favor(self, obj):
+        manuales = list(obj.movimientos.filter(origen_manual__isnull=False))
+        excedente_ids = {
+            m.pk
+            for m in manuales
+            if m.origen_manual == TipoMovimientoOrigenChoices.INGRESO_MANUAL
+            and (m.concepto or "").startswith("Excedente de transferencia / Saldo a favor")
+        }
+        ingresos = sum(
+            (m.monto for m in manuales if m.pk in excedente_ids),
+            Decimal("0.00"),
+        )
+        notas_credito = sum(
+            (
+                m.monto
+                for m in manuales
+                if m.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
+                and m.movimiento_revertido_id in excedente_ids
+            ),
+            Decimal("0.00"),
+        )
+        devoluciones = sum(
+            (
+                m.monto
+                for m in manuales
+                if m.origen_manual == TipoMovimientoOrigenChoices.EGRESO
+                and (m.concepto or "").startswith("Devolución de saldo / Excedente")
+            ),
+            Decimal("0.00"),
+        )
+        return max(Decimal("0.00"), ingresos - notas_credito - devoluciones)
 
     def get_total_mora(self, obj):
         return sum(

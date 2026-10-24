@@ -214,8 +214,9 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
     return movements
       .filter((movement) => (
         movement.tipo_movimiento === 'Abono'
+        && movement.origen_manual === 'IngresoManual'
+        && !movement.pago
         && !movement.movimiento_revertido
-        && movement.origen_manual !== 'NotaCredito'
         && !reversedIds.has(movement.movimiento_cuenta_id)
       ))
       .sort((a, b) => b.movimiento_cuenta_id - a.movimiento_cuenta_id)
@@ -691,7 +692,9 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                 />
                 <p className="text-sm text-on-surface-variant">
                   {operation.type === 'Abono'
-                    ? 'Aumenta el saldo a favor en la cuenta corriente del socio.'
+                    ? form.conceptType === 'Excedente de transferencia / Saldo a favor'
+                      ? 'Acredita saldo a favor en la cuenta corriente del socio.'
+                      : 'Registra el ingreso en caja asociado a la cuenta del socio.'
                     : isCreditNote
                       ? 'Descuenta el importe devuelto sobre el ingreso original.'
                       : 'Registra el cargo correspondiente en la cuenta corriente.'}

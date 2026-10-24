@@ -278,6 +278,29 @@ class MovimientosManualesTests(APITestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("socio", response.data["detail"].lower())
 
+	def test_no_permite_emitir_nota_de_credito_sobre_pago_de_cuota(self):
+		cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "1000.00")
+		pago_response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [cuota.pk],
+			"monto_total": "1000.00",
+			"medios": [{"medio_de_pago": "Efectivo", "monto": "1000.00"}],
+		}, format="json")
+		self.assertEqual(pago_response.status_code, 201)
+		movimiento_pago = MovimientoCuenta.objects.get(pago_id=pago_response.data["pago"]["pago_id"])
+
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Intento de revertir cuota con NC",
+			"monto": "1000.00",
+			"movimiento_revertido_id": movimiento_pago.pk,
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("ingresos manuales", response.data["detail"].lower())
+
 	def test_movimientos_manuales_impactan_en_resumen_financiero_por_medio(self):
 		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
 			"socio_id": self.socio.pk,

@@ -79,8 +79,19 @@ def create_manual_movement(
         ).first()
         if reversed_movement is None:
             raise PagoInvalidoError("El movimiento a revertir no pertenece al socio indicado.")
+        if (
+            reversed_movement.origen_manual != TipoMovimientoOrigenChoices.INGRESO_MANUAL
+            or reversed_movement.tipo_movimiento != TipoMovimientoChoices.ABONO
+            or reversed_movement.pago_id is not None
+        ):
+            raise PagoInvalidoError(
+                "Solo se pueden emitir notas de crédito sobre ingresos manuales. "
+                "Para cobros de cuotas utilice la opción de revisar y corregir pago."
+            )
         if hasattr(reversed_movement, "reversion"):
             raise PagoInvalidoError("El movimiento indicado ya fue revertido.")
+        if amount > reversed_movement.monto:
+            raise PagoInvalidoError("El monto de la nota de crédito no puede superar el ingreso original.")
         if payment_method is None:
             payment_method = reversed_movement.medio_de_pago
 
