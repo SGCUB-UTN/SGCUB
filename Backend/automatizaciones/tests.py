@@ -8,7 +8,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django_q.conf import Conf
-from django_q.models import Schedule
+from django_q.models import Schedule, Task
 from django_q.scheduler import scheduler
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -49,6 +49,37 @@ class AutomatizacionesApiTests(APITestCase):
         schedule = next(item for item in response.data if item["id"] == self.schedule.pk)
         self.assertTrue(schedule["is_active"])
         self.assertEqual(schedule["name"], self.schedule.name)
+
+    def test_lista_ejecuciones_reales_y_pagina_de_cinco_registros(self):
+        self.client.force_authenticate(self.administrador)
+        now = timezone.now()
+        for index in range(6):
+            Task.objects.create(
+                id=f"{index:032x}",
+                name=f"Ejecución {index}",
+                func=self.schedule.func,
+                started=now,
+                stopped=now + timedelta(seconds=index),
+                success=index % 2 == 0,
+            )
+
+        primera_pagina = self.client.get(reverse("automatizacion-ejecuciones"), {"page": 1})
+        segunda_pagina = self.client.get(reverse("automatizacion-ejecuciones"), {"page": 2})
+
+        self.assertEqual(primera_pagina.status_code, status.HTTP_200_OK)
+        self.assertEqual(primera_pagina.data["count"], 6)
+        self.assertEqual(len(primera_pagina.data["results"]), 5)
+        self.assertEqual(primera_pagina.data["results"][0]["automation"], self.schedule.name)
+        self.assertFalse(primera_pagina.data["results"][0]["success"])
+        self.assertEqual(len(segunda_pagina.data["results"]), 1)
+        self.assertEqual(segunda_pagina.data["page"], 2)
+
+    def test_ejecuciones_rechaza_un_numero_de_pagina_invalido(self):
+        self.client.force_authenticate(self.administrador)
+
+        response = self.client.get(reverse("automatizacion-ejecuciones"), {"page": "0"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_desactivar_y_activar_persiste_el_estado_en_django_q(self):
         self.client.force_authenticate(self.administrador)

@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
-from django_q.models import Schedule
+from django.core.paginator import Paginator
+from django_q.models import Schedule, Task
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -63,3 +64,40 @@ def automatizacion_detail(request, pk):
     schedule.repeats = -1 if request.data["is_active"] else 0
     schedule.save(update_fields=["repeats"])
     return Response(_serialize_schedule(schedule))
+
+
+@extend_schema(tags=["Automatizaciones"])
+@api_view(["GET"])
+@permission_classes([CanManageAutomatizaciones])
+def automatizacion_execution_list(request):
+    schedules = list(Schedule.objects.order_by("pk").values("name", "func"))
+    schedule_names = {}
+    for schedule in schedules:
+        schedule_names.setdefault(schedule["func"], schedule["name"] or schedule["func"])
+
+    page_number = request.query_params.get("page", "1")
+    if not page_number.isdecimal() or int(page_number) < 1:
+        return Response(
+            {"page": ["Ingresá un número de página mayor que cero."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    executions = Task.objects.filter(func__in=schedule_names).order_by("-stopped", "-id")
+    page = Paginator(executions, 5).get_page(page_number)
+    results = [
+        {
+            "id": task.pk,
+            "executed_at": task.stopped,
+            "automation": schedule_names[task.func],
+            "scope": task.func.split(".", 1)[0].replace("_", " ").capitalize(),
+            "success": task.success,
+        }
+        for task in page.object_list
+    ]
+    return Response({
+        "results": results,
+        "count": page.paginator.count,
+        "page": page.number,
+        "page_size": 5,
+        "total_pages": page.paginator.num_pages,
+    })

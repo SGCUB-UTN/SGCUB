@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PERMISSIONS } from '../auth/permissions'
 import { useAuth } from '../auth/useAuth'
-import { getAutomatizaciones, updateAutomatizacionStatus } from '../api/automatizaciones'
+import {
+  getAutomatizacionExecutions,
+  getAutomatizaciones,
+  updateAutomatizacionStatus,
+} from '../api/automatizaciones'
 import PageHeader from '../components/shared/PageHeader'
 
 const FREQUENCIES = {
@@ -94,6 +98,28 @@ const formatDate = (value) => {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+const formatExecutionTime = (value) => {
+  const date = new Date(value)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  const formatTime = new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date)
+  const dateKey = (item) => `${item.getFullYear()}-${item.getMonth()}-${item.getDate()}`
+
+  if (dateKey(date) === dateKey(today)) return `Hoy, ${formatTime} hs`
+  if (dateKey(date) === dateKey(yesterday)) return `Ayer, ${formatTime} hs`
+
+  const dateLabel = new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date)
+  return `${dateLabel}, ${formatTime} hs`
 }
 
 const getTimeUntil = (value) => {
@@ -213,6 +239,16 @@ export default function Automatizaciones() {
   const [isLoading, setIsLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState(null)
   const [error, setError] = useState('')
+  const [executionLog, setExecutionLog] = useState({
+    results: [],
+    count: 0,
+    page: 1,
+    page_size: 5,
+    total_pages: 0,
+  })
+  const [executionPage, setExecutionPage] = useState(1)
+  const [isLoadingExecutions, setIsLoadingExecutions] = useState(true)
+  const [executionError, setExecutionError] = useState('')
 
   const loadAutomatizaciones = useCallback(async () => {
     setIsLoading(true)
@@ -229,6 +265,27 @@ export default function Automatizaciones() {
   useEffect(() => {
     loadAutomatizaciones()
   }, [loadAutomatizaciones])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadExecutions = async () => {
+      setIsLoadingExecutions(true)
+      setExecutionError('')
+      try {
+        const result = await getAutomatizacionExecutions(executionPage)
+        if (!cancelled) setExecutionLog(result)
+      } catch (requestError) {
+        if (!cancelled) setExecutionError(getErrorMessage(requestError))
+      } finally {
+        if (!cancelled) setIsLoadingExecutions(false)
+      }
+    }
+
+    loadExecutions()
+    return () => {
+      cancelled = true
+    }
+  }, [executionPage])
 
   const { active, inactive, nextAutomation } = useMemo(() => {
     const activeSchedules = automatizaciones.filter((item) => item.is_active)
@@ -374,6 +431,101 @@ export default function Automatizaciones() {
               onToggle={toggleStatus}
             />
           ))}
+        </section>
+
+        <section aria-labelledby="execution-log-title" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-sky-700" aria-hidden="true">receipt_long</span>
+              <div>
+                <h2 id="execution-log-title" className="font-semibold text-slate-900">Registro de últimas ejecuciones</h2>
+                <p className="text-xs text-slate-500">Historial de tareas completadas, exitosas o fallidas.</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-2 self-start text-xs text-slate-500 sm:self-auto">
+              <span className="h-2 w-2 rounded-full bg-sky-600" />
+              Historial disponible
+            </span>
+          </div>
+
+          {executionError && (
+            <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+              {executionError}
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-sm">
+              <thead className="bg-sky-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Fecha y hora</th>
+                  <th className="px-4 py-3">Automatización</th>
+                  <th className="px-4 py-3">Módulo / alcance</th>
+                  <th className="px-4 py-3">Resultado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoadingExecutions && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500" role="status">
+                      Cargando ejecuciones...
+                    </td>
+                  </tr>
+                )}
+                {!isLoadingExecutions && !executionError && executionLog.results.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                      Todavía no hay ejecuciones registradas.
+                    </td>
+                  </tr>
+                )}
+                {!isLoadingExecutions && executionLog.results.map((execution) => (
+                  <tr key={execution.id} className="text-slate-600">
+                    <td className="whitespace-nowrap px-4 py-4">{formatExecutionTime(execution.executed_at)}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-900">{execution.automation}</td>
+                    <td className="px-4 py-4">{execution.scope}</td>
+                    <td className="px-4 py-4">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${execution.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${execution.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        {execution.success ? 'Exitosa' : 'Fallida'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              {isLoadingExecutions
+                ? 'Cargando registros...'
+                : `Mostrando ${executionLog.count === 0 ? 0 : (executionLog.page - 1) * executionLog.page_size + 1}–${(executionLog.page - 1) * executionLog.page_size + executionLog.results.length} de ${executionLog.count.toLocaleString('es-AR')} ejecuciones`}
+            </p>
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setExecutionPage((page) => Math.max(1, page - 1))}
+                disabled={isLoadingExecutions || executionLog.page <= 1}
+                aria-label="Página anterior"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_left</span>
+              </button>
+              <span className="whitespace-nowrap font-medium text-slate-700">
+                Página {executionLog.page} de {executionLog.total_pages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setExecutionPage((page) => Math.min(executionLog.total_pages, page + 1))}
+                disabled={isLoadingExecutions || executionLog.page >= executionLog.total_pages}
+                aria-label="Página siguiente"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </div>
