@@ -59,7 +59,7 @@ const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.sald
 
 const stopRowToggle = (event) => event.stopPropagation()
 
-function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit, onDelete, onPay, onAssignBenefit }) {
+function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit, onDelete, onPay, onAssignBenefit, onChanged }) {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [status, setStatus] = useState(ALL)
@@ -220,6 +220,7 @@ function CuotaTable({ data = [], isLoading = false, error = null, onAdd, onEdit,
                   colSpan={COLUMN_COUNT}
                   onPay={cuota.socio ? onPay : undefined}
                   onAssignBenefit={cuota.socio ? onAssignBenefit : undefined}
+                  onChanged={onChanged}
                 />
               )}
             </Fragment>
