@@ -29,7 +29,8 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
               <span className="material-symbols-outlined text-[20px]">{tab.icon}</span>
               <span>{tab.label}</span>
               {[tab.badge].flat().filter(Boolean).map((badge, index) => (
-                <StatusBadge key={index} badge={badge} />
+                <StatusBadge key={index}
+                 badge={badge} />
               ))}
               <span className={`absolute bottom-0 left-0 right-0 h-0.5 rounded-t ${isSelected ? 'bg-primary' : 'bg-transparent'}`} />
             </button>

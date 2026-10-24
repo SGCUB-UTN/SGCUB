@@ -10,7 +10,6 @@ import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
 
-// Renders finances already loaded with useSocioFinances, so the page can share them (e.g. for the tab badge)
 export function FinancialStatement({ socio, finances }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
