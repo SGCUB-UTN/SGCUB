@@ -41,6 +41,7 @@ import { CHANGE_PASSWORD_PATH } from './auth/paths'
 import DocumentacionDashboard from './pages/DocumentacionDashboard'
 import Comunicaciones from './pages/Comunicaciones'
 import HistorialComunicaciones from './pages/HistorialComunicaciones'
+import Automatizaciones from './pages/Automatizaciones'
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -190,7 +191,7 @@ export const router = createBrowserRouter([
             children: [
               {
                 path: 'automatizaciones',
-                element: <EnDesarrollo title="Automatizaciones" />,
+                element: <Automatizaciones />,
               },
             ],
           },
