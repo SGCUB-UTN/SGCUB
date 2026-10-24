@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { BenefitsTable } from '../../finanzas/BenefitTables'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
-import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
+import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import StatCard from '../../shared/StatCard'
@@ -10,7 +10,6 @@ import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
 
-// Renders finances already loaded with useSocioFinances, so the page can share them (e.g. for the tab badge)
 export function FinancialStatement({ socio, finances }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
@@ -31,7 +30,7 @@ export function FinancialStatement({ socio, finances }) {
   const summary = useMemo(() => ({
     pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
     debt: Number(account?.total_adeudado ?? 0),
-    activeScholarships: becas ? becas.filter((beca) => scholarshipState(beca) === 'active').length : null,
+    activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
   }), [account, cuotas, becas])
 
   if (loading) {
@@ -50,7 +49,7 @@ export function FinancialStatement({ socio, finances }) {
 
   return (
     <section className="flex flex-col gap-6" aria-label={title}>
-      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." />
+      <TabHeader title={title} description="Detalle de cuotas, pagos y beneficios del socio." divider={false} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-10">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
@@ -71,11 +70,16 @@ export function FinancialStatement({ socio, finances }) {
         {cuotas.length === 0 ? (
           <EmptyState icon="receipt_long" title="Sin cuotas generadas" description="La cuenta corriente no tiene cuotas registradas." />
         ) : (
-          <CuotasEstadoCuentaTable cuotas={cuotas} />
+          <CuotasEstadoCuentaTable
+            cuotas={cuotas}
+            onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
+            onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+            onChanged={reloadFinances}
+          />
         )}
       </section>
 
-      <BenefitsTable becas={becas} cuotas={cuotas} />
+      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
     </section>
   )
 }

@@ -185,6 +185,7 @@ function Cuotas() {
           }}
           onPay={(cuota) => openPayment({ socioId: cuota.socio.socio_id, cuotaIds: [cuota.cuota_id], onSuccess: cargarDatos })}
           onAssignBenefit={(cuota) => openBenefit({ socioId: cuota.socio.socio_id, cuotaId: cuota.cuota_id, onSuccess: cargarDatos })}
+          onChanged={cargarDatos}
         />
       </section>
 

@@ -1,5 +1,6 @@
 import { Alert, Button, Group, Modal, Stack, Table, Text, TextInput } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
+import { itemLabel } from '../finanzas/cuotaItems'
 
 const formatAmount = (item) => {
   const monto = Number(item.monto ?? 0) * (item.es_descuento ? -1 : 1)
@@ -42,7 +43,7 @@ function EditCuotaModal({ opened, onClose, onSubmit, formulario, onChange, loadi
               <tbody>
                 {(cuota?.items ?? []).map((item) => (
                   <tr key={item.item_cuota_id}>
-                    <td>{item.concepto_nombre ?? item.concepto}</td>
+                    <td>{itemLabel(item)}</td>
                     <td style={{ textAlign: 'right' }}>{formatAmount(item)}</td>
                   </tr>
                 ))}

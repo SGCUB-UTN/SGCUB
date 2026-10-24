@@ -16,6 +16,13 @@ export const CUOTA_STATE_LABELS = {
   [CUOTA_STATES.PAGA]: 'Paga',
 }
 
+const CUOTA_STATE_SHORT_LABELS = {
+  [CUOTA_STATES.EN_FECHA]: 'En Fecha',
+  [CUOTA_STATES.VENCIDA_1]: '1° Venc.',
+  [CUOTA_STATES.VENCIDA_2]: '2° Venc.',
+  [CUOTA_STATES.PAGA]: 'Paga',
+}
+
 const CUOTA_STATE_BADGE_CLASSES = {
   [CUOTA_STATES.EN_FECHA]: 'bg-sky-50 text-sky-700 border-sky-200',
   [CUOTA_STATES.VENCIDA_1]: 'bg-amber-50 text-amber-800 border-amber-200',
@@ -40,6 +47,8 @@ export const matchesStateFilter = (cuota, filter) => (
 )
 
 export const cuotaStateLabel = (state) => CUOTA_STATE_LABELS[state] ?? state ?? '—'
+
+export const cuotaStateShortLabel = (state) => CUOTA_STATE_SHORT_LABELS[state] ?? cuotaStateLabel(state)
 
 export const cuotaStateBadgeClass = (state) => CUOTA_STATE_BADGE_CLASSES[state] ?? DEFAULT_BADGE_CLASS
 
