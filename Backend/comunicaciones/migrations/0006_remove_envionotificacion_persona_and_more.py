@@ -4,43 +4,6 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
-def asignar_socios(apps, schema_editor):
-    EnvioNotificacion = apps.get_model("comunicaciones", "EnvioNotificacion")
-    Socio = apps.get_model("padron", "Socio")
-
-    envios_sin_socio = []
-    for envio in EnvioNotificacion.objects.all().iterator():
-        socio_id = (
-            Socio.objects.filter(persona_id=envio.persona_id)
-            .values_list("pk", flat=True)
-            .first()
-        )
-        if socio_id is None:
-            envios_sin_socio.append(envio.pk)
-            continue
-        EnvioNotificacion.objects.filter(pk=envio.pk).update(socio_id=socio_id)
-
-    if envios_sin_socio:
-        raise RuntimeError(
-            "No se pudo asociar EnvioNotificacion con un Socio para los envíos: "
-            + ", ".join(str(pk) for pk in envios_sin_socio)
-        )
-
-
-def restaurar_personas(apps, schema_editor):
-    EnvioNotificacion = apps.get_model("comunicaciones", "EnvioNotificacion")
-    Socio = apps.get_model("padron", "Socio")
-
-    for envio in EnvioNotificacion.objects.exclude(socio_id=None).iterator():
-        persona_id = (
-            Socio.objects.filter(pk=envio.socio_id)
-            .values_list("persona_id", flat=True)
-            .first()
-        )
-        if persona_id is not None:
-            EnvioNotificacion.objects.filter(pk=envio.pk).update(persona_id=persona_id)
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -49,27 +12,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='envionotificacion',
-            name='socio',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='envios_notificacion', to='padron.socio'),
-        ),
-        migrations.RunPython(
-            code=asignar_socios,
-            reverse_code=restaurar_personas,
-        ),
-        migrations.AlterField(
-            model_name='envionotificacion',
-            name='persona',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='personas', to='padron.persona'),
-        ),
         migrations.RemoveField(
             model_name='envionotificacion',
             name='persona',
         ),
-        migrations.AlterField(
+        migrations.AddField(
             model_name='envionotificacion',
             name='socio',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='envios_notificacion', to='padron.socio'),
+            field=models.ForeignKey(default=4, on_delete=django.db.models.deletion.CASCADE, related_name='envios_notificacion', to='padron.socio'),
+            preserve_default=False,
         ),
     ]
