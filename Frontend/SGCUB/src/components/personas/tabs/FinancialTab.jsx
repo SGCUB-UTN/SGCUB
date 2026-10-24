@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { BenefitsTable } from '../../finanzas/BenefitTables'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
-import { isPaid, scholarshipState } from '../../finanzas/accountStatement'
+import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import StatCard from '../../shared/StatCard'
@@ -31,7 +31,7 @@ export function FinancialStatement({ socio, finances }) {
   const summary = useMemo(() => ({
     pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
     debt: Number(account?.total_adeudado ?? 0),
-    activeScholarships: becas ? becas.filter((beca) => scholarshipState(beca) === 'active').length : null,
+    activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
   }), [account, cuotas, becas])
 
   if (loading) {
@@ -75,7 +75,7 @@ export function FinancialStatement({ socio, finances }) {
         )}
       </section>
 
-      <BenefitsTable becas={becas} cuotas={cuotas} />
+      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
     </section>
   )
 }
