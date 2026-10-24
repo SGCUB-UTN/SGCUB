@@ -87,14 +87,16 @@ const PAYMENT_METHODS = [
   { value: 'BilleteraVirtual', label: 'Billetera virtual', icon: 'account_balance_wallet' },
 ]
 
-const buildEmptyForm = (socio = null) => ({
-  socio,
-  operation: 'IngresoManual',
-  conceptType: '',
-  detail: '',
-  amount: '',
+const buildEmptyForm = (socio = null, reversedMovement = null) => ({
+  socio: reversedMovement?.socio ?? socio,
+  operation: reversedMovement ? 'NotaCredito' : 'IngresoManual',
+  conceptType: reversedMovement ? 'Devolución total de operación' : '',
+  detail: reversedMovement
+    ? `Ref. #${reversedMovement.movimiento_cuenta_id} (${reversedMovement.concepto})`.slice(0, DETAIL_MAX_LENGTH)
+    : '',
+  amount: reversedMovement ? String(reversedMovement.monto) : '',
   paymentMethod: 'Efectivo',
-  reversedMovement: null,
+  reversedMovement,
 })
 
 const operationFor = (value) => OPERATIONS.find((operation) => operation.value === value) ?? OPERATIONS[0]
@@ -181,10 +183,10 @@ function MovementRow({ movement, selected, onSelect }) {
   )
 }
 
-function MovimientoManualModal({ opened, initialSocio = null, onClose, onSuccess }) {
+function MovimientoManualModal({ opened, initialSocio = null, initialReversedMovement = null, onClose, onSuccess }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
-  const [form, setForm] = useState(() => buildEmptyForm(initialSocio))
-  const [searchingSocio, setSearchingSocio] = useState(() => !initialSocio)
+  const [form, setForm] = useState(() => buildEmptyForm(initialSocio, initialReversedMovement))
+  const [searchingSocio, setSearchingSocio] = useState(() => !(initialReversedMovement?.socio ?? initialSocio))
   const [movements, setMovements] = useState([])
   const [loadingMovements, setLoadingMovements] = useState(false)
   const [movementsError, setMovementsError] = useState('')
@@ -219,13 +221,13 @@ function MovimientoManualModal({ opened, initialSocio = null, onClose, onSuccess
 
   useEffect(() => {
     if (!opened) return
-    setForm(buildEmptyForm(initialSocio))
-    setSearchingSocio(!initialSocio)
+    setForm(buildEmptyForm(initialSocio, initialReversedMovement))
+    setSearchingSocio(!(initialReversedMovement?.socio ?? initialSocio))
     setMovements([])
     setMovementsError('')
     setShowErrors(false)
     setSubmitError('')
-  }, [opened, initialSocio])
+  }, [opened, initialSocio, initialReversedMovement])
 
   useEffect(() => {
     if (!opened || !socio || !isCreditNote) {

@@ -13,101 +13,291 @@ import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
-const COLUMN_COUNT = 5
+const COLUMN_COUNT = 6
 const ALL = 'todos'
-const STATUS_OPTIONS = ['Vigente', 'Anulado']
 
-const socioName = (comprobante) => {
-  const socio = comprobante.socio
-  return socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : ''
+const SCOPES = [
+  {
+    id: 'todos',
+    titulo: 'Todos los movimientos',
+    detalle: 'Incluye cobros de cuotas y otros movimientos de caja.',
+  },
+  {
+    id: 'comprobantes',
+    titulo: 'Cobros de cuotas',
+    detalle: 'Comprobantes emitidos por pagos de cuotas societarias.',
+  },
+  {
+    id: 'manuales',
+    titulo: 'Otros movimientos',
+    detalle: 'Ingresos manuales, egresos de caja y notas de crédito.',
+  },
+]
+
+const TYPE_FILTER_OPTIONS = [
+  { value: 'CuotaVigente', label: 'Cobros de cuota (Vigentes)', group: 'comprobantes' },
+  { value: 'CuotaAnulada', label: 'Cobros de cuota (Anulados)', group: 'comprobantes' },
+  { value: 'IngresoManual', label: 'Ingresos manuales', group: 'manuales' },
+  { value: 'Egreso', label: 'Egresos de caja', group: 'manuales' },
+  { value: 'NotaCredito', label: 'Notas de crédito', group: 'manuales' },
+]
+
+const BADGE_STYLES = {
+  CuotaVigente: 'bg-primary/10 text-primary border-primary/20',
+  CuotaAnulada: 'bg-error-container text-on-error-container border-error/20',
+  IngresoManual: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
+  Egreso: 'bg-error/10 text-error border-error/20',
+  NotaCredito: 'bg-amber-500/15 text-amber-800 border-amber-500/30',
 }
+
+const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : '')
 
 const SORT_VALUES = {
-  number: (comprobante) => Number(comprobante.numero),
-  date: (comprobante) => comprobante.fecha_emision,
-  socio: (comprobante) => socioName(comprobante) || null,
-  amount: (comprobante) => Number(comprobante.monto_total),
+  number: (item) => Number(item.sortNumber ?? 0),
+  date: (item) => item.sortDate || '',
+  socio: (item) => item.socioLabel || null,
+  amount: (item) => Number(item.amount ?? 0),
 }
-// On load: latest receipts first.
-const INITIAL_SORT = { columna: 'number', direccion: 'desc' }
 
-function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
+const INITIAL_SORT = { columna: 'date', direccion: 'desc' }
+
+function ComprobantesTable({
+  comprobantes = [],
+  movimientosManuales = [],
+  isLoading,
+  error,
+  onSelect,
+  onSelectMovimiento,
+}) {
+  const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState(ALL)
+  const [typeFilter, setTypeFilter] = useState(ALL)
   const [month, setMonth] = useState(ALL)
 
+  const creditNoteByReversedId = useMemo(() => {
+    const map = new Map()
+    movimientosManuales.forEach((movement) => {
+      if (movement.movimiento_revertido) {
+        map.set(movement.movimiento_revertido, movement)
+      }
+    })
+    return map
+  }, [movimientosManuales])
+
+  const unifiedItems = useMemo(() => {
+    const receiptItems = comprobantes.map((comprobante) => {
+      const isAnulado = comprobante.estado === 'Anulado'
+      const filterCode = isAnulado ? 'CuotaAnulada' : 'CuotaVigente'
+      return {
+        key: `comprobante-${comprobante.comprobante_id}`,
+        kind: 'comprobante',
+        raw: comprobante,
+        filterCode,
+        refCode: `#${comprobante.numero}`,
+        badgeLabel: isAnulado ? 'Comprobante anulado' : 'Comprobante de cuota',
+        badgeClass: BADGE_STYLES[filterCode],
+        date: comprobante.fecha_emision,
+        sortDate: `${comprobante.fecha_emision || ''}-${String(comprobante.comprobante_id).padStart(8, '0')}`,
+        sortNumber: comprobante.numero,
+        socio: comprobante.socio,
+        socioLabel: socioName(comprobante.socio),
+        concept: 'Cobro de cuota societaria',
+        subConcept: `Pago #${comprobante.pago} · Comprobante #${comprobante.numero}`,
+        paymentMethod: 'Ver comprobante',
+        amount: Number(comprobante.monto_total ?? 0),
+        isPositive: true,
+        isAnulado,
+      }
+    })
+
+    const manualItems = movimientosManuales.map((movement) => {
+      const isAbono = movement.tipo_movimiento === 'Abono'
+      const filterCode = movement.origen_manual || (isAbono ? 'IngresoManual' : 'Egreso')
+      const reversedBy = creditNoteByReversedId.get(movement.movimiento_cuenta_id)
+      const subParts = []
+      if (movement.movimiento_revertido) {
+        subParts.push(`Revierte al ingreso #${movement.movimiento_revertido}`)
+      }
+      if (reversedBy) {
+        subParts.push(`Revertido por Nota de crédito #${reversedBy.movimiento_cuenta_id}`)
+      }
+      if (!subParts.length) {
+        subParts.push(`Movimiento de cuenta #${movement.movimiento_cuenta_id}`)
+      }
+
+      const dateOnly = movement.fecha ? String(movement.fecha).slice(0, 10) : ''
+      return {
+        key: `movimiento-${movement.movimiento_cuenta_id}`,
+        kind: 'manual',
+        raw: movement,
+        filterCode,
+        refCode: `Mov. #${movement.movimiento_cuenta_id}`,
+        badgeLabel: movement.origen_manual_nombre || movement.origen_manual || 'Movimiento',
+        badgeClass: BADGE_STYLES[filterCode] || BADGE_STYLES.IngresoManual,
+        date: movement.fecha,
+        sortDate: `${dateOnly}-${String(movement.movimiento_cuenta_id).padStart(8, '0')}`,
+        sortNumber: movement.movimiento_cuenta_id,
+        socio: movement.socio,
+        socioLabel: socioName(movement.socio),
+        concept: movement.concepto || 'Movimiento manual',
+        subConcept: subParts.join(' · '),
+        paymentMethod: movement.medio_de_pago_nombre || movement.medio_de_pago || 'Ajuste en cuenta',
+        amount: Number(movement.monto ?? 0),
+        isPositive: isAbono,
+        isAnulado: false,
+      }
+    })
+
+    return [...receiptItems, ...manualItems]
+  }, [comprobantes, movimientosManuales, creditNoteByReversedId])
+
   const availableMonths = useMemo(
-    () => periodOptions(comprobantes, (comprobante) => periodOf(comprobante.fecha_emision)),
-    [comprobantes],
+    () => periodOptions(unifiedItems, (item) => periodOf(item.date)),
+    [unifiedItems],
   )
+
+  const visibleTypeOptions = useMemo(() => {
+    if (scope === 'comprobantes') return TYPE_FILTER_OPTIONS.filter((opt) => opt.group === 'comprobantes')
+    if (scope === 'manuales') return TYPE_FILTER_OPTIONS.filter((opt) => opt.group === 'manuales')
+    return TYPE_FILTER_OPTIONS
+  }, [scope])
 
   const filtered = useMemo(() => {
     const text = search.trim()
     const textDigits = text.replace(/[.#]/g, '')
-    return comprobantes.filter((comprobante) => {
-      if (status !== ALL && comprobante.estado !== status) return false
-      if (month !== ALL && periodOf(comprobante.fecha_emision) !== month) return false
+    return unifiedItems.filter((item) => {
+      if (scope === 'comprobantes' && item.kind !== 'comprobante') return false
+      if (scope === 'manuales' && item.kind !== 'manual') return false
+      if (typeFilter !== ALL && item.filterCode !== typeFilter) return false
+      if (month !== ALL && periodOf(item.date) !== month) return false
       if (!text) return true
-      return matchesSearch(text, [socioName(comprobante)])
-        || (textDigits !== '' && [comprobante.numero, comprobante.pago, comprobante.socio?.dni]
-          .some((field) => String(field ?? '').includes(textDigits)))
+      return matchesSearch(text, [
+        item.socioLabel,
+        item.concept,
+        item.subConcept,
+        item.badgeLabel,
+        item.paymentMethod,
+      ])
+        || (textDigits !== '' && [
+          item.sortNumber,
+          item.raw.pago,
+          item.socio?.dni,
+          item.socio?.numero_socio,
+        ].some((field) => String(field ?? '').includes(textDigits)))
     })
-  }, [comprobantes, search, status, month])
+  }, [unifiedItems, scope, typeFilter, month, search])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
 
-  const handleKeyDown = (event, comprobante) => {
-    if (event.key === 'Enter' || event.key === ' ') onSelect?.(comprobante)
+  const changeScope = (nextScope) => {
+    withPageReset(() => {
+      setScope(nextScope)
+      setTypeFilter(ALL)
+    })()
+  }
+
+  const handleRowAction = (item) => {
+    if (item.kind === 'comprobante') {
+      onSelect?.(item.raw)
+    } else {
+      onSelectMovimiento?.(item.raw)
+    }
+  }
+
+  const handleKeyDown = (event, item) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleRowAction(item)
+    }
   }
 
   return (
-    <section className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm overflow-hidden" aria-labelledby="comprobantes-title">
-      <div className="p-5 border-b border-outline-variant/20 flex items-center justify-between gap-3">
-        <div>
-          <h2 id="comprobantes-title" className="text-xl font-bold text-on-surface">Comprobantes de pago</h2>
-          <p className="text-sm text-on-surface-variant">Historial completo de comprobantes emitidos.</p>
+    <section
+      className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm overflow-hidden"
+      aria-labelledby="comprobantes-title"
+    >
+      <div className="p-5 border-b border-outline-variant/20 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="comprobantes-title" className="text-xl font-bold text-on-surface">
+              Movimientos y comprobantes de caja
+            </h2>
+            <p className="text-sm text-on-surface-variant">
+              Historial completo de comprobantes emitidos y otros movimientos registrados.
+            </p>
+          </div>
+          <span className="material-symbols-outlined text-primary text-2xl" aria-hidden="true">receipt_long</span>
         </div>
-        <span className="material-symbols-outlined text-primary text-2xl">receipt_long</span>
+
+        <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <legend className="sr-only">Seleccionar tipo de registros de caja</legend>
+          {SCOPES.map((opcion) => (
+            <label
+              key={opcion.id}
+              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                scope === opcion.id
+                  ? 'border-primary bg-primary/5'
+                  : 'border-outline-variant/40 hover:bg-surface-container-low'
+              }`}
+            >
+              <input
+                type="radio"
+                name="alcance-caja"
+                value={opcion.id}
+                checked={scope === opcion.id}
+                onChange={() => changeScope(opcion.id)}
+                className="mt-1 accent-primary"
+              />
+              <span>
+                <span className="block font-semibold text-on-surface">{opcion.titulo}</span>
+                <span className="block mt-0.5 text-sm text-on-surface-variant">{opcion.detalle}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
       </div>
 
       <div className="p-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
         <TableSearchInput
           value={search}
           onChange={withPageReset(setSearch)}
-          placeholder="Buscar por N° de comprobante, socio, DNI o pago..."
-          label="Filtrar comprobantes"
+          placeholder="Buscar por N° de comprobante, socio, DNI, concepto o movimiento..."
+          label="Filtrar movimientos y comprobantes"
         />
         <FilterSelect
           className={FILTER_CLASS}
           value={month}
           onChange={(event) => withPageReset(setMonth)(event.target.value)}
-          aria-label="Filtrar por mes de emisión"
+          aria-label="Filtrar por mes"
         >
           <option value={ALL}>Mes: Todos</option>
           {availableMonths.map((value) => <option key={value} value={value}>{formatPeriod(value)}</option>)}
         </FilterSelect>
         <FilterSelect
           className={FILTER_CLASS}
-          value={status}
-          onChange={(event) => withPageReset(setStatus)(event.target.value)}
-          aria-label="Filtrar por estado"
+          value={typeFilter}
+          onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
+          aria-label="Filtrar por tipo de movimiento"
         >
-          <option value={ALL}>Estado: Todos</option>
-          {STATUS_OPTIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+          <option value={ALL}>Estado / Tipo: Todos</option>
+          {visibleTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </FilterSelect>
       </div>
 
       <DataTable
-        tableClassName="min-w-[720px]"
+        tableClassName="min-w-[820px]"
         headers={(
           <>
-            <SortableHeader className={HEADER_CLASS} etiqueta="Número" columna="number" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className={HEADER_CLASS} etiqueta="Referencia" columna="number" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
-            <th className={HEADER_CLASS} scope="col">Pago asociado</th>
-            <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto total" columna="amount" orden={sort} onOrdenar={sortAndReset} />
+            <th className={HEADER_CLASS} scope="col">Concepto y comprobante asociado</th>
+            <th className={HEADER_CLASS} scope="col">Medio / Acción</th>
+            <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
       >
@@ -116,39 +306,69 @@ function ComprobantesTable({ comprobantes = [], isLoading, error, onSelect }) {
           isLoading={isLoading}
           isEmpty={Boolean(error) || visibleRows.length === 0}
           error={error}
-          loadingText="Cargando comprobantes..."
-          errorText="No se pudieron cargar los comprobantes."
-          emptyText={comprobantes.length === 0 ? 'Todavía no hay comprobantes registrados.' : 'No hay comprobantes que coincidan con el filtro.'}
+          loadingText="Cargando movimientos y comprobantes..."
+          errorText="No se pudieron cargar los movimientos de caja."
+          emptyText={
+            unifiedItems.length === 0
+              ? 'Todavía no hay movimientos ni comprobantes registrados.'
+              : 'No hay movimientos que coincidan con el filtro.'
+          }
         />
 
-        {!isLoading && !error && visibleRows.map((comprobante) => (
+        {!isLoading && !error && visibleRows.map((item) => (
           <tr
-            key={comprobante.comprobante_id}
-            onClick={() => onSelect?.(comprobante)}
-            onKeyDown={(event) => handleKeyDown(event, comprobante)}
+            key={item.key}
+            onClick={() => handleRowAction(item)}
+            onKeyDown={(event) => handleKeyDown(event, item)}
             tabIndex={0}
             role="button"
             className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
           >
-            <td className="py-3 px-4 font-semibold text-primary whitespace-nowrap">
-              #{comprobante.numero}
-              {comprobante.estado === 'Anulado' && (
-                <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-error-container text-on-error-container">Anulado</span>
-              )}
+            <td className="py-3 px-4 whitespace-nowrap">
+              <div className="flex flex-col items-start gap-1">
+                <span className="font-bold text-primary">{item.refCode}</span>
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${item.badgeClass}`}>
+                  {item.badgeLabel}
+                </span>
+              </div>
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">{formatDate(comprobante.fecha_emision)}</td>
+            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(item.date)}</td>
             <td className="py-3 px-4">
-              {comprobante.socio ? (
+              {item.socio ? (
                 <>
-                  <span className="block font-medium text-on-surface">{socioName(comprobante)}</span>
-                  <span className="block text-sm text-on-surface-variant">DNI {formatDni(comprobante.socio.dni)}</span>
+                  <span className="block font-medium text-on-surface">{item.socioLabel}</span>
+                  <span className="block text-sm text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
                 </>
               ) : (
                 <span className="text-on-surface-variant">—</span>
               )}
             </td>
-            <td className="py-3 px-4 text-on-surface-variant">Pago #{comprobante.pago}</td>
-            <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</td>
+            <td className="py-3 px-4 max-w-xs">
+              <span className="block font-medium text-on-surface truncate" title={item.concept}>
+                {item.concept}
+              </span>
+              <span className="block text-xs text-on-surface-variant truncate" title={item.subConcept}>
+                {item.subConcept}
+              </span>
+            </td>
+            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-sm">
+                {item.paymentMethod}
+                <span className="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">chevron_right</span>
+              </span>
+            </td>
+            <td
+              className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
+                item.isAnulado
+                  ? 'text-outline line-through'
+                  : item.isPositive
+                    ? 'text-emerald-700'
+                    : 'text-error'
+              }`}
+            >
+              {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
+              {formatAmount(item.amount)}
+            </td>
           </tr>
         ))}
       </DataTable>
