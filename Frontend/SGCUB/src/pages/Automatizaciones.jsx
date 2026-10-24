@@ -14,8 +14,76 @@ const FREQUENCIES = {
   Y: 'Anual',
 }
 
+const MONTHS = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+const formatCronField = (field, names, unit) => {
+  if (field === '*' || field === '?') return `cada ${unit}`
+  if (field.startsWith('*/')) return `cada ${field.slice(2)} ${unit}`
+  const values = field.split(',')
+  const readableValues = values.map((value) => {
+    if (value.includes('-')) {
+      const [start, end] = value.split('-').map(Number)
+      return `${names[start] ?? start} a ${names[end] ?? end}`
+    }
+    const numericValue = Number(value)
+    return names[numericValue] ?? numericValue
+  })
+  return readableValues.join(', ')
+}
+
+const formatMonthDays = (field) => {
+  if (/^\d+$/.test(field)) return `los ${field}`
+  if (/^\d+-\d+$/.test(field)) {
+    const [start, end] = field.split('-')
+    return `del ${start} al ${end}`
+  }
+  if (/^\d+(,\d+)+$/.test(field)) return `los días ${field.split(',').join(', ')}`
+  if (field.startsWith('*/')) return `cada ${field.slice(2)} días`
+  return `los días ${formatCronField(field, [], 'días')}`
+}
+
+const formatCron = (expression) => {
+  const fields = expression.trim().split(/\s+/)
+  if (fields.length !== 5) return `Programada con la expresión ${expression}`
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields
+  const minuteNumber = Number(minute)
+  const hourNumber = Number(hour)
+  const fixedTime = Number.isInteger(minuteNumber)
+    && Number.isInteger(hourNumber)
+    && minuteNumber >= 0 && minuteNumber < 60
+    && hourNumber >= 0 && hourNumber < 24
+  const timeDescription = fixedTime
+    ? `a las ${String(hourNumber).padStart(2, '0')}:${String(minuteNumber).padStart(2, '0')}`
+    : `cuando coincidan ${formatCronField(minute, [], 'minutos')} y ${formatCronField(hour, [], 'horas')}`
+
+  const hasDayOfMonth = dayOfMonth !== '*' && dayOfMonth !== '?'
+  const hasMonth = month !== '*' && month !== '?'
+  const hasDayOfWeek = dayOfWeek !== '*' && dayOfWeek !== '?'
+  let dateDescription = 'todos los días'
+
+  if (hasDayOfMonth && hasMonth && !hasDayOfWeek) {
+    dateDescription = `${formatMonthDays(dayOfMonth)} de ${formatCronField(month, MONTHS, 'meses')}`
+  } else if (hasDayOfMonth && !hasMonth && !hasDayOfWeek) {
+    dateDescription = `${formatMonthDays(dayOfMonth)} de cada mes`
+  } else if (!hasDayOfMonth && hasMonth && !hasDayOfWeek) {
+    dateDescription = `cada día de ${formatCronField(month, MONTHS, 'meses')}`
+  } else if (!hasDayOfMonth && !hasMonth && hasDayOfWeek) {
+    dateDescription = `cada ${formatCronField(dayOfWeek, WEEKDAYS, 'días de la semana').replace(/^cada /, '')}`
+  } else if (hasDayOfMonth || hasMonth || hasDayOfWeek) {
+    dateDescription = [
+      hasDayOfMonth && `${formatMonthDays(dayOfMonth)} del mes`,
+      hasMonth && `mes ${formatCronField(month, MONTHS, 'meses')}`,
+      hasDayOfWeek && `día de semana ${formatCronField(dayOfWeek, WEEKDAYS, 'días')}`,
+    ].filter(Boolean).join(', ')
+  }
+
+  return `${dateDescription} ${timeDescription}`
+}
+
 const getFrequency = (schedule) => {
-  if (schedule.schedule_type === 'C' && schedule.cron) return `Cron · ${schedule.cron}`
+  if (schedule.schedule_type === 'C' && schedule.cron) return formatCron(schedule.cron)
   if (schedule.schedule_type === 'I') return `Cada ${schedule.minutes} minuto/s`
   return FREQUENCIES[schedule.schedule_type] ?? 'Programada'
 }
@@ -98,9 +166,6 @@ function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
               {getCategory(automation)}
             </span>
           </div>
-          <p className="mt-1 break-all text-xs text-slate-500" title={automation.func}>
-            Tarea: {automation.func}
-          </p>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[16px]" aria-hidden="true">repeat</span>
