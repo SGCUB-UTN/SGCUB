@@ -214,10 +214,17 @@ class Categoria(models.Model):
         (GENERO_FEMENINO, "Femenino"),
     ]
 
+    class TipoChoices(models.TextChoices):
+        JUVENIL = "juvenil", "Juvenil"
+        CUARTA = "cuarta", "Cuarta división"
+        MAYOR = "mayor", "Mayor"
+
     categoria_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=50)
     anio_vigente = models.PositiveIntegerField(default=get_anio_actual)
+    edad_minima = models.PositiveSmallIntegerField(default=0)
     edad_maxima = models.PositiveSmallIntegerField(default=0)
+    tipo = models.CharField(max_length=10, choices=TipoChoices.choices, default=TipoChoices.JUVENIL)
     genero = models.CharField(
         max_length=1,
         choices=GENERO_CHOICES,
@@ -239,7 +246,12 @@ class Categoria(models.Model):
         return get_anio_actual() - birth_date.year
 
     def accepts_age(self, birth_date):
-        return self.competition_age(birth_date) <= self.edad_maxima
+        return self.edad_minima <= self.competition_age(birth_date) <= self.edad_maxima
+
+    def age_range_label(self):
+        if self.edad_minima:
+            return f"admite desde {self.edad_minima} hasta {self.edad_maxima}"
+        return f"admite hasta {self.edad_maxima}"
 
     def __str__(self):
         return f"{self.nombre} ({self.anio_vigente})"

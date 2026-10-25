@@ -398,8 +398,10 @@ class SocioSerializer(serializers.ModelSerializer):
 class CategoriaSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=50)
     anio_vigente = serializers.IntegerField()
+    edad_minima = serializers.IntegerField(min_value=0, required=False)
     edad_maxima = serializers.IntegerField(min_value=0)
     genero = serializers.ChoiceField(choices=Categoria.GENERO_CHOICES)
+    tipo = serializers.ChoiceField(choices=Categoria.TipoChoices.choices, required=False)
 
     class Meta:
         model = Categoria
@@ -407,8 +409,10 @@ class CategoriaSerializer(serializers.ModelSerializer):
             "categoria_id",
             "nombre",
             "anio_vigente",
+            "edad_minima",
             "edad_maxima",
             "genero",
+            "tipo",
         ]
         read_only_fields = ["categoria_id"]
 
@@ -428,6 +432,10 @@ class CategoriaSerializer(serializers.ModelSerializer):
             if field in attrs:
                 return attrs[field]
             return getattr(self.instance, field, None)
+        min_age = current("edad_minima") or 0
+        max_age = current("edad_maxima")
+        if max_age is not None and min_age > max_age:
+            raise serializers.ValidationError({"edad_minima": ["La edad mínima no puede superar a la máxima."]})
         name = current("nombre")
         current_year = current("anio_vigente")
         gender = current("genero")
@@ -615,7 +623,7 @@ class JugadorSerializer(serializers.ModelSerializer):
         if birth_date and category and (category_changed or birth_date_changed) and not category.accepts_age(birth_date):
             errors["categoria"] = [
                 f"El jugador tiene {category.competition_age(birth_date)} años en la temporada {category.anio_vigente} "
-                f"y la categoría {category.nombre} admite hasta {category.edad_maxima}."
+                f"y la categoría {category.nombre} {category.age_range_label()}."
             ]
 
         secondary = attrs.get("categoria_secundaria", getattr(self.instance, "categoria_secundaria", None))
