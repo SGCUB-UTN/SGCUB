@@ -359,6 +359,15 @@ def generar_cuotas_mensuales(fecha=None, today=None):
     return result
 
 
+def generate_scheduled_cuotas(today=None):
+    """Runs every day: generates the month's cuotas only on the day set in the configuration in force."""
+    today = today or timezone.localdate()
+    generation_day = ConfiguracionFinanciera.load(today).dia_generacion
+    if today.day != generation_day:
+        return {"periodo": today.strftime(PERIOD_FORMAT), "cuotas_creadas": 0, "dia_generacion": generation_day}
+    return generar_cuotas_mensuales(today, today=today)
+
+
 def pending_amounts(cuotas, ignored_origin=None):
     cuota_ids = [cuota.pk for cuota in cuotas]
     imputations = Imputacion.objects.filter(movimiento_destino__cuota__in=cuota_ids)

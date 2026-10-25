@@ -466,6 +466,7 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
             "monto_cuota_deportiva": {"min_value": Decimal("0.01")},
             "dia_vencimiento_1": {"min_value": 1, "max_value": 31},
             "dia_vencimiento_2": {"min_value": 1, "max_value": 31},
+            "dia_generacion": {"min_value": 1, "max_value": 28},
             "valor_recargo_1": {"min_value": Decimal("0.00")},
             "valor_recargo_2": {"min_value": Decimal("0.00")},
         }
@@ -490,6 +491,8 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
         errors = {}
         if current("dia_vencimiento_2") < current("dia_vencimiento_1"):
             errors["dia_vencimiento_2"] = "El segundo vencimiento no puede ser anterior al primero."
+        if current("dia_generacion") > current("dia_vencimiento_1"):
+            errors["dia_generacion"] = "Las cuotas deben generarse antes del primer vencimiento o el mismo día."
         for number in (1, 2):
             if current(f"tipo_recargo_{number}") == ModalidadMontoChoices.PORCENTAJE and current(f"valor_recargo_{number}") > 100:
                 errors[f"valor_recargo_{number}"] = "El porcentaje de recargo no puede superar el 100%."

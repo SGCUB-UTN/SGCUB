@@ -56,6 +56,7 @@ from .services import (
 	cuota_state,
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
+	generate_scheduled_cuotas,
 	grant_scholarship,
 	next_receipt_number,
 	pending_amounts,
@@ -283,6 +284,41 @@ class ConfiguracionFinancieraTests(APITestCase):
 		self.assertEqual(configuracion.surcharge(1, Decimal("2500.00")), Decimal("200.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("2500.00")), Decimal("250.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("1333.33")), Decimal("133.33"))
+
+
+class GeneracionProgramadaTests(TestCase):
+	def setUp(self):
+		ConfiguracionFinanciera.objects.create(dia_generacion=5)
+		self.socio = crear_socio("61000001")
+
+	def test_genera_solo_el_dia_configurado(self):
+		antes = generate_scheduled_cuotas(today=date(2026, 10, 4))
+		self.assertEqual(antes["cuotas_creadas"], 0)
+		self.assertFalse(Cuota.objects.exists())
+
+		resultado = generate_scheduled_cuotas(today=date(2026, 10, 5))
+
+		self.assertEqual(resultado["cuotas_creadas"], 1)
+		self.assertEqual(Cuota.objects.get().periodo, "2026-10")
+
+	def test_usa_el_dia_de_la_version_vigente_para_el_mes(self):
+		ConfiguracionFinanciera.objects.create(periodo_vigencia="2026-11", dia_generacion=3)
+
+		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 5))["cuotas_creadas"], 0)
+		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 3))["cuotas_creadas"], 1)
+
+	def test_valida_el_dia_de_generacion(self):
+		self.client.force_login(get_user_model().objects.create_user(username="tesorero"))
+		periodo = next_period_start().strftime("%Y-%m")
+		for datos in ({"dia_generacion": 0}, {"dia_generacion": 29}, {"dia_generacion": 12, "dia_vencimiento_1": 10}):
+			with self.subTest(datos=datos):
+				response = self.client.post(
+					reverse("configuracion-financiera"),
+					{"periodo_vigencia": periodo, **datos},
+					content_type="application/json",
+				)
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("dia_generacion", response.json())
 
 
 class ActualizacionCuotasPorConfiguracionTests(APITestCase):
@@ -2455,7 +2491,7 @@ class TareasProgramadasTests(TestCase):
 
 	def test_tareas_registradas_en_django_q(self):
 		esperadas = {
-			self.migracion.MONTHLY_GENERATION: ("finanzas.services.generar_cuotas_mensuales", Schedule.MONTHLY, 1, 1),
+			self.migracion.MONTHLY_GENERATION: ("finanzas.services.generate_scheduled_cuotas", Schedule.DAILY, None, 1),
 			self.migracion.DAILY_SURCHARGES: ("finanzas.services.apply_surcharges", Schedule.DAILY, None, 2),
 		}
 		for nombre, (funcion, tipo, dia, hora) in esperadas.items():
@@ -2473,6 +2509,7 @@ class TareasProgramadasTests(TestCase):
 
 	def test_django_q_ejecuta_las_tareas_programadas(self):
 		crear_socio("90000001", con_jugador=True)
+		ConfiguracionFinanciera.objects.update_or_create(pk=1, defaults={"dia_generacion": timezone.localdate().day})
 
 		for tarea in Schedule.objects.filter(name__in=[self.migracion.MONTHLY_GENERATION, self.migracion.DAILY_SURCHARGES]):
 			with self.subTest(tarea=tarea.name):

@@ -380,6 +380,7 @@ CONFIGURATION_FIELDS = (
     "valor_recargo_1",
     "tipo_recargo_2",
     "valor_recargo_2",
+    "dia_generacion",
 )
 
 
@@ -392,6 +393,8 @@ class ConfiguracionFinanciera(models.Model):
     monto_cuota_deportiva = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1500.00"))
     dia_vencimiento_1 = models.PositiveSmallIntegerField(default=10)
     dia_vencimiento_2 = models.PositiveSmallIntegerField(default=20)
+    # Day of the month the scheduled task generates that month's cuotas
+    dia_generacion = models.PositiveSmallIntegerField(default=1)
     tipo_recargo_1 = models.CharField(
         max_length=20,
         choices=ModalidadMontoChoices.choices,
