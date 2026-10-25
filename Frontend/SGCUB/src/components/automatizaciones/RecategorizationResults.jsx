@@ -17,9 +17,25 @@ import { DECISIONS, RESULT_TYPES } from './recategorization'
 const EMPTY_PAGE = { results: [], count: 0, page: 1, page_size: 20, total_pages: 1 }
 
 const getTabs = (execution) => [
-  { type: RESULT_TYPES.exito, label: 'Cambios realizados', count: execution.exitosos },
-  { type: RESULT_TYPES.pendiente, label: 'Pendientes de revisión', count: execution.pendientes_sin_revisar, attention: execution.pendientes_sin_revisar > 0 },
-  { type: RESULT_TYPES.error, label: 'Errores', count: execution.errores },
+  {
+    type: RESULT_TYPES.exito,
+    label: 'Cambios realizados',
+    count: execution.exitosos,
+    help: 'Jugadores que se actualizaron solos, sin dudas. Si alguno quedó mal, usá "Modificar".',
+  },
+  {
+    type: RESULT_TYPES.pendiente,
+    label: 'Pendientes de revisión',
+    count: execution.pendientes_sin_revisar,
+    attention: execution.pendientes_sin_revisar > 0,
+    help: 'Estos jugadores necesitan que decidas: aceptá la categoría sugerida, mantené la actual o editala. No cambian hasta que decidas.',
+  },
+  {
+    type: RESULT_TYPES.error,
+    label: 'Errores',
+    count: execution.errores,
+    help: 'No se pudieron recategorizar porque les falta algún dato. Corregí sus categorías con "Editar" o completá su ficha.',
+  },
 ]
 
 function ResultsPagination({ data, isLoading, onPageChange }) {
@@ -184,12 +200,8 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
     <section aria-labelledby="recategorization-results-title" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 id="recategorization-results-title" className="text-base font-bold text-slate-900">
-            Resultados de la recategorización {execution.anio}
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Las revisiones quedan guardadas: podés salir de esta pantalla y continuar más tarde.
-          </p>
+          <h2 id="recategorization-results-title" className="text-lg font-bold text-slate-900">Detalle por jugador</h2>
+          <p className="mt-0.5 text-sm text-slate-500">Hacé clic en una tarjeta o pestaña para ver cada grupo.</p>
         </div>
         <button
           type="button"
@@ -266,6 +278,10 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
             </button>
           )}
         </div>
+
+        <p className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
+          {tabs.find((tab) => tab.type === activeTab).help}
+        </p>
 
         {actionError && (
           <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">

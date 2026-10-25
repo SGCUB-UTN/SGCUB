@@ -1,28 +1,9 @@
-import { ActionActions, ActionButton, ActionCard } from './actionCardParts'
+import { ActionButton, ActionCard, ActionSummary } from './actionCardParts'
 import { describeWhen } from './automationSchedule'
 
-function LastUpdate({ status }) {
-  const lastUpdate = status.ultima_actualizacion
-  return (
-    <dl className="grid gap-3 text-base sm:grid-cols-2">
-      <div>
-        <dt className="text-sm font-medium text-slate-500">Última ejecución</dt>
-        <dd className="font-semibold text-slate-900">
-          {lastUpdate ? (
-            <>
-              {describeWhen(lastUpdate.fecha)}
-              <span className="font-normal text-slate-600"> · por {lastUpdate.ejecutado_por}</span>
-            </>
-          ) : 'Todavía no se ejecutó'}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-sm font-medium text-slate-500">Año de las categorías</dt>
-        <dd className="font-semibold text-slate-900">{status.anio_categorias ?? '—'}</dd>
-      </div>
-    </dl>
-  )
-}
+const lastRunLabel = (run) => (run
+  ? <>{describeWhen(run.fecha)}<span className="font-normal text-slate-600"> · por {run.ejecutado_por}</span></>
+  : 'Todavía no se ejecutó')
 
 export default function CategoryUpdatePanel({ status, isLoading, error, canRun, onRun }) {
   return (
@@ -35,11 +16,14 @@ export default function CategoryUpdatePanel({ status, isLoading, error, canRun, 
       {!isLoading && error && (
         <p className="text-base text-red-700" role="alert">No se pudo consultar el año de las categorías. Recargá la página para intentar de nuevo.</p>
       )}
-      {!isLoading && status && <LastUpdate status={status} />}
-      {!isLoading && !error && canRun && (
-        <ActionActions>
-          <ActionButton icon="event_repeat" onClick={onRun}>Actualizar categorías</ActionButton>
-        </ActionActions>
+      {!isLoading && status && (
+        <ActionSummary
+          items={[
+            { label: 'Año de las categorías', value: status.anio_categorias ?? '—' },
+            { label: 'Última ejecución', value: lastRunLabel(status.ultima_actualizacion) },
+          ]}
+          actions={canRun && <ActionButton icon="event_repeat" onClick={onRun}>Actualizar categorías</ActionButton>}
+        />
       )}
     </ActionCard>
   )

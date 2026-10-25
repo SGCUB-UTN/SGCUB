@@ -1,4 +1,4 @@
-import { ActionActions, ActionButton, ActionCard, ActionNotice } from './actionCardParts'
+import { ActionButton, ActionCard, ActionNotice, ActionSummary } from './actionCardParts'
 import { RECATEGORIZATION_REVIEW_PATH } from './automationCatalog'
 import { describeWhen } from './automationSchedule'
 
@@ -12,12 +12,7 @@ const NOTICES = {
   revision_pendiente: {
     icon: 'pending_actions',
     tone: 'warning',
-    text: (execution) => `Hay ${execution.pendientes_sin_revisar} ${execution.pendientes_sin_revisar === 1 ? 'jugador esperando' : 'jugadores esperando'} tu revisión. Cuando termines, vas a poder ejecutarla de nuevo.`,
-  },
-  finalizada: {
-    icon: 'check_circle',
-    tone: 'success',
-    text: () => 'La última recategorización terminó y no quedan jugadores por revisar.',
+    text: (execution) => `La revisión todavía no finalizó: ${execution.pendientes_sin_revisar === 1 ? 'hay 1 jugador esperando' : `hay ${execution.pendientes_sin_revisar} jugadores esperando`} tu decisión. Cuando termines, vas a poder ejecutarla de nuevo.`,
   },
   fallida: {
     icon: 'error',
@@ -26,30 +21,9 @@ const NOTICES = {
   },
 }
 
-function LastRun({ execution }) {
-  const hasResults = ['revision_pendiente', 'finalizada'].includes(execution.estado)
-  return (
-    <dl className="grid gap-3 text-base sm:grid-cols-2">
-      <div>
-        <dt className="text-sm font-medium text-slate-500">Última ejecución</dt>
-        <dd className="font-semibold text-slate-900">
-          {describeWhen(execution.fecha_inicio)}
-          <span className="font-normal text-slate-600"> · por {execution.ejecutado_por}</span>
-        </dd>
-      </div>
-      {hasResults && (
-        <div>
-          <dt className="text-sm font-medium text-slate-500">Resultado</dt>
-          <dd className="flex flex-wrap gap-x-3 gap-y-1 font-semibold">
-            <span className="text-emerald-700">{execution.exitosos} actualizados</span>
-            <span className="text-amber-700">{execution.pendientes} para revisar</span>
-            <span className="text-red-700">{execution.errores} con errores</span>
-          </dd>
-        </div>
-      )}
-    </dl>
-  )
-}
+const lastRunLabel = (execution) => (execution
+  ? <>{describeWhen(execution.fecha_inicio)}<span className="font-normal text-slate-600"> · por {execution.ejecutado_por}</span></>
+  : 'Todavía no se ejecutó')
 
 function Actions({ execution, canRun, categoriesUpToDate, onRun }) {
   const status = execution?.estado
@@ -69,9 +43,21 @@ function Actions({ execution, canRun, categoriesUpToDate, onRun }) {
   )
 }
 
+function Results({ execution }) {
+  return (
+    <p className="flex flex-wrap gap-x-3 gap-y-1 text-base">
+      <span className="text-slate-500">Resultado:</span>
+      <span className="font-semibold text-emerald-700">{execution.exitosos} actualizados</span>
+      <span className="font-semibold text-amber-700">{execution.pendientes} para revisar</span>
+      <span className="font-semibold text-red-700">{execution.errores} con errores</span>
+    </p>
+  )
+}
+
 export default function RecategorizationPanel({ execution, isLoading, error, categories, canRun, onRun }) {
   const notice = execution ? NOTICES[execution.estado] : null
   const isActive = ['en_curso', 'revision_pendiente'].includes(execution?.estado)
+  const hasResults = ['revision_pendiente', 'finalizada'].includes(execution?.estado)
   const categoriesUpToDate = categories?.actualizadas ?? true
 
   return (
@@ -84,24 +70,24 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
       {!isLoading && error && (
         <p className="text-base text-red-700" role="alert">No se pudo consultar la recategorización. Recargá la página para intentar de nuevo.</p>
       )}
-      {!isLoading && !error && !execution && (
-        <p className="text-base text-slate-600">Todavía no se ejecutó ninguna recategorización.</p>
+      {!isLoading && !error && (
+        <ActionSummary
+          items={[
+            { label: 'Categorizados al año', value: execution?.anio ?? '—' },
+            { label: 'Última ejecución', value: lastRunLabel(execution) },
+          ]}
+          actions={<Actions execution={execution} canRun={canRun} categoriesUpToDate={categoriesUpToDate} onRun={onRun} />}
+        />
       )}
-      {!isLoading && execution && <LastRun execution={execution} />}
+      {!isLoading && hasResults && <Results execution={execution} />}
 
       {!isLoading && notice && (
         <ActionNotice tone={notice.tone} icon={notice.icon} spin={notice.spin}>{notice.text(execution)}</ActionNotice>
       )}
-      {!isLoading && !isActive && !categoriesUpToDate && (
+      {!isLoading && !error && !isActive && !categoriesUpToDate && (
         <ActionNotice tone="warning" icon="event_repeat">
           Primero ejecutá "Actualizar categorías al nuevo año" para {categories.anio_actual} (tarjeta de arriba). Después vas a poder ejecutar la recategorización.
         </ActionNotice>
-      )}
-
-      {!isLoading && !error && (
-        <ActionActions>
-          <Actions execution={execution} canRun={canRun} categoriesUpToDate={categoriesUpToDate} onRun={onRun} />
-        </ActionActions>
       )}
     </ActionCard>
   )

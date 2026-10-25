@@ -42,6 +42,7 @@ import DocumentacionDashboard from './pages/DocumentacionDashboard'
 import Comunicaciones from './pages/Comunicaciones'
 import HistorialComunicaciones from './pages/HistorialComunicaciones'
 import Automatizaciones from './pages/Automatizaciones'
+import RecategorizacionRevision from './pages/RecategorizacionRevision'
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -192,6 +193,10 @@ export const router = createBrowserRouter([
               {
                 path: 'automatizaciones',
                 element: <Automatizaciones />,
+              },
+              {
+                path: 'automatizaciones/recategorizacion',
+                element: <RecategorizacionRevision />,
               },
             ],
           },

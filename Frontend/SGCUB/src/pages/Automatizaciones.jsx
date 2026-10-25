@@ -329,22 +329,23 @@ export default function Automatizaciones() {
         )}
 
         <RecordSection title="Acciones ejecutables">
-          <CategoryUpdatePanel
-            status={categoryUpdate.status}
-            isLoading={categoryUpdate.isLoading}
-            error={categoryUpdate.error}
-            canRun={canChange}
-            onRun={() => setIsCategoryModalOpen(true)}
-          />
-          <hr className="mx-auto w-1/3 border-slate-300" />
-          <RecategorizationPanel
-            execution={recategorization.execution}
-            isLoading={recategorization.isLoading}
-            error={recategorization.error}
-            categories={categoryUpdate.status}
-            canRun={canChange}
-            onRun={() => setIsRunModalOpen(true)}
-          />
+          <div className="flex flex-col gap-3">
+            <CategoryUpdatePanel
+              status={categoryUpdate.status}
+              isLoading={categoryUpdate.isLoading}
+              error={categoryUpdate.error}
+              canRun={canChange}
+              onRun={() => setIsCategoryModalOpen(true)}
+            />
+            <RecategorizationPanel
+              execution={recategorization.execution}
+              isLoading={recategorization.isLoading}
+              error={recategorization.error}
+              categories={categoryUpdate.status}
+              canRun={canChange}
+              onRun={() => setIsRunModalOpen(true)}
+            />
+          </div>
         </RecordSection>
 
         <ExecuteActionModal

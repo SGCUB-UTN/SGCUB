@@ -59,6 +59,19 @@ export function ActionCard({ icon, title, description, children }) {
   )
 }
 
-export function ActionActions({ children }) {
-  return <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">{children}</div>
+// Data columns (label above, value below) separated by a vertical line; the actions take the height of both rows
+export function ActionSummary({ items, actions }) {
+  return (
+    <div className="flex flex-col pt-4 pl-16 gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <dl className="flex flex-wrap gap-y-2 text-base">
+        {items.map((item, index) => (
+          <div key={item.label} className={index > 0 ? 'border-l border-slate-300 pl-4 ml-4' : ''}>
+            <dt className="text-sm text-slate-500">{item.label}</dt>
+            <dd className="font-semibold text-slate-900">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {actions && <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:self-stretch">{actions}</div>}
+    </div>
+  )
 }
