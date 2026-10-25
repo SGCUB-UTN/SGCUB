@@ -41,10 +41,6 @@ class RecategorizationInProgress(Exception):
     pass
 
 
-class CategoryUpdateBlocked(Exception):
-    pass
-
-
 class CategoriesOutdated(Exception):
     pass
 
@@ -235,7 +231,8 @@ def start_recategorization(user, executed_by):
         raise RecategorizationInProgress()
     if not categories_status()["actualizadas"]:
         raise CategoriesOutdated(
-            f"Primero actualizá las categorías al año {get_anio_actual()} y después ejecutá la recategorización."
+            f'Primero ejecutá "Actualizar categorías al nuevo año" para {get_anio_actual()} '
+            "y después ejecutá la recategorización."
         )
     try:
         with transaction.atomic():
@@ -427,7 +424,7 @@ def categories_status():
     return {
         "anio_actual": current_year,
         "anio_categorias": oldest_year,
-        "actualizadas": not Categoria.objects.exclude(anio_vigente=current_year).exists(),
+        "actualizadas": ActualizacionCategoriasEjecucion.objects.filter(anio=current_year).exists(),
     }
 
 
@@ -448,13 +445,6 @@ def record_task_history(func, success, started, args=None, result=None):
 
 
 def update_categories_year(user, executed_by):
-    if RecategorizacionEjecucion.objects.filter(estado__in=[Estado.EN_CURSO, Estado.REVISION_PENDIENTE]).exists():
-        raise CategoryUpdateBlocked(
-            "No se pueden actualizar las categorías mientras haya una recategorización en curso o con revisiones pendientes."
-        )
-    if categories_status()["actualizadas"]:
-        raise CategoryUpdateBlocked(f"Las categorías ya están actualizadas para {get_anio_actual()}.")
-
     started = timezone.now()
     try:
         with transaction.atomic():

@@ -5,13 +5,14 @@ import { AuthorizerSelect, SUBMIT_BUTTON_CLASS } from '../finanzas/formParts'
 import { getErrorMessage } from '../personas/format'
 import { Campo } from '../socios/SocioFormFields'
 
-function RunRecategorizationForm({ onConfirm, onCancel }) {
+// Confirmation for a manual action: explains what will happen and asks who runs it
+function ExecuteActionForm({ id, description, confirmLabel, confirmIcon, savingLabel, errorMessage, onConfirm, onCancel }) {
   const { user } = useAuth()
   const [executedBy, setExecutedBy] = useState(user?.full_name ?? '')
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const executedByError = !executedBy ? 'Elegí quién ejecuta la recategorización.' : ''
+  const executedByError = !executedBy ? 'Elegí quién lo ejecuta.' : ''
 
   const submit = async (event) => {
     event.preventDefault()
@@ -22,28 +23,18 @@ function RunRecategorizationForm({ onConfirm, onCancel }) {
     try {
       await onConfirm(executedBy)
     } catch (error) {
-      setSubmitError(getErrorMessage(error, 'No se pudo iniciar la recategorización.'))
+      setSubmitError(getErrorMessage(error, errorMessage))
       setSaving(false)
     }
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
-      <div className="flex flex-col gap-2 text-base text-on-surface-variant">
-        <p>¿Querés ejecutar la recategorización de jugadores?</p>
-        <p>
-          Se revisarán todos los jugadores activos y con baja parcial, y se les asignará la categoría que corresponde
-          según su año de nacimiento.
-        </p>
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          <span className="material-symbols-outlined text-base" aria-hidden="true">schedule</span>
-          <p>El proceso puede tardar unos minutos. Podés seguir usando el sistema mientras se ejecuta.</p>
-        </div>
-      </div>
+      <div className="flex flex-col gap-2 text-base text-on-surface-variant">{description}</div>
 
-      <Campo id="recategorization-executed-by" label="Ejecutado por" requerido error={showErrors ? executedByError : ''}>
+      <Campo id={`${id}-executed-by`} label="Ejecutado por" requerido error={showErrors ? executedByError : ''}>
         <AuthorizerSelect
-          id="recategorization-executed-by"
+          id={`${id}-executed-by`}
           value={executedBy}
           onChange={setExecutedBy}
           invalid={showErrors && Boolean(executedByError)}
@@ -68,24 +59,19 @@ function RunRecategorizationForm({ onConfirm, onCancel }) {
         </button>
         <button type="submit" disabled={saving} className={SUBMIT_BUTTON_CLASS}>
           <span className={`material-symbols-outlined text-base ${saving ? 'animate-spin' : ''}`} aria-hidden="true">
-            {saving ? 'progress_activity' : 'bolt'}
+            {saving ? 'progress_activity' : confirmIcon}
           </span>
-          <span>{saving ? 'Iniciando...' : 'Ejecutar recategorización'}</span>
+          <span>{saving ? savingLabel : confirmLabel}</span>
         </button>
       </div>
     </form>
   )
 }
 
-export default function RunRecategorizationModal({ opened, onConfirm, onClose }) {
+export default function ExecuteActionModal({ opened, title, onClose, ...formProps }) {
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={<Text fw={700} size="xl">Ejecutar recategorización</Text>}
-      centered
-    >
-      {opened && <RunRecategorizationForm onConfirm={onConfirm} onCancel={onClose} />}
+    <Modal opened={opened} onClose={onClose} title={<Text fw={700} size="xl">{title}</Text>} centered>
+      {opened && <ExecuteActionForm {...formProps} onCancel={onClose} />}
     </Modal>
   )
 }

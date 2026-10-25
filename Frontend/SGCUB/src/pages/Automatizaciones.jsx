@@ -7,10 +7,13 @@ import {
   updateAutomatizacionStatus,
 } from '../api/automatizaciones'
 import { AREA_ORDER, getAutomationInfo } from '../components/automatizaciones/automationCatalog'
+import CategoryUpdatePanel from '../components/automatizaciones/CategoryUpdatePanel'
+import ExecuteActionModal from '../components/automatizaciones/ExecuteActionModal'
 import RecategorizationPanel from '../components/automatizaciones/RecategorizationPanel'
-import RunRecategorizationModal from '../components/automatizaciones/RunRecategorizationModal'
 import TurnOffAutomationModal from '../components/automatizaciones/TurnOffAutomationModal'
+import { RecordSection } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
+import useCategoryUpdate from '../hooks/useCategoryUpdate'
 import useRecategorization from '../hooks/useRecategorization'
 
 const FREQUENCIES = {
@@ -149,15 +152,15 @@ function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
   const info = getAutomationInfo(automation)
 
   return (
-    <article className={`rounded-xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5 ${isActive ? 'border-slate-200' : 'border-slate-200/80'}`}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-500'}`} aria-hidden="true">
-          <span className="material-symbols-outlined">{info.icon}</span>
+    <article className={`rounded-xl border bg-white px-4 py-3 shadow-sm transition-shadow hover:shadow-md ${isActive ? 'border-slate-200' : 'border-slate-200/80'}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-500'}`} aria-hidden="true">
+          <span className="material-symbols-outlined text-[20px]">{info.icon}</span>
         </span>
 
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-slate-900">{info.title}</h3>
-          <p className="mt-1 text-sm text-slate-600">{info.description}</p>
+          <p className="text-sm text-slate-600">{info.description}</p>
           {info.tip && (
             <p className="mt-1.5 inline-flex items-start gap-1.5 text-sm text-sky-800">
               <span className="material-symbols-outlined text-[18px]" aria-hidden="true">lightbulb</span>
@@ -222,12 +225,21 @@ export default function Automatizaciones() {
   const [isLoadingExecutions, setIsLoadingExecutions] = useState(true)
   const [executionError, setExecutionError] = useState('')
   const recategorization = useRecategorization()
+  const categoryUpdate = useCategoryUpdate()
   const [isRunModalOpen, setIsRunModalOpen] = useState(false)
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [pendingTurnOff, setPendingTurnOff] = useState(null)
+  const [historyVersion, setHistoryVersion] = useState(0)
 
   const startRecategorization = async (executedBy) => {
     await recategorization.run(executedBy)
     setIsRunModalOpen(false)
+  }
+
+  const startCategoryUpdate = async (executedBy) => {
+    await categoryUpdate.run(executedBy)
+    setIsCategoryModalOpen(false)
+    setHistoryVersion((version) => version + 1)
   }
 
   const loadAutomatizaciones = useCallback(async () => {
@@ -265,7 +277,7 @@ export default function Automatizaciones() {
     return () => {
       cancelled = true
     }
-  }, [executionPage])
+  }, [executionPage, historyVersion])
 
   const automationGroups = useMemo(() => {
     const groups = new Map(AREA_ORDER.map((area) => [area, []]))
@@ -300,16 +312,13 @@ export default function Automatizaciones() {
 
   return (
     <div className="min-h-full bg-slate-50/70 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <div className="flex flex-col gap-3">
           <div>
             <PageHeader
               breadcrumb={[{ label: 'Administración' }, { label: 'Automatizaciones' }]}
               title="Automatizaciones"
             />
-            <p className="max-w-2xl text-sm text-slate-500">
-              Acá están los procesos que el sistema hace solo y los que podés ejecutar cuando lo necesites.
-            </p>
           </div>
         </div>
 
@@ -319,22 +328,70 @@ export default function Automatizaciones() {
           </div>
         )}
 
-        <section aria-labelledby="manual-actions-title" className="flex flex-col gap-3">
-          <div>
-            <h2 id="manual-actions-title" className="text-base font-bold text-slate-900">Acciones que podés ejecutar</h2>
-            <p className="mt-0.5 text-sm text-slate-500">Se ejecutan solo cuando vos lo decidís.</p>
-          </div>
+        <RecordSection title="Acciones ejecutables">
+          <CategoryUpdatePanel
+            status={categoryUpdate.status}
+            isLoading={categoryUpdate.isLoading}
+            error={categoryUpdate.error}
+            canRun={canChange}
+            onRun={() => setIsCategoryModalOpen(true)}
+          />
+          <hr className="mx-auto w-1/3 border-slate-300" />
           <RecategorizationPanel
             execution={recategorization.execution}
             isLoading={recategorization.isLoading}
             error={recategorization.error}
+            categories={categoryUpdate.status}
             canRun={canChange}
             onRun={() => setIsRunModalOpen(true)}
           />
-        </section>
+        </RecordSection>
 
-        <RunRecategorizationModal
+        <ExecuteActionModal
+          id="category-update"
+          opened={isCategoryModalOpen}
+          title="Actualizar categorías al nuevo año"
+          description={(
+            <>
+              <p>¿Querés pasar las categorías al año {categoryUpdate.status?.anio_actual}?</p>
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <span className="material-symbols-outlined text-base" aria-hidden="true">warning</span>
+                <p>
+                  Se cambia el año de todas las categorías y se renombran las infantiles (por ejemplo, "2015" pasa a "2016").
+                  Normalmente se hace una vez por año, al comenzar la temporada.
+                </p>
+              </div>
+            </>
+          )}
+          confirmLabel="Actualizar categorías"
+          confirmIcon="event_repeat"
+          savingLabel="Actualizando..."
+          errorMessage="No se pudieron actualizar las categorías."
+          onConfirm={startCategoryUpdate}
+          onClose={() => setIsCategoryModalOpen(false)}
+        />
+
+        <ExecuteActionModal
+          id="recategorization"
           opened={isRunModalOpen}
+          title="Ejecutar recategorización"
+          description={(
+            <>
+              <p>¿Querés ejecutar la recategorización de jugadores?</p>
+              <p>
+                Se revisarán todos los jugadores activos y con baja parcial, y se les asignará la categoría que corresponde
+                según su año de nacimiento.
+              </p>
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <span className="material-symbols-outlined text-base" aria-hidden="true">schedule</span>
+                <p>El proceso puede tardar unos minutos. Podés seguir usando el sistema mientras se ejecuta.</p>
+              </div>
+            </>
+          )}
+          confirmLabel="Ejecutar recategorización"
+          confirmIcon="bolt"
+          savingLabel="Iniciando..."
+          errorMessage="No se pudo iniciar la recategorización."
           onConfirm={startRecategorization}
           onClose={() => setIsRunModalOpen(false)}
         />
@@ -346,18 +403,14 @@ export default function Automatizaciones() {
           onClose={() => setPendingTurnOff(null)}
         />
 
-        <section aria-labelledby="automation-list-title" className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 id="automation-list-title" className="text-base font-bold text-slate-900">Automatizaciones configuradas</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Activá o pausá cada tarea sin modificar su programación.</p>
-            </div>
-            {!isLoading && (
-              <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
-                {automatizaciones.length} {automatizaciones.length === 1 ? 'tarea' : 'tareas'}
-              </span>
-            )}
-          </div>
+        <RecordSection
+          title="Ejecuciones automáticas"
+          extra={!isLoading && (
+            <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
+              {automatizaciones.length} {automatizaciones.length === 1 ? 'tarea' : 'tareas'}
+            </span>
+          )}
+        >
 
           {!canChange && !isLoading && (
             <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600" role="status">
@@ -392,102 +445,90 @@ export default function Automatizaciones() {
               ))}
             </div>
           ))}
-        </section>
+        </RecordSection>
 
-        <section aria-labelledby="execution-log-title" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sky-700" aria-hidden="true">receipt_long</span>
-              <div>
-                <h2 id="execution-log-title" className="font-semibold text-slate-900">Registro de últimas ejecuciones</h2>
-                <p className="text-xs text-slate-500">Historial de tareas completadas, exitosas o fallidas.</p>
+        <RecordSection title="Registro de últimas ejecuciones">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {executionError && (
+              <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                {executionError}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="bg-sky-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Fecha y hora</th>
+                    <th className="px-4 py-3">Automatización</th>
+                    <th className="px-4 py-3">Módulo / alcance</th>
+                    <th className="px-4 py-3">Resultado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoadingExecutions && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500" role="status">
+                        Cargando ejecuciones...
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoadingExecutions && !executionError && executionLog.results.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                        Todavía no hay ejecuciones registradas.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoadingExecutions && executionLog.results.map((execution) => (
+                    <tr key={execution.id} className="text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-4">{formatExecutionTime(execution.executed_at)}</td>
+                      <td className="px-4 py-4 font-semibold text-slate-900">{execution.automation}</td>
+                      <td className="px-4 py-4">{execution.scope}</td>
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${execution.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${execution.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                          {execution.success ? 'Exitosa' : 'Fallida'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                {isLoadingExecutions
+                  ? 'Cargando registros...'
+                  : `Mostrando ${executionLog.count === 0 ? 0 : (executionLog.page - 1) * executionLog.page_size + 1}–${(executionLog.page - 1) * executionLog.page_size + executionLog.results.length} de ${executionLog.count.toLocaleString('es-AR')} ejecuciones`}
+              </p>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setExecutionPage((page) => Math.max(1, page - 1))}
+                  disabled={isLoadingExecutions || executionLog.page <= 1}
+                  aria-label="Página anterior"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_left</span>
+                </button>
+                <span className="whitespace-nowrap font-medium text-slate-700">
+                  Página {executionLog.page} de {executionLog.total_pages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExecutionPage((page) => Math.min(executionLog.total_pages, page + 1))}
+                  disabled={isLoadingExecutions || executionLog.page >= executionLog.total_pages}
+                  aria-label="Página siguiente"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
+                </button>
               </div>
             </div>
-            <span className="inline-flex items-center gap-2 self-start text-xs text-slate-500 sm:self-auto">
-              <span className="h-2 w-2 rounded-full bg-sky-600" />
-              Historial disponible
-            </span>
           </div>
-
-          {executionError && (
-            <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-              {executionError}
-            </div>
-          )}
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="bg-sky-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Fecha y hora</th>
-                  <th className="px-4 py-3">Automatización</th>
-                  <th className="px-4 py-3">Módulo / alcance</th>
-                  <th className="px-4 py-3">Resultado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoadingExecutions && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500" role="status">
-                      Cargando ejecuciones...
-                    </td>
-                  </tr>
-                )}
-                {!isLoadingExecutions && !executionError && executionLog.results.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                      Todavía no hay ejecuciones registradas.
-                    </td>
-                  </tr>
-                )}
-                {!isLoadingExecutions && executionLog.results.map((execution) => (
-                  <tr key={execution.id} className="text-slate-600">
-                    <td className="whitespace-nowrap px-4 py-4">{formatExecutionTime(execution.executed_at)}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-900">{execution.automation}</td>
-                    <td className="px-4 py-4">{execution.scope}</td>
-                    <td className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${execution.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${execution.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        {execution.success ? 'Exitosa' : 'Fallida'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              {isLoadingExecutions
-                ? 'Cargando registros...'
-                : `Mostrando ${executionLog.count === 0 ? 0 : (executionLog.page - 1) * executionLog.page_size + 1}–${(executionLog.page - 1) * executionLog.page_size + executionLog.results.length} de ${executionLog.count.toLocaleString('es-AR')} ejecuciones`}
-            </p>
-            <div className="flex items-center justify-between gap-3 sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setExecutionPage((page) => Math.max(1, page - 1))}
-                disabled={isLoadingExecutions || executionLog.page <= 1}
-                aria-label="Página anterior"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_left</span>
-              </button>
-              <span className="whitespace-nowrap font-medium text-slate-700">
-                Página {executionLog.page} de {executionLog.total_pages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setExecutionPage((page) => Math.min(executionLog.total_pages, page + 1))}
-                disabled={isLoadingExecutions || executionLog.page >= executionLog.total_pages}
-                aria-label="Página siguiente"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">chevron_right</span>
-              </button>
-            </div>
-          </div>
-        </section>
+        </RecordSection>
       </div>
     </div>
   )

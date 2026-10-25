@@ -170,6 +170,7 @@ class RecategorizationApiTests(APITestCase):
             name: Categoria.objects.create(nombre=name, edad_maxima=max_age, genero="M", anio_vigente=2026)
             for name, max_age in [("2016", 10), ("2015", 11), ("PRE 9NA", 12), ("9NA", 13), ("4TA", 19)]
         }
+        ActualizacionCategoriasEjecucion.objects.create(ejecutado_por="Admin")
         self.dni_counter = 40000000
 
     def create_player(self, birth_year, category, secondary=None):
@@ -244,8 +245,8 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(execution.usuario, self.administrador)
         self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
 
-    def test_run_is_rejected_while_categories_are_outdated(self):
-        Categoria.objects.filter(pk=self.categories["4TA"].pk).update(anio_vigente=get_anio_actual() - 1)
+    def test_run_is_rejected_until_the_category_update_runs_this_year(self):
+        ActualizacionCategoriasEjecucion.objects.update(anio=get_anio_actual() - 1)
 
         status_response = self.client.get(reverse("recategorizacion-estado"))
         with patch("django_q.tasks.async_task") as enqueue:
@@ -255,7 +256,7 @@ class RecategorizationApiTests(APITestCase):
 
         self.assertFalse(status_response.data["categorias"]["actualizadas"])
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertIn("Primero actualizá las categorías", response.data["detail"])
+        self.assertIn('Primero ejecutá "Actualizar categorías al nuevo año"', response.data["detail"])
         enqueue.assert_not_called()
 
     def test_results_are_filtered_by_type_and_sorted_by_birth_year(self):
@@ -409,7 +410,6 @@ class CategoryUpdateApiTests(APITestCase):
         self.assertEqual(response.data["anio_actual"], self.current_year)
         self.assertEqual(response.data["anio_categorias"], self.current_year - 1)
         self.assertIsNone(response.data["ultima_actualizacion"])
-        self.assertFalse(response.data["bloqueada_por_recategorizacion"])
 
     def test_update_requires_who_executes_it(self):
         response = self.run_update("  ")
@@ -428,9 +428,10 @@ class CategoryUpdateApiTests(APITestCase):
         self.youth.refresh_from_db()
         self.assertEqual(self.youth.anio_vigente, self.current_year)
         self.assertEqual(self.youth.nombre, str(self.current_year - 11))
-        update = ActualizacionCategoriasEjecucion.objects.get()
-        self.assertEqual(update.usuario, self.administrador)
-        self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(ActualizacionCategoriasEjecucion.objects.first().usuario, self.administrador)
+        self.assertEqual(repeated.status_code, status.HTTP_200_OK)
+        self.assertEqual(repeated.data["ultima_actualizacion"]["categorias_actualizadas"], 0)
+        self.assertEqual(ActualizacionCategoriasEjecucion.objects.count(), 2)
 
     def test_update_appears_in_the_execution_history(self):
         self.run_update()
@@ -454,18 +455,16 @@ class CategoryUpdateApiTests(APITestCase):
         self.assertFalse(task.success)
         self.assertEqual(task.result, "boom")
 
-    def test_update_is_blocked_while_a_recategorization_is_active(self):
+    def test_update_can_run_while_a_recategorization_is_active(self):
         RecategorizacionEjecucion.objects.create(
             ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE,
         )
 
-        status_response = self.client.get(reverse("categorias-estado"))
         response = self.run_update()
 
-        self.assertTrue(status_response.data["bloqueada_por_recategorizacion"])
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.youth.refresh_from_db()
-        self.assertEqual(self.youth.anio_vigente, self.current_year - 1)
+        self.assertEqual(self.youth.anio_vigente, self.current_year)
 
     def test_users_without_permissions_cannot_update_categories(self):
         self.client.force_authenticate(get_user_model().objects.create_user(username="lector"))

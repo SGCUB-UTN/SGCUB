@@ -1,5 +1,6 @@
 // Plain-language description of every task the system runs, keyed by the backend function it executes
 export const RECATEGORIZATION_FUNC = 'padron.services.run_recategorization'
+export const CATEGORY_UPDATE_FUNC = 'padron.services.pasr_de_anio_vigente_a_categoria'
 export const RECATEGORIZATION_REVIEW_PATH = '/automatizaciones/recategorizacion'
 export const AREA_ORDER = ['Padrón', 'Finanzas', 'Sistema']
 
@@ -25,11 +26,9 @@ const AUTOMATION_CATALOG = {
     icon: 'school',
     area: 'Finanzas',
   },
-  'padron.services.pasr_de_anio_vigente_a_categoria': {
+  [CATEGORY_UPDATE_FUNC]: {
     title: 'Actualizar las categorías al nuevo año',
-    description: 'Pasa las categorías al año nuevo y actualiza el nombre de las infantiles (por ejemplo, "2015" pasa a "2016").',
-    tip: 'Después de esta tarea, ejecutá la recategorización de jugadores.',
-    whenOff: 'Si la apagás, las categorías van a quedar con el año anterior.',
+    description: 'Pasa las categorías al año en curso y actualiza el nombre de las infantiles (por ejemplo, "2015" pasa a "2016"). Se hace una vez por año, antes de la recategorización.',
     icon: 'event_repeat',
     area: 'Padrón',
   },

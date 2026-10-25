@@ -17,7 +17,6 @@ from padron.services import (
     RECATEGORIZATION_TASK,
     RECATEGORIZATION_TASK_NAME,
     CategoriesOutdated,
-    CategoryUpdateBlocked,
     RecategorizationDecisionError,
     RecategorizationInProgress,
     accept_all_suggestions,
@@ -375,9 +374,6 @@ def _serialize_categories_status():
     last_update = ActualizacionCategoriasEjecucion.objects.order_by("-fecha", "-actualizacion_id").first()
     return {
         **categories_status(),
-        "bloqueada_por_recategorizacion": RecategorizacionEjecucion.objects.filter(
-            estado__in=[RecategorizacionEjecucion.EstadoChoices.EN_CURSO, RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE],
-        ).exists(),
         "ultima_actualizacion": {
             "id": last_update.pk,
             "anio": last_update.anio,
@@ -405,8 +401,5 @@ def category_update_run(request):
             {"ejecutado_por": ["Indicá quién actualiza las categorías (hasta 150 caracteres)."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    try:
-        update_categories_year(request.user, executed_by)
-    except CategoryUpdateBlocked as error:
-        return Response({"detail": str(error)}, status=status.HTTP_409_CONFLICT)
+    update_categories_year(request.user, executed_by)
     return Response(_serialize_categories_status())

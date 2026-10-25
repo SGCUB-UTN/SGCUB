@@ -9,7 +9,7 @@ from padron.serializers import SocioSerializer
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from .models import CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio, get_anio_actual
+from .models import ActualizacionCategoriasEjecucion, CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio, get_anio_actual
 from .services import (
     CategoriesOutdated,
     RecategorizationInProgress,
@@ -1416,6 +1416,7 @@ class RecategorizationServiceTests(TestCase):
             ]
         }
         self.unassigned = Categoria.objects.create(nombre="No asignado")
+        ActualizacionCategoriasEjecucion.objects.create(ejecutado_por="Admin")
         self.dni_counter = 40000000
 
     def create_player(self, birth_year, category, secondary=None, gender=None, birth_date=True):
@@ -1598,8 +1599,8 @@ class RecategorizationServiceTests(TestCase):
         with self.assertRaises(RecategorizationInProgress):
             start_recategorization(user, "Administrador")
 
-    def test_start_requires_categories_updated_to_the_current_year(self):
-        Categoria.objects.filter(pk=self.categories["2015"].pk).update(anio_vigente=get_anio_actual() - 1)
+    def test_start_requires_the_category_update_to_run_this_year(self):
+        ActualizacionCategoriasEjecucion.objects.update(anio=get_anio_actual() - 1)
 
         with patch("django_q.tasks.async_task") as enqueue, self.assertRaises(CategoriesOutdated):
             start_recategorization(None, "Administrador")

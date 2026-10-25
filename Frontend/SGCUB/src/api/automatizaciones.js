@@ -17,6 +17,18 @@ export const updateAutomatizacionStatus = async (id, isActive) => {
   return response.data
 }
 
+const categoryUpdateEndpoint = `${endpoint}categorias/`
+
+export const getCategoryUpdateStatus = async () => {
+  const response = await api.get(categoryUpdateEndpoint)
+  return response.data
+}
+
+export const runCategoryUpdate = async (executedBy) => {
+  const response = await api.post(`${categoryUpdateEndpoint}ejecutar/`, { ejecutado_por: executedBy })
+  return response.data
+}
+
 const recategorizationEndpoint = `${endpoint}recategorizacion/`
 
 export const getRecategorizationStatus = async () => {
