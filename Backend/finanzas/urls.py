@@ -8,6 +8,7 @@ from .views import (
     cuota_beneficio,
     comprobante_detail,
     configuracion_financiera,
+    configuracion_financiera_impacto,
     configuracion_financiera_versiones,
     comprobante_list,
     comprobante_pdf,
@@ -40,6 +41,7 @@ from .views import (
 
 urlpatterns = [
     path("configuracion/", configuracion_financiera, name="configuracion-financiera"),
+    path("configuracion/impacto/", configuracion_financiera_impacto, name="configuracion-financiera-impacto"),
     path("configuracion/versiones/", configuracion_financiera_versiones, name="configuracion-financiera-versiones"),
     path("cuota/generar-mensual/", generar_cuotas_mensuales_manual, name="generar-cuotas-mensuales"),
     path("cuota/aplicar-recargos/", aplicar_recargos_manual, name="aplicar-recargos"),

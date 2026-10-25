@@ -455,10 +455,11 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
             "periodo_vigencia",
             *CONFIGURATION_FIELDS,
             "fecha_creacion",
+            "cuotas_actualizadas",
             "usuario_creacion",
             "usuario_nombre",
         ]
-        read_only_fields = ["configuracion_financiera_id", "fecha_creacion", "usuario_creacion"]
+        read_only_fields = ["configuracion_financiera_id", "fecha_creacion", "cuotas_actualizadas", "usuario_creacion"]
         extra_kwargs = {
             "periodo_vigencia": {"required": True},
             "monto_cuota_social": {"min_value": Decimal("0.01")},

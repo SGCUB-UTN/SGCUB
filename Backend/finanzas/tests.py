@@ -56,7 +56,10 @@ from .services import (
 	cuota_state,
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
+	grant_scholarship,
 	next_receipt_number,
+	pending_amounts,
+	register_payment,
 	sync_cuota_charge,
 )
 from .views import _build_financial_report
@@ -280,6 +283,128 @@ class ConfiguracionFinancieraTests(APITestCase):
 		self.assertEqual(configuracion.surcharge(1, Decimal("2500.00")), Decimal("200.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("2500.00")), Decimal("250.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("1333.33")), Decimal("133.33"))
+
+
+class ActualizacionCuotasPorConfiguracionTests(APITestCase):
+	"""A new version updates every unpaid cuota (partially paid included) of the periods it applies to."""
+
+	def setUp(self):
+		self.usuario = get_user_model().objects.create_user(username="tesorero", first_name="Ana", last_name="Tesorera")
+		self.client.force_authenticate(user=self.usuario)
+		self.inicio = next_period_start()
+		self.periodo = self.inicio.strftime("%Y-%m")
+
+	def nueva_version(self, periodo=None, **datos):
+		return self.client.post(
+			reverse("configuracion-financiera"),
+			{"periodo_vigencia": periodo or self.periodo, **datos},
+			format="json",
+		)
+
+	def cuota(self, dni, periodo=None, con_jugador=False):
+		return create_cuota(crear_socio(dni, con_jugador=con_jugador), periodo or self.periodo)
+
+	def pagar(self, cuota, monto):
+		register_payment(
+			cuota.movimiento.cuenta_corriente.socio_id,
+			[cuota.pk],
+			[{"medio_de_pago": "Efectivo", "monto": Decimal(monto)}],
+			Decimal(monto),
+		)
+
+	def test_actualiza_montos_movimiento_y_saldo_de_cuotas_impagas(self):
+		cuota = self.cuota("60000001", con_jugador=True)
+
+		response = self.nueva_version(monto_cuota_social="1200.00", monto_cuota_deportiva="1800.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["cuotas_actualizadas"], 1)
+		cuota.refresh_from_db()
+		cuota.movimiento.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
+		self.assertEqual(cuota.movimiento.cuenta_corriente.saldo, Decimal("-3000.00"))
+		self.assertEqual(
+			sorted(cuota.items.values_list("concepto", "monto")),
+			[("CuotaDeportiva", Decimal("1800.00")), ("CuotaSocial", Decimal("1200.00"))],
+		)
+		anulado = ItemCuota.all_objects.anulados().get(cuota=cuota, concepto="CuotaSocial")
+		self.assertEqual(anulado.monto, Decimal("1000.00"))
+		self.assertEqual(anulado.usuario_anulacion, self.usuario)
+		self.assertIn(self.periodo, anulado.motivo_anulacion)
+
+	def test_actualiza_las_cuotas_parcialmente_pagas(self):
+		cuota = self.cuota("60000002")
+		self.pagar(cuota, "400.00")
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1200.00"))
+		self.assertEqual(pending_amounts([cuota])[cuota.pk], Decimal("800.00"))
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
+
+	def test_no_modifica_las_cuotas_pagas(self):
+		cuota = self.cuota("60000003")
+		self.pagar(cuota, "1000.00")
+
+		response = self.nueva_version(monto_cuota_social="1200.00")
+
+		self.assertEqual(response.data["cuotas_actualizadas"], 0)
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+
+	def test_actualiza_los_vencimientos(self):
+		cuota = self.cuota("60000004")
+
+		self.nueva_version(dia_vencimiento_1=5, dia_vencimiento_2=15)
+
+		cuota.refresh_from_db()
+		self.assertEqual((cuota.fecha_venc1, cuota.fecha_venc2), (self.inicio.replace(day=5), self.inicio.replace(day=15)))
+
+	def test_no_modifica_cuotas_de_periodos_anteriores_a_la_vigencia(self):
+		cuota = self.cuota("60000005")
+
+		response = self.nueva_version(periodo=next_period_start(2).strftime("%Y-%m"), monto_cuota_social="1200.00")
+
+		self.assertEqual(response.data["cuotas_actualizadas"], 0)
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+
+	def test_no_modifica_cuotas_de_una_version_programada_posterior(self):
+		posterior = next_period_start(2).strftime("%Y-%m")
+		self.nueva_version(periodo=posterior, monto_cuota_social="1500.00")
+		cuota_posterior = self.cuota("60000006", periodo=posterior)
+		cuota = self.cuota("60000007")
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		cuota_posterior.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1200.00"))
+		self.assertEqual(cuota_posterior.movimiento.monto, Decimal("1500.00"))
+
+	def test_recalcula_las_becas_porcentuales(self):
+		socio = crear_socio("60000008")
+		grant_scholarship(socio.pk, "Porcentaje", Decimal("50.00"), timezone.localdate(), "Beca deportiva", "Comisión")
+		cuota = create_cuota(socio, self.periodo)
+		self.assertEqual(cuota.movimiento.monto, Decimal("500.00"))
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.items.get(concepto="Beca").monto, Decimal("600.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("600.00"))
+
+	def test_impacto_cuenta_las_cuotas_que_se_actualizarian(self):
+		self.cuota("60000009")
+		pagada = self.cuota("60000010")
+		self.pagar(pagada, "1000.00")
+
+		response = self.client.get(reverse("configuracion-financiera-impacto"), {"periodo": self.periodo})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["cuotas_afectadas"], 1)
 
 
 class BecaModeloTests(TestCase):

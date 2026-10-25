@@ -64,6 +64,7 @@ from .services import (
 	CuotaDuplicadaError,
 	PagoInvalidoError,
 	SocioInactivoError,
+	affected_cuotas,
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
@@ -74,6 +75,7 @@ from .services import (
 	ensure_cuota_without_payments,
 	generar_cuotas_mensuales,
 	grant_scholarship,
+	parse_period,
 	pending_amounts,
 	register_payment,
 	remove_cuota_item,
@@ -467,6 +469,17 @@ def configuracion_financiera(request):
 	usuario = request.user if request.user.is_authenticated else None
 	configuracion = create_configuration_version(serializer.validated_data, usuario)
 	return Response(ConfiguracionFinancieraSerializer(configuracion).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Configuracion"])
+@api_view(["GET"])
+def configuracion_financiera_impacto(request):
+	"""How many cuotas a new version from `periodo` would update, to warn before saving it."""
+	try:
+		periodo = parse_period(request.query_params.get("periodo", "")).strftime("%Y-%m")
+	except ValueError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response({"periodo": periodo, "cuotas_afectadas": affected_cuotas(periodo).count()})
 
 
 @extend_schema(tags=["Finanzas/Configuracion"], responses=VersionConfiguracionFinancieraSerializer(many=True))

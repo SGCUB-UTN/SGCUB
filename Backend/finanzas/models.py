@@ -405,6 +405,7 @@ class ConfiguracionFinanciera(models.Model):
     )
     valor_recargo_2 = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     fecha_creacion = models.DateTimeField(default=timezone.now)
+    cuotas_actualizadas = models.PositiveIntegerField(default=0)
     usuario_creacion = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
