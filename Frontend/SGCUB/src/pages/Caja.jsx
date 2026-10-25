@@ -8,7 +8,6 @@ import PagoForm from '../components/finanzas/PagoForm'
 import ComprobantesTable from '../components/finanzas/ComprobantesTable'
 import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
 import MovimientoManualDetailModal from '../components/finanzas/MovimientoManualDetailModal'
-import AmendPagoModal from '../components/finanzas/AmendPagoModal'
 import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
 import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton } from '../components/personas/tabs/parts'
@@ -30,7 +29,6 @@ function Caja() {
   const [detalleComprobante, setDetalleComprobante] = useState(null)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
   const [errorDetalle, setErrorDetalle] = useState(null)
-  const [pagoEnCorreccion, setPagoEnCorreccion] = useState(null)
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null)
   const [movimientoManualAbierto, setMovimientoManualAbierto] = useState(false)
   const [ingresoARevertir, setIngresoARevertir] = useState(null)
@@ -151,7 +149,30 @@ function Caja() {
         error={errorDetalle}
         opened={Boolean(comprobanteSeleccionado)}
         onClose={() => setComprobanteSeleccionado(null)}
-        onCorrect={setPagoEnCorreccion}
+        onAmended={async ({ replacementComprobante } = {}) => {
+          await recargarCaja()
+          if (socioId) {
+            try {
+              const cuentaActualizada = await getEstadoCuenta(socioId)
+              setCarga((actual) => ({ ...actual, cuenta: cuentaActualizada }))
+            } catch {
+              setCarga((actual) => ({
+                ...actual,
+                error: 'La modificación se registró, pero no se pudo actualizar la cuenta corriente.',
+              }))
+            }
+          }
+          const target = replacementComprobante ?? comprobanteSeleccionado
+          if (target?.comprobante_id) {
+            try {
+              const updatedDetail = await getComprobante(target.comprobante_id)
+              setComprobanteSeleccionado((prev) => (replacementComprobante ? { ...prev, ...replacementComprobante } : prev))
+              setDetalleComprobante(updatedDetail)
+            } catch {
+              // Keep existing detail if refresh fails
+            }
+          }
+        }}
       />
 
       <MovimientoManualDetailModal
@@ -163,31 +184,6 @@ function Caja() {
         onIssueCreditNote={(movimiento) => {
           setMovimientoSeleccionado(null)
           abrirModalMovimientoManual(movimiento)
-        }}
-      />
-
-      <AmendPagoModal
-        key={pagoEnCorreccion?.pago_id ?? 'closed'}
-        comprobante={comprobanteSeleccionado}
-        pago={pagoEnCorreccion}
-        detail={detalleComprobante}
-        opened={Boolean(pagoEnCorreccion)}
-        onClose={() => setPagoEnCorreccion(null)}
-        onSuccess={async () => {
-          await recargarCaja()
-          if (socioId) {
-            try {
-              const cuentaActualizada = await getEstadoCuenta(socioId)
-              setCarga((actual) => ({ ...actual, cuenta: cuentaActualizada }))
-            } catch {
-              setCarga((actual) => ({
-                ...actual,
-                error: 'La corrección se registró, pero no se pudo actualizar la cuenta corriente.',
-              }))
-            }
-          }
-          setPagoEnCorreccion(null)
-          setComprobanteSeleccionado(null)
         }}
       />
 

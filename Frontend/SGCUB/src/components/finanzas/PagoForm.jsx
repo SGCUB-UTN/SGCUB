@@ -11,6 +11,7 @@ import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
+import { crearMovimientoManual } from '../../api/movimientos'
 
 const PAYMENT_METHODS = [
   { value: 'Efectivo', label: 'Efectivo', icon: 'payments' },
@@ -45,6 +46,28 @@ const allocate = (cuotas, amount) => {
 const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
   .slice(0, count)
   .reduce((total, cuota) => total + cuotaDue(cuota), 0))
+
+const splitPaymentMethods = (rows, targetCuotasTotal) => {
+  let remainingCuotas = roundCents(targetCuotasTotal)
+  const cuotaMedios = []
+  const surplusMedios = []
+
+  rows.filter(isRowComplete).forEach((row) => {
+    const rowAmount = roundCents(Number(row.monto))
+    const forCuotas = roundCents(Math.min(rowAmount, remainingCuotas))
+    const forSurplus = roundCents(rowAmount - forCuotas)
+    remainingCuotas = roundCents(remainingCuotas - forCuotas)
+
+    if (forCuotas > 0) {
+      cuotaMedios.push({ medio_de_pago: row.medio, monto: forCuotas })
+    }
+    if (forSurplus > 0) {
+      surplusMedios.push({ medio_de_pago: row.medio, monto: forSurplus })
+    }
+  })
+
+  return { cuotaMedios, surplusMedios }
+}
 
 function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false, action = null }) {
   return (
@@ -358,12 +381,12 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const canAddRow = paymentRows.length < PAYMENT_METHODS.length
   const showActionSlot = canAddRow || paymentRows.length > 1
 
-  const exceedsDebt = enteredTotal > pendingTotal
+  const surplusAmount = roundCents(Math.max(enteredTotal - pendingTotal, 0))
+  const cuotasPaymentTotal = roundCents(Math.min(enteredTotal, pendingTotal))
   const formErrors = {
     medios: paymentRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá el monto de cada pago.' : '',
-    montos: exceedsDebt ? `El pago no puede superar el total de cuotas pendientes, incluidas las futuras (${formatAmount(pendingTotal)}).` : '',
   }
-  const isValid = !formErrors.medios && !formErrors.montos && coveredLines.length > 0
+  const isValid = !formErrors.medios && coveredLines.length > 0
 
   const confirmPayment = async (event) => {
     event.preventDefault()
@@ -373,18 +396,31 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
     setSaving(true)
     setSubmitError('')
     try {
+      const { cuotaMedios, surplusMedios } = splitPaymentMethods(paymentRows, cuotasPaymentTotal)
       const response = await registrarPago({
         socio_id: socio.socio_id,
         cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
-        monto_total: enteredTotal,
-        medios: paymentRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
+        monto_total: cuotasPaymentTotal,
+        medios: cuotaMedios,
         observacion,
       })
+      for (const surplus of surplusMedios) {
+        await crearMovimientoManual({
+          socio_id: socio.socio_id,
+          tipo: 'Abono',
+          origen: 'IngresoManual',
+          concepto: 'Excedente de transferencia / Saldo a favor — Generado al abonar cuota',
+          monto: surplus.monto,
+          medio_de_pago: surplus.medio_de_pago,
+        })
+      }
       const detalle = await getComprobante(response.comprobante?.comprobante_id).catch(() => null)
       setReceipt({
         detalle,
         medios: paymentRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) })),
         montoTotal: enteredTotal,
+        montoCuotas: cuotasPaymentTotal,
+        excedente: surplusAmount,
         observacion,
         numero: response.comprobante?.numero,
         fecha: response.comprobante?.fecha_emision,
@@ -405,8 +441,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
 
   const confirmLabel = () => {
     if (saving) return 'Registrando...'
-    if (exceedsDebt) return `Excede las cuotas pendientes en ${formatAmount(roundCents(enteredTotal - pendingTotal))}`
     if (!(enteredTotal > 0)) return 'Ingresá el monto del pago'
+    if (surplusAmount > 0) return `Confirmar pago y saldo a favor • ${formatAmount(enteredTotal)}`
     return `Confirmar pago • ${formatAmount(enteredTotal)}`
   }
 
@@ -479,7 +515,14 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
               ))}
             </div>
             {showErrors && formErrors.medios && <p className="text-sm text-error font-medium" role="alert">{formErrors.medios}</p>}
-            {formErrors.montos && <p className="text-sm text-error font-medium" role="alert">{formErrors.montos}</p>}
+            {surplusAmount > 0 && (
+              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5" role="status">
+                <span className="material-symbols-outlined text-[18px] text-emerald-700 shrink-0 mt-0.5" aria-hidden="true">account_balance_wallet</span>
+                <p>
+                  El excedente de <strong>{formatAmount(surplusAmount)}</strong> se acreditará automáticamente como <strong>saldo a favor</strong> y se descontará en la próxima cuota.
+                </p>
+              </div>
+            )}
           </FormSection>
 
           <FormSection icon="notes" title="Observaciones" disabled={!socio}>
@@ -546,6 +589,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
                       valueClassName="text-amber-700"
                     />
                   ))}
+                  {surplusAmount > 0 && (
+                    <SummaryLine
+                      label="Saldo a favor (próxima cuota)"
+                      value={`+ ${formatAmount(surplusAmount)}`}
+                      valueClassName="text-emerald-700 font-bold"
+                    />
+                  )}
                 </>
               ) : <p className="text-base text-on-surface-variant">Ingresá el pago para ver qué cuotas se saldan.</p>}
             </TicketSection>
@@ -570,7 +620,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
             )}
             <button
               type="submit"
-              disabled={!socio || saving || noDebt || exceedsDebt || !(enteredTotal > 0)}
+              disabled={!socio || saving || noDebt || !(enteredTotal > 0)}
               className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}
             >
               <span>{confirmLabel()}</span>

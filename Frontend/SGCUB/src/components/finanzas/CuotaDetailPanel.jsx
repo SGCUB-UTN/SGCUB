@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { descargarComprobantePdf, getComprobante, getComprobantesByCuota } from '../../api/comprobantes'
+import { descargarMovimientoPdf } from '../../api/movimientos'
 import { formatAmount, formatDate } from '../personas/format'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import ComprobanteDetailModal from './ComprobanteDetailModal'
+import MovimientoManualDetailModal from './MovimientoManualDetailModal'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
@@ -20,7 +22,7 @@ const PAID_HINT = 'La cuota ya está paga'
 
 const sumItems = (items) => items.reduce((total, item) => total + Number(item.monto ?? 0) * (item.es_descuento ? -1 : 1), 0)
 
-function ReceiptRow({ comprobante, onOpen }) {
+function ReceiptRow({ comprobante, onOpen, onEdit }) {
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
   const annulled = isAnnulled(comprobante)
@@ -58,8 +60,74 @@ function ReceiptRow({ comprobante, onOpen }) {
           <button type="button" onClick={() => onOpen(comprobante)} title="Ver detalle" aria-label={`Ver comprobante ${comprobante.numero}`} className={ICON_BUTTON_CLASS}>
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
           </button>
+          {!annulled && onEdit && (
+            <button type="button" onClick={() => onEdit(comprobante)} title="Editar pago o cuota" aria-label={`Editar comprobante ${comprobante.numero}`} className={ICON_BUTTON_CLASS}>
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">edit_note</span>
+            </button>
+          )}
           <button type="button" onClick={download} disabled={downloading} title="Descargar PDF" aria-label={`Descargar comprobante ${comprobante.numero}`} className={ICON_BUTTON_CLASS}>
             <span className={`material-symbols-outlined text-[20px] ${downloading ? 'animate-spin' : ''}`} aria-hidden="true">{downloading ? 'progress_activity' : 'download'}</span>
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-sm text-error pl-9" role="alert">{error}</p>}
+    </li>
+  )
+}
+
+function CreditNoteRow({ creditNote, onOpen }) {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+
+  const download = async () => {
+    setDownloading(true)
+    setError('')
+    try {
+      await descargarMovimientoPdf(creditNote.movimiento_cuenta_id)
+    } catch {
+      setError('No se pudo descargar la nota de crédito.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <li className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0">
+      <div className="flex items-center gap-3">
+        <span className="material-symbols-outlined text-[22px] shrink-0 text-amber-700" aria-hidden="true">
+          receipt_long
+        </span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-base font-semibold text-on-surface truncate">
+            Nota de Crédito #{creditNote.numero_comprobante}
+          </span>
+          <span className="text-sm text-on-surface-variant">
+            {formatDate(creditNote.fecha)} · <span className="font-semibold text-on-surface tabular-nums">−{formatAmount(creditNote.monto)}</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onOpen && (
+            <button
+              type="button"
+              onClick={() => onOpen(creditNote)}
+              title="Ver detalle"
+              aria-label={`Ver nota de crédito ${creditNote.numero_comprobante}`}
+              className={ICON_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={download}
+            disabled={downloading}
+            title="Descargar PDF"
+            aria-label={`Descargar nota de crédito ${creditNote.numero_comprobante}`}
+            className={ICON_BUTTON_CLASS}
+          >
+            <span className={`material-symbols-outlined text-[20px] ${downloading ? 'animate-spin' : ''}`} aria-hidden="true">
+              {downloading ? 'progress_activity' : 'download'}
+            </span>
           </button>
         </div>
       </div>
@@ -97,6 +165,11 @@ function ConceptsCard({ cuota, onRemove }) {
   const items = cuota.items ?? []
   const charges = items.filter((item) => !isAdjustment(item))
   const adjustments = items.filter(isAdjustment)
+  const creditNotes = cuota.notas_credito ?? []
+  const totalOriginal = Number(cuota.monto_total ?? 0)
+  const ncDiscount = Number(cuota.monto_nota_credito ?? 0)
+  const netTotal = cuota.monto_neto != null ? Number(cuota.monto_neto) : Math.max(0, totalOriginal - ncDiscount)
+  const hasPaidNc = creditNotes.length > 0 && netTotal < totalOriginal
 
   return (
     <div className={`${CARD_CLASS} flex flex-col gap-3 p-4 h-full`} role="region" aria-label="Detalle de conceptos">
@@ -108,7 +181,7 @@ function ConceptsCard({ cuota, onRemove }) {
         {charges.map((item) => (
           <ConceptLine key={item.item_cuota_id} label={itemLabel(item)} value={formatAmount(Number(item.monto ?? 0))} />
         ))}
-        {adjustments.length > 0 && (
+        {(adjustments.length > 0 || hasPaidNc) && (
           <>
             <ConceptLine label="Subtotal" value={formatAmount(sumItems(charges))} className="font-semibold text-on-surface" />
             {adjustments.map((item) => {
@@ -127,12 +200,21 @@ function ConceptsCard({ cuota, onRemove }) {
                 />
               )
             })}
+            {hasPaidNc && creditNotes.map((nc) => (
+              <ConceptLine
+                key={`nc-${nc.movimiento_cuenta_id}`}
+                label={`Nota de Crédito NC-X #${nc.numero_comprobante}`}
+                detail={nc.concepto}
+                value={`− ${formatAmount(Number(nc.monto ?? 0))}`}
+                className="text-emerald-700 font-medium"
+              />
+            ))}
           </>
         )}
       </div>
       <div className="mt-auto flex items-baseline justify-between gap-3 pt-1 text-base font-bold text-on-surface">
-        <span className="uppercase tracking-wider text-sm">Total calculado</span>
-        <span className="tabular-nums whitespace-nowrap pr-[30px]">{formatAmount(Number(cuota.monto_total ?? 0))}</span>
+        <span className="uppercase tracking-wider text-sm">{hasPaidNc ? 'Total neto final' : 'Total calculado'}</span>
+        <span className="tabular-nums whitespace-nowrap pr-[30px]">{formatAmount(hasPaidNc ? netTotal : totalOriginal)}</span>
       </div>
     </div>
   )
@@ -147,15 +229,26 @@ function SummaryRow({ label, value, className = 'text-on-surface' }) {
   )
 }
 
-function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
+function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, activeReceipt, onEditPaidReceipt }) {
   const paid = isPaid(cuota)
   const pending = Number(cuota.saldo_pendiente ?? 0)
   const payable = !paid && pending > 0
+  const totalOriginal = Number(cuota.monto_total ?? 0)
+  const ncDiscount = Number(cuota.monto_nota_credito ?? 0)
+  const netTotal = cuota.monto_neto != null ? Number(cuota.monto_neto) : Math.max(0, totalOriginal - ncDiscount)
+  const hasNcDiscount = ncDiscount > 0 && netTotal < totalOriginal
+
   return (
     <div className={`${CARD_CLASS} flex flex-col gap-3 p-4`} role="region" aria-label="Resumen de pago">
       <h4 className={CARD_TITLE_CLASS}>Resumen de pago</h4>
       <div className="flex flex-col gap-1.5 text-base">
-        <SummaryRow label="Total cuota" value={formatAmount(Number(cuota.monto_total ?? 0))} />
+        <SummaryRow label={hasNcDiscount ? 'Total original cuota' : 'Total cuota'} value={formatAmount(totalOriginal)} />
+        {hasNcDiscount && (
+          <>
+            <SummaryRow label="Nota de Crédito (NC-X)" value={`− ${formatAmount(ncDiscount)}`} className="text-emerald-700 font-medium" />
+            <SummaryRow label="Total neto final" value={formatAmount(netTotal)} className="font-bold text-on-surface" />
+          </>
+        )}
         <SummaryRow label="Pagado" value={formatAmount(Number(cuota.monto_pagado ?? 0))} />
         <div className="pt-2 mt-0.5 border-t border-outline-variant/30">
           {payable ? (
@@ -168,12 +261,17 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
           )}
         </div>
       </div>
-      {(onPay || onAssignBenefit) && (
+      {(onPay || onAssignBenefit || (paid && activeReceipt && onEditPaidReceipt)) && (
         <div className="flex flex-col gap-2 [&>button]:justify-center">
           {onPay && payable && (
             <PrimaryButton icon="payments" onClick={() => onPay(cuota)}>
               {`Pagar · ${formatAmount(pending)}`}
             </PrimaryButton>
+          )}
+          {paid && activeReceipt && onEditPaidReceipt && (
+            <SecondaryButton icon="edit_note" onClick={() => onEditPaidReceipt(activeReceipt)}>
+              Editar pago / cuota
+            </SecondaryButton>
           )}
           {onAssignBenefit && (
             <SecondaryButton icon="sell" onClick={() => onAssignBenefit(cuota)} disabled={paid} title={paid ? PAID_HINT : undefined}>
@@ -186,17 +284,8 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
   )
 }
 
-function ReceiptsCard({ cuotaId, onOpen }) {
-  const [receipts, setReceipts] = useState({ loading: true, error: '', items: [] })
-
-  useEffect(() => {
-    let active = true
-    getComprobantesByCuota(cuotaId)
-      .then((items) => active && setReceipts({ loading: false, error: '', items: items ?? [] }))
-      .catch(() => active && setReceipts({ loading: false, error: 'No se pudieron cargar los comprobantes.', items: [] }))
-    return () => { active = false }
-  }, [cuotaId])
-
+function ReceiptsCard({ receipts, creditNotes = [], onOpen, onEdit, onOpenCreditNote }) {
+  const hasItems = (receipts.items?.length ?? 0) > 0 || creditNotes.length > 0
   return (
     <div className={`${CARD_CLASS} flex flex-col gap-2 p-4 min-w-0`} role="region" aria-label="Comprobantes asociados">
       <h4 className={CARD_TITLE_CLASS}>Comprobantes asociados</h4>
@@ -207,10 +296,22 @@ function ReceiptsCard({ cuotaId, onOpen }) {
         </p>
       )}
       {receipts.error && <p className="text-sm text-error" role="alert">{receipts.error}</p>}
-      {!receipts.loading && !receipts.error && (receipts.items.length ? (
+      {!receipts.loading && !receipts.error && (hasItems ? (
         <ul className="flex flex-col divide-y divide-outline-variant/20">
           {receipts.items.map((comprobante) => (
-            <ReceiptRow key={comprobante.comprobante_id} comprobante={comprobante} onOpen={onOpen} />
+            <ReceiptRow
+              key={comprobante.comprobante_id}
+              comprobante={comprobante}
+              onOpen={onOpen}
+              onEdit={onEdit}
+            />
+          ))}
+          {creditNotes.map((nc) => (
+            <CreditNoteRow
+              key={nc.movimiento_cuenta_id}
+              creditNote={nc}
+              onOpen={onOpenCreditNote}
+            />
           ))}
         </ul>
       ) : (
@@ -224,12 +325,34 @@ function ReceiptsCard({ cuotaId, onOpen }) {
 }
 
 function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged }) {
+  const [receipts, setReceipts] = useState({ loading: true, error: '', items: [] })
   const [selected, setSelected] = useState(null)
+  const [selectedCreditNote, setSelectedCreditNote] = useState(null)
+  const [openInEditMode, setOpenInEditMode] = useState(false)
   const [detail, setDetail] = useState({ loading: false, error: null, data: null })
   const [removing, setRemoving] = useState(null)
 
-  const openReceipt = async (comprobante) => {
+  const loadReceipts = async () => {
+    setReceipts((prev) => ({ ...prev, loading: true, error: '' }))
+    try {
+      const items = await getComprobantesByCuota(cuota.cuota_id)
+      setReceipts({ loading: false, error: '', items: items ?? [] })
+    } catch {
+      setReceipts({ loading: false, error: 'No se pudieron cargar los comprobantes.', items: [] })
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+    getComprobantesByCuota(cuota.cuota_id)
+      .then((items) => active && setReceipts({ loading: false, error: '', items: items ?? [] }))
+      .catch(() => active && setReceipts({ loading: false, error: 'No se pudieron cargar los comprobantes.', items: [] }))
+    return () => { active = false }
+  }, [cuota.cuota_id])
+
+  const openReceipt = async (comprobante, editMode = false) => {
     setSelected(comprobante)
+    setOpenInEditMode(editMode)
     setDetail({ loading: true, error: null, data: null })
     try {
       setDetail({ loading: false, error: null, data: await getComprobante(comprobante.comprobante_id) })
@@ -237,6 +360,8 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged })
       setDetail({ loading: false, error: 'No se pudo cargar el detalle.', data: null })
     }
   }
+
+  const activeReceipt = receipts.items.find((item) => !isAnnulled(item)) ?? null
 
   return (
     <tr className="bg-surface-container-low/60">
@@ -246,8 +371,20 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged })
             <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemoving : undefined} />
           </div>
           <div className="flex flex-col gap-4 min-w-0">
-            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={openReceipt} />
-            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} />
+            <ReceiptsCard
+              receipts={receipts}
+              creditNotes={cuota.notas_credito ?? []}
+              onOpen={(comp) => openReceipt(comp, false)}
+              onEdit={(comp) => openReceipt(comp, true)}
+              onOpenCreditNote={(nc) => setSelectedCreditNote({ ...nc, socio: cuota.socio })}
+            />
+            <PaymentSummaryCard
+              cuota={cuota}
+              onPay={onPay}
+              onAssignBenefit={onAssignBenefit}
+              activeReceipt={activeReceipt}
+              onEditPaidReceipt={(comp) => openReceipt(comp, true)}
+            />
           </div>
         </div>
 
@@ -257,9 +394,35 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged })
           loading={detail.loading}
           error={detail.error}
           opened={Boolean(selected)}
-          onClose={() => setSelected(null)}
+          initialEditMode={openInEditMode}
+          onClose={() => {
+            setSelected(null)
+            setOpenInEditMode(false)
+          }}
+          onAmended={async ({ replacementComprobante } = {}) => {
+            await loadReceipts()
+            onChanged?.()
+            const target = replacementComprobante ?? selected
+            if (target?.comprobante_id) {
+              try {
+                const updated = await getComprobante(target.comprobante_id)
+                setSelected((prev) => (replacementComprobante ? { ...prev, ...replacementComprobante } : prev))
+                setDetail({ loading: false, error: null, data: updated })
+              } catch {
+                // Keep current detail if reload fails
+              }
+            }
+          }}
         />
         <RemoveCuotaItemModal cuota={removing ? cuota : null} item={removing} onClose={() => setRemoving(null)} onRemoved={onChanged} />
+
+        {selectedCreditNote && (
+          <MovimientoManualDetailModal
+            movimiento={selectedCreditNote}
+            opened={Boolean(selectedCreditNote)}
+            onClose={() => setSelectedCreditNote(null)}
+          />
+        )}
       </td>
     </tr>
   )

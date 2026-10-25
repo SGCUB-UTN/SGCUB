@@ -64,19 +64,26 @@ export function FinancialStatement({ socio, finances }) {
     const manualList = movimientos ?? []
     const excedenteIds = new Set(
       manualList
-        .filter((m) => m.origen_manual === 'IngresoManual' && (m.concepto || '').startsWith('Excedente de transferencia / Saldo a favor'))
+        .filter((m) => m.es_excedente ?? (m.origen_manual === 'IngresoManual' && (m.concepto || '').startsWith('Excedente de transferencia / Saldo a favor')))
         .map((m) => m.movimiento_cuenta_id),
     )
     const computedCredit = manualList.reduce((acc, m) => {
       const amount = Number(m.monto ?? 0)
       if (excedenteIds.has(m.movimiento_cuenta_id)) return acc + amount
+      if (m.origen_manual === 'NotaCredito' && m.movimiento_revertido != null && !m.medio_de_pago) return acc + amount
       if (m.origen_manual === 'NotaCredito' && excedenteIds.has(m.movimiento_revertido)) return acc - amount
       if (m.origen_manual === 'Egreso' && (m.concepto || '').startsWith('Devolución de saldo / Excedente')) return acc - amount
       return acc
     }, 0)
+    const appliedInCuotas = cuotas.reduce((acc, cuota) => {
+      const items = cuota.items ?? []
+      return acc + items
+        .filter((item) => item.es_descuento && (item.motivo || '').startsWith('Saldo a favor aplicado'))
+        .reduce((sum, item) => sum + Number(item.monto ?? 0), 0)
+    }, 0)
     const creditBalance = account?.saldo_a_favor != null
       ? Number(account.saldo_a_favor)
-      : Math.max(0, computedCredit)
+      : Math.max(0, computedCredit - appliedInCuotas)
 
     return {
       pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
