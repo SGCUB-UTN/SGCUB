@@ -22,7 +22,7 @@ export default function CategoryUpdatePanel({ status, isLoading, error, canRun, 
             { label: 'Año de las categorías', value: status.anio_categorias ?? '—' },
             { label: 'Última ejecución', value: lastRunLabel(status.ultima_actualizacion) },
           ]}
-          actions={canRun && <ActionButton icon="event_repeat" onClick={onRun}>Actualizar categorías</ActionButton>}
+          actions={canRun && <ActionButton onClick={onRun}>Actualizar categorías</ActionButton>}
         />
       )}
     </ActionCard>
