@@ -24,15 +24,24 @@ import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
+import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
+
+const ORIGINS = {
+  jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
+  socios: [{ label: 'Personas' }, { label: 'Socios', to: '/padron/socios' }],
+  recategorizacion: [
+    { label: 'Administración' },
+    { label: 'Automatizaciones', to: '/automatizaciones' },
+    { label: 'Revisión de la recategorización', to: RECATEGORIZATION_REVIEW_PATH },
+  ],
+}
 
 function JugadorDetail() {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') ?? undefined
   const navigate = useNavigate()
-  const origin = useLocation().state?.from === 'socios'
-    ? { label: 'Socios', to: '/padron/socios' }
-    : { label: 'Jugadores', to: '/padron/jugadores' }
+  const origin = ORIGINS[useLocation().state?.from] ?? ORIGINS.jugadores
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -250,8 +259,7 @@ function JugadorDetail() {
     <div className="flex flex-col w-full pb-8">
       <PersonHeader
         breadcrumb={[
-          { label: 'Personas' },
-          origin,
+          ...origin,
           { label: `Jugador ${formatNumber(jugador.jugador_id)}` },
         ]}
         name={socio.nombre}

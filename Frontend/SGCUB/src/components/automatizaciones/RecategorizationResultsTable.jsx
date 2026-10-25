@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { formatDni } from '../personas/format'
 import SortableHeader from '../shared/SortableHeader'
 import { DECISION_STYLES, RESULT_TYPES, categoryName } from './recategorization'
@@ -31,7 +31,14 @@ function DecisionBadge({ result }) {
 function PlayerCell({ result }) {
   return (
     <td className="px-4 py-3">
-      <p className="font-semibold text-slate-900">{result.jugador}</p>
+      <Link
+        to={`/padron/jugadores/${result.jugador_id}`}
+        state={{ from: 'recategorizacion' }}
+        title={`Ver la ficha de ${result.jugador}`}
+        className="font-semibold text-slate-900 hover:text-sky-700 hover:underline"
+      >
+        {result.jugador}
+      </Link>
       <p className="text-xs text-slate-500">DNI {formatDni(result.dni)}</p>
     </td>
   )
@@ -113,7 +120,7 @@ function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
         {canEdit && (
           <button
             type="button"
-            onClick={() => (goToPlayer ? navigate(`/padron/jugadores/${result.jugador_id}`) : onEdit(result))}
+            onClick={() => (goToPlayer ? navigate(`/padron/jugadores/${result.jugador_id}`, { state: { from: 'recategorizacion' } }) : onEdit(result))}
             disabled={isBusy}
             title={goToPlayer ? `Cargar la fecha de nacimiento de ${result.jugador}` : `${editLabel} categorías de ${result.jugador}`}
             className={`${ICON_BUTTON_CLASS} border-sky-200 text-sky-700 hover:bg-sky-50`}
