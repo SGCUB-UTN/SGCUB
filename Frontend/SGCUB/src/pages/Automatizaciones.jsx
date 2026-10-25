@@ -6,9 +6,10 @@ import {
   getAutomatizaciones,
   updateAutomatizacionStatus,
 } from '../api/automatizaciones'
+import { AREA_ORDER, getAutomationInfo } from '../components/automatizaciones/automationCatalog'
 import RecategorizationPanel from '../components/automatizaciones/RecategorizationPanel'
-import RecategorizationResults from '../components/automatizaciones/RecategorizationResults'
 import RunRecategorizationModal from '../components/automatizaciones/RunRecategorizationModal'
+import TurnOffAutomationModal from '../components/automatizaciones/TurnOffAutomationModal'
 import PageHeader from '../components/shared/PageHeader'
 import useRecategorization from '../hooks/useRecategorization'
 
@@ -136,21 +137,6 @@ const getTimeUntil = (value) => {
   return `En ${days} día${days === 1 ? '' : 's'}`
 }
 
-const getCategory = (schedule) => {
-  const text = `${schedule.name} ${schedule.func}`.toLowerCase()
-  if (text.includes('finanza') || text.includes('cuota') || text.includes('mora')) return 'Finanzas'
-  if (text.includes('padron') || text.includes('categor') || text.includes('jugador')) return 'Padrón'
-  return 'Sistema'
-}
-
-const getIcon = (schedule) => {
-  const text = `${schedule.name} ${schedule.func}`.toLowerCase()
-  if (text.includes('mora') || text.includes('recargo')) return 'payments'
-  if (text.includes('año') || text.includes('categoria')) return 'event_repeat'
-  if (text.includes('cuota')) return 'request_quote'
-  return 'schedule'
-}
-
 const getErrorMessage = (error) => {
   const detail = error.response?.data?.detail
   return typeof detail === 'string'
@@ -158,44 +144,26 @@ const getErrorMessage = (error) => {
     : 'No se pudieron cargar o actualizar las automatizaciones. Intentá nuevamente.'
 }
 
-function SummaryCard({ label, value, supportingText, icon, tone = 'blue' }) {
-  const tones = {
-    blue: 'bg-blue-50 text-blue-700',
-    green: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-  }
-
-  return (
-    <article className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-        <p className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-900">{value}</p>
-        <p className="mt-1 text-xs text-slate-500">{supportingText}</p>
-      </div>
-      <span className={`material-symbols-outlined flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tones[tone]}`} aria-hidden="true">
-        {icon}
-      </span>
-    </article>
-  )
-}
-
 function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
   const isActive = automation.is_active
+  const info = getAutomationInfo(automation)
 
   return (
     <article className={`rounded-xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5 ${isActive ? 'border-slate-200' : 'border-slate-200/80'}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <span className={`material-symbols-outlined flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-500'}`} aria-hidden="true">
-          {getIcon(automation)}
+        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${isActive ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-500'}`} aria-hidden="true">
+          <span className="material-symbols-outlined">{info.icon}</span>
         </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-slate-900">{automation.name}</h3>
-            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
-              {getCategory(automation)}
-            </span>
-          </div>
+          <h3 className="font-semibold text-slate-900">{info.title}</h3>
+          <p className="mt-1 text-sm text-slate-600">{info.description}</p>
+          {info.tip && (
+            <p className="mt-1.5 inline-flex items-start gap-1.5 text-sm text-sky-800">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">lightbulb</span>
+              {info.tip}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[16px]" aria-hidden="true">repeat</span>
@@ -222,7 +190,7 @@ function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
               type="button"
               role="switch"
               aria-checked={isActive}
-              aria-label={`${isActive ? 'Desactivar' : 'Activar'} ${automation.name}`}
+              aria-label={`${isActive ? 'Desactivar' : 'Activar'} ${info.title}`}
               onClick={() => onToggle(automation)}
               disabled={isUpdating}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${isActive ? 'bg-sky-700' : 'bg-slate-300'}`}
@@ -255,6 +223,7 @@ export default function Automatizaciones() {
   const [executionError, setExecutionError] = useState('')
   const recategorization = useRecategorization()
   const [isRunModalOpen, setIsRunModalOpen] = useState(false)
+  const [pendingTurnOff, setPendingTurnOff] = useState(null)
 
   const startRecategorization = async (executedBy) => {
     await recategorization.run(executedBy)
@@ -298,20 +267,17 @@ export default function Automatizaciones() {
     }
   }, [executionPage])
 
-  const { active, inactive, nextAutomation } = useMemo(() => {
-    const activeSchedules = automatizaciones.filter((item) => item.is_active)
-    const next = activeSchedules
-      .filter((item) => item.next_run)
-      .sort((first, second) => new Date(first.next_run) - new Date(second.next_run))[0]
-
-    return {
-      active: activeSchedules.length,
-      inactive: automatizaciones.length - activeSchedules.length,
-      nextAutomation: next,
-    }
+  const automationGroups = useMemo(() => {
+    const groups = new Map(AREA_ORDER.map((area) => [area, []]))
+    automatizaciones.forEach((automation) => {
+      const { area } = getAutomationInfo(automation)
+      if (!groups.has(area)) groups.set(area, [])
+      groups.get(area).push(automation)
+    })
+    return [...groups].filter(([, items]) => items.length > 0)
   }, [automatizaciones])
 
-  const toggleStatus = async (automation) => {
+  const changeStatus = async (automation) => {
     setUpdatingId(automation.id)
     setError('')
     try {
@@ -323,7 +289,13 @@ export default function Automatizaciones() {
       setError(getErrorMessage(requestError))
     } finally {
       setUpdatingId(null)
+      setPendingTurnOff(null)
     }
+  }
+
+  const toggleStatus = (automation) => {
+    if (automation.is_active) setPendingTurnOff(automation)
+    else changeStatus(automation)
   }
 
   return (
@@ -333,10 +305,10 @@ export default function Automatizaciones() {
           <div>
             <PageHeader
               breadcrumb={[{ label: 'Administración' }, { label: 'Automatizaciones' }]}
-              title="Automatizaciones del Sistema"
+              title="Automatizaciones"
             />
             <p className="max-w-2xl text-sm text-slate-500">
-              Configurá el estado de las tareas programadas y consultá sus próximas ejecuciones.
+              Acá están los procesos que el sistema hace solo y los que podés ejecutar cuando lo necesites.
             </p>
           </div>
         </div>
@@ -347,81 +319,31 @@ export default function Automatizaciones() {
           </div>
         )}
 
-        <section aria-label="Resumen de automatizaciones" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SummaryCard
-            label="Automatizaciones activas"
-            value={isLoading || error ? '—' : active}
-            supportingText={error ? 'No se pudo consultar el servicio' : `${automatizaciones.length} registradas`}
-            icon="autorenew"
-            tone="blue"
-          />
-          <SummaryCard
-            label="Pausadas"
-            value={isLoading || error ? '—' : inactive}
-            supportingText={error ? 'No se pudo consultar el servicio' : 'No generarán nuevas tareas programadas'}
-            icon="pause_circle"
-            tone="amber"
-          />
-          <SummaryCard
-            label="Próxima ejecución"
-            value={isLoading || error ? '—' : nextAutomation ? getTimeUntil(nextAutomation.next_run) : 'Sin tareas'}
-            supportingText={error ? 'No se pudo consultar el servicio' : nextAutomation ? nextAutomation.name : 'No hay tareas activas con fecha próxima'}
-            icon="schedule"
-            tone="green"
-          />
-        </section>
-
-        <section aria-label="Estado del planificador" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700" aria-hidden="true">
-                hub
-              </span>
-              <div>
-                <h2 className="font-semibold text-slate-900">Estado de las tareas programadas</h2>
-                <p className="text-xs text-slate-500">
-                  {isLoading
-                    ? 'Consultando tareas registradas...'
-                    : error
-                      ? 'No se pudo consultar el estado del planificador.'
-                      : `${active} de ${automatizaciones.length} tareas habilitadas`}
-                </p>
-              </div>
-            </div>
-            <span className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-xs font-semibold sm:self-auto ${isLoading || error ? 'bg-slate-100 text-slate-600' : active > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-              <span className={`h-2 w-2 rounded-full ${isLoading || error ? 'bg-slate-400' : active > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {isLoading ? 'Consultando' : error ? 'Estado no disponible' : active > 0 ? 'Tareas habilitadas' : 'Todas pausadas'}
-            </span>
+        <section aria-labelledby="manual-actions-title" className="flex flex-col gap-3">
+          <div>
+            <h2 id="manual-actions-title" className="text-base font-bold text-slate-900">Acciones que podés ejecutar</h2>
+            <p className="mt-0.5 text-sm text-slate-500">Se ejecutan solo cuando vos lo decidís.</p>
           </div>
-          <div className="h-1.5 bg-slate-100">
-            <div
-              className={`h-full transition-all ${active > 0 ? 'bg-sky-700' : 'bg-slate-300'}`}
-              style={{ width: `${!isLoading && !error && automatizaciones.length ? (active / automatizaciones.length) * 100 : 0}%` }}
-            />
-          </div>
-        </section>
-
-        <RecategorizationPanel
-          execution={recategorization.execution}
-          isLoading={recategorization.isLoading}
-          error={recategorization.error}
-          canRun={canChange}
-          onRun={() => setIsRunModalOpen(true)}
-        />
-
-        {['revision_pendiente', 'finalizada'].includes(recategorization.execution?.estado) && (
-          <RecategorizationResults
-            key={recategorization.execution.id}
+          <RecategorizationPanel
             execution={recategorization.execution}
-            canEdit={canChange}
-            onExecutionChange={recategorization.setExecution}
+            isLoading={recategorization.isLoading}
+            error={recategorization.error}
+            canRun={canChange}
+            onRun={() => setIsRunModalOpen(true)}
           />
-        )}
+        </section>
 
         <RunRecategorizationModal
           opened={isRunModalOpen}
           onConfirm={startRecategorization}
           onClose={() => setIsRunModalOpen(false)}
+        />
+
+        <TurnOffAutomationModal
+          automation={pendingTurnOff}
+          isUpdating={updatingId !== null}
+          onConfirm={() => changeStatus(pendingTurnOff)}
+          onClose={() => setPendingTurnOff(null)}
         />
 
         <section aria-labelledby="automation-list-title" className="flex flex-col gap-3">
@@ -456,14 +378,19 @@ export default function Automatizaciones() {
             </div>
           )}
 
-          {!isLoading && automatizaciones.map((automation) => (
-            <AutomationCard
-              key={automation.id}
-              automation={automation}
-              canChange={canChange}
-              isUpdating={updatingId !== null}
-              onToggle={toggleStatus}
-            />
+          {!isLoading && automationGroups.map(([area, items]) => (
+            <div key={area} className="flex flex-col gap-3">
+              <h3 className="mt-2 text-sm font-semibold uppercase tracking-wider text-slate-500">{area}</h3>
+              {items.map((automation) => (
+                <AutomationCard
+                  key={automation.id}
+                  automation={automation}
+                  canChange={canChange}
+                  isUpdating={updatingId !== null}
+                  onToggle={toggleStatus}
+                />
+              ))}
+            </div>
           ))}
         </section>
 

@@ -1,5 +1,7 @@
 // Plain-language description of every task the system runs, keyed by the backend function it executes
 export const RECATEGORIZATION_FUNC = 'padron.services.run_recategorization'
+export const RECATEGORIZATION_REVIEW_PATH = '/automatizaciones/recategorizacion'
+export const AREA_ORDER = ['Padrón', 'Finanzas', 'Sistema']
 
 const AUTOMATION_CATALOG = {
   'finanzas.services.generar_cuotas_mensuales': {
@@ -18,8 +20,8 @@ const AUTOMATION_CATALOG = {
   },
   'finanzas.services.finish_expired_scholarships': {
     title: 'Finalizar becas vencidas',
-    description: 'Da por terminadas las becas cuya fecha de fin ya pasó.',
-    whenOff: 'Si la apagás, las becas vencidas van a seguir figurando como vigentes.',
+    description: 'Marca como "Finalizada" cada beca cuya fecha de fin ya pasó. No cambia el monto de las cuotas.',
+    whenOff: 'Si la apagás, las becas vencidas van a seguir figurando como "Aplicada" y se van a poder modificar.',
     icon: 'school',
     area: 'Finanzas',
   },

@@ -1,110 +1,127 @@
-const STATUS_STYLES = {
-  en_curso: { label: 'En curso', badge: 'bg-sky-50 text-sky-700', dot: 'bg-sky-500' },
-  revision_pendiente: { label: 'Revisión pendiente', badge: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
-  finalizada: { label: 'Finalizada', badge: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  fallida: { label: 'Fallida', badge: 'bg-red-50 text-red-700', dot: 'bg-red-500' },
+import { Link } from 'react-router-dom'
+import { RECATEGORIZATION_REVIEW_PATH } from './automationCatalog'
+import { describeWhen } from './automationSchedule'
+
+const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-700 px-5 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2'
+const SECONDARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2'
+
+const NOTICES = {
+  en_curso: {
+    icon: 'progress_activity',
+    iconClass: 'animate-spin',
+    tone: 'border-sky-200 bg-sky-50 text-sky-900',
+    text: () => 'Se está ejecutando. Puede tardar unos minutos; mientras tanto podés seguir usando el sistema.',
+  },
+  revision_pendiente: {
+    icon: 'pending_actions',
+    tone: 'border-amber-200 bg-amber-50 text-amber-900',
+    text: (execution) => `Hay ${execution.pendientes_sin_revisar} ${execution.pendientes_sin_revisar === 1 ? 'jugador esperando' : 'jugadores esperando'} tu revisión. Cuando termines, vas a poder ejecutarla de nuevo.`,
+  },
+  finalizada: {
+    icon: 'check_circle',
+    tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    text: () => 'La última recategorización terminó y no quedan jugadores por revisar.',
+  },
+  fallida: {
+    icon: 'error',
+    tone: 'border-red-200 bg-red-50 text-red-900',
+    text: () => 'La última recategorización no se pudo completar. Podés intentarlo de nuevo.',
+  },
 }
 
-const formatRunDate = (value) => {
-  const date = new Date(value)
-  const day = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
-  const time = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(date)
-  return `${day} - ${time} hs`
-}
-
-function RunDetails({ execution }) {
+function LastRun({ execution }) {
   const hasResults = ['revision_pendiente', 'finalizada'].includes(execution.estado)
-
   return (
-    <div className="flex flex-col gap-2 text-sm text-slate-600">
-      <p className="inline-flex flex-wrap items-center gap-1.5">
-        <span className="material-symbols-outlined text-[18px] text-slate-400" aria-hidden="true">schedule</span>
-        <span className="font-medium text-slate-700">Última ejecución:</span>
-        {formatRunDate(execution.fecha_inicio)}
-        <span className="text-slate-500">(Por: {execution.ejecutado_por})</span>
-      </p>
-      <p className="inline-flex flex-wrap items-center gap-1.5">
-        <span className="material-symbols-outlined text-[18px] text-slate-400" aria-hidden="true">bar_chart</span>
-        <span className="font-medium text-slate-700">Resultado anterior:</span>
-        {hasResults ? (
-          <>
-            <span className="font-semibold text-emerald-700">{execution.exitosos} Exitosos</span>
-            <span className="text-slate-300">|</span>
-            <span className="font-semibold text-amber-700">{execution.pendientes} Pendientes</span>
-            <span className="text-slate-300">|</span>
-            <span className="font-semibold text-red-700">{execution.errores} Errores</span>
-          </>
-        ) : (
-          <span>{execution.estado === 'en_curso' ? 'Procesando jugadores...' : 'La ejecución no pudo completarse.'}</span>
-        )}
-      </p>
-    </div>
+    <dl className="grid gap-3 text-base sm:grid-cols-2">
+      <div>
+        <dt className="text-sm font-medium text-slate-500">Última vez</dt>
+        <dd className="font-semibold text-slate-900">
+          {describeWhen(execution.fecha_inicio)}
+          <span className="font-normal text-slate-600"> · por {execution.ejecutado_por}</span>
+        </dd>
+      </div>
+      {hasResults && (
+        <div>
+          <dt className="text-sm font-medium text-slate-500">Resultado</dt>
+          <dd className="flex flex-wrap gap-x-3 gap-y-1 font-semibold">
+            <span className="text-emerald-700">{execution.exitosos} actualizados</span>
+            <span className="text-amber-700">{execution.pendientes} para revisar</span>
+            <span className="text-red-700">{execution.errores} con errores</span>
+          </dd>
+        </div>
+      )}
+    </dl>
+  )
+}
+
+function Actions({ execution, canRun, onRun }) {
+  const status = execution?.estado
+  if (status === 'en_curso') return null
+  if (status === 'revision_pendiente') {
+    return (
+      <Link to={RECATEGORIZATION_REVIEW_PATH} className={PRIMARY_BUTTON_CLASS}>
+        Revisar jugadores
+        <span className="material-symbols-outlined text-[20px]" aria-hidden="true">arrow_forward</span>
+      </Link>
+    )
+  }
+  return (
+    <>
+      {status === 'finalizada' && (
+        <Link to={RECATEGORIZATION_REVIEW_PATH} className={SECONDARY_BUTTON_CLASS}>
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">list_alt</span>
+          Ver resultados
+        </Link>
+      )}
+      {canRun && (
+        <button type="button" onClick={onRun} className={PRIMARY_BUTTON_CLASS}>
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">bolt</span>
+          Ejecutar recategorización
+        </button>
+      )}
+    </>
   )
 }
 
 export default function RecategorizationPanel({ execution, isLoading, error, canRun, onRun }) {
-  const status = execution ? STATUS_STYLES[execution.estado] : null
-  const isRunning = execution?.estado === 'en_curso'
-  const hasPendingReviews = execution?.estado === 'revision_pendiente'
-  const blockedReason = isRunning
-    ? 'La recategorización se está ejecutando. Puede tardar unos minutos.'
-    : hasPendingReviews
-      ? `Resolvé las ${execution.pendientes_sin_revisar} revisiones pendientes antes de volver a ejecutarla.`
-      : ''
+  const notice = execution ? NOTICES[execution.estado] : null
 
   return (
-    <section aria-labelledby="recategorization-title" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700" aria-hidden="true">
-              sync
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id="recategorization-title" className="font-bold uppercase tracking-wide text-slate-900">
-                  Recategorización automática de jugadores
-                </h2>
-                {status && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${status.badge}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${status.dot} ${isRunning ? 'animate-pulse' : ''}`} />
-                    {status.label}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-slate-500">
-                Revisa el padrón activo según el año de nacimiento y actualiza las categorías vigentes.
-              </p>
-            </div>
-          </div>
-
-          {isLoading && <p className="text-sm text-slate-500" role="status">Consultando la última ejecución...</p>}
-          {!isLoading && error && (
-            <p className="text-sm text-red-700" role="alert">No se pudo consultar el estado de la recategorización.</p>
-          )}
-          {!isLoading && !error && !execution && (
-            <p className="text-sm text-slate-500">Todavía no se ejecutó ninguna recategorización.</p>
-          )}
-          {!isLoading && execution && <RunDetails execution={execution} />}
+    <article className="flex flex-col gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700" aria-hidden="true">
+          <span className="material-symbols-outlined text-[28px]">sync</span>
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-lg font-bold text-slate-900">Recategorización de jugadores</h3>
+          <p className="mt-1 text-base text-slate-600">
+            Asigna a cada jugador activo la categoría que le corresponde por su año de nacimiento.
+            Los casos dudosos quedan para que los revises vos.
+          </p>
         </div>
-
-        {canRun && (
-          <div className="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
-            <button
-              type="button"
-              onClick={onRun}
-              disabled={isLoading || Boolean(blockedReason)}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <span className={`material-symbols-outlined text-[18px] ${isRunning ? 'animate-spin' : ''}`} aria-hidden="true">
-                {isRunning ? 'progress_activity' : 'bolt'}
-              </span>
-              {isRunning ? 'Ejecutando...' : 'Ejecutar recategorización'}
-            </button>
-            {blockedReason && <p className="max-w-xs text-xs text-slate-500 lg:text-right">{blockedReason}</p>}
-          </div>
-        )}
       </div>
-    </section>
+
+      {isLoading && <p className="text-base text-slate-500" role="status">Consultando la última recategorización...</p>}
+      {!isLoading && error && (
+        <p className="text-base text-red-700" role="alert">No se pudo consultar la recategorización. Recargá la página para intentar de nuevo.</p>
+      )}
+      {!isLoading && !error && !execution && (
+        <p className="text-base text-slate-600">Todavía no se ejecutó ninguna recategorización.</p>
+      )}
+      {!isLoading && execution && <LastRun execution={execution} />}
+
+      {!isLoading && notice && (
+        <div className={`flex items-start gap-3 rounded-lg border p-4 text-base ${notice.tone}`} role="status">
+          <span className={`material-symbols-outlined shrink-0 text-[22px] ${notice.iconClass ?? ''}`} aria-hidden="true">{notice.icon}</span>
+          <p>{notice.text(execution)}</p>
+        </div>
+      )}
+
+      {!isLoading && !error && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Actions execution={execution} canRun={canRun} onRun={onRun} />
+        </div>
+      )}
+    </article>
   )
 }
