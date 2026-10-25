@@ -71,6 +71,22 @@ def category_for_age(ladder, age):
     return next((category for category in ladder if category.edad_maxima >= age), None)
 
 
+def category_admits(category, gender, age):
+    return category is not None and category.genero == gender and category.edad_maxima >= age
+
+
+def can_keep_categories(player, current_year):
+    person = player.socio.persona
+    gender = GENERO_PERSONA_A_CATEGORIA.get(getattr(person.genero, "nombre", None))
+    if not person.fecha_nacimiento or gender is None:
+        return False
+    age = current_year - person.fecha_nacimiento.year
+    secondary = player.categoria_secundaria
+    return category_admits(player.categoria, gender, age) and (
+        secondary is None or category_admits(secondary, gender, age)
+    )
+
+
 def _error(motivo, detalle):
     return Clasificacion(tipo=Tipo.ERROR, motivo=motivo, detalle=detalle)
 
@@ -159,17 +175,20 @@ def classify_player(player, ladders, current_year, last_run_year):
             quitar_secundaria_sugerido=True,
         )
 
-    remove_secondary = secondary.genero != gender or secondary.edad_maxima < age
+    remove_secondary = not category_admits(secondary, gender, age)
     secondary_detail = (
         f"Posee categoría secundaria {secondary.nombre}"
         + (", que ya no admite su edad." if remove_secondary else ".")
     )
     if result.tipo == Tipo.EXITO:
+        # The main category is applied right away; only the secondary one is left for review.
+        if result.categoria_nueva != principal:
+            secondary_detail = f"Pasó a {result.categoria_nueva.nombre}. {secondary_detail}"
         return Clasificacion(
             tipo=Tipo.PENDIENTE,
             motivo=Motivo.TIENE_SECUNDARIA,
             detalle=secondary_detail,
-            categoria_sugerida=result.categoria_nueva,
+            categoria_nueva=result.categoria_nueva,
             quitar_secundaria_sugerido=remove_secondary,
         )
     result.detalle = f"{result.detalle} {secondary_detail}"
@@ -310,7 +329,7 @@ def _process_execution(execution):
         ))
         log_lines.append(_result_log_line(player, result))
 
-        if result.tipo == Tipo.EXITO and result.categoria_nueva != player.categoria:
+        if result.categoria_nueva is not None and result.categoria_nueva != player.categoria:
             player.categoria = result.categoria_nueva
             players_to_update.append(player)
 
@@ -357,10 +376,13 @@ def _apply_decision(execution, result, decision, user, categoria=None, categoria
         raise RecategorizationDecisionError("El jugador ya fue revisado o no requiere revisión.")
 
     player = result.jugador
+    if decision == Decision.MANTENIDA and not can_keep_categories(player, execution.anio):
+        raise RecategorizationDecisionError("Por su edad, el jugador no puede mantener sus categorías actuales.")
     if decision == Decision.ACEPTADA:
-        if result.categoria_sugerida is None:
-            raise RecategorizationDecisionError("El resultado no tiene una categoría sugerida.")
-        player.categoria = result.categoria_sugerida
+        if result.categoria_sugerida is None and not result.quitar_secundaria_sugerido:
+            raise RecategorizationDecisionError("El resultado no tiene una sugerencia para aceptar.")
+        if result.categoria_sugerida is not None:
+            player.categoria = result.categoria_sugerida
         if result.quitar_secundaria_sugerido or player.categoria_secundaria_id == player.categoria_id:
             player.categoria_secundaria = None
     elif decision == Decision.EDITADA:
@@ -389,7 +411,7 @@ def _result_for_decision(result_id):
     return (
         RecategorizacionResultado.objects
         .select_for_update(of=("self",))
-        .select_related("jugador__socio__persona", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .select_related("jugador__socio__persona__genero", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
         .get(pk=result_id)
     )
 
@@ -411,8 +433,8 @@ def accept_all_suggestions(execution_id, user):
     pending = (
         execution.resultados
         .select_for_update(of=("self",))
-        .select_related("jugador__socio__persona", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
-        .filter(tipo=Tipo.PENDIENTE, decision="", categoria_sugerida__isnull=False)
+        .select_related("jugador__socio__persona__genero", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .filter(Q(categoria_sugerida__isnull=False) | Q(quitar_secundaria_sugerido=True), tipo=Tipo.PENDIENTE, decision="")
         .order_by("resultado_id")
     )
     accepted = 0

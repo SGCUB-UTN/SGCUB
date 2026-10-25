@@ -20,6 +20,7 @@ from padron.services import (
     RecategorizationDecisionError,
     RecategorizationInProgress,
     accept_all_suggestions,
+    can_keep_categories,
     categories_status,
     decide_result,
     mark_stale_runs_as_failed,
@@ -206,6 +207,7 @@ def _serialize_result(result):
         "quitar_secundaria_sugerido": result.quitar_secundaria_sugerido,
         "categoria_actual": _serialize_category(player.categoria),
         "categoria_secundaria_actual": _serialize_category(player.categoria_secundaria),
+        "puede_mantener": can_keep_categories(player, result.ejecucion.anio),
         "decision": result.decision,
         "decision_display": result.get_decision_display() if result.decision else "",
         "fecha_decision": result.fecha_decision,
@@ -293,6 +295,7 @@ def recategorization_results(request, pk):
             "categoria_nueva",
             "categoria_secundaria_nueva",
             "categoria_sugerida",
+            "ejecucion",
         )
         .order_by(*ordering)
     )

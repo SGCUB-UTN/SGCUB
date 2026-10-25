@@ -14,6 +14,7 @@ from .services import (
     CategoriesOutdated,
     RecategorizationInProgress,
     build_category_ladders,
+    can_keep_categories,
     classify_player,
     pasr_de_anio_vigente_a_categoria,
     recategorization_task_hook,
@@ -1491,15 +1492,37 @@ class RecategorizationServiceTests(TestCase):
         self.assertEqual(self.categories["2015"], result.categoria_sugerida)
         self.assertTrue(result.quitar_secundaria_sugerido)
 
-    def test_player_with_secondary_category_requires_review(self):
+    def test_player_with_valid_secondary_category_is_promoted_without_suggestion(self):
         player = self.create_player(2015, self.categories["2016"], secondary=self.categories["9NA"])
 
         result = self.classify(player, last_run_year=2025)
 
         self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
         self.assertEqual(RecategorizacionResultado.MotivoChoices.TIENE_SECUNDARIA, result.motivo)
-        self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+        self.assertEqual(self.categories["2015"], result.categoria_nueva)
+        self.assertIsNone(result.categoria_sugerida)
         self.assertFalse(result.quitar_secundaria_sugerido)
+
+    def test_promoted_player_with_too_young_secondary_only_gets_removal_suggested(self):
+        player = self.create_player(2014, self.categories["2015"], secondary=self.categories["2016"])
+
+        result = self.classify(player, last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.TIENE_SECUNDARIA, result.motivo)
+        self.assertEqual(self.categories["PRE 9NA"], result.categoria_nueva)
+        self.assertIsNone(result.categoria_sugerida)
+        self.assertTrue(result.quitar_secundaria_sugerido)
+
+    def test_player_can_keep_categories_only_if_his_age_allows_them(self):
+        cases = [
+            (self.create_player(2014, self.categories["9NA"]), True),
+            (self.create_player(2006, self.categories["4TA"]), False),
+            (self.create_player(2014, self.categories["9NA"], secondary=self.categories["2016"]), False),
+            (self.create_player(2014, self.categories["9NA"], birth_date=False), False),
+        ]
+        for player, expected in cases:
+            with self.subTest(player=player.socio.persona.dni):
+                self.assertEqual(expected, can_keep_categories(player, self.CURRENT_YEAR))
 
     def test_secondary_category_too_young_is_suggested_for_removal(self):
         player = self.create_player(2014, self.categories["9NA"], secondary=self.categories["2016"])

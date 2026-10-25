@@ -69,6 +69,10 @@ function ReasonCell({ result }) {
 function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
   const isPendingReview = result.tipo === RESULT_TYPES.pendiente && !result.decision
   const editLabel = result.tipo === RESULT_TYPES.exito ? 'Modificar' : 'Editar'
+  const hasSuggestion = Boolean(result.categoria_sugerida) || result.quitar_secundaria_sugerido
+  const acceptTitle = result.categoria_sugerida
+    ? `Aceptar ${result.categoria_sugerida.nombre}`
+    : result.quitar_secundaria_sugerido ? 'Quitar la categoría secundaria' : 'Sin sugerencia'
 
   return (
     <td className="px-4 py-3">
@@ -79,8 +83,8 @@ function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
             <button
               type="button"
               onClick={() => onAccept(result)}
-              disabled={isBusy || !result.categoria_sugerida}
-              title={result.categoria_sugerida ? `Aceptar ${result.categoria_sugerida.nombre}` : 'Sin sugerencia'}
+              disabled={isBusy || !hasSuggestion}
+              title={acceptTitle}
               className={`${ICON_BUTTON_CLASS} border-emerald-200 text-emerald-700 hover:bg-emerald-50`}
             >
               <span className="material-symbols-outlined text-[16px]" aria-hidden="true">check</span>
@@ -89,8 +93,8 @@ function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
             <button
               type="button"
               onClick={() => onKeep(result)}
-              disabled={isBusy}
-              title="Mantener las categorías actuales"
+              disabled={isBusy || !result.puede_mantener}
+              title={result.puede_mantener ? 'Mantener las categorías actuales' : 'Su edad no le permite seguir en estas categorías'}
               className={`${ICON_BUTTON_CLASS} border-slate-200 text-slate-700 hover:bg-slate-50`}
             >
               <span className="material-symbols-outlined text-[16px]" aria-hidden="true">history</span>

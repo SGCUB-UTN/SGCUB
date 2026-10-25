@@ -356,6 +356,33 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(log.count("[SUGERENCIA ACEPTADA]"), 2)
         self.assertIn("Revisión manual completada", log)
 
+    def test_keeping_is_rejected_when_the_player_age_does_not_fit(self):
+        too_old = self.create_player(2014, self.categories["2016"])
+        execution = self.run_execution()
+        url = reverse("recategorizacion-resultados", args=[execution.pk])
+
+        rows = {row["jugador_id"]: row for row in self.client.get(url, {"tipo": "pendiente"}).data["results"]}
+        response = self.decide(self.result_for(execution, too_old), decision="mantenida")
+
+        self.assertFalse(rows[too_old.pk]["puede_mantener"])
+        self.assertTrue(rows[self.playing_up.pk]["puede_mantener"])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        too_old.refresh_from_db()
+        self.assertEqual(too_old.categoria, self.categories["2016"])
+
+    def test_accepting_a_secondary_removal_keeps_the_updated_main_category(self):
+        player = self.create_player(2014, self.categories["2015"], secondary=self.categories["2016"])
+        execution = self.run_execution()
+        player.refresh_from_db()
+        self.assertEqual(player.categoria, self.categories["PRE 9NA"])
+
+        response = self.decide(self.result_for(execution, player), decision="aceptada")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        player.refresh_from_db()
+        self.assertEqual(player.categoria, self.categories["PRE 9NA"])
+        self.assertIsNone(player.categoria_secundaria)
+
     def test_run_finishes_only_after_errors_are_edited(self):
         missing_birth_date = self.create_player(2015, self.categories["2016"])
         missing_birth_date.socio.persona.fecha_nacimiento = None
