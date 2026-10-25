@@ -61,6 +61,7 @@ export function ActionCard({ icon, title, description, children }) {
 
 const FOOTER_TONES = {
   warning: 'border-amber-200 bg-amber-50 text-amber-900',
+  error: 'border-red-200 bg-red-50 text-red-900',
 }
 
 export function ActionFooter({ tone = 'warning', icon, children }) {

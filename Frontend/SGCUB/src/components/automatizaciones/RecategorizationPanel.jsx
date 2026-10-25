@@ -9,11 +9,6 @@ const NOTICES = {
     tone: 'info',
     text: () => 'Se está ejecutando. Puede tardar unos minutos; mientras tanto podés seguir usando el sistema.',
   },
-  fallida: {
-    icon: 'error',
-    tone: 'error',
-    text: () => 'La última recategorización no se pudo completar. Podés intentarlo de nuevo.',
-  },
 }
 
 const lastRunLabel = (execution) => (execution
@@ -71,6 +66,15 @@ function PendingReviewFooter({ execution }) {
   )
 }
 
+function FailedRunFooter() {
+  return (
+    <ActionFooter tone="error" icon="error">
+      <span className="font-bold">La última recategorización no se pudo completar.</span>
+      <span className="text-red-800">Podés intentarlo de nuevo.</span>
+    </ActionFooter>
+  )
+}
+
 export default function RecategorizationPanel({ execution, isLoading, error, categories, canRun, onRun }) {
   const notice = execution ? NOTICES[execution.estado] : null
   const isActive = ['en_curso', 'revision_pendiente'].includes(execution?.estado)
@@ -107,6 +111,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
         </ActionNotice>
       )}
       {!isLoading && isPendingReview && <PendingReviewFooter execution={execution}/>}
+      {!isLoading && execution?.estado === 'fallida' && <FailedRunFooter />}
     </ActionCard>
   )
 }
