@@ -107,7 +107,7 @@ def _classify_senior_category(principal, age):
 
 
 def _classify_fourth_division(principal, age):
-    """4ta división is always reviewed by hand: the player may stay or move up to mayores."""
+    """4ta división (the oldest youth category) is always reviewed by hand: the player may stay or move up."""
     if admits_age(principal, age):
         detalle = f"Tiene {age} años: revisá si sigue en {principal.nombre} o pasa a mayores."
     else:
@@ -177,12 +177,12 @@ def classify_player(player, ladders, current_year, last_run_year):
         return _error(Motivo.CATEGORIA_INCOMPATIBLE, "La categoría principal no está asignada o es de otro género.")
 
     expected = None
+    youth_ladder = [category for category in ladder if category.tipo == TipoCategoria.JUVENIL]
     if principal.tipo == TipoCategoria.MAYOR:
         result = _classify_senior_category(principal, age)
-    elif principal.tipo == TipoCategoria.CUARTA:
+    elif principal == youth_ladder[-1]:
         result = _classify_fourth_division(principal, age)
     else:
-        youth_ladder = [category for category in ladder if category.tipo != TipoCategoria.MAYOR]
         expected = category_for_age(youth_ladder, age)
         result = _classify_youth_category(
             principal, expected, age, birth_year, youth_ladder, current_year, last_run_year

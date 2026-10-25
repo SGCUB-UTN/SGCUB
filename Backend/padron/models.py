@@ -216,7 +216,6 @@ class Categoria(models.Model):
 
     class TipoChoices(models.TextChoices):
         JUVENIL = "juvenil", "Juvenil"
-        CUARTA = "cuarta", "Cuarta división"
         MAYOR = "mayor", "Mayor"
 
     categoria_id = models.AutoField(primary_key=True)

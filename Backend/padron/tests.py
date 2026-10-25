@@ -1418,7 +1418,7 @@ class RecategorizationServiceTests(TestCase):
             )
             for name, min_age, max_age, tipo in [
                 ("2016", 0, 10, Tipo.JUVENIL), ("2015", 0, 11, Tipo.JUVENIL), ("PRE 9NA", 0, 12, Tipo.JUVENIL),
-                ("9NA", 0, 13, Tipo.JUVENIL), ("5TA", 0, 17, Tipo.JUVENIL), ("4TA", 0, 19, Tipo.CUARTA),
+                ("9NA", 0, 13, Tipo.JUVENIL), ("5TA", 0, 17, Tipo.JUVENIL), ("4TA", 0, 19, Tipo.JUVENIL),
                 ("3RA", 0, 99, Tipo.MAYOR), ("1RA", 0, 99, Tipo.MAYOR), ("SENIOR", 35, 99, Tipo.MAYOR),
             ]
         }

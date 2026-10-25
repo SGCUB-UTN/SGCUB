@@ -15,7 +15,6 @@ export const GENERO_BADGE_CLASSES = {
 // Valores de `Categoria.tipo` en el backend (TipoChoices)
 export const TIPO_OPTIONS = [
   { value: 'juvenil', label: 'Juvenil' },
-  { value: 'cuarta', label: 'Cuarta división' },
   { value: 'mayor', label: 'Mayor' },
 ]
 
