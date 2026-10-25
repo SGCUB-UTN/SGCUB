@@ -45,6 +45,10 @@ class CategoryUpdateBlocked(Exception):
     pass
 
 
+class CategoriesOutdated(Exception):
+    pass
+
+
 class RecategorizationDecisionError(Exception):
     pass
 
@@ -229,6 +233,10 @@ def start_recategorization(user, executed_by):
     mark_stale_runs_as_failed()
     if RecategorizacionEjecucion.objects.filter(estado__in=[Estado.EN_CURSO, Estado.REVISION_PENDIENTE]).exists():
         raise RecategorizationInProgress()
+    if not categories_status()["actualizadas"]:
+        raise CategoriesOutdated(
+            f"Primero actualizá las categorías al año {get_anio_actual()} y después ejecutá la recategorización."
+        )
     try:
         with transaction.atomic():
             execution = RecategorizacionEjecucion.objects.create(usuario=user, ejecutado_por=executed_by)

@@ -244,6 +244,20 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(execution.usuario, self.administrador)
         self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
 
+    def test_run_is_rejected_while_categories_are_outdated(self):
+        Categoria.objects.filter(pk=self.categories["4TA"].pk).update(anio_vigente=get_anio_actual() - 1)
+
+        status_response = self.client.get(reverse("recategorizacion-estado"))
+        with patch("django_q.tasks.async_task") as enqueue:
+            response = self.client.post(
+                reverse("recategorizacion-ejecutar"), {"ejecutado_por": "Ana Admin"}, format="json"
+            )
+
+        self.assertFalse(status_response.data["categorias"]["actualizadas"])
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("Primero actualizá las categorías", response.data["detail"])
+        enqueue.assert_not_called()
+
     def test_results_are_filtered_by_type_and_sorted_by_birth_year(self):
         execution = self.run_execution()
         url = reverse("recategorizacion-resultados", args=[execution.pk])

@@ -9,8 +9,9 @@ from padron.serializers import SocioSerializer
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from .models import CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio
+from .models import CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio, get_anio_actual
 from .services import (
+    CategoriesOutdated,
     RecategorizationInProgress,
     build_category_ladders,
     classify_player,
@@ -1596,6 +1597,15 @@ class RecategorizationServiceTests(TestCase):
         self.assertEqual(user, execution.usuario)
         with self.assertRaises(RecategorizationInProgress):
             start_recategorization(user, "Administrador")
+
+    def test_start_requires_categories_updated_to_the_current_year(self):
+        Categoria.objects.filter(pk=self.categories["2015"].pk).update(anio_vigente=get_anio_actual() - 1)
+
+        with patch("django_q.tasks.async_task") as enqueue, self.assertRaises(CategoriesOutdated):
+            start_recategorization(None, "Administrador")
+
+        enqueue.assert_not_called()
+        self.assertFalse(RecategorizacionEjecucion.objects.exists())
 
     def test_start_discards_stale_runs(self):
         stale = RecategorizacionEjecucion.objects.create(

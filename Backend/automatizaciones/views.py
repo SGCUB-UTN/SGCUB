@@ -16,6 +16,7 @@ from padron.services import (
     GENERO_PERSONA_A_CATEGORIA,
     RECATEGORIZATION_TASK,
     RECATEGORIZATION_TASK_NAME,
+    CategoriesOutdated,
     CategoryUpdateBlocked,
     RecategorizationDecisionError,
     RecategorizationInProgress,
@@ -226,7 +227,10 @@ def _executed_by(request):
 @permission_classes([CanManageRecategorizacion])
 def recategorization_status(request):
     mark_stale_runs_as_failed()
-    return Response({"ultima_ejecucion": _serialize_execution(_latest_execution())})
+    return Response({
+        "ultima_ejecucion": _serialize_execution(_latest_execution()),
+        "categorias": categories_status(),
+    })
 
 
 @extend_schema(tags=["Automatizaciones / Recategorización"], summary="Ejecutar recategorización de jugadores")
@@ -246,6 +250,8 @@ def recategorization_run(request):
             {"detail": "Ya hay una recategorización en curso o con revisiones pendientes."},
             status=status.HTTP_409_CONFLICT,
         )
+    except CategoriesOutdated as error:
+        return Response({"detail": str(error)}, status=status.HTTP_409_CONFLICT)
     return Response({"ultima_ejecucion": _serialize_execution(execution)}, status=status.HTTP_202_ACCEPTED)
 
 
