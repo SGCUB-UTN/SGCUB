@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import { SUBMIT_BUTTON_CLASS } from '../finanzas/formParts'
-import { getErrorMessage } from '../personas/format'
+import { formatDni, getErrorMessage } from '../personas/format'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import { categoryName, eligibleCategories } from './recategorization'
 
@@ -15,19 +15,36 @@ function SummaryItem({ label, value }) {
 }
 
 function EditRecategorizationForm({ result, categories, onConfirm, onCancel }) {
-  const [mainCategory, setMainCategory] = useState(String(result.categoria_actual?.id ?? ''))
-  const [secondaryCategory, setSecondaryCategory] = useState(String(result.categoria_secundaria_actual?.id ?? ''))
+  const options = useMemo(
+    () => eligibleCategories(categories, result)
+      .slice()
+      .sort((first, second) => first.genero.localeCompare(second.genero) || first.edad_maxima - second.edad_maxima),
+    [categories, result],
+  )
+  // A current category that no longer admits the player's age is not offered, so it starts empty
+  const initialCategory = (category) => (
+    category && options.some((option) => option.categoria_id === category.id) ? String(category.id) : ''
+  )
+  // Without a valid main category, it starts with the one that corresponds: the suggested one or the youngest
+  // youth category for the player's age (mayores are left for the user to choose)
+  const correspondingCategory = () => {
+    const suggested = initialCategory(result.categoria_sugerida)
+    if (suggested || !result.genero || !result.anio_nacimiento) return suggested
+    const youth = options.find((option) => option.tipo === 'juvenil')
+    return youth ? String(youth.categoria_id) : ''
+  }
+  const [mainCategory, setMainCategory] = useState(
+    () => initialCategory(result.categoria_actual) || correspondingCategory(),
+  )
+  const [secondaryCategory, setSecondaryCategory] = useState(() => {
+    const secondary = initialCategory(result.categoria_secundaria_actual)
+    return secondary === mainCategory ? '' : secondary
+  })
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const mainCategoryError = !mainCategory ? 'Elegí la categoría principal.' : ''
 
-  const options = useMemo(
-    () => eligibleCategories(categories, result, [mainCategory, secondaryCategory])
-      .slice()
-      .sort((first, second) => first.genero.localeCompare(second.genero) || first.edad_maxima - second.edad_maxima),
-    [categories, result, mainCategory, secondaryCategory],
-  )
   const optionLabel = (category) => (result.genero ? category.nombre : `${category.nombre} (${category.genero || 'sin género'})`)
   const secondaryOptions = options.filter((category) => String(category.categoria_id) !== mainCategory)
 
@@ -57,7 +74,7 @@ function EditRecategorizationForm({ result, categories, onConfirm, onCancel }) {
     <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
       <dl className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
         <SummaryItem label="Jugador" value={result.jugador} />
-        <SummaryItem label="DNI" value={result.dni} />
+        <SummaryItem label="DNI" value={formatDni(result.dni)} />
         <SummaryItem label="Año de nacimiento" value={result.anio_nacimiento ?? 'Sin fecha'} />
         <SummaryItem label="Principal anterior" value={categoryName(result.categoria_anterior)} />
         <SummaryItem label="Secundaria anterior" value={categoryName(result.categoria_secundaria_anterior)} />

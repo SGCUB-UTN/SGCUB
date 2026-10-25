@@ -249,10 +249,15 @@ def format_datetime(value):
     return timezone.localtime(value).strftime("%d/%m/%Y %H:%M")
 
 
+def format_dni(dni):
+    """Same format as the frontend: thousands separated by dots (30.000.148)."""
+    return f"{int(dni):,}".replace(",", ".") if dni and dni.isdigit() else dni
+
+
 def player_label(player):
     person = player.socio.persona
     birth_year = person.fecha_nacimiento.year if person.fecha_nacimiento else "s/f"
-    return f"{person.apellido}, {person.nombre} (DNI {person.dni}, {birth_year})"
+    return f"{person.apellido}, {person.nombre} (DNI {format_dni(person.dni)}, {birth_year})"
 
 
 def category_label(category):

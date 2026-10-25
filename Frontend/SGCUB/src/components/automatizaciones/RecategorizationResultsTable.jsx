@@ -1,7 +1,10 @@
+import { useNavigate } from 'react-router-dom'
+import { formatDni } from '../personas/format'
 import SortableHeader from '../shared/SortableHeader'
 import { DECISION_STYLES, RESULT_TYPES, categoryName } from './recategorization'
 
 const HEADER_CELL_CLASS = 'px-4 py-3'
+const MISSING_BIRTH_DATE = 'sin_fecha_nacimiento'
 const ICON_BUTTON_CLASS = 'inline-flex h-8 items-center justify-center gap-1 rounded-md border px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40'
 
 const COLUMNS = {
@@ -29,7 +32,7 @@ function PlayerCell({ result }) {
   return (
     <td className="px-4 py-3">
       <p className="font-semibold text-slate-900">{result.jugador}</p>
-      <p className="text-xs text-slate-500">DNI {result.dni}</p>
+      <p className="text-xs text-slate-500">DNI {formatDni(result.dni)}</p>
     </td>
   )
 }
@@ -66,8 +69,13 @@ function ReasonCell({ result }) {
   )
 }
 
+// The birth date is fixed in the player's file; once it is loaded, the categories are edited here as usual
+const needsBirthDate = (result) => result.motivo === MISSING_BIRTH_DATE && !result.anio_nacimiento
+
 function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
+  const navigate = useNavigate()
   const isPendingReview = result.tipo === RESULT_TYPES.pendiente && !result.decision
+  const goToPlayer = needsBirthDate(result)
   const editLabel = result.tipo === RESULT_TYPES.exito ? 'Modificar' : 'Editar'
   const hasSuggestion = Boolean(result.categoria_sugerida) || result.quitar_secundaria_sugerido
   const acceptTitle = result.categoria_sugerida
@@ -105,9 +113,9 @@ function ActionsCell({ result, canEdit, isBusy, onAccept, onKeep, onEdit }) {
         {canEdit && (
           <button
             type="button"
-            onClick={() => onEdit(result)}
+            onClick={() => (goToPlayer ? navigate(`/padron/jugadores/${result.jugador_id}`) : onEdit(result))}
             disabled={isBusy}
-            title={`${editLabel} categorías de ${result.jugador}`}
+            title={goToPlayer ? `Cargar la fecha de nacimiento de ${result.jugador}` : `${editLabel} categorías de ${result.jugador}`}
             className={`${ICON_BUTTON_CLASS} border-sky-200 text-sky-700 hover:bg-sky-50`}
           >
             <span className={`material-symbols-outlined text-[16px] ${isBusy ? 'animate-spin' : ''}`} aria-hidden="true">

@@ -20,11 +20,10 @@ export const DECISION_STYLES = {
 
 export const categoryName = (category) => category?.nombre ?? '—'
 
-// Same rule as the player form: categories of the player's gender that admit their age, plus the selected ones
-export const eligibleCategories = (categories, result, selectedIds = []) => {
+// Same rule as the player form: only categories of the player's gender that admit their age
+export const eligibleCategories = (categories, result) => {
   if (!result?.genero || !result?.anio_nacimiento) return categories
   return categories.filter((category) => (
-    selectedIds.includes(String(category.categoria_id))
-    || (category.genero === result.genero && categoriaAdmiteEdad(category, result.anio_nacimiento))
+    category.genero === result.genero && categoriaAdmiteEdad(category, result.anio_nacimiento)
   ))
 }
