@@ -14,7 +14,6 @@ from .views import (
     jugador_list_create,
     persona_detail,
     persona_list_create,
-    update_categories_current_year_view,
     socio_detail,
     socio_list_create,
     vinculo_familiar_list_create,
@@ -49,7 +48,6 @@ urlpatterns = [
     path("genero/", genero_list, name="genero-list"),
     path("localidad/", localidad_list, name="localidad-list"),
     path("barrio/", barrio_list_create, name="barrio-list"),
-    path("pasr-de-anio-vigente-a-categoria/", update_categories_current_year_view, name="pasr-de-anio-vigente-a-categoria"),
     path("docente-categoria/", docente_categoria_list, name="docente-categoria-list"),
     path("docente-categoria/<int:pk>/", docente_categoria_detail, name="docente-categoria-detail"),
 ]

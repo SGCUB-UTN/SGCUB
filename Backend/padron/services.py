@@ -1,17 +1,20 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
+from uuid import uuid4
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Min, Q
 from django.utils import timezone
 
 from .models import (
     ESTADO_ADMINISTRATIVO_INACTIVO,
     ESTADO_DEPORTIVO_ACTIVO,
+    ActualizacionCategoriasEjecucion,
     Categoria,
     Jugador,
     RecategorizacionEjecucion,
     RecategorizacionResultado,
+    get_anio_actual,
 )
 
 GENERO_PERSONA_A_CATEGORIA = {
@@ -30,9 +33,15 @@ Decision = RecategorizacionResultado.DecisionChoices
 DECISION_LOG_HEADER = "Revisiones manuales:"
 RECATEGORIZATION_TASK = "padron.services.run_recategorization"
 RECATEGORIZATION_TASK_NAME = "Recategorización de jugadores"
+CATEGORY_UPDATE_TASK = "padron.services.pasr_de_anio_vigente_a_categoria"
+CATEGORY_UPDATE_TASK_NAME = "Actualizar las categorías al nuevo año"
 
 
 class RecategorizationInProgress(Exception):
+    pass
+
+
+class CategoryUpdateBlocked(Exception):
     pass
 
 
@@ -392,6 +401,7 @@ def accept_all_suggestions(execution_id, user):
 def pasr_de_anio_vigente_a_categoria():
     current_year = date.today().year
     categorias = Categoria.objects.exclude(anio_vigente=current_year)
+    updated = 0
     for categoria in categorias:
         categoria.anio_vigente = current_year
 
@@ -399,3 +409,53 @@ def pasr_de_anio_vigente_a_categoria():
             categoria.nombre = str(categoria.anio_vigente - categoria.edad_maxima)
 
         categoria.save()
+        updated += 1
+    return updated
+
+
+def categories_status():
+    current_year = get_anio_actual()
+    oldest_year = Categoria.objects.aggregate(oldest=Min("anio_vigente"))["oldest"]
+    return {
+        "anio_actual": current_year,
+        "anio_categorias": oldest_year,
+        "actualizadas": not Categoria.objects.exclude(anio_vigente=current_year).exists(),
+    }
+
+
+def record_task_history(func, success, started, args=None, result=None):
+    """Store a synchronous run in django-q's task table so it shows up in the execution history."""
+    from django_q.models import Task
+
+    Task.objects.create(
+        id=uuid4().hex,
+        name=f"manual-{uuid4().hex[:8]}",
+        func=func,
+        args=args,
+        result=result,
+        started=started,
+        stopped=timezone.now(),
+        success=success,
+    )
+
+
+def update_categories_year(user, executed_by):
+    if RecategorizacionEjecucion.objects.filter(estado__in=[Estado.EN_CURSO, Estado.REVISION_PENDIENTE]).exists():
+        raise CategoryUpdateBlocked(
+            "No se pueden actualizar las categorías mientras haya una recategorización en curso o con revisiones pendientes."
+        )
+    if categories_status()["actualizadas"]:
+        raise CategoryUpdateBlocked(f"Las categorías ya están actualizadas para {get_anio_actual()}.")
+
+    started = timezone.now()
+    try:
+        with transaction.atomic():
+            updated = pasr_de_anio_vigente_a_categoria()
+            update = ActualizacionCategoriasEjecucion.objects.create(
+                usuario=user, ejecutado_por=executed_by, categorias_actualizadas=updated,
+            )
+    except Exception as error:
+        record_task_history(CATEGORY_UPDATE_TASK, False, started, result=str(error))
+        raise
+    record_task_history(CATEGORY_UPDATE_TASK, True, started, args=(update.pk,), result=f"{updated} categorías actualizadas")
+    return update

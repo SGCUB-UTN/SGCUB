@@ -6,7 +6,6 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from .search import normalize_text, normalized_field
-from .services import pasr_de_anio_vigente_a_categoria
 
 from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
 from .serializers import (
@@ -508,13 +507,6 @@ def vinculo_familiar_detail(request, pk):
             return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
     contact.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-@extend_schema(tags=["Padron / Categoria"], summary="Actualizar año vigente de categorías")
-@api_view(["POST"])
-def update_categories_current_year_view(request):
-    pasr_de_anio_vigente_a_categoria()
-    return Response({"message": "Año vigente de categorías actualizado."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Padron / DocenteCategoria"], request=DocenteCategoriaSerializer, responses=DocenteCategoriaSerializer)

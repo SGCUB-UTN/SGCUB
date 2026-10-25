@@ -8,19 +8,29 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
-from padron.models import RecategorizacionEjecucion, RecategorizacionResultado
+from padron.models import ActualizacionCategoriasEjecucion, RecategorizacionEjecucion, RecategorizacionResultado
 from padron.serializers import JugadorSerializer
 from padron.services import (
+    CATEGORY_UPDATE_TASK,
+    CATEGORY_UPDATE_TASK_NAME,
     GENERO_PERSONA_A_CATEGORIA,
     RECATEGORIZATION_TASK,
     RECATEGORIZATION_TASK_NAME,
+    CategoryUpdateBlocked,
     RecategorizationDecisionError,
     RecategorizationInProgress,
     accept_all_suggestions,
+    categories_status,
     decide_result,
     mark_stale_runs_as_failed,
     start_recategorization,
+    update_categories_year,
 )
+
+MANUAL_TASKS = {
+    RECATEGORIZATION_TASK: (RECATEGORIZATION_TASK_NAME, RecategorizacionEjecucion),
+    CATEGORY_UPDATE_TASK: (CATEGORY_UPDATE_TASK_NAME, ActualizacionCategoriasEjecucion),
+}
 
 
 class CanManageAutomatizaciones(BasePermission):
@@ -86,7 +96,7 @@ def automatizacion_detail(request, pk):
 @permission_classes([CanManageAutomatizaciones])
 def automatizacion_execution_list(request):
     schedules = list(Schedule.objects.order_by("pk").values("name", "func"))
-    schedule_names = {RECATEGORIZATION_TASK: RECATEGORIZATION_TASK_NAME}
+    schedule_names = {func: name for func, (name, _) in MANUAL_TASKS.items()}
     for schedule in schedules:
         schedule_names.setdefault(schedule["func"], schedule["name"] or schedule["func"])
 
@@ -99,15 +109,15 @@ def automatizacion_execution_list(request):
 
     executions = Task.objects.filter(func__in=schedule_names).order_by("-stopped", "-id")
     page = Paginator(executions, 5).get_page(page_number)
-    recategorization_ids = [
-        task.args[0] for task in page.object_list if task.func == RECATEGORIZATION_TASK and task.args
-    ]
-    recategorizations = RecategorizacionEjecucion.objects.in_bulk(recategorization_ids)
+    manual_runs = {
+        func: model.objects.in_bulk([
+            task.args[0] for task in page.object_list if task.func == func and task.args
+        ])
+        for func, (_, model) in MANUAL_TASKS.items()
+    }
     results = []
     for task in page.object_list:
-        recategorization = None
-        if task.func == RECATEGORIZATION_TASK and task.args:
-            recategorization = recategorizations.get(task.args[0])
+        manual_run = manual_runs[task.func].get(task.args[0]) if task.func in manual_runs and task.args else None
         results.append({
             "id": task.pk,
             "executed_at": task.stopped,
@@ -115,9 +125,9 @@ def automatizacion_execution_list(request):
             "func": task.func,
             "scope": task.func.split(".", 1)[0].replace("_", " ").capitalize(),
             "success": task.success,
-            "is_manual": task.func == RECATEGORIZATION_TASK,
-            "executed_by": recategorization.ejecutado_por if recategorization else None,
-            "recategorization_id": recategorization.pk if recategorization else None,
+            "is_manual": task.func in MANUAL_TASKS,
+            "executed_by": manual_run.ejecutado_por if manual_run else None,
+            "recategorization_id": manual_run.pk if manual_run and task.func == RECATEGORIZATION_TASK else None,
         })
     return Response({
         "results": results,
@@ -205,6 +215,12 @@ def _latest_execution():
     return RecategorizacionEjecucion.objects.order_by("-fecha_inicio", "-ejecucion_id").first()
 
 
+def _executed_by(request):
+    executed_by = request.data.get("ejecutado_por") if isinstance(request.data, dict) else None
+    executed_by = executed_by.strip() if isinstance(executed_by, str) else ""
+    return executed_by if 0 < len(executed_by) <= 150 else None
+
+
 @extend_schema(tags=["Automatizaciones / Recategorización"], summary="Estado de la última recategorización")
 @api_view(["GET"])
 @permission_classes([CanManageRecategorizacion])
@@ -217,9 +233,8 @@ def recategorization_status(request):
 @api_view(["POST"])
 @permission_classes([CanManageRecategorizacion])
 def recategorization_run(request):
-    executed_by = request.data.get("ejecutado_por") if isinstance(request.data, dict) else None
-    executed_by = executed_by.strip() if isinstance(executed_by, str) else ""
-    if not executed_by or len(executed_by) > 150:
+    executed_by = _executed_by(request)
+    if not executed_by:
         return Response(
             {"ejecutado_por": ["Indicá quién ejecuta la recategorización (hasta 150 caracteres)."]},
             status=status.HTTP_400_BAD_REQUEST,
@@ -348,3 +363,44 @@ def recategorization_accept_all(request, pk):
         return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
     execution.refresh_from_db()
     return Response({"aceptados": accepted, "ultima_ejecucion": _serialize_execution(execution)})
+
+
+def _serialize_categories_status():
+    last_update = ActualizacionCategoriasEjecucion.objects.order_by("-fecha", "-actualizacion_id").first()
+    return {
+        **categories_status(),
+        "bloqueada_por_recategorizacion": RecategorizacionEjecucion.objects.filter(
+            estado__in=[RecategorizacionEjecucion.EstadoChoices.EN_CURSO, RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE],
+        ).exists(),
+        "ultima_actualizacion": {
+            "id": last_update.pk,
+            "anio": last_update.anio,
+            "fecha": last_update.fecha,
+            "ejecutado_por": last_update.ejecutado_por,
+            "categorias_actualizadas": last_update.categorias_actualizadas,
+        } if last_update else None,
+    }
+
+
+@extend_schema(tags=["Automatizaciones / Categorías"], summary="Estado del año de las categorías")
+@api_view(["GET"])
+@permission_classes([CanManageRecategorizacion])
+def category_update_status(request):
+    return Response(_serialize_categories_status())
+
+
+@extend_schema(tags=["Automatizaciones / Categorías"], summary="Actualizar las categorías al año actual")
+@api_view(["POST"])
+@permission_classes([CanManageRecategorizacion])
+def category_update_run(request):
+    executed_by = _executed_by(request)
+    if not executed_by:
+        return Response(
+            {"ejecutado_por": ["Indicá quién actualiza las categorías (hasta 150 caracteres)."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        update_categories_year(request.user, executed_by)
+    except CategoryUpdateBlocked as error:
+        return Response({"detail": str(error)}, status=status.HTTP_409_CONFLICT)
+    return Response(_serialize_categories_status())

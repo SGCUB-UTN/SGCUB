@@ -13,7 +13,10 @@ from django_q.scheduler import scheduler
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from padron.models import Categoria, Genero, Jugador, Persona, RecategorizacionEjecucion, Socio
+from padron.models import (
+    ActualizacionCategoriasEjecucion, Categoria, Genero, Jugador, Persona, RecategorizacionEjecucion, Socio,
+    get_anio_actual,
+)
 from padron.services import run_recategorization
 
 
@@ -365,3 +368,93 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(status_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(run_response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(accept_response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class CategoryUpdateApiTests(APITestCase):
+    def setUp(self):
+        self.administrador = get_user_model().objects.create_user(username="administrador")
+        self.administrador.groups.add(Group.objects.get(name="Administrador"))
+        self.client.force_authenticate(self.administrador)
+        self.current_year = get_anio_actual()
+        Categoria.objects.all().delete()
+        self.youth = Categoria.objects.create(
+            nombre=str(self.current_year - 1 - 11), edad_maxima=11, genero="M", anio_vigente=self.current_year - 1,
+        )
+        self.adults = Categoria.objects.create(
+            nombre="1RA DIVISION", edad_maxima=99, genero="M", anio_vigente=self.current_year - 1,
+        )
+
+    def run_update(self, executed_by="Ana Admin"):
+        return self.client.post(reverse("categorias-ejecutar"), {"ejecutado_por": executed_by}, format="json")
+
+    def test_status_reports_outdated_categories(self):
+        response = self.client.get(reverse("categorias-estado"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["actualizadas"])
+        self.assertEqual(response.data["anio_actual"], self.current_year)
+        self.assertEqual(response.data["anio_categorias"], self.current_year - 1)
+        self.assertIsNone(response.data["ultima_actualizacion"])
+        self.assertFalse(response.data["bloqueada_por_recategorizacion"])
+
+    def test_update_requires_who_executes_it(self):
+        response = self.run_update("  ")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ejecutado_por", response.data)
+
+    def test_update_moves_categories_to_current_year_and_is_logged(self):
+        response = self.run_update()
+        repeated = self.run_update()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["actualizadas"])
+        self.assertEqual(response.data["ultima_actualizacion"]["ejecutado_por"], "Ana Admin")
+        self.assertEqual(response.data["ultima_actualizacion"]["categorias_actualizadas"], 2)
+        self.youth.refresh_from_db()
+        self.assertEqual(self.youth.anio_vigente, self.current_year)
+        self.assertEqual(self.youth.nombre, str(self.current_year - 11))
+        update = ActualizacionCategoriasEjecucion.objects.get()
+        self.assertEqual(update.usuario, self.administrador)
+        self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
+
+    def test_update_appears_in_the_execution_history(self):
+        self.run_update()
+
+        entry = self.client.get(reverse("automatizacion-ejecuciones")).data["results"][0]
+
+        self.assertEqual(entry["automation"], "Actualizar las categorías al nuevo año")
+        self.assertTrue(entry["success"])
+        self.assertTrue(entry["is_manual"])
+        self.assertEqual(entry["executed_by"], "Ana Admin")
+        self.assertIsNone(entry["recategorization_id"])
+
+    def test_failed_update_is_rolled_back_and_logged_as_failed(self):
+        with patch("padron.services.ActualizacionCategoriasEjecucion.objects.create", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.run_update()
+
+        self.youth.refresh_from_db()
+        self.assertEqual(self.youth.anio_vigente, self.current_year - 1)
+        task = Task.objects.get(func="padron.services.pasr_de_anio_vigente_a_categoria")
+        self.assertFalse(task.success)
+        self.assertEqual(task.result, "boom")
+
+    def test_update_is_blocked_while_a_recategorization_is_active(self):
+        RecategorizacionEjecucion.objects.create(
+            ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE,
+        )
+
+        status_response = self.client.get(reverse("categorias-estado"))
+        response = self.run_update()
+
+        self.assertTrue(status_response.data["bloqueada_por_recategorizacion"])
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.youth.refresh_from_db()
+        self.assertEqual(self.youth.anio_vigente, self.current_year - 1)
+
+    def test_users_without_permissions_cannot_update_categories(self):
+        self.client.force_authenticate(get_user_model().objects.create_user(username="lector"))
+
+        self.assertEqual(self.client.get(reverse("categorias-estado")).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.run_update().status_code, status.HTTP_403_FORBIDDEN)
