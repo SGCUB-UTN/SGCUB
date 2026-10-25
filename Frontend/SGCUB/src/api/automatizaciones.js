@@ -16,3 +16,37 @@ export const updateAutomatizacionStatus = async (id, isActive) => {
   const response = await api.patch(`${endpoint}${id}/`, { is_active: isActive })
   return response.data
 }
+
+const recategorizationEndpoint = `${endpoint}recategorizacion/`
+
+export const getRecategorizationStatus = async () => {
+  const response = await api.get(recategorizationEndpoint)
+  return response.data.ultima_ejecucion
+}
+
+export const runRecategorization = async (executedBy) => {
+  const response = await api.post(`${recategorizationEndpoint}ejecutar/`, { ejecutado_por: executedBy })
+  return response.data.ultima_ejecucion
+}
+
+export const getRecategorizationResults = async (executionId, type, page = 1) => {
+  const response = await api.get(`${recategorizationEndpoint}${executionId}/resultados/`, {
+    params: { tipo: type, page },
+  })
+  return response.data
+}
+
+export const getRecategorizationLog = async (executionId) => {
+  const response = await api.get(`${recategorizationEndpoint}${executionId}/registro/`)
+  return response.data.registro
+}
+
+export const decideRecategorizationResult = async (resultId, payload) => {
+  const response = await api.post(`${recategorizationEndpoint}resultados/${resultId}/decision/`, payload)
+  return response.data
+}
+
+export const acceptAllRecategorizationSuggestions = async (executionId) => {
+  const response = await api.post(`${recategorizationEndpoint}${executionId}/aceptar-sugeridos/`)
+  return response.data
+}

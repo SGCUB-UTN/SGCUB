@@ -6,7 +6,10 @@ import {
   getAutomatizaciones,
   updateAutomatizacionStatus,
 } from '../api/automatizaciones'
+import RecategorizationPanel from '../components/automatizaciones/RecategorizationPanel'
+import RunRecategorizationModal from '../components/automatizaciones/RunRecategorizationModal'
 import PageHeader from '../components/shared/PageHeader'
+import useRecategorization from '../hooks/useRecategorization'
 
 const FREQUENCIES = {
   O: 'Una vez',
@@ -249,6 +252,13 @@ export default function Automatizaciones() {
   const [executionPage, setExecutionPage] = useState(1)
   const [isLoadingExecutions, setIsLoadingExecutions] = useState(true)
   const [executionError, setExecutionError] = useState('')
+  const recategorization = useRecategorization()
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false)
+
+  const startRecategorization = async (executedBy) => {
+    await recategorization.run(executedBy)
+    setIsRunModalOpen(false)
+  }
 
   const loadAutomatizaciones = useCallback(async () => {
     setIsLoading(true)
@@ -389,6 +399,20 @@ export default function Automatizaciones() {
             />
           </div>
         </section>
+
+        <RecategorizationPanel
+          execution={recategorization.execution}
+          isLoading={recategorization.isLoading}
+          error={recategorization.error}
+          canRun={canChange}
+          onRun={() => setIsRunModalOpen(true)}
+        />
+
+        <RunRecategorizationModal
+          opened={isRunModalOpen}
+          onConfirm={startRecategorization}
+          onClose={() => setIsRunModalOpen(false)}
+        />
 
         <section aria-labelledby="automation-list-title" className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
