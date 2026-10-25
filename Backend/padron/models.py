@@ -491,6 +491,28 @@ class DocenteCategoria(models.Model):
         ]
 
 
+class ActualizacionCategoriasEjecucion(models.Model):
+    actualizacion_id = models.AutoField(primary_key=True)
+    anio = models.PositiveIntegerField(default=get_anio_actual)
+    fecha = models.DateTimeField(default=django.utils.timezone.now)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="actualizaciones_categorias",
+        null=True,
+        blank=True,
+    )
+    ejecutado_por = models.CharField(max_length=150)
+    categorias_actualizadas = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "actualizacion_categorias_ejecucion"
+        ordering = ["-fecha", "-actualizacion_id"]
+
+    def __str__(self):
+        return f"Actualización de categorías {self.anio}"
+
+
 class RecategorizacionEjecucion(models.Model):
     class EstadoChoices(models.TextChoices):
         EN_CURSO = "en_curso", "En curso"
