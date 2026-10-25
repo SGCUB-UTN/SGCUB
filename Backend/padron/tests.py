@@ -1410,11 +1410,16 @@ class RecategorizationServiceTests(TestCase):
         self.other, _ = Genero.objects.get_or_create(nombre="Otro")
         # Replace the seeded categories with a small, known ladder
         Categoria.objects.all().delete()
+        Tipo = Categoria.TipoChoices
         self.categories = {
-            name: Categoria.objects.create(nombre=name, edad_maxima=max_age, genero="M", anio_vigente=self.CURRENT_YEAR)
-            for name, max_age in [
-                ("2016", 10), ("2015", 11), ("PRE 9NA", 12), ("9NA", 13),
-                ("4TA", 19), ("3RA", 26), ("1RA", 99),
+            name: Categoria.objects.create(
+                nombre=name, edad_minima=min_age, edad_maxima=max_age, tipo=tipo,
+                genero="M", anio_vigente=self.CURRENT_YEAR,
+            )
+            for name, min_age, max_age, tipo in [
+                ("2016", 0, 10, Tipo.JUVENIL), ("2015", 0, 11, Tipo.JUVENIL), ("PRE 9NA", 0, 12, Tipo.JUVENIL),
+                ("9NA", 0, 13, Tipo.JUVENIL), ("5TA", 0, 17, Tipo.JUVENIL), ("4TA", 0, 19, Tipo.CUARTA),
+                ("3RA", 0, 99, Tipo.MAYOR), ("1RA", 0, 99, Tipo.MAYOR), ("SENIOR", 35, 99, Tipo.MAYOR),
             ]
         }
         self.unassigned = Categoria.objects.create(nombre="No asignado")
@@ -1456,10 +1461,50 @@ class RecategorizationServiceTests(TestCase):
         self.assertEqual(self.categories["2015"], result.categoria_nueva)
 
     def test_new_year_run_keeps_player_in_multi_year_category(self):
-        result = self.classify(self.create_player(2008, self.categories["4TA"]), last_run_year=2025)
+        result = self.classify(self.create_player(2010, self.categories["5TA"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+        self.assertEqual(self.categories["5TA"], result.categoria_nueva)
+
+    def test_youth_player_moves_to_fourth_division_automatically(self):
+        result = self.classify(self.create_player(2008, self.categories["5TA"]), last_run_year=2025)
 
         self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
         self.assertEqual(self.categories["4TA"], result.categoria_nueva)
+
+    def test_youth_player_too_old_for_fourth_division_requires_review(self):
+        result = self.classify(self.create_player(2005, self.categories["5TA"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.EDAD_NO_ADMITIDA, result.motivo)
+        self.assertIsNone(result.categoria_sugerida)
+
+    def test_fourth_division_is_always_reviewed_without_suggestion(self):
+        for birth_year in (2008, 2006):
+            with self.subTest(birth_year=birth_year):
+                result = self.classify(self.create_player(birth_year, self.categories["4TA"]), last_run_year=2025)
+
+                self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+                self.assertEqual(RecategorizacionResultado.MotivoChoices.CUARTA_DIVISION, result.motivo)
+                self.assertIsNone(result.categoria_sugerida)
+                self.assertIsNone(result.categoria_nueva)
+
+    def test_senior_categories_are_never_recategorized(self):
+        for name in ("3RA", "1RA"):
+            with self.subTest(category=name):
+                result = self.classify(self.create_player(2006, self.categories[name]), last_run_year=2025)
+
+                self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+                self.assertEqual(self.categories[name], result.categoria_nueva)
+
+    def test_senior_category_requires_its_minimum_age(self):
+        veteran = self.classify(self.create_player(1980, self.categories["SENIOR"]), last_run_year=2025)
+        too_young = self.classify(self.create_player(1995, self.categories["SENIOR"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, veteran.tipo)
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, too_young.tipo)
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.EDAD_NO_ADMITIDA, too_young.motivo)
+        self.assertIn("admite desde 35", too_young.detalle)
 
     def test_new_year_run_flags_player_already_in_expected_or_higher_category(self):
         for category in (self.categories["2015"], self.categories["PRE 9NA"]):
@@ -1517,6 +1562,7 @@ class RecategorizationServiceTests(TestCase):
         cases = [
             (self.create_player(2014, self.categories["9NA"]), True),
             (self.create_player(2006, self.categories["4TA"]), False),
+            (self.create_player(1995, self.categories["SENIOR"]), False),
             (self.create_player(2014, self.categories["9NA"], secondary=self.categories["2016"]), False),
             (self.create_player(2014, self.categories["9NA"], birth_date=False), False),
         ]
@@ -1532,15 +1578,6 @@ class RecategorizationServiceTests(TestCase):
         self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_MAYOR, result.motivo)
         self.assertTrue(result.quitar_secundaria_sugerido)
         self.assertIn("2016", result.detalle)
-
-    def test_adult_player_is_never_promoted_automatically(self):
-        adult = self.classify(self.create_player(1995, self.categories["1RA"]), last_run_year=2025)
-        turning_twenty = self.classify(self.create_player(2006, self.categories["4TA"]), last_run_year=2025)
-
-        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, adult.tipo)
-        self.assertEqual(self.categories["1RA"], adult.categoria_nueva)
-        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, turning_twenty.tipo)
-        self.assertEqual(self.categories["3RA"], turning_twenty.categoria_sugerida)
 
     def test_players_without_required_data_are_reported_as_errors(self):
         cases = [

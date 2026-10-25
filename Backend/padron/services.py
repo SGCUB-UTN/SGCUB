@@ -22,13 +22,13 @@ GENERO_PERSONA_A_CATEGORIA = {
     "Femenino": Categoria.GENERO_FEMENINO,    # "F"
 }
 
-YOUTH_MAX_AGE = 20
 STALE_RUN_TIMEOUT = timedelta(minutes=30)
 
 Estado = RecategorizacionEjecucion.EstadoChoices
 Tipo = RecategorizacionResultado.TipoChoices
 Motivo = RecategorizacionResultado.MotivoChoices
 Decision = RecategorizacionResultado.DecisionChoices
+TipoCategoria = Categoria.TipoChoices
 
 DECISION_LOG_HEADER = "Revisiones manuales:"
 RECATEGORIZATION_TASK = "padron.services.run_recategorization"
@@ -67,12 +67,16 @@ def build_category_ladders():
     return ladders
 
 
+def admits_age(category, age):
+    return category.edad_minima <= age <= category.edad_maxima
+
+
 def category_for_age(ladder, age):
-    return next((category for category in ladder if category.edad_maxima >= age), None)
+    return next((category for category in ladder if admits_age(category, age)), None)
 
 
 def category_admits(category, gender, age):
-    return category is not None and category.genero == gender and category.edad_maxima >= age
+    return category is not None and category.genero == gender and admits_age(category, age)
 
 
 def can_keep_categories(player, current_year):
@@ -91,13 +95,33 @@ def _error(motivo, detalle):
     return Clasificacion(tipo=Tipo.ERROR, motivo=motivo, detalle=detalle)
 
 
-def _classify_main_category(principal, expected, age, birth_year, ladder, current_year, last_run_year):
-    if (
-        expected.edad_maxima > YOUTH_MAX_AGE
-        and principal.edad_maxima > YOUTH_MAX_AGE
-        and principal.edad_maxima >= age
-    ):
+def _classify_senior_category(principal, age):
+    """Mayores are never recategorized; they are only flagged when their age no longer fits."""
+    if admits_age(principal, age):
         return Clasificacion(tipo=Tipo.EXITO, categoria_nueva=principal)
+    return Clasificacion(
+        tipo=Tipo.PENDIENTE,
+        motivo=Motivo.EDAD_NO_ADMITIDA,
+        detalle=f"Tiene {age} años y {principal.nombre} {principal.age_range_label()}.",
+    )
+
+
+def _classify_fourth_division(principal, age):
+    """4ta división is always reviewed by hand: the player may stay or move up to mayores."""
+    if admits_age(principal, age):
+        detalle = f"Tiene {age} años: revisá si sigue en {principal.nombre} o pasa a mayores."
+    else:
+        detalle = f"Tiene {age} años y {principal.nombre} {principal.age_range_label()}: elegí su categoría de mayores."
+    return Clasificacion(tipo=Tipo.PENDIENTE, motivo=Motivo.CUARTA_DIVISION, detalle=detalle)
+
+
+def _classify_youth_category(principal, expected, age, birth_year, ladder, current_year, last_run_year):
+    if expected is None:
+        return Clasificacion(
+            tipo=Tipo.PENDIENTE,
+            motivo=Motivo.EDAD_NO_ADMITIDA,
+            detalle=f"Tiene {age} años y ya no entra en juveniles ni en 4ta división: elegí su categoría de mayores.",
+        )
 
     if last_run_year is None or last_run_year >= current_year:
         if principal.edad_maxima == expected.edad_maxima:
@@ -114,7 +138,7 @@ def _classify_main_category(principal, expected, age, birth_year, ladder, curren
         was_in_natural_category = (
             previous_expected is not None and principal.edad_maxima == previous_expected.edad_maxima
         )
-        if was_in_natural_category and expected.edad_maxima <= YOUTH_MAX_AGE:
+        if was_in_natural_category:
             new_category = principal if principal.edad_maxima == expected.edad_maxima else expected
             return Clasificacion(tipo=Tipo.EXITO, categoria_nueva=new_category)
         if principal.edad_maxima >= expected.edad_maxima:
@@ -145,22 +169,32 @@ def classify_player(player, ladders, current_year, last_run_year):
     ladder = ladders.get(gender, [])
     birth_year = person.fecha_nacimiento.year
     age = current_year - birth_year
-    expected = category_for_age(ladder, age)
-    if expected is None:
+    if category_for_age(ladder, age) is None:
         return _error(Motivo.SIN_CATEGORIA_DISPONIBLE, f"Ninguna categoría admite jugadores de {age} años.")
 
     principal = player.categoria
     if principal is None or principal.genero != gender:
         return _error(Motivo.CATEGORIA_INCOMPATIBLE, "La categoría principal no está asignada o es de otro género.")
 
-    result = _classify_main_category(principal, expected, age, birth_year, ladder, current_year, last_run_year)
+    expected = None
+    if principal.tipo == TipoCategoria.MAYOR:
+        result = _classify_senior_category(principal, age)
+    elif principal.tipo == TipoCategoria.CUARTA:
+        result = _classify_fourth_division(principal, age)
+    else:
+        youth_ladder = [category for category in ladder if category.tipo != TipoCategoria.MAYOR]
+        expected = category_for_age(youth_ladder, age)
+        result = _classify_youth_category(
+            principal, expected, age, birth_year, youth_ladder, current_year, last_run_year
+        )
 
     secondary = player.categoria_secundaria
     if secondary is None:
         return result
 
     if (
-        secondary.genero == gender
+        expected is not None
+        and secondary.genero == gender
         and secondary.edad_maxima == expected.edad_maxima
         and principal.edad_maxima != expected.edad_maxima
     ):

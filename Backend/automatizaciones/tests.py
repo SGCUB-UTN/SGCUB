@@ -170,6 +170,8 @@ class RecategorizationApiTests(APITestCase):
             name: Categoria.objects.create(nombre=name, edad_maxima=max_age, genero="M", anio_vigente=2026)
             for name, max_age in [("2016", 10), ("2015", 11), ("PRE 9NA", 12), ("9NA", 13), ("4TA", 19)]
         }
+        self.categories["4TA"].tipo = Categoria.TipoChoices.CUARTA
+        self.categories["4TA"].save(update_fields=["tipo"])
         ActualizacionCategoriasEjecucion.objects.create(ejecutado_por="Admin")
         self.dni_counter = 40000000
 

@@ -581,6 +581,8 @@ class RecategorizacionResultado(models.Model):
         CATEGORIA_MENOR = "categoria_menor", "Categoría menor a la que corresponde"
         SECUNDARIA_CORRESPONDE = "secundaria_corresponde", "La categoría secundaria corresponde como principal"
         TIENE_SECUNDARIA = "tiene_secundaria", "Posee categoría secundaria"
+        CUARTA_DIVISION = "cuarta_division", "Jugador de 4ta división"
+        EDAD_NO_ADMITIDA = "edad_no_admitida", "Su categoría no admite su edad"
         SIN_FECHA_NACIMIENTO = "sin_fecha_nacimiento", "Sin fecha de nacimiento"
         SIN_GENERO = "sin_genero", "Sin género compatible con las categorías"
         SIN_CATEGORIA_DISPONIBLE = "sin_categoria_disponible", "Sin categoría disponible para su edad"
