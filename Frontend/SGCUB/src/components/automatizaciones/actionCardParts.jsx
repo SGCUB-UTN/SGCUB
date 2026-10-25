@@ -59,6 +59,20 @@ export function ActionCard({ icon, title, description, children }) {
   )
 }
 
+const FOOTER_TONES = {
+  warning: 'border-amber-200 bg-amber-50 text-amber-900',
+}
+
+// Full-width strip at the bottom of an ActionCard; must be its last child
+export function ActionFooter({ tone = 'warning', icon, children }) {
+  return (
+    <div className={`-mx-5 -mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-b-xl border-t px-5 py-3 text-base sm:-mx-6 sm:-mb-6 sm:px-6 ${FOOTER_TONES[tone]}`} role="status">
+      {icon && <span className="material-symbols-outlined shrink-0 text-[22px]" aria-hidden="true">{icon}</span>}
+      {children}
+    </div>
+  )
+}
+
 // Data columns (label above, value below) separated by a vertical line; the actions take the height of both rows
 export function ActionSummary({ items, actions }) {
   return (

@@ -406,11 +406,6 @@ export default function Automatizaciones() {
 
         <RecordSection
           title="Ejecuciones automáticas"
-          extra={!isLoading && (
-            <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800">
-              {automatizaciones.length} {automatizaciones.length === 1 ? 'tarea' : 'tareas'}
-            </span>
-          )}
         >
 
           {!canChange && !isLoading && (

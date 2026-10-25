@@ -240,7 +240,11 @@ class RecategorizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data["ultima_ejecucion"]["estado"], "en_curso")
-        enqueue.assert_called_once_with("padron.services.run_recategorization", response.data["ultima_ejecucion"]["id"])
+        enqueue.assert_called_once_with(
+            "padron.services.run_recategorization",
+            response.data["ultima_ejecucion"]["id"],
+            hook="padron.services.recategorization_task_hook",
+        )
         execution = RecategorizacionEjecucion.objects.get(pk=response.data["ultima_ejecucion"]["id"])
         self.assertEqual(execution.usuario, self.administrador)
         self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)

@@ -1,4 +1,4 @@
-import { ActionButton, ActionCard, ActionNotice, ActionSummary } from './actionCardParts'
+import { ActionButton, ActionCard, ActionFooter, ActionNotice, ActionSummary } from './actionCardParts'
 import { RECATEGORIZATION_REVIEW_PATH } from './automationCatalog'
 import { describeWhen } from './automationSchedule'
 
@@ -8,11 +8,6 @@ const NOTICES = {
     spin: true,
     tone: 'info',
     text: () => 'Se está ejecutando. Puede tardar unos minutos; mientras tanto podés seguir usando el sistema.',
-  },
-  revision_pendiente: {
-    icon: 'pending_actions',
-    tone: 'warning',
-    text: (execution) => `La revisión todavía no finalizó: ${execution.pendientes_sin_revisar === 1 ? 'hay 1 jugador esperando' : `hay ${execution.pendientes_sin_revisar} jugadores esperando`} tu decisión. Cuando termines, vas a poder ejecutarla de nuevo.`,
   },
   fallida: {
     icon: 'error',
@@ -43,21 +38,42 @@ function Actions({ execution, canRun, categoriesUpToDate, onRun }) {
   )
 }
 
+function ResultCounts({ execution }) {
+  return (
+    <>
+      <span className="font-semibold text-emerald-700">{execution.exitosos} actualizados</span>
+      <span className="font-semibold text-amber-700">{execution.pendientes} para revisar</span>
+      <span className="font-semibold text-red-700">{execution.errores} con errores</span>
+    </>
+  )
+}
+
 function Results({ execution }) {
   return (
     <p className="flex flex-wrap gap-x-3 gap-y-1 text-base">
       <span className="text-slate-500">Resultado:</span>
-      <span className="font-semibold text-emerald-700">{execution.exitosos} actualizados</span>
-      <span className="font-semibold text-amber-700">{execution.pendientes} para revisar</span>
-      <span className="font-semibold text-red-700">{execution.errores} con errores</span>
+      <ResultCounts execution={execution} />
     </p>
+  )
+}
+
+function PendingReviewFooter({ execution }) {
+  return (
+    <ActionFooter icon="pending_actions">
+      <span className="font-bold">La revisión todavía no finalizó.</span>
+      <span className="text-amber-800">
+        Faltan {execution.pendientes_sin_revisar} {execution.pendientes_sin_revisar === 1 ? 'jugador' : 'jugadores'}.
+      </span>
+      <span className="text-amber-800">Resultado:</span>
+      <ResultCounts execution={execution} />
+    </ActionFooter>
   )
 }
 
 export default function RecategorizationPanel({ execution, isLoading, error, categories, canRun, onRun }) {
   const notice = execution ? NOTICES[execution.estado] : null
   const isActive = ['en_curso', 'revision_pendiente'].includes(execution?.estado)
-  const hasResults = ['revision_pendiente', 'finalizada'].includes(execution?.estado)
+  const isPendingReview = execution?.estado === 'revision_pendiente'
   const categoriesUpToDate = categories?.actualizadas ?? true
 
   return (
@@ -79,7 +95,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
           actions={<Actions execution={execution} canRun={canRun} categoriesUpToDate={categoriesUpToDate} onRun={onRun} />}
         />
       )}
-      {!isLoading && hasResults && <Results execution={execution} />}
+      {!isLoading && execution?.estado === 'finalizada' && <Results execution={execution} />}
 
       {!isLoading && notice && (
         <ActionNotice tone={notice.tone} icon={notice.icon} spin={notice.spin}>{notice.text(execution)}</ActionNotice>
@@ -89,6 +105,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
           Primero ejecutá "Actualizar categorías al nuevo año" para {categories.anio_actual} (tarjeta de arriba). Después vas a poder ejecutar la recategorización.
         </ActionNotice>
       )}
+      {!isLoading && isPendingReview && <PendingReviewFooter execution={execution} />}
     </ActionCard>
   )
 }

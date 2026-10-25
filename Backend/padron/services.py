@@ -33,6 +33,7 @@ Decision = RecategorizacionResultado.DecisionChoices
 DECISION_LOG_HEADER = "Revisiones manuales:"
 RECATEGORIZATION_TASK = "padron.services.run_recategorization"
 RECATEGORIZATION_TASK_NAME = "Recategorización de jugadores"
+RECATEGORIZATION_HOOK = "padron.services.recategorization_task_hook"
 CATEGORY_UPDATE_TASK = "padron.services.pasr_de_anio_vigente_a_categoria"
 CATEGORY_UPDATE_TASK_NAME = "Actualizar las categorías al nuevo año"
 
@@ -237,10 +238,30 @@ def start_recategorization(user, executed_by):
     try:
         with transaction.atomic():
             execution = RecategorizacionEjecucion.objects.create(usuario=user, ejecutado_por=executed_by)
-            transaction.on_commit(lambda: async_task(RECATEGORIZATION_TASK, execution.pk))
+            transaction.on_commit(
+                lambda: async_task(RECATEGORIZATION_TASK, execution.pk, hook=RECATEGORIZATION_HOOK)
+            )
     except IntegrityError as error:
         raise RecategorizationInProgress() from error
     return execution
+
+
+def recategorization_task_hook(task):
+    """Called by django-q once the task is stored; marks the run as failed if the worker could not finish it."""
+    if task.success or not task.args:
+        return
+    with transaction.atomic():
+        execution = (
+            RecategorizacionEjecucion.objects.select_for_update()
+            .filter(pk=task.args[0], estado=Estado.EN_CURSO)
+            .first()
+        )
+        if execution is None:
+            return
+        execution.estado = Estado.FALLIDA
+        execution.fecha_fin = timezone.now()
+        execution.registro += f"\nLa tarea no se pudo completar: {str(task.result)[:500]}\n"
+        execution.save(update_fields=["estado", "fecha_fin", "registro"])
 
 
 def run_recategorization(execution_id):

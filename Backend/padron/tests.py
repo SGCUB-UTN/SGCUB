@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 from padron.serializers import SocioSerializer
 
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from .models import ActualizacionCategoriasEjecucion, CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio, get_anio_actual
 from .services import (
@@ -16,6 +16,7 @@ from .services import (
     build_category_ladders,
     classify_player,
     pasr_de_anio_vigente_a_categoria,
+    recategorization_task_hook,
     run_recategorization,
     start_recategorization,
 )
@@ -1594,7 +1595,9 @@ class RecategorizationServiceTests(TestCase):
         with patch("django_q.tasks.async_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             execution = start_recategorization(user, "Administrador")
 
-        enqueue.assert_called_once_with("padron.services.run_recategorization", execution.pk)
+        enqueue.assert_called_once_with(
+            "padron.services.run_recategorization", execution.pk, hook="padron.services.recategorization_task_hook"
+        )
         self.assertEqual(user, execution.usuario)
         with self.assertRaises(RecategorizationInProgress):
             start_recategorization(user, "Administrador")
@@ -1607,6 +1610,28 @@ class RecategorizationServiceTests(TestCase):
 
         enqueue.assert_not_called()
         self.assertFalse(RecategorizacionEjecucion.objects.exists())
+
+    def test_task_hook_marks_run_as_failed_when_the_worker_could_not_finish_it(self):
+        execution = RecategorizacionEjecucion.objects.create(ejecutado_por="Admin")
+        task = Mock(success=False, args=(execution.pk,), result="Function is not defined")
+
+        recategorization_task_hook(task)
+
+        execution.refresh_from_db()
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.FALLIDA, execution.estado)
+        self.assertIsNotNone(execution.fecha_fin)
+        self.assertIn("Function is not defined", execution.registro)
+
+    def test_task_hook_leaves_finished_runs_untouched(self):
+        execution = RecategorizacionEjecucion.objects.create(
+            ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE,
+        )
+
+        recategorization_task_hook(Mock(success=False, args=(execution.pk,), result="boom"))
+        recategorization_task_hook(Mock(success=True, args=(execution.pk,), result=None))
+
+        execution.refresh_from_db()
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE, execution.estado)
 
     def test_start_discards_stale_runs(self):
         stale = RecategorizacionEjecucion.objects.create(
