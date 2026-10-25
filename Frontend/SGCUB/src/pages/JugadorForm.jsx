@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
 import { putSocio } from '../api/socios'
+import { categoriaAdmiteEdad } from '../components/categorias/categoriaFormat'
 import ContactModal from '../components/jugadores/ContactModal'
 import FilaContacto from '../components/jugadores/FilaContacto'
 import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
@@ -67,7 +68,7 @@ const edadCompetencia = (categoria, anioNacimiento) => categoria.anio_vigente - 
 function categoriaPorEdad(categorias, anioNacimiento, generoLetra) {
   if (!anioNacimiento || !generoLetra) return null
   return categorias
-    .filter((c) => c.genero === generoLetra && c.edad_maxima >= edadCompetencia(c, anioNacimiento))
+    .filter((c) => c.genero === generoLetra && categoriaAdmiteEdad(c, anioNacimiento))
     .sort((a, b) => a.edad_maxima - b.edad_maxima)[0] ?? null
 }
 
@@ -202,7 +203,7 @@ function JugadorForm() {
     return categorias.filter((c) => {
       const categoriaId = String(c.categoria_id)
       if (categoriaId === formulario.categoria || categoriaId === formulario.categoria_secundaria) return true
-      return c.genero === generoLetra && c.edad_maxima >= edadCompetencia(c, anioNacimiento)
+      return c.genero === generoLetra && categoriaAdmiteEdad(c, anioNacimiento)
     })
   }, [categorias, formulario, anioNacimiento, generoLetra])
 

@@ -1,3 +1,5 @@
+import { categoriaAdmiteEdad } from '../categorias/categoriaFormat'
+
 export const RESULT_TYPES = {
   exito: 'exito',
   pendiente: 'pendiente',
@@ -23,6 +25,6 @@ export const eligibleCategories = (categories, result, selectedIds = []) => {
   if (!result?.genero || !result?.anio_nacimiento) return categories
   return categories.filter((category) => (
     selectedIds.includes(String(category.categoria_id))
-    || (category.genero === result.genero && category.edad_maxima >= category.anio_vigente - result.anio_nacimiento)
+    || (category.genero === result.genero && categoriaAdmiteEdad(category, result.anio_nacimiento))
   ))
 }

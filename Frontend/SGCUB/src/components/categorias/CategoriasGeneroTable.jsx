@@ -3,7 +3,7 @@ import DataTable from '../shared/DataTable'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
-import { formatEdadMaxima, GENERO_BADGE_CLASSES } from './categoriaFormat'
+import { formatRangoEdad, GENERO_BADGE_CLASSES } from './categoriaFormat'
 
 const SORT_VALUES = {
   name: (categoria) => categoria.nombre,
@@ -54,7 +54,7 @@ function CategoriasGeneroTable({ genero, categorias, isLoading, error }) {
             onClick={() => navigate(`/padron/categorias/${categoria.categoria_id}`)}
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer"
           >
-            <td className="py-3 px-4 text-on-surface-variant">{formatEdadMaxima(categoria.edad_maxima)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatRangoEdad(categoria)}</td>
             <td className="py-3 px-4 pl-6 font-medium text-on-surface text-base">{categoria.nombre}</td>
             <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_jugadores ?? '—'}</td>
             <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_docentes ?? '—'}</td>
