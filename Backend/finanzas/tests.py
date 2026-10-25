@@ -50,6 +50,7 @@ from .models import (
 	SecuenciaComprobante,
 )
 from .pdf_utils import format_amount
+from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
@@ -504,6 +505,47 @@ class MediosDePagoTests(APITestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertTrue(MedioPago.objects.get(pk=medio.pk).activo)
+
+
+class MediosDePagoEnPagosTests(APITestCase):
+	"""The payment method catalog applies to the payment flow and the receipt."""
+
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.socio = crear_socio("62000001")
+		self.cuota = create_cuota(self.socio, "2026-10", today=date(2026, 10, 1))
+
+	def pagar(self, medio):
+		return self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.cuota.pk],
+			"monto_total": "1000.00",
+			"medios": [{"medio_de_pago": medio, "monto": "1000.00"}],
+		}, format="json")
+
+	def test_no_registra_pagos_con_un_medio_deshabilitado(self):
+		MedioPago.objects.filter(codigo="Transferencia").update(activo=False)
+
+		response = self.pagar("Transferencia")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Pago.objects.exists())
+
+	def test_registra_pagos_con_un_medio_nuevo_y_el_recibo_muestra_su_nombre(self):
+		codigo = self.client.post(reverse("medio-pago-list"), {"nombre": "Tarjeta de debito"}, format="json").data["codigo"]
+
+		response = self.pagar(codigo)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = Comprobante.objects.get()
+		self.assertIn(b"Tarjeta de debito", render_receipt_pdf(receipt))
+
+	def test_el_recibo_usa_el_nombre_actual_del_medio(self):
+		self.pagar("Transferencia")
+		medio = MedioPago.objects.get(codigo="Transferencia")
+		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"nombre": "Transferencia bancaria"}, format="json")
+
+		self.assertIn(b"Transferencia bancaria", render_receipt_pdf(Comprobante.objects.get()))
 
 
 class BecaModeloTests(TestCase):
