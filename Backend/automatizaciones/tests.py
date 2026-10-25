@@ -246,10 +246,14 @@ class RecategorizationApiTests(APITestCase):
         url = reverse("recategorizacion-resultados", args=[execution.pk])
 
         successes = self.client.get(url, {"tipo": "exito"})
+        successes_desc = self.client.get(url, {"tipo": "exito", "orden": "desc"})
         pending = self.client.get(url, {"tipo": "pendiente"})
         invalid = self.client.get(url, {"tipo": "otro"})
+        invalid_order = self.client.get(url, {"tipo": "exito", "orden": "x"})
 
         self.assertEqual([row["anio_nacimiento"] for row in successes.data["results"]], [2015, 2016])
+        self.assertEqual([row["anio_nacimiento"] for row in successes_desc.data["results"]], [2016, 2015])
+        self.assertEqual(invalid_order.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(successes.data["results"][0]["categoria_anterior"]["nombre"], "2016")
         self.assertEqual(successes.data["results"][0]["categoria_nueva"]["nombre"], "2015")
         self.assertEqual([row["anio_nacimiento"] for row in pending.data["results"]], [2014, 2015])

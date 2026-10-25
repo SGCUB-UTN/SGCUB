@@ -29,9 +29,9 @@ export const runRecategorization = async (executedBy) => {
   return response.data.ultima_ejecucion
 }
 
-export const getRecategorizationResults = async (executionId, type, page = 1) => {
+export const getRecategorizationResults = async (executionId, type, page = 1, order = 'asc') => {
   const response = await api.get(`${recategorizationEndpoint}${executionId}/resultados/`, {
-    params: { tipo: type, page },
+    params: { tipo: type, page, orden: order },
   })
   return response.data
 }

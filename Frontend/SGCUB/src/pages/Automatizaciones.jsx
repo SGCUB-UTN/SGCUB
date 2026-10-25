@@ -7,6 +7,7 @@ import {
   updateAutomatizacionStatus,
 } from '../api/automatizaciones'
 import RecategorizationPanel from '../components/automatizaciones/RecategorizationPanel'
+import RecategorizationResults from '../components/automatizaciones/RecategorizationResults'
 import RunRecategorizationModal from '../components/automatizaciones/RunRecategorizationModal'
 import PageHeader from '../components/shared/PageHeader'
 import useRecategorization from '../hooks/useRecategorization'
@@ -407,6 +408,15 @@ export default function Automatizaciones() {
           canRun={canChange}
           onRun={() => setIsRunModalOpen(true)}
         />
+
+        {['revision_pendiente', 'finalizada'].includes(recategorization.execution?.estado) && (
+          <RecategorizationResults
+            key={recategorization.execution.id}
+            execution={recategorization.execution}
+            canEdit={canChange}
+            onExecutionChange={recategorization.setExecution}
+          />
+        )}
 
         <RunRecategorizationModal
           opened={isRunModalOpen}

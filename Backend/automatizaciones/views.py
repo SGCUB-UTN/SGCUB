@@ -228,19 +228,23 @@ def recategorization_run(request):
 def recategorization_results(request, pk):
     execution = get_object_or_404(RecategorizacionEjecucion, pk=pk)
     result_type = request.query_params.get("tipo", Tipo.EXITO)
+    direction = request.query_params.get("orden", "asc")
     page_number = request.query_params.get("page", "1")
     if result_type not in Tipo.values:
         return Response(
             {"tipo": [f"Elegí un tipo válido: {', '.join(Tipo.values)}."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if direction not in ("asc", "desc"):
+        return Response({"orden": ["Elegí un orden válido: asc o desc."]}, status=status.HTTP_400_BAD_REQUEST)
     if not page_number.isdecimal() or int(page_number) < 1:
         return Response(
             {"page": ["Ingresá un número de página mayor que cero."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    birth_date = F("jugador__socio__persona__fecha_nacimiento").asc(nulls_last=True)
+    birth_date_field = F("jugador__socio__persona__fecha_nacimiento")
+    birth_date = birth_date_field.asc(nulls_last=True) if direction == "asc" else birth_date_field.desc(nulls_last=True)
     ordering = [birth_date, "jugador__socio__persona__apellido", "jugador__socio__persona__nombre", "resultado_id"]
     if result_type == Tipo.PENDIENTE:
         ordering.insert(0, "decision")
