@@ -1,9 +1,12 @@
 from decimal import Decimal
 
 from django.db.models import Prefetch
+from django.utils import timezone
 from rest_framework import serializers
 
+from .generators import PERIOD_FORMAT
 from .models import (
+    CONFIGURATION_FIELDS,
     Beca,
     Comprobante,
     ConceptoItemChoices,
@@ -438,12 +441,26 @@ class ImputacionSerializer(serializers.ModelSerializer):
         read_only_fields = ["imputacion_id"]
 
 
+def user_display_name(user):
+    return (user.get_full_name().strip() or user.username) if user else None
+
+
 class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = ConfiguracionFinanciera
-        exclude = ["configuracion_financiera_id"]
-        read_only_fields = ["fecha_actualizacion", "usuario_actualizacion"]
+        fields = [
+            "configuracion_financiera_id",
+            "periodo_vigencia",
+            *CONFIGURATION_FIELDS,
+            "fecha_creacion",
+            "usuario_creacion",
+            "usuario_nombre",
+        ]
+        read_only_fields = ["configuracion_financiera_id", "fecha_creacion", "usuario_creacion"]
         extra_kwargs = {
+            "periodo_vigencia": {"required": True},
             "monto_cuota_social": {"min_value": Decimal("0.01")},
             "monto_cuota_deportiva": {"min_value": Decimal("0.01")},
             "dia_vencimiento_1": {"min_value": 1, "max_value": 31},
@@ -451,6 +468,19 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
             "valor_recargo_1": {"min_value": Decimal("0.00")},
             "valor_recargo_2": {"min_value": Decimal("0.00")},
         }
+
+    def get_usuario_nombre(self, obj) -> str | None:
+        return user_display_name(obj.usuario_creacion)
+
+    def validate_periodo_vigencia(self, value):
+        try:
+            period = parse_period(value).strftime(PERIOD_FORMAT)
+        except ValueError as error:
+            raise serializers.ValidationError(str(error)) from None
+        current = timezone.localdate().strftime(PERIOD_FORMAT)
+        if period <= current:
+            raise serializers.ValidationError("El período de vigencia debe ser posterior al período actual.")
+        return period
 
     def validate(self, attrs):
         def current(field):
@@ -465,6 +495,23 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+class VersionConfiguracionFinancieraSerializer(ConfiguracionFinancieraSerializer):
+    cambios = serializers.SerializerMethodField()
+
+    class Meta(ConfiguracionFinancieraSerializer.Meta):
+        fields = [*ConfiguracionFinancieraSerializer.Meta.fields, "cambios"]
+
+    def get_cambios(self, obj) -> list:
+        previous = obj.previous_version()
+        if previous is None:
+            return []
+        return [
+            {"campo": field, "anterior": str(getattr(previous, field)), "nuevo": str(getattr(obj, field))}
+            for field in CONFIGURATION_FIELDS
+            if getattr(previous, field) != getattr(obj, field)
+        ]
 
 
 class OtorgarBecaSerializer(serializers.Serializer):

@@ -358,8 +358,36 @@ class DetalleImputacion(models.Model):
         return f"{self.concepto} - {self.monto}"
 
 
+# The first version applies "since always": any period sorts after it.
+INITIAL_CONFIGURATION_PERIOD = "2000-01"
+
+
+def period_key(period=None):
+    if period is None:
+        return timezone.localdate().strftime("%Y-%m")
+    if hasattr(period, "strftime"):
+        return period.strftime("%Y-%m")
+    return str(period).strip()[:7]
+
+
+# Cuota parameters that only change from a given period on
+CONFIGURATION_FIELDS = (
+    "monto_cuota_social",
+    "monto_cuota_deportiva",
+    "dia_vencimiento_1",
+    "dia_vencimiento_2",
+    "tipo_recargo_1",
+    "valor_recargo_1",
+    "tipo_recargo_2",
+    "valor_recargo_2",
+)
+
+
 class ConfiguracionFinanciera(models.Model):
+    """One version of the cuota parameters. Each version applies from `periodo_vigencia` on."""
+
     configuracion_financiera_id = models.AutoField(primary_key=True)
+    periodo_vigencia = models.CharField(max_length=7, default=INITIAL_CONFIGURATION_PERIOD)
     monto_cuota_social = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1000.00"))
     monto_cuota_deportiva = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1500.00"))
     dia_vencimiento_1 = models.PositiveSmallIntegerField(default=10)
@@ -376,8 +404,8 @@ class ConfiguracionFinanciera(models.Model):
         default=ModalidadMontoChoices.MONTO_FIJO,
     )
     valor_recargo_2 = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
-    fecha_actualizacion = models.DateTimeField(auto_now=True)
-    usuario_actualizacion = models.ForeignKey(
+    fecha_creacion = models.DateTimeField(default=timezone.now)
+    usuario_creacion = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         related_name="configuraciones_financieras",
@@ -387,14 +415,28 @@ class ConfiguracionFinanciera(models.Model):
 
     class Meta:
         db_table = "configuracion_financiera"
+        ordering = ["-periodo_vigencia", "-pk"]
 
     def __str__(self):
-        return "Configuración financiera"
+        return f"Configuración financiera desde {self.periodo_vigencia}"
 
     @classmethod
-    def load(cls):
-        configuration, _ = cls.objects.get_or_create(pk=1)
-        return configuration
+    def load(cls, period=None):
+        """The version in force for `period` (current period by default): the latest one created for the
+        most recent periodo_vigencia that is not after it."""
+        version = cls.objects.filter(periodo_vigencia__lte=period_key(period)).order_by("-periodo_vigencia", "-pk").first()
+        return version or cls.objects.order_by("periodo_vigencia", "pk").first() or cls.objects.create()
+
+    def parameters(self):
+        return {field: getattr(self, field) for field in CONFIGURATION_FIELDS}
+
+    def previous_version(self):
+        """The version that was in force for this one's period before it was created."""
+        return (
+            ConfiguracionFinanciera.objects.filter(periodo_vigencia__lte=self.periodo_vigencia, pk__lt=self.pk)
+            .order_by("-periodo_vigencia", "-pk")
+            .first()
+        )
 
     def surcharge(self, due_number, base_amount):
         kind, value = (

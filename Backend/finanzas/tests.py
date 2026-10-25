@@ -148,13 +148,25 @@ class GeneradorItemsCuotaTests(TestCase):
 		self.assertEqual(self.conceptos(socio), [])
 
 
+def next_period_start(months=1):
+	first_day = timezone.localdate().replace(day=1)
+	for _ in range(months):
+		first_day = (first_day + timedelta(days=32)).replace(day=1)
+	return first_day
+
+
 class ConfiguracionFinancieraTests(APITestCase):
 	def setUp(self):
-		self.usuario = get_user_model().objects.create_user(username="tesorero")
+		self.usuario = get_user_model().objects.create_user(username="tesorero", first_name="Ana", last_name="Tesorera")
 		self.client.force_authenticate(user=self.usuario)
+		self.periodo = next_period_start().strftime("%Y-%m")
 
-	def actualizar(self, **datos):
-		return self.client.patch(reverse("configuracion-financiera"), datos, format="json")
+	def actualizar(self, periodo=None, **datos):
+		return self.client.post(
+			reverse("configuracion-financiera"),
+			{"periodo_vigencia": periodo or self.periodo, **datos},
+			format="json",
+		)
 
 	def test_valores_iniciales(self):
 		response = self.client.get(reverse("configuracion-financiera"))
@@ -174,22 +186,71 @@ class ConfiguracionFinancieraTests(APITestCase):
 			dia_vencimiento_1=5,
 			dia_vencimiento_2=15,
 		)
-		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.status_code, 201, response.data)
 		socio = crear_socio("40000001", con_jugador=True)
+		inicio = next_period_start()
 
-		generar_cuotas_mensuales(date(2026, 11, 1), today=date(2026, 11, 1))
+		generar_cuotas_mensuales(inicio, today=inicio)
 
 		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio)
-		self.assertEqual(cuota.fecha_venc1, date(2026, 11, 5))
-		self.assertEqual(cuota.fecha_venc2, date(2026, 11, 15))
+		self.assertEqual(cuota.fecha_venc1, inicio.replace(day=5))
+		self.assertEqual(cuota.fecha_venc2, inicio.replace(day=15))
 		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
 
-	def test_registra_quien_actualizo(self):
+	def test_la_nueva_version_no_afecta_los_periodos_anteriores(self):
+		self.actualizar(monto_cuota_social="1200.00")
+
+		self.assertEqual(ConfiguracionFinanciera.load().monto_cuota_social, Decimal("1000.00"))
+		self.assertEqual(ConfiguracionFinanciera.load(self.periodo).monto_cuota_social, Decimal("1200.00"))
+		self.assertEqual(ConfiguracionFinanciera.load(next_period_start(5)).monto_cuota_social, Decimal("1200.00"))
+
+	def test_la_ultima_version_creada_para_un_periodo_es_la_vigente(self):
+		self.actualizar(monto_cuota_social="1200.00")
+		self.actualizar(monto_cuota_deportiva="2000.00")
+
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
+		self.assertEqual(configuracion.monto_cuota_social, Decimal("1200.00"))
+		self.assertEqual(configuracion.monto_cuota_deportiva, Decimal("2000.00"))
+
+	def test_registra_quien_actualizo_y_desde_que_periodo(self):
 		self.actualizar(valor_recargo_1="150.00")
 
-		configuracion = ConfiguracionFinanciera.load()
-		self.assertEqual(configuracion.usuario_actualizacion, self.usuario)
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
+		self.assertEqual(configuracion.usuario_creacion, self.usuario)
+		self.assertEqual(configuracion.periodo_vigencia, self.periodo)
 		self.assertEqual(configuracion.valor_recargo_1, Decimal("150.00"))
+
+	def test_historial_de_versiones_con_cambios(self):
+		self.actualizar(monto_cuota_social="1200.00", dia_vencimiento_1=5)
+
+		response = self.client.get(reverse("configuracion-financiera-versiones"))
+
+		self.assertEqual(response.status_code, 200)
+		ultima = response.data[0]
+		self.assertEqual(ultima["periodo_vigencia"], self.periodo)
+		self.assertEqual(ultima["usuario_nombre"], "Ana Tesorera")
+		self.assertEqual(
+			{cambio["campo"]: (cambio["anterior"], cambio["nuevo"]) for cambio in ultima["cambios"]},
+			{"monto_cuota_social": ("1000.00", "1200.00"), "dia_vencimiento_1": ("10", "5")},
+		)
+
+	def test_el_periodo_de_vigencia_debe_ser_posterior_al_actual(self):
+		actual = timezone.localdate().strftime("%Y-%m")
+		for periodo in (actual, "2020-01", "2026/13", ""):
+			with self.subTest(periodo=periodo):
+				response = self.client.post(
+					reverse("configuracion-financiera"),
+					{"periodo_vigencia": periodo, "monto_cuota_social": "1200.00"},
+					format="json",
+				)
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("periodo_vigencia", response.data)
+
+	def test_rechaza_una_version_sin_cambios(self):
+		response = self.actualizar(monto_cuota_social="1000.00")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(ConfiguracionFinanciera.objects.count(), 1)
 
 	def test_validaciones(self):
 		casos = [
@@ -214,7 +275,7 @@ class ConfiguracionFinancieraTests(APITestCase):
 			tipo_recargo_2="Porcentaje",
 			valor_recargo_2="10.00",
 		)
-		configuracion = ConfiguracionFinanciera.load()
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
 
 		self.assertEqual(configuracion.surcharge(1, Decimal("2500.00")), Decimal("200.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("2500.00")), Decimal("250.00"))

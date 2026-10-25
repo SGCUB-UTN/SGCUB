@@ -39,6 +39,7 @@ from .serializers import (
 	AnulacionSerializer,
 	CUOTA_ITEM_PREFETCHES,
 	ConfiguracionFinancieraSerializer,
+	VersionConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
 	EdicionDescuentoSerializer,
 	ComprobanteListSerializer,
@@ -67,6 +68,7 @@ from .services import (
 	assign_benefit,
 	cancel_scholarship,
 	correct_payment,
+	create_configuration_version,
 	create_cuota,
 	delete_cuota,
 	ensure_cuota_without_payments,
@@ -448,17 +450,30 @@ def imputacion_detail(request, pk):
 
 
 @extend_schema(tags=["Finanzas/Configuracion"], request=ConfiguracionFinancieraSerializer, responses=ConfiguracionFinancieraSerializer)
-@api_view(["GET", "PUT", "PATCH"])
+@api_view(["GET", "POST"])
 def configuracion_financiera(request):
-	configuracion = ConfiguracionFinanciera.load()
 	if request.method == "GET":
+		configuracion = ConfiguracionFinanciera.load(request.query_params.get("periodo"))
 		return Response(ConfiguracionFinancieraSerializer(configuracion).data)
 
-	serializer = ConfiguracionFinancieraSerializer(configuracion, data=request.data, partial=request.method == "PATCH")
+	# The new version starts from the one in force for its period: only the fields sent change
+	base = ConfiguracionFinanciera.load(request.data.get("periodo_vigencia"))
+	serializer = ConfiguracionFinancieraSerializer(data={**base.parameters(), **request.data})
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	if all(serializer.validated_data[field] == value for field, value in base.parameters().items()):
+		return Response({"detail": "No hay cambios para guardar."}, status=status.HTTP_400_BAD_REQUEST)
+
 	usuario = request.user if request.user.is_authenticated else None
-	return Response(ConfiguracionFinancieraSerializer(serializer.save(usuario_actualizacion=usuario)).data)
+	configuracion = create_configuration_version(serializer.validated_data, usuario)
+	return Response(ConfiguracionFinancieraSerializer(configuracion).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Configuracion"], responses=VersionConfiguracionFinancieraSerializer(many=True))
+@api_view(["GET"])
+def configuracion_financiera_versiones(request):
+	versiones = ConfiguracionFinanciera.objects.select_related("usuario_creacion").order_by("-fecha_creacion", "-pk")
+	return Response(VersionConfiguracionFinancieraSerializer(versiones, many=True).data)
 
 
 @extend_schema(tags=["Finanzas/Beca"], request=BeneficioSerializer)
