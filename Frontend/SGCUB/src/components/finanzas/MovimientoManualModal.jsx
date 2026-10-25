@@ -5,7 +5,9 @@ import { formatAmount, formatDate, formatDni, formatNumber, getErrorMessage } fr
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import SocioPicker from './SocioPicker'
+import { AddItemInlineForm, renderPeriodoLabel } from './DesgloseComprobante'
 import { crearMovimientoManual, getMovimientos } from '../../api/movimientos'
+import { getEstadoCuenta } from '../../api/estadoCuenta'
 import {
   FormSection,
   NO_SPINNER_CLASS,
@@ -64,17 +66,18 @@ const OPERATIONS = [
     value: 'NotaCredito',
     title: 'Nota de crédito',
     shortTitle: 'Nota de crédito',
-    description: 'Anulación o devolución total/parcial de un ingreso ya registrado.',
+    description: 'Ajuste sobre una cuota ya emitida (ej. ítems) o devolución de pago de indumentaria u otros conceptos.',
     icon: 'assignment_return',
     type: 'Cargo',
-    impactLabel: 'Reversión de ingreso',
+    impactLabel: 'Ajuste / Reversión',
     submitText: 'Emitir nota de crédito',
     tone: 'text-primary',
     badgeClass: 'bg-primary/10 text-primary border-primary/20',
     concepts: [
-      'Transferencia o cobro duplicado',
+      'Modificación de ítem de cuota',
       'Devolución parcial / Diferencia de importe',
       'Devolución total de operación',
+      'Transferencia o cobro duplicado',
       'Error de registración',
       'Otro motivo',
     ],
@@ -89,17 +92,38 @@ const PAYMENT_METHODS = [
 
 const movementReceiptNumber = (movement) => movement?.numero_comprobante ?? movement?.movimiento_cuenta_id
 
-const buildEmptyForm = (socio = null, reversedMovement = null) => ({
-  socio: reversedMovement?.socio ?? socio,
-  operation: reversedMovement ? 'NotaCredito' : 'IngresoManual',
-  conceptType: reversedMovement ? 'Devolución total de operación' : '',
-  detail: reversedMovement
-    ? `Ref. Recibo X #${movementReceiptNumber(reversedMovement)} (${reversedMovement.concepto})`.slice(0, DETAIL_MAX_LENGTH)
-    : '',
-  amount: reversedMovement ? String(reversedMovement.monto) : '',
-  paymentMethod: 'Efectivo',
-  reversedMovement,
-})
+const isSurplusMovement = (movement) => (
+  movement?.es_excedente ?? (movement?.concepto || '').startsWith('Excedente de transferencia / Saldo a favor')
+)
+
+const movementReversibleAmount = (movement, allMovements = []) => {
+  if (movement?.saldo_reversible != null) return Number(movement.saldo_reversible)
+  const original = Number(movement?.monto ?? 0)
+  const reversedSum = allMovements
+    .filter((item) => item.movimiento_revertido === movement?.movimiento_cuenta_id)
+    .reduce((sum, item) => sum + Number(item.monto || 0), 0)
+  return Math.max(0, Math.round((original - reversedSum) * 100) / 100)
+}
+
+const buildEmptyForm = (socio = null, reversedMovement = null) => {
+  const surplusOrigin = isSurplusMovement(reversedMovement)
+  const suggestedAmount = reversedMovement
+    ? String(reversedMovement.saldo_reversible ?? reversedMovement.monto)
+    : ''
+  return {
+    socio: reversedMovement?.socio ?? socio,
+    operation: reversedMovement ? (surplusOrigin ? 'Egreso' : 'NotaCredito') : 'IngresoManual',
+    conceptType: reversedMovement
+      ? (surplusOrigin ? 'Devolución de saldo / Excedente' : 'Devolución total de operación')
+      : '',
+    detail: reversedMovement
+      ? `Ref. Recibo X #${movementReceiptNumber(reversedMovement)} (${reversedMovement.concepto})`.slice(0, DETAIL_MAX_LENGTH)
+      : '',
+    amount: suggestedAmount,
+    paymentMethod: reversedMovement?.medio_de_pago || 'Efectivo',
+    reversedMovement,
+  }
+}
 
 const operationFor = (value) => OPERATIONS.find((operation) => operation.value === value) ?? OPERATIONS[0]
 
@@ -145,7 +169,12 @@ function OperationCard({ operation, selected, onSelect }) {
 }
 
 function MovementRow({ movement, selected, onSelect }) {
+  const isCuota = movement.cuota != null
+  const cuotaDetail = movement.cuota_detalle
+  const chargeItems = (cuotaDetail?.items ?? []).filter((item) => !item.es_descuento)
+  const itemsSummary = chargeItems.map((item) => `${item.concepto_nombre || item.concepto} (${formatAmount(item.monto)})`).join(' + ')
   const paymentLabel = movement.medio_de_pago_nombre || (movement.medio_de_pago ? methodLabel(movement.medio_de_pago) : null)
+
   return (
     <button
       type="button"
@@ -165,23 +194,270 @@ function MovementRow({ movement, selected, onSelect }) {
         <span className="min-w-0">
           <span className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-base text-on-surface truncate">{movement.concepto}</span>
-            <span className="px-1.5 py-0.5 rounded bg-surface-container text-xs font-medium text-on-surface-variant">
-              X #{movementReceiptNumber(movement)}
-            </span>
+            {isCuota ? (
+              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-semibold">
+                Cuota emitida {cuotaDetail?.estado_cuota === 'Paga' ? '• Paga' : '• Pendiente'}
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded bg-surface-container text-xs font-medium text-on-surface-variant">
+                X #{movementReceiptNumber(movement)}
+              </span>
+            )}
           </span>
-          <span className="block text-sm text-on-surface-variant">
-            {formatDate(movement.fecha)}
-            {paymentLabel ? ` • ${paymentLabel}` : ''}
+          <span className="block text-sm text-on-surface-variant truncate">
+            {isCuota
+              ? (itemsSummary || `Emitida el ${formatDate(movement.fecha)}`)
+              : `${formatDate(movement.fecha)}${paymentLabel ? ` • ${paymentLabel}` : ''}`}
           </span>
         </span>
       </span>
       <span className="shrink-0 text-right">
-        <span className="block text-base font-bold tabular-nums text-on-surface">{formatAmount(movement.monto)}</span>
+        <span className="block text-base font-bold tabular-nums text-on-surface">
+          {formatAmount(movement.saldo_reversible ?? movement.monto)}
+        </span>
         <span className={`text-xs font-semibold ${selected ? 'text-primary' : 'text-on-surface-variant'}`}>
-          {selected ? 'Seleccionado' : 'Elegir ingreso'}
+          {selected ? 'Seleccionado' : (isCuota ? 'Elegir cuota' : 'Elegir ingreso')}
         </span>
       </span>
     </button>
+  )
+}
+
+function CuotaBreakdownCard({
+  cuotaMovement,
+  allMovements = [],
+  selectedKeys = [],
+  addedItems = [],
+  onToggleItem,
+  onToggleAll,
+  onAddCustomItem,
+  onRemoveAddedItem,
+}) {
+  const cuotaDetail = cuotaMovement?.cuota_detalle
+  if (!cuotaMovement || !cuotaDetail) return null
+
+  const [showAddForm, setShowAddForm] = useState(false)
+
+  const existingNcs = allMovements.filter(
+    (m) => m.movimiento_revertido === cuotaMovement.movimiento_cuenta_id,
+  )
+  const existingNcTotal = existingNcs.reduce((sum, m) => sum + Number(m.monto || 0), 0)
+  const originalAmount = Number(cuotaMovement.monto || 0)
+  const availableToAdjust = Math.max(0, Math.round((originalAmount - existingNcTotal) * 100) / 100)
+
+  const items = cuotaDetail.items ?? []
+  const positiveItems = items.filter((item) => !item.es_descuento && Number(item.monto) > 0)
+  const selectedItems = positiveItems.filter((item) => selectedKeys.includes(item.item_cuota_id ?? item.concepto))
+  const selectedSum = selectedItems.reduce((sum, item) => sum + Number(item.monto || 0), 0)
+  const addedSum = addedItems.reduce((sum, item) => sum + Number(item.monto || 0), 0)
+  const totalAdjustment = selectedSum + addedSum
+  const resultingNetValue = Math.max(0, Math.round((availableToAdjust - totalAdjustment) * 100) / 100)
+  const allSelected = positiveItems.length > 0 && selectedItems.length === positiveItems.length
+  const totalCount = selectedItems.length + addedItems.length
+
+  return (
+    <div className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest shadow-xs">
+      <div className="px-3.5 py-2.5 bg-surface-container-low border-b border-outline-variant/30 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <strong className="text-on-surface text-sm font-semibold">
+            {cuotaDetail.periodo ? `Período: ${renderPeriodoLabel(cuotaDetail.periodo)}` : cuotaMovement.concepto}
+          </strong>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${
+              cuotaDetail.estado_cuota === 'Paga'
+                ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                : 'bg-primary/10 text-primary border-primary/20'
+            }`}
+          >
+            {cuotaDetail.estado_cuota || 'Emitida'}
+          </span>
+          {existingNcs.map((nc) => (
+            <span
+              key={nc.movimiento_cuenta_id}
+              className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200"
+            >
+              NC-X #{nc.numero_comprobante ?? nc.movimiento_cuenta_id} emitida (−{formatAmount(nc.monto)})
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-sm tabular-nums">
+          {existingNcTotal > 0 ? (
+            <>
+              <span className="line-through text-on-surface-variant text-xs">{formatAmount(originalAmount)}</span>
+              <span className="font-bold text-on-surface">{formatAmount(availableToAdjust)}</span>
+            </>
+          ) : (
+            <span className="font-semibold text-on-surface">{formatAmount(availableToAdjust)}</span>
+          )}
+        </div>
+      </div>
+
+      <ul className="flex flex-col p-2.5 divide-y divide-outline-variant/15">
+        {items.map((linea) => {
+          const key = linea.item_cuota_id ?? linea.concepto
+          const isPositive = !linea.es_descuento && Number(linea.monto) > 0
+          const isSelected = selectedKeys.includes(key)
+          return (
+            <li
+              key={key}
+              className={`flex items-center justify-between gap-2 text-sm rounded px-2.5 py-1.5 transition-colors ${
+                isSelected ? 'bg-amber-50/80 border border-amber-200/70' : ''
+              }`}
+            >
+              <span
+                className={`flex items-center gap-2 before:content-[''] before:block before:w-1.5 before:h-1.5 before:rounded-full ${
+                  isSelected
+                    ? 'line-through text-on-surface-variant before:bg-amber-500'
+                    : linea.es_descuento
+                      ? 'text-emerald-700 before:bg-emerald-500'
+                      : 'text-on-surface before:bg-outline-variant/60'
+                }`}
+              >
+                <span className="font-medium">{linea.concepto_nombre || linea.concepto}</span>
+                {linea.motivo && <span className="text-xs text-on-surface-variant">({linea.motivo})</span>}
+              </span>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span
+                  className={`tabular-nums font-semibold ${
+                    isSelected
+                      ? 'line-through text-amber-800'
+                      : linea.es_descuento
+                        ? 'text-emerald-700'
+                        : 'text-on-surface'
+                  }`}
+                >
+                  {linea.es_descuento ? `− ${formatAmount(linea.monto)}` : formatAmount(linea.monto)}
+                </span>
+                {isPositive && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleItem(linea)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200/70'
+                        : 'bg-surface-container-lowest text-primary border-primary/30 hover:bg-primary/5'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
+                      {isSelected ? 'undo' : 'remove_circle_outline'}
+                    </span>
+                    {isSelected ? 'Restaurar ítem' : 'Quitar ítem'}
+                  </button>
+                )}
+              </div>
+            </li>
+          )
+        })}
+
+        {addedItems.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-center justify-between gap-2 text-sm rounded px-2.5 py-1.5 bg-amber-50/90 border border-amber-200"
+          >
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+              <span className="font-semibold text-amber-950 truncate">{item.concepto_nombre}</span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-200/80 text-amber-900 shrink-0">
+                Agregado
+              </span>
+              {item.motivo && (
+                <span className="text-xs text-amber-800/80 truncate">({item.motivo})</span>
+              )}
+            </span>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="tabular-nums font-bold text-amber-900">
+                − {formatAmount(item.monto)}
+              </span>
+              {onRemoveAddedItem && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveAddedItem(item.id)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border bg-surface-container-lowest text-primary border-primary/30 hover:bg-primary/5 transition-colors cursor-pointer"
+                  title="Quitar este ítem"
+                >
+                  <span className="material-symbols-outlined text-[15px]" aria-hidden="true">remove_circle_outline</span>
+                  Quitar ítem
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {onAddCustomItem && (
+        <div className="p-2.5 bg-surface-container-lowest border-t border-outline-variant/15">
+          {showAddForm ? (
+            <AddItemInlineForm
+              maxAmount={Math.max(0, Math.round((availableToAdjust - totalAdjustment) * 100) / 100)}
+              onAdd={(newItem) => {
+                onAddCustomItem(newItem)
+                setShowAddForm(false)
+              }}
+              onCancel={() => setShowAddForm(false)}
+            />
+          ) : (
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-on-surface-variant/75 text-[11px] italic">
+                ¿Deseas agregar un concepto o ajuste a la cuota?
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-primary border border-primary/30 bg-surface-container-lowest hover:bg-primary/5 transition-colors cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[15px]" aria-hidden="true">add_circle_outline</span>
+                Agregar ítem
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="p-3 bg-surface-container-low border-t border-outline-variant/30 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-bold uppercase tracking-wider text-primary">
+            Desglose de ajuste por Nota de Crédito
+          </span>
+          {positiveItems.length > 1 && (
+            <button
+              type="button"
+              onClick={onToggleAll}
+              className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+            >
+              {allSelected ? 'Desmarcar todos' : 'Marcar todos los ítems'}
+            </button>
+          )}
+        </div>
+
+        {totalAdjustment > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
+            <div className="flex flex-col justify-center p-2.5 rounded-md bg-amber-50/70 border border-amber-200 text-xs">
+              <span className="text-amber-800 font-medium">Nota de Crédito (NC-X) a emitir</span>
+              <strong className="text-base text-amber-900 tabular-nums font-bold">
+                {formatAmount(totalAdjustment)}
+              </strong>
+              <span className="text-[11px] text-amber-700/90 mt-0.5">
+                {totalCount === 1 ? '1 ítem ajustado' : `${totalCount} ítems ajustados`}
+              </span>
+            </div>
+            <div className="flex flex-col justify-center p-2.5 rounded-md bg-surface-container-lowest border border-outline-variant/30 text-xs">
+              <span className="text-on-surface-variant font-medium">Nuevo valor neto de la cuota</span>
+              <strong className="text-base text-on-surface tabular-nums font-bold">
+                {formatAmount(resultingNetValue)}
+              </strong>
+              <span className="text-[11px] text-on-surface-variant mt-0.5">
+                Original: {formatAmount(availableToAdjust)}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2 rounded-md bg-surface-container-lowest border border-dashed border-outline-variant/50 text-xs text-on-surface-variant">
+            <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">info</span>
+            <span>Hacé clic en <strong>Quitar ítem</strong> o <strong>Agregar ítem de ajuste</strong> para modificar el valor de la cuota. El monto de la Nota de Crédito se calculará automáticamente.</span>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -189,7 +465,10 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [form, setForm] = useState(() => buildEmptyForm(initialSocio, initialReversedMovement))
   const [searchingSocio, setSearchingSocio] = useState(() => !(initialReversedMovement?.socio ?? initialSocio))
+  const [selectedCuotaItemKeys, setSelectedCuotaItemKeys] = useState([])
+  const [addedCuotaItems, setAddedCuotaItems] = useState([])
   const [movements, setMovements] = useState([])
+  const [saldoAFavor, setSaldoAFavor] = useState(null)
   const [loadingMovements, setLoadingMovements] = useState(false)
   const [movementsError, setMovementsError] = useState('')
   const [showErrors, setShowErrors] = useState(false)
@@ -199,60 +478,112 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
   const socio = form.socio
   const operation = operationFor(form.operation)
   const isCreditNote = form.operation === 'NotaCredito'
+  const isSurplusRefund = form.operation === 'Egreso' && form.conceptType === 'Devolución de saldo / Excedente'
+  const requiresOriginMovement = isCreditNote || isSurplusRefund
   const isOtherConcept = OTHER_CONCEPTS.has(form.conceptType)
   const amount = Number(form.amount)
   const hasValidAmount = Number.isFinite(amount) && amount > 0
-  const maxCredit = Number(form.reversedMovement?.monto ?? 0)
-  const amountExceedsCredit = isCreditNote && maxCredit > 0 && amount > maxCredit
-  const remainingAfterCredit = isCreditNote && maxCredit > 0 && hasValidAmount && !amountExceedsCredit
+  const rawOriginMax = form.reversedMovement ? movementReversibleAmount(form.reversedMovement, movements) : 0
+  const maxCredit = isSurplusRefund && saldoAFavor !== null && rawOriginMax > 0
+    ? Math.min(rawOriginMax, saldoAFavor)
+    : rawOriginMax
+  const amountExceedsCredit = requiresOriginMovement && maxCredit > 0 && amount > maxCredit
+  const remainingAfterCredit = requiresOriginMovement && maxCredit > 0 && hasValidAmount && !amountExceedsCredit
     ? Math.max(Math.round((maxCredit - amount) * 100) / 100, 0)
     : null
   const finalConcept = composeConcept(form.conceptType, form.detail)
 
-  const availableMovements = useMemo(() => {
-    const reversedIds = new Set(movements.map((item) => item.movimiento_revertido).filter(Boolean))
-    return movements
-      .filter((movement) => (
-        movement.tipo_movimiento === 'Abono'
-        && movement.origen_manual === 'IngresoManual'
-        && !movement.pago
-        && !movement.movimiento_revertido
-        && !reversedIds.has(movement.movimiento_cuenta_id)
-      ))
+  const surplusMovements = useMemo(() => (
+    movements
+      .filter((movement) => {
+        if (movementReversibleAmount(movement, movements) <= 0) return false
+        const isManualSurplus = (
+          movement.tipo_movimiento === 'Abono'
+          && movement.origen_manual === 'IngresoManual'
+          && isSurplusMovement(movement)
+          && !movement.pago
+          && !movement.movimiento_revertido
+        )
+        const isCuotaCreditNote = (
+          movement.origen_manual === 'NotaCredito'
+          && movement.movimiento_revertido != null
+          && !movement.medio_de_pago
+        )
+        return isManualSurplus || isCuotaCreditNote
+      })
       .sort((a, b) => b.movimiento_cuenta_id - a.movimiento_cuenta_id)
-  }, [movements])
+  ), [movements])
+
+  const creditNoteMovements = useMemo(() => (
+    movements
+      .filter((movement) => {
+        if (movement.movimiento_revertido || movementReversibleAmount(movement, movements) <= 0) return false
+        const isEmittedCuota = movement.cuota != null && Number(movement.monto) > 0
+        const isManualNonSurplus = (
+          movement.tipo_movimiento === 'Abono'
+          && movement.origen_manual === 'IngresoManual'
+          && !isSurplusMovement(movement)
+          && !movement.pago
+        )
+        return isEmittedCuota || isManualNonSurplus
+      })
+      .sort((a, b) => b.movimiento_cuenta_id - a.movimiento_cuenta_id)
+  ), [movements])
+
+  const hasAvailableSurplus = surplusMovements.length > 0 && (saldoAFavor === null || saldoAFavor > 0)
+  const availableMovements = isSurplusRefund
+    ? (hasAvailableSurplus ? surplusMovements : [])
+    : creditNoteMovements
 
   useEffect(() => {
     if (!opened) return
+    setSelectedCuotaItemKeys([])
+    setAddedCuotaItems([])
     setForm(buildEmptyForm(initialSocio, initialReversedMovement))
     setSearchingSocio(!(initialReversedMovement?.socio ?? initialSocio))
     setMovements([])
+    setSaldoAFavor(null)
     setMovementsError('')
     setShowErrors(false)
     setSubmitError('')
   }, [opened, initialSocio, initialReversedMovement])
 
   useEffect(() => {
-    if (!opened || !socio || !isCreditNote) {
+    if (!opened || !socio) {
       setMovements([])
+      setSaldoAFavor(null)
       setMovementsError('')
       return undefined
     }
     let active = true
     setLoadingMovements(true)
     setMovementsError('')
-    getMovimientos(socio.socio_id)
-      .then((data) => active && setMovements(Array.isArray(data) ? data : []))
-      .catch(() => active && setMovementsError('No se pudieron cargar los ingresos disponibles para devolver.'))
+    Promise.all([
+      getMovimientos(socio.socio_id),
+      getEstadoCuenta(socio.socio_id).catch(() => null),
+    ])
+      .then(([movsData, accountData]) => {
+        if (!active) return
+        setMovements(Array.isArray(movsData) ? movsData : [])
+        setSaldoAFavor(accountData?.saldo_a_favor != null ? Number(accountData.saldo_a_favor) : null)
+      })
+      .catch(() => active && setMovementsError('No se pudieron cargar los movimientos disponibles para asociar.'))
       .finally(() => active && setLoadingMovements(false))
     return () => { active = false }
-  }, [opened, socio, isCreditNote])
+  }, [opened, socio])
 
   const errors = {
-    reversedMovement: isCreditNote && !form.reversedMovement ? 'Seleccioná el ingreso original que querés devolver.' : '',
+    reversedMovement: requiresOriginMovement && !form.reversedMovement
+      ? (isSurplusRefund ? 'Seleccioná el excedente original que querés devolver.' : 'Seleccioná el ingreso original que querés devolver.')
+      : '',
     amount: (() => {
+      if (isCreditNote && form.reversedMovement?.cuota != null) {
+        if (!hasValidAmount) return 'Seleccioná o agregá al menos un ítem de la cuota para emitir la Nota de Crédito.'
+        if (amountExceedsCredit) return `El monto no puede superar el disponible de la cuota (${formatAmount(maxCredit)}).`
+        return ''
+      }
       if (!hasValidAmount) return 'Ingresá un monto mayor a cero.'
-      if (amountExceedsCredit) return `El monto no puede superar el ingreso original (${formatAmount(maxCredit)}).`
+      if (amountExceedsCredit) return `El monto no puede superar el movimiento original (${formatAmount(maxCredit)}).`
       return ''
     })(),
     paymentMethod: !isCreditNote && !form.paymentMethod ? 'Seleccioná el medio de pago.' : '',
@@ -264,16 +595,24 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
   const fieldError = (key) => (showErrors ? errors[key] : '')
 
   const update = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }))
+    setForm((current) => {
+      const next = { ...current, [field]: value }
+      if (field === 'conceptType' && current.operation === 'Egreso' && value !== 'Devolución de saldo / Excedente') {
+        next.reversedMovement = null
+      }
+      return next
+    })
     setSubmitError('')
   }
 
   const changeSocio = (nextSocio) => {
+    setSelectedCuotaItemKeys([])
+    setAddedCuotaItems([])
     setForm((current) => ({
       ...current,
       socio: nextSocio,
       reversedMovement: null,
-      amount: current.operation === 'NotaCredito' ? '' : current.amount,
+      amount: (current.operation === 'NotaCredito' || current.conceptType === 'Devolución de saldo / Excedente') ? '' : current.amount,
     }))
     setSearchingSocio(!nextSocio)
     setShowErrors(false)
@@ -281,6 +620,8 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
   }
 
   const selectOperation = (value) => {
+    setSelectedCuotaItemKeys([])
+    setAddedCuotaItems([])
     setForm((current) => ({
       ...current,
       operation: value,
@@ -293,15 +634,90 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
     setSubmitError('')
   }
 
+  const updateCuotaAdjustmentForm = (keys, added, targetMovement = form.reversedMovement) => {
+    if (!targetMovement) return
+    const cuotaDetail = targetMovement.cuota_detalle
+    const selectedItems = (cuotaDetail?.items ?? []).filter(
+      (i) => !i.es_descuento && Number(i.monto) > 0 && keys.includes(i.item_cuota_id ?? i.concepto),
+    )
+    const sum = selectedItems.reduce((acc, i) => acc + Number(i.monto || 0), 0) + added.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+    const parts = []
+    if (selectedItems.length > 0) {
+      parts.push(`Baja de ${selectedItems.map((i) => i.concepto_nombre || i.concepto).join(', ')}`)
+    }
+    if (added.length > 0) {
+      parts.push(added.map((i) => `${i.concepto_nombre} (${formatAmount(i.monto)})`).join(', '))
+    }
+    const detailText = parts.length > 0
+      ? `Modificación de ítem de cuota · ${parts.join(', ')} en ${targetMovement.concepto}`.slice(0, DETAIL_MAX_LENGTH)
+      : ''
+
+    setForm((current) => ({
+      ...current,
+      amount: sum > 0 ? String(sum) : '',
+      conceptType: 'Modificación de ítem de cuota',
+      detail: detailText,
+    }))
+    setSubmitError('')
+  }
+
   const selectMovement = (movement) => {
+    const isCuota = movement.cuota != null
+    const rawMonto = movementReversibleAmount(movement, movements)
+    const suggestedAmount = (form.operation === 'Egreso' && saldoAFavor !== null && rawMonto > 0)
+      ? Math.min(rawMonto, saldoAFavor)
+      : rawMonto
+    setSelectedCuotaItemKeys([])
+    setAddedCuotaItems([])
     setForm((current) => ({
       ...current,
       reversedMovement: movement,
-      amount: String(movement.monto),
-      conceptType: current.conceptType || 'Devolución total de operación',
-      detail: current.detail.trim() ? current.detail : `Ref. Recibo X #${movementReceiptNumber(movement)} (${movement.concepto})`.slice(0, DETAIL_MAX_LENGTH),
+      amount: isCuota ? '' : String(suggestedAmount),
+      paymentMethod: movement.medio_de_pago || current.paymentMethod || 'Efectivo',
+      conceptType: current.operation === 'Egreso'
+        ? 'Devolución de saldo / Excedente'
+        : isCuota
+          ? 'Modificación de ítem de cuota'
+          : (current.conceptType || 'Devolución total de operación'),
+      detail: isCuota
+        ? ''
+        : `Ref. Recibo X #${movementReceiptNumber(movement)} (${movement.concepto})`.slice(0, DETAIL_MAX_LENGTH),
     }))
     setSubmitError('')
+  }
+
+  const handleToggleCuotaItem = (item) => {
+    if (!form.reversedMovement) return
+    const itemKey = item.item_cuota_id ?? item.concepto
+    const isSelected = selectedCuotaItemKeys.includes(itemKey)
+    const nextKeys = isSelected
+      ? selectedCuotaItemKeys.filter((k) => k !== itemKey)
+      : [...selectedCuotaItemKeys, itemKey]
+    setSelectedCuotaItemKeys(nextKeys)
+    updateCuotaAdjustmentForm(nextKeys, addedCuotaItems)
+  }
+
+  const handleToggleAllCuotaItems = () => {
+    if (!form.reversedMovement) return
+    const cuotaDetail = form.reversedMovement.cuota_detalle
+    const positiveItems = (cuotaDetail?.items ?? []).filter((i) => !i.es_descuento && Number(i.monto) > 0)
+    const allKeys = positiveItems.map((i) => i.item_cuota_id ?? i.concepto)
+    const allSelected = allKeys.length > 0 && allKeys.every((k) => selectedCuotaItemKeys.includes(k))
+    const nextKeys = allSelected ? [] : allKeys
+    setSelectedCuotaItemKeys(nextKeys)
+    updateCuotaAdjustmentForm(nextKeys, addedCuotaItems)
+  }
+
+  const handleAddCustomCuotaItem = (item) => {
+    const nextAdded = [...addedCuotaItems, item]
+    setAddedCuotaItems(nextAdded)
+    updateCuotaAdjustmentForm(selectedCuotaItemKeys, nextAdded)
+  }
+
+  const handleRemoveCustomCuotaItem = (itemId) => {
+    const nextAdded = addedCuotaItems.filter((i) => i.id !== itemId)
+    setAddedCuotaItems(nextAdded)
+    updateCuotaAdjustmentForm(selectedCuotaItemKeys, nextAdded)
   }
 
   const submit = async (event) => {
@@ -320,7 +736,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
         concepto: finalConcept,
         monto: form.amount,
         medio_de_pago: isCreditNote ? null : form.paymentMethod,
-        movimiento_revertido_id: isCreditNote ? form.reversedMovement.movimiento_cuenta_id : null,
+        movimiento_revertido_id: requiresOriginMovement ? form.reversedMovement.movimiento_cuenta_id : null,
       })
       onSuccess?.()
       onClose()
@@ -333,7 +749,12 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
 
   const confirmLabel = () => {
     if (loading) return 'Registrando...'
-    if (amountExceedsCredit) return 'El monto supera el ingreso original'
+    if (isSurplusRefund && !loadingMovements && !hasAvailableSurplus) return 'Sin excedentes disponibles para devolver'
+    if (isCreditNote && !loadingMovements && availableMovements.length === 0) return 'Sin ingresos disponibles para revertir'
+    if (requiresOriginMovement && !form.reversedMovement) {
+      return isSurplusRefund ? 'Seleccioná el excedente a devolver' : 'Seleccioná el ingreso a revertir'
+    }
+    if (amountExceedsCredit) return 'El monto supera el disponible del movimiento'
     if (!hasValidAmount) return 'Ingresá el monto del movimiento'
     return `${operation.submitText} • ${formatAmount(amount)}`
   }
@@ -414,17 +835,21 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
               </div>
             </FormSection>
 
-            {isCreditNote && (
+            {requiresOriginMovement && (
               <FormSection
                 icon="history"
-                title="Ingreso a devolver"
-                description="Seleccioná el ingreso original. Podés reintegrar el total o una parte."
+                title={isSurplusRefund ? 'Excedente a devolver' : 'Cuota emitida o pago a ajustar'}
+                description={
+                  isSurplusRefund
+                    ? 'Seleccioná el excedente / saldo a favor registrado al que corresponde esta devolución.'
+                    : 'Seleccioná la cuota ya emitida (para modificar/bonificar sus ítems) o el pago de indumentaria / otro concepto a revertir.'
+                }
                 disabled={!socio}
               >
                 {loadingMovements && (
                   <div className="flex items-center gap-2.5 p-4 rounded-lg border border-outline-variant/30 bg-surface-container-low text-base text-on-surface-variant" role="status">
                     <span className="material-symbols-outlined text-[20px] animate-spin text-primary" aria-hidden="true">progress_activity</span>
-                    <span>Buscando ingresos disponibles del socio...</span>
+                    <span>Buscando movimientos disponibles del socio...</span>
                   </div>
                 )}
 
@@ -438,8 +863,10 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                 {!loadingMovements && !movementsError && availableMovements.length === 0 && (
                   <p className="text-base text-on-surface-variant text-center py-6 px-4 border border-dashed border-outline-variant/40 rounded-lg">
                     {socio
-                      ? 'Este socio no tiene ingresos disponibles para revertir con una nota de crédito.'
-                      : 'Seleccioná un socio para ver sus ingresos disponibles.'}
+                      ? (isSurplusRefund
+                        ? 'Este socio no tiene excedentes / saldos a favor pendientes de devolución.'
+                        : 'Este socio no tiene cuotas emitidas ni pagos de otros conceptos disponibles para nota de crédito.')
+                      : 'Seleccioná un socio para ver sus cuotas o pagos disponibles.'}
                   </p>
                 )}
 
@@ -456,6 +883,19 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                   </div>
                 )}
 
+                {isCreditNote && form.reversedMovement?.cuota != null && (
+                  <CuotaBreakdownCard
+                    cuotaMovement={form.reversedMovement}
+                    allMovements={movements}
+                    selectedKeys={selectedCuotaItemKeys}
+                    addedItems={addedCuotaItems}
+                    onToggleItem={handleToggleCuotaItem}
+                    onToggleAll={handleToggleAllCuotaItems}
+                    onAddCustomItem={handleAddCustomCuotaItem}
+                    onRemoveAddedItem={handleRemoveCustomCuotaItem}
+                  />
+                )}
+
                 {fieldError('reversedMovement') && (
                   <p className="text-sm text-error font-medium" role="alert">{errors.reversedMovement}</p>
                 )}
@@ -470,42 +910,71 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 items-start">
                 <Campo
                   id="movimiento-monto"
-                  label={isCreditNote ? 'Monto a devolver' : 'Monto'}
+                  label={
+                    isCreditNote && form.reversedMovement?.cuota != null
+                      ? 'Monto Nota de Crédito (calculado)'
+                      : (requiresOriginMovement ? 'Monto a devolver' : 'Monto')
+                  }
                   requerido
                   error={fieldError('amount') || (amountExceedsCredit ? errors.amount : '')}
                 >
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
-                    <input
-                      id="movimiento-monto"
-                      type="number"
-                      inputMode="decimal"
-                      min="0.01"
-                      max={isCreditNote && maxCredit ? maxCredit : undefined}
-                      step="0.01"
-                      value={form.amount}
-                      onChange={(event) => update('amount', event.target.value)}
-                      placeholder="0.00"
-                      aria-invalid={Boolean(fieldError('amount') || amountExceedsCredit) || undefined}
-                      className={claseInput(
-                        Boolean(fieldError('amount') || amountExceedsCredit),
-                        `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`,
-                      )}
-                    />
+                    {isCreditNote && form.reversedMovement?.cuota != null ? (
+                      <input
+                        id="movimiento-monto"
+                        type="text"
+                        readOnly
+                        disabled
+                        value={hasValidAmount ? formatAmount(amount).replace('$', '').trim() : '0,00'}
+                        placeholder="0,00"
+                        className={`${claseInput(Boolean(fieldError('amount')))} pl-7 font-semibold text-right bg-surface-container-low text-on-surface cursor-not-allowed`}
+                      />
+                    ) : (
+                      <input
+                        id="movimiento-monto"
+                        type="number"
+                        inputMode="decimal"
+                        min="0.01"
+                        max={requiresOriginMovement && maxCredit ? maxCredit : undefined}
+                        step="0.01"
+                        value={form.amount}
+                        onChange={(event) => update('amount', event.target.value)}
+                        placeholder="0.00"
+                        aria-invalid={Boolean(fieldError('amount') || amountExceedsCredit) || undefined}
+                        className={claseInput(
+                          Boolean(fieldError('amount') || amountExceedsCredit),
+                          `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`,
+                        )}
+                      />
+                    )}
                   </div>
-                  {isCreditNote && maxCredit > 0 && (
+                  {isCreditNote && form.reversedMovement?.cuota != null ? (
                     <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
-                      <span>Máximo disponible: <strong className="text-on-surface">{formatAmount(maxCredit)}</strong></span>
-                      {amount !== maxCredit && (
-                        <button
-                          type="button"
-                          onClick={() => update('amount', String(maxCredit))}
-                          className="font-semibold text-primary hover:underline cursor-pointer"
-                        >
-                          Usar total
-                        </button>
+                      <span>
+                        {hasValidAmount
+                          ? 'Calculado automáticamente a partir de los conceptos seleccionados arriba.'
+                          : 'Seleccioná al menos un ítem de la cuota para calcular el monto.'}
+                      </span>
+                      {maxCredit > 0 && (
+                        <span>Disponible: <strong className="text-on-surface">{formatAmount(maxCredit)}</strong></span>
                       )}
                     </div>
+                  ) : (
+                    requiresOriginMovement && maxCredit > 0 && (
+                      <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
+                        <span>Máximo disponible: <strong className="text-on-surface">{formatAmount(maxCredit)}</strong></span>
+                        {amount !== maxCredit && (
+                          <button
+                            type="button"
+                            onClick={() => update('amount', String(maxCredit))}
+                            className="font-semibold text-primary hover:underline cursor-pointer"
+                          >
+                            Usar total
+                          </button>
+                        )}
+                      </div>
+                    )
                   )}
                 </Campo>
 
@@ -540,11 +1009,15 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                   </Campo>
                 ) : (
                   <div className="flex flex-col gap-1.5 p-3 rounded-lg border border-outline-variant/30 bg-surface-container-low/60">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-outline">Referencia del ingreso</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-outline">
+                      {form.reversedMovement?.cuota != null ? 'Referencia de la cuota' : 'Referencia del comprobante'}
+                    </span>
                     {form.reversedMovement ? (
                       <>
                         <p className="text-sm font-semibold text-on-surface truncate">
-                          X #{movementReceiptNumber(form.reversedMovement)} · {form.reversedMovement.concepto}
+                          {form.reversedMovement.cuota != null
+                            ? (form.reversedMovement.cuota_detalle?.periodo ? `Cuota ${renderPeriodoLabel(form.reversedMovement.cuota_detalle.periodo)}` : form.reversedMovement.concepto)
+                            : `X #${movementReceiptNumber(form.reversedMovement)} · ${form.reversedMovement.concepto}`}
                         </p>
                         <p className="text-xs text-on-surface-variant">
                           Registrado el {formatDate(form.reversedMovement.fecha)} por {formatAmount(maxCredit)}
@@ -552,7 +1025,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                       </>
                     ) : (
                       <p className="text-sm text-on-surface-variant">
-                        Elegí un ingreso de la lista superior para precargar su importe.
+                        Elegí una cuota o ingreso de la lista superior.
                       </p>
                     )}
                   </div>
@@ -580,11 +1053,21 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                     conError={Boolean(fieldError('conceptType'))}
                   >
                     <option value="">Seleccioná un concepto</option>
-                    {operation.concepts.map((conceptOption) => (
-                      <option key={conceptOption} value={conceptOption}>
-                        {conceptOption}
-                      </option>
-                    ))}
+                    {operation.concepts.map((conceptOption) => {
+                      const disableSurplusOption = (
+                        form.operation === 'Egreso'
+                        && conceptOption === 'Devolución de saldo / Excedente'
+                        && !loadingMovements
+                        && !hasAvailableSurplus
+                      )
+                      return (
+                        <option key={conceptOption} value={conceptOption} disabled={disableSurplusOption}>
+                          {disableSurplusOption
+                            ? `${conceptOption} (sin saldo excedente disponible)`
+                            : conceptOption}
+                        </option>
+                      )
+                    })}
                   </SelectConFlecha>
                 </Campo>
 
@@ -660,11 +1143,17 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                 ) : (
                   <>
                     <SummaryLine
-                      label="Ingreso original"
-                      value={form.reversedMovement ? `X #${movementReceiptNumber(form.reversedMovement)}` : '—'}
+                      label={form.reversedMovement?.cuota != null ? 'Comprobante' : 'Ingreso original'}
+                      value={
+                        form.reversedMovement
+                          ? form.reversedMovement.cuota != null
+                            ? (form.reversedMovement.cuota_detalle?.periodo ? `Cuota ${renderPeriodoLabel(form.reversedMovement.cuota_detalle.periodo)}` : form.reversedMovement.concepto)
+                            : `X #${movementReceiptNumber(form.reversedMovement)}`
+                          : '—'
+                      }
                     />
                     <SummaryLine
-                      label="Importe original"
+                      label={form.reversedMovement?.cuota != null ? 'Importe cuota' : 'Importe original'}
                       value={form.reversedMovement ? formatAmount(maxCredit) : '—'}
                     />
                     {remainingAfterCredit !== null && (
@@ -675,7 +1164,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                     )}
                     {remainingAfterCredit !== null && remainingAfterCredit > 0 && (
                       <SummaryLine
-                        label="Saldo del ingreso"
+                        label={form.reversedMovement?.cuota != null ? 'Nuevo valor cuota' : 'Saldo del ingreso'}
                         value={formatAmount(remainingAfterCredit)}
                       />
                     )}
@@ -696,7 +1185,9 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
                       ? 'Acredita saldo a favor en la cuenta corriente del socio.'
                       : 'Registra el ingreso en caja asociado a la cuenta del socio.'
                     : isCreditNote
-                      ? 'Descuenta el importe devuelto sobre el ingreso original.'
+                      ? (form.reversedMovement?.cuota != null
+                          ? 'Emite una Nota de Crédito (NC-X) bonificando los ítems seleccionados en la cuota.'
+                          : 'Descuenta el importe devuelto sobre el ingreso original.')
                       : 'Registra el cargo correspondiente en la cuenta corriente.'}
                 </p>
               </div>
@@ -715,7 +1206,7 @@ function MovimientoManualModal({ opened, initialSocio = null, initialReversedMov
 
               <button
                 type="submit"
-                disabled={!socio || loading || amountExceedsCredit}
+                disabled={!socio || loading || amountExceedsCredit || (requiresOriginMovement && !form.reversedMovement)}
                 className={`${SUBMIT_BUTTON_CLASS} w-full h-11 justify-center text-base`}
               >
                 <span>{confirmLabel()}</span>
