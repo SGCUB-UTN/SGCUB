@@ -179,12 +179,30 @@ class Pago(models.Model):
         return f"Pago {self.pago_id} - {self.fecha}"
 
 
+class MedioPago(models.Model):
+    """Payment methods the club accepts. Disabling one keeps the payments already made with it."""
+
+    medio_pago_id = models.AutoField(primary_key=True)
+    codigo = models.CharField(max_length=40, unique=True)
+    nombre = models.CharField(max_length=60, unique=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "medio_pago"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def label(cls, code):
+        return cls.objects.filter(codigo=code).values_list("nombre", flat=True).first() or code
+
+
 class ItemPago(models.Model):
     id_item_pago = models.AutoField(primary_key=True)
-    medio_de_pago = models.CharField(
-        max_length=40,
-        choices=MedioDePagoChoices.choices,
-    )
+    # Code of a MedioPago: kept as text so historical payments survive a method being removed
+    medio_de_pago = models.CharField(max_length=40)
     pago = models.ForeignKey(
         Pago,
         on_delete=models.PROTECT,

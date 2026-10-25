@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from decimal import Decimal
 
 from django.db.models import Prefetch
@@ -20,7 +22,7 @@ from .models import (
     MovimientoCuenta,
     Pago,
     EstadoCuotaChoices,
-    MedioDePagoChoices,
+    MedioPago,
     ModalidadMontoChoices,
 )
 from .services import (
@@ -60,12 +62,56 @@ def cuota_account(cuota):
 
 
 class MedioPagoSerializer(serializers.Serializer):
-    medio_de_pago = serializers.ChoiceField(choices=MedioDePagoChoices.choices)
+    medio_de_pago = serializers.CharField(max_length=40)
     monto = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
         min_value=Decimal("0.01"),
     )
+
+
+    def validate_medio_de_pago(self, value):
+        if not MedioPago.objects.filter(codigo=value, activo=True).exists():
+            raise serializers.ValidationError("El medio de pago no existe o no está habilitado.")
+        return value
+
+
+def payment_method_code(name):
+    """'Tarjeta de débito' -> 'TarjetaDeDebito'."""
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return "".join(word[:1].upper() + word[1:] for word in re.findall(r"[A-Za-z0-9]+", plain))[:40]
+
+
+class MedioPagoAceptadoSerializer(serializers.ModelSerializer):
+    en_uso = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MedioPago
+        fields = ["medio_pago_id", "codigo", "nombre", "activo", "en_uso"]
+        read_only_fields = ["medio_pago_id", "codigo"]
+
+    def get_en_uso(self, obj) -> bool:
+        return ItemPago.objects.filter(medio_de_pago=obj.codigo).exists()
+
+    def validate_nombre(self, value):
+        value = value.strip()
+        if not payment_method_code(value):
+            raise serializers.ValidationError("Ingresá un nombre con letras o números.")
+        others = MedioPago.objects.exclude(pk=getattr(self.instance, "pk", None))
+        if others.filter(nombre__iexact=value).exists() or (
+            self.instance is None and others.filter(codigo=payment_method_code(value)).exists()
+        ):
+            raise serializers.ValidationError("Ya existe un medio de pago con ese nombre.")
+        return value
+
+    def validate_activo(self, value):
+        if self.instance and self.instance.activo and not value:
+            if not MedioPago.objects.filter(activo=True).exclude(pk=self.instance.pk).exists():
+                raise serializers.ValidationError("Tiene que quedar al menos un medio de pago habilitado.")
+        return value
+
+    def create(self, validated_data):
+        return MedioPago.objects.create(codigo=payment_method_code(validated_data["nombre"]), **validated_data)
 
 
 class CorreccionPagoSerializer(serializers.Serializer):

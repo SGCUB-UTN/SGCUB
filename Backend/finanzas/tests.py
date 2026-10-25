@@ -44,12 +44,13 @@ from .models import (
 	ItemCuota,
 	ItemPago,
 	MedioDePagoChoices,
+	MedioPago,
 	MovimientoCuenta,
 	Pago,
 	SecuenciaComprobante,
 )
 from .pdf_utils import format_amount
-from .serializers import CuentaCorrienteEstadoSerializer
+from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
 	create_cuota,
@@ -441,6 +442,68 @@ class ActualizacionCuotasPorConfiguracionTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["cuotas_afectadas"], 1)
+
+
+class MediosDePagoTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+
+	def crear(self, nombre):
+		return self.client.post(reverse("medio-pago-list"), {"nombre": nombre}, format="json")
+
+	def test_lista_los_medios_iniciales(self):
+		response = self.client.get(reverse("medio-pago-list"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			{medio["codigo"] for medio in response.data},
+			{"Efectivo", "Transferencia", "BilleteraVirtual"},
+		)
+
+	def test_alta_genera_el_codigo_y_rechaza_duplicados(self):
+		response = self.crear("Tarjeta de débito")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["codigo"], "TarjetaDeDebito")
+		self.assertEqual(self.crear("tarjeta de DÉBITO").status_code, 400)
+
+	def test_un_medio_deshabilitado_no_acepta_pagos_ni_figura_en_los_activos(self):
+		medio = MedioPago.objects.get(codigo="Transferencia")
+		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"activo": False}, format="json")
+
+		activos = self.client.get(reverse("medio-pago-list"), {"activos": "true"}).data
+		serializer = MedioPagoSerializer(data={"medio_de_pago": "Transferencia", "monto": "10.00"})
+
+		self.assertNotIn("Transferencia", [item["codigo"] for item in activos])
+		self.assertFalse(serializer.is_valid())
+		self.assertIn("medio_de_pago", serializer.errors)
+
+	def test_no_elimina_un_medio_usado_en_pagos(self):
+		pago = Pago.objects.create(estado_pago=EstadoPagoChoices.ACREDITADO)
+		ItemPago.objects.create(pago=pago, medio_de_pago="Efectivo", monto=Decimal("10.00"))
+		medio = MedioPago.objects.get(codigo="Efectivo")
+
+		response = self.client.delete(reverse("medio-pago-detail", args=[medio.pk]))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(MedioPago.objects.filter(pk=medio.pk).exists())
+
+	def test_elimina_un_medio_sin_pagos(self):
+		medio_id = self.crear("Cheque").data["medio_pago_id"]
+
+		response = self.client.delete(reverse("medio-pago-detail", args=[medio_id]))
+
+		self.assertEqual(response.status_code, 204)
+		self.assertFalse(MedioPago.objects.filter(pk=medio_id).exists())
+
+	def test_debe_quedar_al_menos_un_medio_habilitado(self):
+		MedioPago.objects.exclude(codigo="Efectivo").update(activo=False)
+		medio = MedioPago.objects.get(codigo="Efectivo")
+
+		response = self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"activo": False}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(MedioPago.objects.get(pk=medio.pk).activo)
 
 
 class BecaModeloTests(TestCase):

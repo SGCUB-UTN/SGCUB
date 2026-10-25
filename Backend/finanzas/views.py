@@ -27,6 +27,7 @@ from .models import (
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
 	MedioDePagoChoices,
+	MedioPago,
 )
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
@@ -39,6 +40,7 @@ from .serializers import (
 	AnulacionSerializer,
 	CUOTA_ITEM_PREFETCHES,
 	ConfiguracionFinancieraSerializer,
+	MedioPagoAceptadoSerializer,
 	VersionConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
 	EdicionDescuentoSerializer,
@@ -487,6 +489,42 @@ def configuracion_financiera_impacto(request):
 def configuracion_financiera_versiones(request):
 	versiones = ConfiguracionFinanciera.objects.select_related("usuario_creacion").order_by("-fecha_creacion", "-pk")
 	return Response(VersionConfiguracionFinancieraSerializer(versiones, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
+@api_view(["GET", "POST"])
+def medio_pago_list_create(request):
+	if request.method == "GET":
+		medios = MedioPago.objects.all()
+		if request.query_params.get("activos") in ("1", "true"):
+			medios = medios.filter(activo=True)
+		return Response(MedioPagoAceptadoSerializer(medios, many=True).data)
+
+	serializer = MedioPagoAceptadoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	return Response(MedioPagoAceptadoSerializer(serializer.save()).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
+@api_view(["PATCH", "DELETE"])
+def medio_pago_detail(request, pk):
+	medio = get_object_or_404(MedioPago, pk=pk)
+	if request.method == "DELETE":
+		if ItemPago.objects.filter(medio_de_pago=medio.codigo).exists():
+			return Response(
+				{"detail": "El medio de pago ya se usó en pagos registrados: deshabilitalo en lugar de eliminarlo."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+		if medio.activo and not MedioPago.objects.filter(activo=True).exclude(pk=medio.pk).exists():
+			return Response({"detail": "Tiene que quedar al menos un medio de pago habilitado."}, status=status.HTTP_400_BAD_REQUEST)
+		medio.delete()
+		return Response(status=status.HTTP_204_NO_CONTENT)
+
+	serializer = MedioPagoAceptadoSerializer(medio, data=request.data, partial=True)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	return Response(MedioPagoAceptadoSerializer(serializer.save()).data)
 
 
 @extend_schema(tags=["Finanzas/Beca"], request=BeneficioSerializer)

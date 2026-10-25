@@ -6,7 +6,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from .models import EstadoComprobanteChoices, MedioDePagoChoices
+from .models import EstadoComprobanteChoices, MedioPago
 from .pdf_utils import CLUB_NAME, format_amount, table
 from .services import receipt_detail
 
@@ -95,7 +95,7 @@ def render_receipt_pdf(receipt):
         table(
             [["Medio", "Monto"]]
             + [
-                [MedioDePagoChoices(method["medio_de_pago"]).label, format_amount(method["monto"])]
+                [MedioPago.label(method["medio_de_pago"]), format_amount(method["monto"])]
                 for method in detail["medios"]
             ],
             [width * 0.6, width * 0.4],
