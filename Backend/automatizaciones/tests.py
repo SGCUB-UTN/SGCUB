@@ -132,6 +132,66 @@ class AutomatizacionesApiTests(APITestCase):
         self.assertEqual(self.schedule.name, "Automatización de prueba")
         self.assertEqual(self.schedule.repeats, -1)
 
+    def test_se_puede_cambiar_la_frecuencia_y_la_proxima_ejecucion(self):
+        self.client.force_authenticate(self.administrador)
+        next_run = (timezone.now() + timedelta(days=2)).replace(microsecond=0)
+
+        response = self.client.patch(
+            reverse("automatizacion-detail", args=[self.schedule.pk]),
+            {"schedule_type": Schedule.WEEKLY, "next_run": next_run.isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.schedule.refresh_from_db()
+        self.assertEqual(self.schedule.schedule_type, Schedule.WEEKLY)
+        self.assertEqual(self.schedule.next_run, next_run)
+        self.assertEqual(self.schedule.repeats, -1)
+
+    def test_rechaza_frecuencias_invalidas_y_fechas_pasadas(self):
+        self.client.force_authenticate(self.administrador)
+        url = reverse("automatizacion-detail", args=[self.schedule.pk])
+
+        frequency = self.client.patch(url, {"schedule_type": Schedule.MINUTES}, format="json")
+        past = self.client.patch(
+            url, {"next_run": (timezone.now() - timedelta(hours=1)).isoformat()}, format="json"
+        )
+        invalid = self.client.patch(url, {"next_run": "mañana"}, format="json")
+
+        self.assertEqual(frequency.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("schedule_type", frequency.data)
+        self.assertEqual(past.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("next_run", past.data)
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        self.schedule.refresh_from_db()
+        self.assertEqual(self.schedule.schedule_type, Schedule.DAILY)
+
+    def test_ejecuciones_se_filtran_por_funcion_e_informan_modificaciones(self):
+        self.client.force_authenticate(self.administrador)
+        now = timezone.now()
+        Task.objects.create(
+            id="a" * 32, name="Recargos", func="finanzas.services.apply_surcharges", started=now, stopped=now,
+            success=True, result={"recargos_primer_vencimiento": 3, "recargos_segundo_vencimiento": 2},
+        )
+        Task.objects.create(
+            id="b" * 32, name="Becas", func="finanzas.services.finish_expired_scholarships", started=now,
+            stopped=now, success=False, result="boom",
+        )
+
+        filtered = self.client.get(reverse("automatizacion-ejecuciones"), {"func": "finanzas.services.apply_surcharges"})
+        failed = self.client.get(
+            reverse("automatizacion-ejecuciones"), {"func": "finanzas.services.finish_expired_scholarships"}
+        )
+        invalid = self.client.get(reverse("automatizacion-ejecuciones"), {"func": "os.system"})
+
+        self.assertEqual(filtered.data["count"], 1)
+        self.assertEqual(filtered.data["results"][0]["changes"], 5)
+        self.assertEqual(filtered.data["results"][0]["detail"]["recargos_primer_vencimiento"], 3)
+        self.assertIsNone(failed.data["results"][0]["changes"])
+        self.assertEqual(failed.data["results"][0]["detail"], "boom")
+        self.assertIn("finanzas.services.apply_surcharges", [item["func"] for item in filtered.data["functions"]])
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_no_se_pueden_crear_ni_eliminar_schedules(self):
         self.client.force_authenticate(self.administrador)
 

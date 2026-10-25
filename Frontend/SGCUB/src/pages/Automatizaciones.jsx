@@ -4,17 +4,23 @@ import { useAuth } from '../auth/useAuth'
 import {
   getAutomatizacionExecutions,
   getAutomatizaciones,
+  updateAutomatizacionSchedule,
   updateAutomatizacionStatus,
 } from '../api/automatizaciones'
-import { AREA_ORDER, getAutomationInfo } from '../components/automatizaciones/automationCatalog'
+import { AREA_ORDER, describeChanges, getAutomationInfo } from '../components/automatizaciones/automationCatalog'
 import CategoryUpdatePanel from '../components/automatizaciones/CategoryUpdatePanel'
 import ExecuteActionModal from '../components/automatizaciones/ExecuteActionModal'
+import ExecutionLogModal from '../components/automatizaciones/ExecutionLogModal'
+import RecategorizationLogModal from '../components/automatizaciones/RecategorizationLogModal'
 import RecategorizationPanel from '../components/automatizaciones/RecategorizationPanel'
+import ScheduleConfigModal from '../components/automatizaciones/ScheduleConfigModal'
 import TurnOffAutomationModal from '../components/automatizaciones/TurnOffAutomationModal'
 import { RecordSection } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import useCategoryUpdate from '../hooks/useCategoryUpdate'
 import useRecategorization from '../hooks/useRecategorization'
+
+const HISTORY_COLUMNS = 6
 
 const FREQUENCIES = {
   O: 'Una vez',
@@ -147,7 +153,7 @@ const getErrorMessage = (error) => {
     : 'No se pudieron cargar o actualizar las automatizaciones. Intentá nuevamente.'
 }
 
-function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
+function AutomationCard({ automation, canChange, isUpdating, onToggle, onConfigure }) {
   const isActive = automation.is_active
   const info = getAutomationInfo(automation)
 
@@ -189,17 +195,28 @@ function AutomationCard({ automation, canChange, isUpdating, onToggle }) {
             </p>
           </div>
           {canChange && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isActive}
-              aria-label={`${isActive ? 'Desactivar' : 'Activar'} ${info.title}`}
-              onClick={() => onToggle(automation)}
-              disabled={isUpdating}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${isActive ? 'bg-sky-700' : 'bg-slate-300'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onConfigure(automation)}
+                aria-label={`Configurar ${info.title}`}
+                title="Configurar frecuencia y próxima ejecución"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+              >
+                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">settings</span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isActive}
+                aria-label={`${isActive ? 'Desactivar' : 'Activar'} ${info.title}`}
+                onClick={() => onToggle(automation)}
+                disabled={isUpdating}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${isActive ? 'bg-sky-700' : 'bg-slate-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -220,8 +237,12 @@ export default function Automatizaciones() {
     page: 1,
     page_size: 5,
     total_pages: 0,
+    functions: [],
   })
   const [executionPage, setExecutionPage] = useState(1)
+  const [executionFunc, setExecutionFunc] = useState('')
+  const [configuring, setConfiguring] = useState(null)
+  const [viewingLog, setViewingLog] = useState(null)
   const [isLoadingExecutions, setIsLoadingExecutions] = useState(true)
   const [executionError, setExecutionError] = useState('')
   const recategorization = useRecategorization()
@@ -264,7 +285,7 @@ export default function Automatizaciones() {
       setIsLoadingExecutions(true)
       setExecutionError('')
       try {
-        const result = await getAutomatizacionExecutions(executionPage)
+        const result = await getAutomatizacionExecutions(executionPage, executionFunc)
         if (!cancelled) setExecutionLog(result)
       } catch (requestError) {
         if (!cancelled) setExecutionError(getErrorMessage(requestError))
@@ -277,7 +298,7 @@ export default function Automatizaciones() {
     return () => {
       cancelled = true
     }
-  }, [executionPage, historyVersion])
+  }, [executionPage, executionFunc, historyVersion])
 
   const automationGroups = useMemo(() => {
     const groups = new Map(AREA_ORDER.map((area) => [area, []]))
@@ -303,6 +324,16 @@ export default function Automatizaciones() {
       setUpdatingId(null)
       setPendingTurnOff(null)
     }
+  }
+
+  const saveSchedule = async (automation, schedule) => {
+    const updated = await updateAutomatizacionSchedule(automation.id, schedule)
+    setAutomatizaciones((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+  }
+
+  const changeExecutionFunc = (func) => {
+    setExecutionFunc(func)
+    setExecutionPage(1)
   }
 
   const toggleStatus = (automation) => {
@@ -390,7 +421,6 @@ export default function Automatizaciones() {
             </>
           )}
           confirmLabel="Ejecutar recategorización"
-          confirmIcon="bolt"
           savingLabel="Iniciando..."
           errorMessage="No se pudo iniciar la recategorización."
           onConfirm={startRecategorization}
@@ -435,16 +465,33 @@ export default function Automatizaciones() {
                   key={automation.id}
                   automation={automation}
                   canChange={canChange}
-                  isUpdating={updatingId !== null}
+                  isUpdating={updatingId === automation.id}
                   onToggle={toggleStatus}
+                  onConfigure={setConfiguring}
                 />
               ))}
             </div>
           ))}
         </RecordSection>
 
-        <RecordSection title="Historial de ejecuciónes">
+        <ScheduleConfigModal automation={configuring} onSave={saveSchedule} onClose={() => setConfiguring(null)} />
+
+        <RecordSection title="Historial de ejecuciones">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
+              <label htmlFor="execution-func-filter" className="text-sm font-medium text-slate-600">Función</label>
+              <select
+                id="execution-func-filter"
+                value={executionFunc}
+                onChange={(event) => changeExecutionFunc(event.target.value)}
+                className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 sm:w-72"
+              >
+                <option value="">Todas las funciones</option>
+                {executionLog.functions.map((item) => (
+                  <option key={item.func} value={item.func}>{item.name}</option>
+                ))}
+              </select>
+            </div>
             {executionError && (
               <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
                 {executionError}
@@ -452,27 +499,29 @@ export default function Automatizaciones() {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[680px] text-left text-sm">
+              <table className="w-full min-w-[860px] text-left text-sm">
                 <thead className="bg-sky-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-4 py-3">Fecha y hora</th>
                     <th className="px-4 py-3">Automatización</th>
                     <th className="px-4 py-3">Módulo / alcance</th>
                     <th className="px-4 py-3">Resultado</th>
+                    <th className="px-4 py-3">Modificaciones</th>
+                    <th className="px-4 py-3"><span className="sr-only">Log</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {isLoadingExecutions && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500" role="status">
+                      <td colSpan={HISTORY_COLUMNS} className="px-4 py-8 text-center text-slate-500" role="status">
                         Cargando ejecuciones...
                       </td>
                     </tr>
                   )}
                   {!isLoadingExecutions && !executionError && executionLog.results.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                        Todavía no hay ejecuciones registradas.
+                      <td colSpan={HISTORY_COLUMNS} className="px-4 py-8 text-center text-slate-500">
+                        {executionFunc ? 'Esta función todavía no tiene ejecuciones registradas.' : 'Todavía no hay ejecuciones registradas.'}
                       </td>
                     </tr>
                   )}
@@ -486,6 +535,19 @@ export default function Automatizaciones() {
                           <span className={`h-1.5 w-1.5 rounded-full ${execution.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
                           {execution.success ? 'Exitosa' : 'Fallida'}
                         </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4">{describeChanges(execution)}</td>
+                      <td className="px-4 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setViewingLog(execution)}
+                          disabled={!execution.recategorization_id && !execution.detail}
+                          title={!execution.recategorization_id && !execution.detail ? 'La ejecución no dejó registro' : 'Ver el log de la ejecución'}
+                          className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">receipt_long</span>
+                          Ver log
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -525,6 +587,18 @@ export default function Automatizaciones() {
             </div>
           </div>
         </RecordSection>
+
+        <ExecutionLogModal
+          execution={viewingLog && !viewingLog.recategorization_id ? viewingLog : null}
+          onClose={() => setViewingLog(null)}
+        />
+        <RecategorizationLogModal
+          execution={viewingLog?.recategorization_id
+            ? { id: viewingLog.recategorization_id, anio: viewingLog.recategorization_year }
+            : null}
+          opened={Boolean(viewingLog?.recategorization_id)}
+          onClose={() => setViewingLog(null)}
+        />
       </div>
     </div>
   )

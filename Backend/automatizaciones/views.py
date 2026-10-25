@@ -1,4 +1,6 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.core.paginator import Paginator
 from django.db.models import F
 from django_q.models import Schedule, Task
@@ -64,6 +66,15 @@ def _serialize_schedule(schedule):
     }
 
 
+EDITABLE_SCHEDULE_FIELDS = {"is_active", "schedule_type", "next_run"}
+EDITABLE_FREQUENCIES = (Schedule.DAILY, Schedule.WEEKLY, Schedule.MONTHLY, Schedule.QUARTERLY, Schedule.YEARLY)
+CHANGE_KEYS_BY_FUNC = {
+    "finanzas.services.generar_cuotas_mensuales": ("cuotas_creadas",),
+    "finanzas.services.apply_surcharges": ("recargos_primer_vencimiento", "recargos_segundo_vencimiento"),
+    "finanzas.services.finish_expired_scholarships": ("becas_finalizadas",),
+}
+
+
 @extend_schema(tags=["Automatizaciones"])
 @api_view(["GET"])
 @permission_classes([CanManageAutomatizaciones])
@@ -76,20 +87,63 @@ def automatizacion_list(request):
 @api_view(["PATCH"])
 @permission_classes([CanManageAutomatizaciones])
 def automatizacion_detail(request, pk):
-    if (
-        not isinstance(request.data, dict)
-        or set(request.data) != {"is_active"}
-        or not isinstance(request.data["is_active"], bool)
-    ):
+    data = request.data if isinstance(request.data, dict) else {}
+    if not data or not set(data) <= EDITABLE_SCHEDULE_FIELDS:
         return Response(
-            {"is_active": ["Enviá únicamente un valor booleano para is_active."]},
+            {"detail": "Solo se puede modificar el estado, la frecuencia y la próxima ejecución."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    errors = {}
+    if "is_active" in data and not isinstance(data["is_active"], bool):
+        errors["is_active"] = ["Enviá un valor booleano para is_active."]
+    if "schedule_type" in data and data["schedule_type"] not in EDITABLE_FREQUENCIES:
+        errors["schedule_type"] = ["Elegí una frecuencia válida: diaria, semanal, mensual, trimestral o anual."]
+    next_run = None
+    if "next_run" in data:
+        next_run = parse_datetime(data["next_run"]) if isinstance(data["next_run"], str) else None
+        if next_run is None:
+            errors["next_run"] = ["Ingresá una fecha y hora válidas."]
+        else:
+            next_run = next_run if timezone.is_aware(next_run) else timezone.make_aware(next_run)
+            if next_run <= timezone.now():
+                errors["next_run"] = ["La próxima ejecución tiene que ser posterior a este momento."]
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
     schedule = get_object_or_404(Schedule, pk=pk)
-    schedule.repeats = -1 if request.data["is_active"] else 0
-    schedule.save(update_fields=["repeats"])
+    if "is_active" in data:
+        schedule.repeats = -1 if data["is_active"] else 0
+    if "schedule_type" in data:
+        schedule.schedule_type = data["schedule_type"]
+        schedule.cron = None
+    if next_run is not None:
+        schedule.next_run = next_run
+    schedule.save(update_fields=["repeats", "schedule_type", "cron", "next_run"])
     return Response(_serialize_schedule(schedule))
+
+
+def _changes_count(task, manual_run):
+    """How many records an execution actually modified, read from what each task stores."""
+    if not task.success:
+        return None
+    if task.func == RECATEGORIZATION_TASK:
+        return _recategorization_changes(manual_run) if manual_run else None
+    if task.func == CATEGORY_UPDATE_TASK:
+        return manual_run.categorias_actualizadas if manual_run else None
+    result = task.result if isinstance(task.result, dict) else {}
+    keys = CHANGE_KEYS_BY_FUNC.get(task.func)
+    if not keys or not any(key in result for key in keys):
+        return None
+    return sum(int(result.get(key) or 0) for key in keys)
+
+
+def _recategorization_changes(execution):
+    rows = execution.resultados.filter(categoria_nueva__isnull=False).values_list(
+        "categoria_anterior_id", "categoria_nueva_id", "categoria_secundaria_anterior_id", "categoria_secundaria_nueva_id",
+    )
+    return sum(1 for main_before, main_after, secondary_before, secondary_after in rows
+               if main_before != main_after or secondary_before != secondary_after)
 
 
 @extend_schema(tags=["Automatizaciones"])
@@ -108,7 +162,12 @@ def automatizacion_execution_list(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    executions = Task.objects.filter(func__in=schedule_names).order_by("-stopped", "-id")
+    func = request.query_params.get("func")
+    if func and func not in schedule_names:
+        return Response({"func": ["Elegí una función válida."]}, status=status.HTTP_400_BAD_REQUEST)
+
+    executions = Task.objects.filter(func=func) if func else Task.objects.filter(func__in=schedule_names)
+    executions = executions.order_by("-stopped", "-id")
     page = Paginator(executions, 5).get_page(page_number)
     manual_runs = {
         func: model.objects.in_bulk([
@@ -129,8 +188,12 @@ def automatizacion_execution_list(request):
             "is_manual": task.func in MANUAL_TASKS,
             "executed_by": manual_run.ejecutado_por if manual_run else None,
             "recategorization_id": manual_run.pk if manual_run and task.func == RECATEGORIZATION_TASK else None,
+            "recategorization_year": manual_run.anio if manual_run and task.func == RECATEGORIZATION_TASK else None,
+            "changes": _changes_count(task, manual_run),
+            "detail": task.result if isinstance(task.result, (dict, str)) else None,
         })
     return Response({
+        "functions": [{"func": key, "name": name} for key, name in schedule_names.items()],
         "results": results,
         "count": page.paginator.count,
         "page": page.number,

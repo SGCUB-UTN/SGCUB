@@ -24,10 +24,10 @@ function Actions({ execution, canRun, categoriesUpToDate, onRun }) {
   return (
     <>
       {status === 'finalizada' && (
-        <ActionButton to={RECATEGORIZATION_REVIEW_PATH} variant="secondary" icon="list_alt">Ver resultados</ActionButton>
+        <ActionButton to={RECATEGORIZATION_REVIEW_PATH} variant="secondary" icon="list_alt">Ver último resultado</ActionButton>
       )}
       {canRun && (
-        <ActionButton icon="bolt" onClick={onRun} disabled={!categoriesUpToDate}>Ejecutar recategorización</ActionButton>
+        <ActionButton onClick={onRun} disabled={!categoriesUpToDate}>Ejecutar recategorización</ActionButton>
       )}
     </>
   )
@@ -40,15 +40,6 @@ function ResultCounts({ execution }) {
       <span className="font-semibold text-amber-700">{execution.pendientes} para revisar</span>
       <span className="font-semibold text-red-700">{execution.errores} con errores</span>
     </>
-  )
-}
-
-function Results({ execution }) {
-  return (
-    <p className="flex flex-wrap gap-x-3 gap-y-1 text-base">
-      <span className="text-slate-500">Resultado:</span>
-      <ResultCounts execution={execution} />
-    </p>
   )
 }
 
@@ -100,7 +91,6 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
           actions={<Actions execution={execution} canRun={canRun} categoriesUpToDate={categoriesUpToDate} onRun={onRun} />}
         />
       )}
-      {!isLoading && execution?.estado === 'finalizada' && <Results execution={execution} />}
 
       {!isLoading && notice && (
         <ActionNotice tone={notice.tone} icon={notice.icon} spin={notice.spin}>{notice.text(execution)}</ActionNotice>

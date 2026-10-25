@@ -7,13 +7,18 @@ export const getAutomatizaciones = async () => {
   return response.data
 }
 
-export const getAutomatizacionExecutions = async (page = 1) => {
-  const response = await api.get(`${endpoint}ejecuciones/`, { params: { page } })
+export const getAutomatizacionExecutions = async (page = 1, func = '') => {
+  const response = await api.get(`${endpoint}ejecuciones/`, { params: { page, func: func || undefined } })
   return response.data
 }
 
 export const updateAutomatizacionStatus = async (id, isActive) => {
   const response = await api.patch(`${endpoint}${id}/`, { is_active: isActive })
+  return response.data
+}
+
+export const updateAutomatizacionSchedule = async (id, schedule) => {
+  const response = await api.patch(`${endpoint}${id}/`, schedule)
   return response.data
 }
 

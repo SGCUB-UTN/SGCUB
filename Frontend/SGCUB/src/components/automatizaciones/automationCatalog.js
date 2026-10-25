@@ -11,6 +11,7 @@ const AUTOMATION_CATALOG = {
     whenOff: 'Si la apagás, no se van a crear las cuotas nuevas y los socios no van a tener la cuota del mes para pagar.',
     icon: 'request_quote',
     area: 'Finanzas',
+    changesLabel: ['cuota creada', 'cuotas creadas'],
   },
   'finanzas.services.apply_surcharges': {
     title: 'Aplicar recargos por mora',
@@ -18,6 +19,7 @@ const AUTOMATION_CATALOG = {
     whenOff: 'Si la apagás, las cuotas vencidas no van a recibir el recargo por mora.',
     icon: 'payments',
     area: 'Finanzas',
+    changesLabel: ['recargo aplicado', 'recargos aplicados'],
   },
   'finanzas.services.finish_expired_scholarships': {
     title: 'Finalizar becas vencidas',
@@ -25,19 +27,28 @@ const AUTOMATION_CATALOG = {
     whenOff: 'Si la apagás, las becas vencidas van a seguir figurando como "Aplicada" y se van a poder modificar.',
     icon: 'school',
     area: 'Finanzas',
+    changesLabel: ['beca finalizada', 'becas finalizadas'],
   },
   [CATEGORY_UPDATE_FUNC]: {
     title: 'Actualizar las categorías al nuevo año',
     description: 'Pasa las categorías al año en curso y actualiza el nombre de las infantiles (por ejemplo, "2015" pasa a "2016"). Se hace una vez por año, antes de la recategorización.',
     icon: 'event_repeat',
     area: 'Padrón',
+    changesLabel: ['categoría actualizada', 'categorías actualizadas'],
   },
   [RECATEGORIZATION_FUNC]: {
     title: 'Recategorización de jugadores',
     description: 'Asigna a cada jugador la categoría que le corresponde por su año de nacimiento.',
     icon: 'sync',
     area: 'Padrón',
+    changesLabel: ['jugador actualizado', 'jugadores actualizados'],
   },
+}
+
+export const describeChanges = (execution) => {
+  if (execution.changes == null) return '—'
+  const [one, other] = getAutomationInfo(execution).changesLabel ?? ['modificación', 'modificaciones']
+  return `${execution.changes.toLocaleString('es-AR')} ${execution.changes === 1 ? one : other}`
 }
 
 export const getAutomationInfo = (automation) => AUTOMATION_CATALOG[automation.func] ?? {

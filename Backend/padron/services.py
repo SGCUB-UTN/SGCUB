@@ -362,7 +362,7 @@ def _process_execution(execution):
             categoria_anterior=player.categoria,
             categoria_secundaria_anterior=player.categoria_secundaria,
             categoria_nueva=result.categoria_nueva,
-            categoria_secundaria_nueva=player.categoria_secundaria if result.tipo == Tipo.EXITO else None,
+            categoria_secundaria_nueva=player.categoria_secundaria if result.categoria_nueva is not None else None,
             categoria_sugerida=result.categoria_sugerida,
             quitar_secundaria_sugerido=result.quitar_secundaria_sugerido,
         ))
