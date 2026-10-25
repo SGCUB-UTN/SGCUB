@@ -187,15 +187,21 @@ def render_manual_movement_pdf(movement):
     ]
 
     try:
-        reversion = movement.reversion
+        reversiones = list(movement.reversiones.all())
     except Exception:
-        reversion = None
+        reversiones = []
 
-    if reversion is not None:
-        note = (
-            f"REVERTIDO POR NOTA DE CRÉDITO "
-            f"{format_receipt_number('NC-X', movement_number(reversion))} ({format_amount(reversion.monto)})"
-        )
+    for reversion in reversiones:
+        if reversion.origen_manual == TipoMovimientoOrigenChoices.EGRESO:
+            note = (
+                f"DEVUELTO POR COMPROBANTE DE EGRESO "
+                f"{format_receipt_number('EGR-X', movement_number(reversion))} ({format_amount(reversion.monto)})"
+            )
+        else:
+            note = (
+                f"REVERTIDO POR NOTA DE CRÉDITO "
+                f"{format_receipt_number('NC-X', movement_number(reversion))} ({format_amount(reversion.monto)})"
+            )
         story += [Spacer(1, 4 * mm), Paragraph(note, cancelled)]
 
     story += [
@@ -225,13 +231,18 @@ def render_manual_movement_pdf(movement):
 
     if movement.movimiento_revertido_id and movement.movimiento_revertido is not None:
         original = movement.movimiento_revertido
+        is_cuota_orig = original.cuota_id is not None
+        orig_code = (
+            f"Cuota {original.cuota.periodo}" if is_cuota_orig and getattr(original, "cuota", None)
+            else (original.concepto if is_cuota_orig else format_receipt_number("X", movement_number(original)))
+        )
         story += [
-            Paragraph("Ingreso original revertido", section),
+            Paragraph("Cuota original ajustada" if is_cuota_orig else "Ingreso original revertido", section),
             table(
                 [
                     ["Comprobante original", "Fecha original", "Concepto original", "Importe original"],
                     [
-                        format_receipt_number("X", movement_number(original)),
+                        orig_code,
                         original.fecha.strftime("%d/%m/%Y"),
                         Paragraph(original.concepto or "—", styles["Normal"]),
                         format_amount(original.monto),

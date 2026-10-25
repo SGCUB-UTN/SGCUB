@@ -25,17 +25,23 @@ from .models import (
 from .services import (
     BENEFIT_DISCOUNT,
     BENEFIT_SCHOLARSHIP,
+    credit_balance,
+    cuota_credit_notes_summary,
     discountable_pending,
+    is_surplus_movement,
     net_amount,
     parse_period,
     pending_amounts,
     receipt_detail,
+    remaining_reversible_amount,
+    reversed_amount_for,
     surcharge_reason,
 )
 
 CUOTA_ITEM_PREFETCHES = (
     Prefetch("items", queryset=ItemCuota.objects.select_related("beca")),
     Prefetch("items", queryset=ItemCuota.all_objects.anulados().select_related("beca"), to_attr="items_anulados"),
+    Prefetch("movimiento__reversiones"),
 )
 
 
@@ -67,6 +73,18 @@ class MedioPagoSerializer(serializers.Serializer):
     )
 
 
+class ExcedenteCorreccionSerializer(serializers.Serializer):
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    medio_de_pago = serializers.ChoiceField(choices=MedioDePagoChoices.choices, required=False, allow_null=True, default=None)
+    concepto = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+
+
+class NotaCreditoCuotaCorreccionSerializer(serializers.Serializer):
+    cuota_id = serializers.IntegerField(min_value=1)
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    concepto = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+
+
 class CorreccionPagoSerializer(serializers.Serializer):
     motivo = serializers.CharField(max_length=500, allow_blank=False, trim_whitespace=True)
     cuota_ids = serializers.ListField(
@@ -79,6 +97,9 @@ class CorreccionPagoSerializer(serializers.Serializer):
         min_value=Decimal("0.01"),
     )
     medios = MedioPagoSerializer(many=True, allow_empty=False)
+    actualizar_medios = serializers.BooleanField(required=False, default=True)
+    excedente = ExcedenteCorreccionSerializer(required=False, allow_null=True, default=None)
+    notas_credito = NotaCreditoCuotaCorreccionSerializer(many=True, required=False, default=list)
 
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
@@ -142,6 +163,9 @@ class CuotaSerializer(serializers.ModelSerializer):
     items = serializers.SerializerMethodField()
     items_anulados = serializers.SerializerMethodField()
     monto_total = serializers.SerializerMethodField()
+    monto_nota_credito = serializers.SerializerMethodField()
+    monto_neto = serializers.SerializerMethodField()
+    notas_credito = serializers.SerializerMethodField()
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
     saldo_sin_recargo = serializers.SerializerMethodField()
@@ -159,11 +183,20 @@ class CuotaSerializer(serializers.ModelSerializer):
             "items",
             "items_anulados",
             "monto_total",
+            "monto_nota_credito",
+            "monto_neto",
+            "notas_credito",
             "monto_pagado",
             "saldo_pendiente",
             "saldo_sin_recargo",
         ]
         read_only_fields = fields
+
+    def _credit_notes_info(self, obj):
+        cache = self.__dict__.setdefault("_nc_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = cuota_credit_notes_summary(getattr(obj, "movimiento", None))
+        return cache[obj.pk]
 
     def get_socio(self, obj):
         account = cuota_account(obj)
@@ -183,6 +216,18 @@ class CuotaSerializer(serializers.ModelSerializer):
 
     def get_monto_total(self, obj):
         return monto_total_cuota(obj)
+
+    def get_monto_nota_credito(self, obj):
+        _, total_nc, _ = self._credit_notes_info(obj)
+        return total_nc
+
+    def get_monto_neto(self, obj):
+        _, total_nc, _ = self._credit_notes_info(obj)
+        return max(Decimal("0.00"), monto_total_cuota(obj) - total_nc)
+
+    def get_notas_credito(self, obj):
+        notes_data, _, _ = self._credit_notes_info(obj)
+        return notes_data
 
     def get_monto_pagado(self, obj):
         return monto_total_cuota(obj) - self._pending(obj)
@@ -417,36 +462,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
         return sum(self._account_pending(obj).values(), Decimal("0.00"))
 
     def get_saldo_a_favor(self, obj):
-        manuales = list(obj.movimientos.filter(origen_manual__isnull=False))
-        excedente_ids = {
-            m.pk
-            for m in manuales
-            if m.origen_manual == TipoMovimientoOrigenChoices.INGRESO_MANUAL
-            and (m.concepto or "").startswith("Excedente de transferencia / Saldo a favor")
-        }
-        ingresos = sum(
-            (m.monto for m in manuales if m.pk in excedente_ids),
-            Decimal("0.00"),
-        )
-        notas_credito = sum(
-            (
-                m.monto
-                for m in manuales
-                if m.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
-                and m.movimiento_revertido_id in excedente_ids
-            ),
-            Decimal("0.00"),
-        )
-        devoluciones = sum(
-            (
-                m.monto
-                for m in manuales
-                if m.origen_manual == TipoMovimientoOrigenChoices.EGRESO
-                and (m.concepto or "").startswith("Devolución de saldo / Excedente")
-            ),
-            Decimal("0.00"),
-        )
-        return max(Decimal("0.00"), ingresos - notas_credito - devoluciones)
+        return credit_balance(obj)
 
     def get_total_mora(self, obj):
         return sum(
@@ -465,12 +481,17 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
     origen_manual_nombre = serializers.CharField(source="get_origen_manual_display", read_only=True)
     medio_de_pago_nombre = serializers.CharField(source="get_medio_de_pago_display", read_only=True)
     socio = serializers.SerializerMethodField()
+    cuota_detalle = serializers.SerializerMethodField()
+    monto_revertido = serializers.SerializerMethodField()
+    saldo_reversible = serializers.SerializerMethodField()
+    es_excedente = serializers.SerializerMethodField()
 
     class Meta:
         model = MovimientoCuenta
         fields = [
             "movimiento_cuenta_id", "numero_comprobante", "cuenta_corriente", "socio", "pago", "cuota",
-            "movimiento_revertido", "tipo_movimiento", "tipo_movimiento_nombre",
+            "cuota_detalle", "movimiento_revertido", "monto_revertido", "saldo_reversible", "es_excedente",
+            "tipo_movimiento", "tipo_movimiento_nombre",
             "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
             "origen_manual", "origen_manual_nombre", "usuario",
         ]
@@ -479,6 +500,38 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
     def get_socio(self, obj):
         account = getattr(obj, "cuenta_corriente", None)
         return socio_data(account.socio) if account and getattr(account, "socio", None) else None
+
+    def get_monto_revertido(self, obj):
+        return reversed_amount_for(obj)
+
+    def get_saldo_reversible(self, obj):
+        return remaining_reversible_amount(obj)
+
+    def get_es_excedente(self, obj):
+        return is_surplus_movement(obj)
+
+    def get_cuota_detalle(self, obj):
+        if not obj.cuota_id or not getattr(obj, "cuota", None):
+            return None
+        cuota = obj.cuota
+        items = [
+            {
+                "item_cuota_id": item.item_cuota_id,
+                "concepto": item.concepto,
+                "concepto_nombre": item.get_concepto_display(),
+                "monto": str(item.monto),
+                "es_descuento": item.es_descuento,
+                "motivo": item.motivo,
+            }
+            for item in cuota.items.all()
+        ]
+        return {
+            "cuota_id": cuota.cuota_id,
+            "periodo": cuota.periodo,
+            "estado_cuota": cuota.estado_cuota,
+            "monto_total": str(obj.monto),
+            "items": items,
+        }
 
 
 class MovimientoManualSerializer(serializers.Serializer):
@@ -500,14 +553,23 @@ class MovimientoManualSerializer(serializers.Serializer):
             raise serializers.ValidationError({"origen": "Un cargo no puede ser un ingreso manual."})
         if attrs["tipo"] == TipoMovimientoChoices.ABONO and attrs["origen"] == TipoMovimientoOrigenChoices.EGRESO:
             raise serializers.ValidationError({"origen": "Un abono no puede ser un egreso."})
+        is_surplus_refund = (
+            attrs["origen"] == TipoMovimientoOrigenChoices.EGRESO
+            and (attrs.get("concepto") or "").startswith("Devolución de saldo / Excedente")
+        )
         if attrs["origen"] == TipoMovimientoOrigenChoices.NOTA_CREDITO:
             if attrs["tipo"] != TipoMovimientoChoices.CARGO or not attrs.get("movimiento_revertido_id"):
                 raise serializers.ValidationError({
                     "movimiento_revertido_id": "La nota de crédito debe revertir un movimiento y ser un cargo."
                 })
+        elif is_surplus_refund:
+            if not attrs.get("movimiento_revertido_id"):
+                raise serializers.ValidationError({
+                    "movimiento_revertido_id": "La devolución de saldo debe asociarse a un excedente registrado."
+                })
         elif attrs.get("movimiento_revertido_id"):
             raise serializers.ValidationError({
-                "movimiento_revertido_id": "Solo las notas de crédito pueden revertir un movimiento."
+                "movimiento_revertido_id": "Solo las notas de crédito o devoluciones de saldo pueden asociarse a un ingreso original."
             })
         return attrs
 

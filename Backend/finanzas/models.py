@@ -292,10 +292,11 @@ class MovimientoCuenta(models.Model):
         null=True,
         blank=True,
     )
-    movimiento_revertido = models.OneToOneField(
+    movimiento_revertido = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
-        related_name="reversion",
+        related_name="reversiones",
+        related_query_name="reversion",
         null=True,
         blank=True,
     )

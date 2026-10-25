@@ -70,6 +70,7 @@ from .services import (
 	CuotaDuplicadaError,
 	PagoInvalidoError,
 	SocioInactivoError,
+	amend_paid_receipt,
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
@@ -234,13 +235,16 @@ def corregir_pago(request, pk):
 
 	data = serializer.validated_data
 	try:
-		pago_original, comprobante_original, pago, comprobante = correct_payment(
-			pk,
-			data["cuota_ids"],
-			data["medios"],
-			data["monto_total"],
-			data["motivo"],
-			request.user if request.user.is_authenticated else None,
+		pago_original, comprobante_original, pago, comprobante, excedente_mov, notas_credito_movs = amend_paid_receipt(
+			payment_id=pk,
+			cuota_ids=data["cuota_ids"],
+			payment_methods=data["medios"],
+			total=data["monto_total"],
+			reason=data["motivo"],
+			user=request.user if request.user.is_authenticated else None,
+			update_payment=data.get("actualizar_medios", True),
+			surplus_data=data.get("excedente"),
+			credit_notes_data=data.get("notas_credito"),
 		)
 	except Pago.DoesNotExist:
 		return Response({"detail": "El pago no existe."}, status=status.HTTP_404_NOT_FOUND)
@@ -249,9 +253,11 @@ def corregir_pago(request, pk):
 
 	return Response({
 		"pago_original": PagoSerializer(pago_original).data,
-		"pago": PagoSerializer(pago).data,
+		"pago": PagoSerializer(pago).data if pago is not None else None,
 		"comprobante_original": ComprobanteSerializer(comprobante_original).data,
-		"comprobante": ComprobanteSerializer(comprobante).data,
+		"comprobante": ComprobanteSerializer(comprobante).data if comprobante is not None else None,
+		"excedente": MovimientoCuentaSerializer(excedente_mov).data if excedente_mov is not None else None,
+		"notas_credito": MovimientoCuentaSerializer(notas_credito_movs, many=True).data,
 		"motivo": data["motivo"],
 		"usuario": request.user.get_username() if request.user.is_authenticated else None,
 		"fecha": timezone.localtime().isoformat(),
@@ -456,7 +462,8 @@ def delinquency_report_pdf(request):
 def movimiento_cuenta_list(request):
 	movements = MovimientoCuenta.objects.select_related(
 		"cuenta_corriente__socio__persona",
-	).order_by("pk")
+		"cuota",
+	).prefetch_related("cuota__items", "reversiones").order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
@@ -504,9 +511,8 @@ def movimiento_cuenta_pdf(request, pk):
 	movement = get_object_or_404(
 		MovimientoCuenta.objects.select_related(
 			"cuenta_corriente__socio__persona",
-			"movimiento_revertido",
-			"reversion",
-		),
+			"movimiento_revertido__cuota",
+		).prefetch_related("reversiones"),
 		pk=pk,
 		origen_manual__isnull=False,
 	)
@@ -684,11 +690,12 @@ def _build_financial_report(period_date):
         origen_manual__isnull=False,
         fecha__year=period_date.year,
         fecha__month=period_date.month,
-    )
-    total_recaudado_periodo += sum(
-        (m.monto if m.tipo_movimiento == TipoMovimientoChoices.ABONO else -m.monto for m in movimientos_periodo),
-        Decimal("0.00"),
-    )
+    ).select_related("movimiento_revertido")
+    for m in movimientos_periodo:
+        medio = m.medio_de_pago or (m.movimiento_revertido.medio_de_pago if m.movimiento_revertido else None)
+        if not medio:
+            continue
+        total_recaudado_periodo += m.monto if m.tipo_movimiento == TipoMovimientoChoices.ABONO else -m.monto
 
     reporte_mora = delinquency_report("activos")
     filas_mora = reporte_mora["filas"]

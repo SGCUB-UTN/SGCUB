@@ -1,4 +1,5 @@
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 def assign_correlative_numbers(apps, schema_editor):
@@ -30,6 +31,18 @@ class Migration(migrations.Migration):
             model_name="movimientocuenta",
             name="numero_comprobante",
             field=models.PositiveIntegerField(blank=True, null=True, unique=True),
+        ),
+        migrations.AlterField(
+            model_name="movimientocuenta",
+            name="movimiento_revertido",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="reversiones",
+                related_query_name="reversion",
+                to="finanzas.movimientocuenta",
+            ),
         ),
         migrations.RunPython(assign_correlative_numbers, migrations.RunPython.noop),
     ]
