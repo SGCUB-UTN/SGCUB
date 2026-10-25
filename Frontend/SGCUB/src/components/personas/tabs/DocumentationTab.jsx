@@ -15,6 +15,14 @@ const getEmptyUploadForm = () => ({
   fecha_vencimiento: '',
 })
 
+const PROFILE_FIELDS = { jugador: 'aplica_jugador', socio: 'aplica_socio', docente: 'aplica_docente' }
+
+const addMonths = (date, months) => {
+  const shifted = new Date(`${date}T00:00:00Z`)
+  shifted.setUTCMonth(shifted.getUTCMonth() + months)
+  return shifted.toISOString().split('T')[0]
+}
+
 const SAVE_ERROR_MESSAGE = 'No se pudo guardar el documento.'
 
 const getSaveErrorMessage = (requestError) => {
@@ -48,13 +56,16 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   const [uploadForm, setUploadForm] = useState(getEmptyUploadForm())
   const [saveError, setSaveError] = useState(null)
 
-  const tiposFiltrados = tipos.filter(t => {
-    const isDocenteType = ['Antecedentes Penales', 'CV', 'DNI'].includes(t.nombre)
-    if (personaType === 'docente') {
-      return isDocenteType
-    }
-    return !['Antecedentes Penales', 'CV'].includes(t.nombre)
-  })
+  // Enabled types that apply to this profile; when editing, the document's own type is always offered
+  const tiposFiltrados = tipos.filter(t => (
+    String(t.id_tipo_documento) === String(uploadForm.tipo_documento)
+    || (t.activo && t[PROFILE_FIELDS[personaType] ?? 'aplica_jugador'])
+  ))
+
+  const suggestedDueDate = (form) => {
+    const tipo = tipos.find(t => String(t.id_tipo_documento) === String(form.tipo_documento))
+    return tipo?.vigencia_meses && form.fecha_emision ? addMonths(form.fecha_emision, tipo.vigencia_meses) : ''
+  }
 
   const handleDeleteClick = (doc) => {
     setDocToDelete(doc)
@@ -102,7 +113,15 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     } else if (type === 'checkbox') {
       setUploadForm(prev => ({ ...prev, [name]: checked }))
     } else {
-      setUploadForm(prev => ({ ...prev, [name]: value }))
+      setUploadForm(prev => {
+        const next = { ...prev, [name]: value }
+        // The due date follows the type's default validity until the user types a different one
+        const followsSuggestion = !prev.fecha_vencimiento || prev.fecha_vencimiento === suggestedDueDate(prev)
+        if ((name === 'tipo_documento' || name === 'fecha_emision') && followsSuggestion) {
+          next.fecha_vencimiento = suggestedDueDate(next)
+        }
+        return next
+      })
     }
   }
 

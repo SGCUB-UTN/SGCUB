@@ -54,11 +54,37 @@ def documento_detail(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 @extend_schema(tags=["Documental / Tipos"], request=TipoDocumentoSerializer, responses=TipoDocumentoSerializer)
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 def tipo_documento_list(request):
-    tipos = TipoDocumento.objects.all()
-    serializer = TipoDocumentoSerializer(tipos, many=True)
-    return Response(serializer.data)
+    if request.method == "GET":
+        tipos = TipoDocumento.objects.order_by('nombre')
+        if request.query_params.get('activos') in ('1', 'true'):
+            tipos = tipos.filter(activo=True)
+        return Response(TipoDocumentoSerializer(tipos, many=True).data)
+
+    serializer = TipoDocumentoSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response(TipoDocumentoSerializer(serializer.save()).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Documental / Tipos"], request=TipoDocumentoSerializer, responses=TipoDocumentoSerializer)
+@api_view(["PATCH", "DELETE"])
+def tipo_documento_detail(request, pk):
+    tipo = get_object_or_404(TipoDocumento, pk=pk)
+    if request.method == "DELETE":
+        if tipo.documentos.exists():
+            return Response(
+                {"detail": "El tipo ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        tipo.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    serializer = TipoDocumentoSerializer(tipo, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response(TipoDocumentoSerializer(serializer.save()).data)
 
 @extend_schema(tags=["Documental / Estados"], request=EstadoDocumentoSerializer, responses=EstadoDocumentoSerializer)
 @api_view(["GET"])

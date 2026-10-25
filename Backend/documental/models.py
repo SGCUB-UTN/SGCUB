@@ -6,6 +6,15 @@ from padron.models import Persona
 class TipoDocumento(models.Model):
     id_tipo_documento = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=50)
+    # A disabled type keeps its documents but cannot be used for new ones
+    activo = models.BooleanField(default=True)
+    obligatorio = models.BooleanField(default=False)
+    aplica_jugador = models.BooleanField(default=True)
+    aplica_socio = models.BooleanField(default=True)
+    aplica_docente = models.BooleanField(default=True)
+    requiere_vencimiento = models.BooleanField(default=False)
+    # Default validity, used to suggest the due date from the issue date
+    vigencia_meses = models.PositiveSmallIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "tipo_documento"

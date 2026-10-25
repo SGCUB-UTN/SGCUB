@@ -22,6 +22,21 @@ export const getTiposDocumento = async () => {
   return data
 }
 
+export const createTipoDocumento = async (tipo) => {
+  const { data } = await api.post('documental/tipos/', tipo)
+  return data
+}
+
+export const updateTipoDocumento = async (id, tipo) => {
+  const { data } = await api.patch(`documental/tipos/${id}/`, tipo)
+  return data
+}
+
+// Only types without documents can be deleted; the rest are disabled
+export const deleteTipoDocumento = async (id) => {
+  await api.delete(`documental/tipos/${id}/`)
+}
+
 export const getEstadosDocumento = async () => {
   const { data } = await api.get('documental/estados/')
   return data
