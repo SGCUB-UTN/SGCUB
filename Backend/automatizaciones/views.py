@@ -1,11 +1,24 @@
 from django.shortcuts import get_object_or_404
 from django.core.paginator import Paginator
+from django.db.models import F
 from django_q.models import Schedule, Task
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
+
+from padron.models import RecategorizacionEjecucion, RecategorizacionResultado
+from padron.serializers import JugadorSerializer
+from padron.services import (
+    GENERO_PERSONA_A_CATEGORIA,
+    RecategorizationDecisionError,
+    RecategorizationInProgress,
+    accept_all_suggestions,
+    decide_result,
+    mark_stale_runs_as_failed,
+    start_recategorization,
+)
 
 
 class CanManageAutomatizaciones(BasePermission):
@@ -101,3 +114,221 @@ def automatizacion_execution_list(request):
         "page_size": 5,
         "total_pages": page.paginator.num_pages,
     })
+
+
+RESULTS_PAGE_SIZE = 20
+Tipo = RecategorizacionResultado.TipoChoices
+Decision = RecategorizacionResultado.DecisionChoices
+
+
+class CanManageRecategorizacion(BasePermission):
+    permissions_by_method = {
+        "GET": ("django_q.view_schedule",),
+        "POST": ("django_q.change_schedule", "padron.change_jugador"),
+    }
+
+    def has_permission(self, request, view):
+        permissions = self.permissions_by_method.get(request.method)
+        if permissions is None:
+            return True
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.has_perms(permissions)
+        )
+
+
+def _serialize_category(category):
+    if category is None:
+        return None
+    return {"id": category.pk, "nombre": category.nombre, "edad_maxima": category.edad_maxima}
+
+
+def _serialize_execution(execution):
+    if execution is None:
+        return None
+    return {
+        "id": execution.pk,
+        "anio": execution.anio,
+        "fecha_inicio": execution.fecha_inicio,
+        "fecha_fin": execution.fecha_fin,
+        "ejecutado_por": execution.ejecutado_por,
+        "estado": execution.estado,
+        "exitosos": execution.exitosos,
+        "pendientes": execution.pendientes,
+        "errores": execution.errores,
+        "pendientes_sin_revisar": execution.resultados.filter(tipo=Tipo.PENDIENTE, decision="").count(),
+    }
+
+
+def _serialize_result(result):
+    player = result.jugador
+    person = player.socio.persona
+    return {
+        "id": result.pk,
+        "jugador_id": player.pk,
+        "jugador": f"{person.apellido}, {person.nombre}",
+        "dni": person.dni,
+        "anio_nacimiento": person.fecha_nacimiento.year if person.fecha_nacimiento else None,
+        "genero": GENERO_PERSONA_A_CATEGORIA.get(getattr(person.genero, "nombre", None)),
+        "tipo": result.tipo,
+        "motivo": result.motivo,
+        "motivo_display": result.get_motivo_display() if result.motivo else "",
+        "detalle": result.detalle,
+        "categoria_anterior": _serialize_category(result.categoria_anterior),
+        "categoria_secundaria_anterior": _serialize_category(result.categoria_secundaria_anterior),
+        "categoria_nueva": _serialize_category(result.categoria_nueva),
+        "categoria_secundaria_nueva": _serialize_category(result.categoria_secundaria_nueva),
+        "categoria_sugerida": _serialize_category(result.categoria_sugerida),
+        "quitar_secundaria_sugerido": result.quitar_secundaria_sugerido,
+        "categoria_actual": _serialize_category(player.categoria),
+        "categoria_secundaria_actual": _serialize_category(player.categoria_secundaria),
+        "decision": result.decision,
+        "decision_display": result.get_decision_display() if result.decision else "",
+        "fecha_decision": result.fecha_decision,
+    }
+
+
+def _latest_execution():
+    return RecategorizacionEjecucion.objects.order_by("-fecha_inicio", "-ejecucion_id").first()
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Estado de la última recategorización")
+@api_view(["GET"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_status(request):
+    mark_stale_runs_as_failed()
+    return Response({"ultima_ejecucion": _serialize_execution(_latest_execution())})
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Ejecutar recategorización de jugadores")
+@api_view(["POST"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_run(request):
+    executed_by = request.data.get("ejecutado_por") if isinstance(request.data, dict) else None
+    executed_by = executed_by.strip() if isinstance(executed_by, str) else ""
+    if not executed_by or len(executed_by) > 150:
+        return Response(
+            {"ejecutado_por": ["Indicá quién ejecuta la recategorización (hasta 150 caracteres)."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        execution = start_recategorization(request.user, executed_by)
+    except RecategorizationInProgress:
+        return Response(
+            {"detail": "Ya hay una recategorización en curso o con revisiones pendientes."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    return Response({"ultima_ejecucion": _serialize_execution(execution)}, status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Resultados de una recategorización")
+@api_view(["GET"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_results(request, pk):
+    execution = get_object_or_404(RecategorizacionEjecucion, pk=pk)
+    result_type = request.query_params.get("tipo", Tipo.EXITO)
+    page_number = request.query_params.get("page", "1")
+    if result_type not in Tipo.values:
+        return Response(
+            {"tipo": [f"Elegí un tipo válido: {', '.join(Tipo.values)}."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not page_number.isdecimal() or int(page_number) < 1:
+        return Response(
+            {"page": ["Ingresá un número de página mayor que cero."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    birth_date = F("jugador__socio__persona__fecha_nacimiento").asc(nulls_last=True)
+    ordering = [birth_date, "jugador__socio__persona__apellido", "jugador__socio__persona__nombre", "resultado_id"]
+    if result_type == Tipo.PENDIENTE:
+        ordering.insert(0, "decision")
+    results = (
+        execution.resultados
+        .filter(tipo=result_type)
+        .select_related(
+            "jugador__socio__persona__genero",
+            "jugador__categoria",
+            "jugador__categoria_secundaria",
+            "categoria_anterior",
+            "categoria_secundaria_anterior",
+            "categoria_nueva",
+            "categoria_secundaria_nueva",
+            "categoria_sugerida",
+        )
+        .order_by(*ordering)
+    )
+    page = Paginator(results, RESULTS_PAGE_SIZE).get_page(page_number)
+    return Response({
+        "results": [_serialize_result(result) for result in page.object_list],
+        "count": page.paginator.count,
+        "page": page.number,
+        "page_size": RESULTS_PAGE_SIZE,
+        "total_pages": page.paginator.num_pages,
+    })
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Registro de una recategorización")
+@api_view(["GET"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_log(request, pk):
+    execution = get_object_or_404(RecategorizacionEjecucion, pk=pk)
+    return Response({"registro": execution.registro})
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Revisar un resultado de la recategorización")
+@api_view(["POST"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_decision(request, pk):
+    result = get_object_or_404(RecategorizacionResultado.objects.select_related("jugador"), pk=pk)
+    data = request.data if isinstance(request.data, dict) else {}
+    decision = data.get("decision")
+    if decision not in Decision.values:
+        return Response(
+            {"decision": [f"Elegí una decisión válida: {', '.join(Decision.values)}."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    categories = {}
+    if decision == Decision.EDITADA:
+        serializer = JugadorSerializer(
+            result.jugador,
+            data={
+                "categoria": data.get("categoria"),
+                "categoria_secundaria": data.get("categoria_secundaria"),
+            },
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        categories = {
+            "categoria": serializer.validated_data["categoria"],
+            "categoria_secundaria": serializer.validated_data.get("categoria_secundaria"),
+        }
+
+    try:
+        result = decide_result(result.pk, decision, request.user, **categories)
+    except RecategorizationDecisionError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    result = (
+        RecategorizacionResultado.objects
+        .select_related("jugador__socio__persona__genero", "ejecucion")
+        .get(pk=result.pk)
+    )
+    return Response({
+        "resultado": _serialize_result(result),
+        "ultima_ejecucion": _serialize_execution(result.ejecucion),
+    })
+
+
+@extend_schema(tags=["Automatizaciones / Recategorización"], summary="Aceptar todas las sugerencias pendientes")
+@api_view(["POST"])
+@permission_classes([CanManageRecategorizacion])
+def recategorization_accept_all(request, pk):
+    execution = get_object_or_404(RecategorizacionEjecucion, pk=pk)
+    try:
+        accepted = accept_all_suggestions(execution.pk, request.user)
+    except RecategorizationDecisionError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    execution.refresh_from_db()
+    return Response({"aceptados": accepted, "ultima_ejecucion": _serialize_execution(execution)})

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
 from django.contrib.admin.sites import site
@@ -12,6 +12,9 @@ from django_q.models import Schedule, Task
 from django_q.scheduler import scheduler
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from padron.models import Categoria, Genero, Jugador, Persona, RecategorizacionEjecucion, Socio
+from padron.services import run_recategorization
 
 
 class AutomatizacionesAdminTests(TestCase):
@@ -104,7 +107,10 @@ class AutomatizacionesApiTests(APITestCase):
         self.schedule.next_run = timezone.now() - timedelta(minutes=1)
         self.schedule.save(update_fields=["repeats", "next_run"])
 
-        with patch("django_q.scheduler.async_task") as enqueue_task:
+        with (
+            patch("django_q.scheduler.async_task") as enqueue_task,
+            patch("django_q.scheduler.close_old_django_connections"),
+        ):
             scheduler(broker=Mock())
 
         enqueue_task.assert_not_called()
@@ -146,3 +152,191 @@ class AutomatizacionesApiTests(APITestCase):
 
         self.assertEqual(listado.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(cambio.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class RecategorizationApiTests(APITestCase):
+    def setUp(self):
+        self.administrador = get_user_model().objects.create_user(
+            username="administrador", first_name="Ana", last_name="Admin"
+        )
+        self.administrador.groups.add(Group.objects.get(name="Administrador"))
+        self.client.force_authenticate(self.administrador)
+        self.male, _ = Genero.objects.get_or_create(nombre="Masculino")
+        Categoria.objects.all().delete()
+        self.categories = {
+            name: Categoria.objects.create(nombre=name, edad_maxima=max_age, genero="M", anio_vigente=2026)
+            for name, max_age in [("2016", 10), ("2015", 11), ("PRE 9NA", 12), ("9NA", 13), ("4TA", 19)]
+        }
+        self.dni_counter = 40000000
+
+    def create_player(self, birth_year, category, secondary=None):
+        self.dni_counter += 1
+        person = Persona.objects.create(
+            nombre="Jugador",
+            apellido=str(self.dni_counter),
+            dni=str(self.dni_counter),
+            fecha_nacimiento=date(birth_year, 6, 1),
+            genero=self.male,
+        )
+        return Jugador.objects.create(
+            socio=Socio.objects.create(persona=person), categoria=category, categoria_secundaria=secondary
+        )
+
+    def run_execution(self):
+        RecategorizacionEjecucion.objects.create(
+            anio=2025, ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.FINALIZADA,
+            fecha_inicio=timezone.now() - timedelta(days=365),
+        )
+        self.promoted = self.create_player(2015, self.categories["2016"])
+        self.unchanged = self.create_player(2016, self.categories["2016"])
+        self.secondary_matches = self.create_player(
+            2015, self.categories["9NA"], secondary=self.categories["2015"]
+        )
+        self.playing_up = self.create_player(2014, self.categories["9NA"])
+        execution = RecategorizacionEjecucion.objects.create(anio=2026, ejecutado_por="Administrador")
+        run_recategorization(execution.pk)
+        return execution
+
+    def result_for(self, execution, player):
+        return execution.resultados.get(jugador=player)
+
+    def decide(self, result, **data):
+        return self.client.post(reverse("recategorizacion-decision", args=[result.pk]), data, format="json")
+
+    def test_status_without_runs_is_empty(self):
+        response = self.client.get(reverse("recategorizacion-estado"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["ultima_ejecucion"])
+
+    def test_status_returns_latest_run_summary(self):
+        execution = self.run_execution()
+
+        response = self.client.get(reverse("recategorizacion-estado"))
+
+        summary = response.data["ultima_ejecucion"]
+        self.assertEqual(summary["id"], execution.pk)
+        self.assertEqual(summary["ejecutado_por"], "Administrador")
+        self.assertEqual(summary["estado"], "revision_pendiente")
+        self.assertEqual((summary["exitosos"], summary["pendientes"], summary["errores"]), (2, 2, 0))
+        self.assertEqual(summary["pendientes_sin_revisar"], 2)
+
+    def test_run_requires_who_executes_it(self):
+        response = self.client.post(reverse("recategorizacion-ejecutar"), {"ejecutado_por": "  "}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("ejecutado_por", response.data)
+
+    def test_run_is_enqueued_and_blocked_while_another_is_active(self):
+        with patch("django_q.tasks.async_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("recategorizacion-ejecutar"), {"ejecutado_por": "Ana Admin"}, format="json"
+            )
+        repeated = self.client.post(reverse("recategorizacion-ejecutar"), {"ejecutado_por": "Ana Admin"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data["ultima_ejecucion"]["estado"], "en_curso")
+        enqueue.assert_called_once_with("padron.services.run_recategorization", response.data["ultima_ejecucion"]["id"])
+        execution = RecategorizacionEjecucion.objects.get(pk=response.data["ultima_ejecucion"]["id"])
+        self.assertEqual(execution.usuario, self.administrador)
+        self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
+
+    def test_results_are_filtered_by_type_and_sorted_by_birth_year(self):
+        execution = self.run_execution()
+        url = reverse("recategorizacion-resultados", args=[execution.pk])
+
+        successes = self.client.get(url, {"tipo": "exito"})
+        pending = self.client.get(url, {"tipo": "pendiente"})
+        invalid = self.client.get(url, {"tipo": "otro"})
+
+        self.assertEqual([row["anio_nacimiento"] for row in successes.data["results"]], [2015, 2016])
+        self.assertEqual(successes.data["results"][0]["categoria_anterior"]["nombre"], "2016")
+        self.assertEqual(successes.data["results"][0]["categoria_nueva"]["nombre"], "2015")
+        self.assertEqual([row["anio_nacimiento"] for row in pending.data["results"]], [2014, 2015])
+        self.assertEqual(pending.data["results"][1]["motivo"], "secundaria_corresponde")
+        self.assertEqual(pending.data["results"][1]["categoria_sugerida"]["nombre"], "2015")
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accepting_suggestion_applies_it_and_logs_the_decision(self):
+        execution = self.run_execution()
+        result = self.result_for(execution, self.secondary_matches)
+
+        response = self.decide(result, decision="aceptada")
+        repeated = self.decide(result, decision="aceptada")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.secondary_matches.refresh_from_db()
+        self.assertEqual(self.secondary_matches.categoria, self.categories["2015"])
+        self.assertIsNone(self.secondary_matches.categoria_secundaria)
+        self.assertEqual(response.data["resultado"]["decision"], "aceptada")
+        self.assertEqual(response.data["ultima_ejecucion"]["pendientes_sin_revisar"], 1)
+        execution.refresh_from_db()
+        self.assertIn("Revisiones manuales:", execution.registro)
+        self.assertIn("[SUGERENCIA ACEPTADA]", execution.registro)
+        self.assertIn("por Ana Admin", execution.registro)
+        self.assertEqual(repeated.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_keeping_current_category_leaves_player_untouched(self):
+        execution = self.run_execution()
+
+        response = self.decide(self.result_for(execution, self.playing_up), decision="mantenida")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.playing_up.refresh_from_db()
+        self.assertEqual(self.playing_up.categoria, self.categories["9NA"])
+        self.assertEqual(response.data["resultado"]["categoria_nueva"]["nombre"], "9NA")
+
+    def test_editing_validates_categories_like_the_player_form(self):
+        execution = self.run_execution()
+        result = self.result_for(execution, self.promoted)
+
+        too_young = self.decide(result, decision="editada", categoria=self.categories["2016"].pk)
+        same_as_main = self.decide(
+            result,
+            decision="editada",
+            categoria=self.categories["PRE 9NA"].pk,
+            categoria_secundaria=self.categories["PRE 9NA"].pk,
+        )
+        edited = self.decide(
+            result,
+            decision="editada",
+            categoria=self.categories["PRE 9NA"].pk,
+            categoria_secundaria=self.categories["9NA"].pk,
+        )
+
+        self.assertEqual(too_young.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("categoria", too_young.data)
+        self.assertEqual(same_as_main.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(edited.status_code, status.HTTP_200_OK)
+        self.promoted.refresh_from_db()
+        self.assertEqual(self.promoted.categoria, self.categories["PRE 9NA"])
+        self.assertEqual(self.promoted.categoria_secundaria, self.categories["9NA"])
+        self.assertEqual(edited.data["resultado"]["tipo"], "exito")
+        self.assertEqual(edited.data["resultado"]["decision"], "editada")
+
+    def test_accept_all_resolves_every_pending_result_and_finishes_the_run(self):
+        execution = self.run_execution()
+
+        response = self.client.post(reverse("recategorizacion-aceptar-sugeridos", args=[execution.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["aceptados"], 2)
+        self.assertEqual(response.data["ultima_ejecucion"]["estado"], "finalizada")
+        self.assertEqual(response.data["ultima_ejecucion"]["pendientes_sin_revisar"], 0)
+        self.playing_up.refresh_from_db()
+        self.assertEqual(self.playing_up.categoria, self.categories["PRE 9NA"])
+        log = self.client.get(reverse("recategorizacion-registro", args=[execution.pk])).data["registro"]
+        self.assertEqual(log.count("[SUGERENCIA ACEPTADA]"), 2)
+        self.assertIn("Revisión manual completada", log)
+
+    def test_users_without_permissions_cannot_use_recategorization(self):
+        execution = self.run_execution()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="lector"))
+
+        status_response = self.client.get(reverse("recategorizacion-estado"))
+        run_response = self.client.post(reverse("recategorizacion-ejecutar"), {"ejecutado_por": "X"}, format="json")
+        accept_response = self.client.post(reverse("recategorizacion-aceptar-sugeridos", args=[execution.pk]))
+
+        self.assertEqual(status_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(run_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(accept_response.status_code, status.HTTP_403_FORBIDDEN)

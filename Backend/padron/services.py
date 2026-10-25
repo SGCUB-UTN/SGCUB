@@ -25,9 +25,16 @@ STALE_RUN_TIMEOUT = timedelta(minutes=30)
 Estado = RecategorizacionEjecucion.EstadoChoices
 Tipo = RecategorizacionResultado.TipoChoices
 Motivo = RecategorizacionResultado.MotivoChoices
+Decision = RecategorizacionResultado.DecisionChoices
+
+DECISION_LOG_HEADER = "Revisiones manuales:"
 
 
 class RecategorizationInProgress(Exception):
+    pass
+
+
+class RecategorizationDecisionError(Exception):
     pass
 
 
@@ -285,6 +292,99 @@ def _process_execution(execution):
     ]
     execution.registro = "\n".join(log_lines) + "\n"
     execution.save()
+
+
+def _user_label(user):
+    if user is None:
+        return "Sistema"
+    return user.get_full_name().strip() or user.username
+
+
+def _append_decision_log(execution, line):
+    if DECISION_LOG_HEADER not in execution.registro:
+        execution.registro += f"\n{DECISION_LOG_HEADER}\n"
+    execution.registro += line + "\n"
+
+
+def _finish_if_reviewed(execution):
+    unresolved = execution.resultados.filter(tipo=Tipo.PENDIENTE, decision="").exists()
+    if execution.estado == Estado.REVISION_PENDIENTE and not unresolved:
+        execution.estado = Estado.FINALIZADA
+        execution.registro += f"Revisión manual completada el {format_datetime(timezone.now())}.\n"
+
+
+def _apply_decision(execution, result, decision, user, categoria=None, categoria_secundaria=None):
+    if execution.estado not in (Estado.REVISION_PENDIENTE, Estado.FINALIZADA):
+        raise RecategorizationDecisionError("La ejecución todavía no admite revisiones.")
+    if decision in (Decision.ACEPTADA, Decision.MANTENIDA) and (result.tipo != Tipo.PENDIENTE or result.decision):
+        raise RecategorizationDecisionError("El jugador ya fue revisado o no requiere revisión.")
+
+    player = result.jugador
+    if decision == Decision.ACEPTADA:
+        if result.categoria_sugerida is None:
+            raise RecategorizationDecisionError("El resultado no tiene una categoría sugerida.")
+        player.categoria = result.categoria_sugerida
+        if result.quitar_secundaria_sugerido or player.categoria_secundaria_id == player.categoria_id:
+            player.categoria_secundaria = None
+    elif decision == Decision.EDITADA:
+        player.categoria = categoria
+        player.categoria_secundaria = categoria_secundaria
+    if decision != Decision.MANTENIDA:
+        player.save(update_fields=["categoria", "categoria_secundaria"])
+
+    result.decision = decision
+    result.categoria_nueva = player.categoria
+    result.categoria_secundaria_nueva = player.categoria_secundaria
+    result.usuario_decision = user
+    result.fecha_decision = timezone.now()
+    result.save(update_fields=[
+        "decision", "categoria_nueva", "categoria_secundaria_nueva", "usuario_decision", "fecha_decision",
+    ])
+    _append_decision_log(
+        execution,
+        f"[{result.get_decision_display().upper()}] {player_label(player)} por {_user_label(user)} "
+        f"el {format_datetime(result.fecha_decision)}: principal {category_label(player.categoria)} | "
+        f"secundaria {category_label(player.categoria_secundaria)}",
+    )
+
+
+def _result_for_decision(result_id):
+    return (
+        RecategorizacionResultado.objects
+        .select_for_update(of=("self",))
+        .select_related("jugador__socio__persona", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .get(pk=result_id)
+    )
+
+
+@transaction.atomic
+def decide_result(result_id, decision, user, categoria=None, categoria_secundaria=None):
+    execution_id = RecategorizacionResultado.objects.values_list("ejecucion_id", flat=True).get(pk=result_id)
+    execution = RecategorizacionEjecucion.objects.select_for_update().get(pk=execution_id)
+    result = _result_for_decision(result_id)
+    _apply_decision(execution, result, decision, user, categoria, categoria_secundaria)
+    _finish_if_reviewed(execution)
+    execution.save(update_fields=["estado", "registro"])
+    return result
+
+
+@transaction.atomic
+def accept_all_suggestions(execution_id, user):
+    execution = RecategorizacionEjecucion.objects.select_for_update().get(pk=execution_id)
+    pending = (
+        execution.resultados
+        .select_for_update(of=("self",))
+        .select_related("jugador__socio__persona", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .filter(tipo=Tipo.PENDIENTE, decision="", categoria_sugerida__isnull=False)
+        .order_by("resultado_id")
+    )
+    accepted = 0
+    for result in pending:
+        _apply_decision(execution, result, Decision.ACEPTADA, user)
+        accepted += 1
+    _finish_if_reviewed(execution)
+    execution.save(update_fields=["estado", "registro"])
+    return accepted
 
 
 def pasr_de_anio_vigente_a_categoria():
