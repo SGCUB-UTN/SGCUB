@@ -333,6 +333,27 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(log.count("[SUGERENCIA ACEPTADA]"), 2)
         self.assertIn("Revisión manual completada", log)
 
+    def test_manual_recategorization_runs_appear_in_the_execution_history(self):
+        execution = self.run_execution()
+        now = timezone.now()
+        Task.objects.create(
+            id="f" * 32,
+            name="Recategorización manual",
+            func="padron.services.run_recategorization",
+            args=(execution.pk,),
+            started=now,
+            stopped=now,
+            success=True,
+        )
+
+        response = self.client.get(reverse("automatizacion-ejecuciones"))
+
+        entry = response.data["results"][0]
+        self.assertEqual(entry["automation"], "Recategorización de jugadores")
+        self.assertTrue(entry["is_manual"])
+        self.assertEqual(entry["executed_by"], "Administrador")
+        self.assertEqual(entry["recategorization_id"], execution.pk)
+
     def test_users_without_permissions_cannot_use_recategorization(self):
         execution = self.run_execution()
         self.client.force_authenticate(get_user_model().objects.create_user(username="lector"))

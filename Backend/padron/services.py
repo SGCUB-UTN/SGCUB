@@ -28,6 +28,8 @@ Motivo = RecategorizacionResultado.MotivoChoices
 Decision = RecategorizacionResultado.DecisionChoices
 
 DECISION_LOG_HEADER = "Revisiones manuales:"
+RECATEGORIZATION_TASK = "padron.services.run_recategorization"
+RECATEGORIZATION_TASK_NAME = "Recategorización de jugadores"
 
 
 class RecategorizationInProgress(Exception):
@@ -221,7 +223,7 @@ def start_recategorization(user, executed_by):
     try:
         with transaction.atomic():
             execution = RecategorizacionEjecucion.objects.create(usuario=user, ejecutado_por=executed_by)
-            transaction.on_commit(lambda: async_task("padron.services.run_recategorization", execution.pk))
+            transaction.on_commit(lambda: async_task(RECATEGORIZATION_TASK, execution.pk))
     except IntegrityError as error:
         raise RecategorizationInProgress() from error
     return execution

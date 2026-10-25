@@ -12,6 +12,8 @@ from padron.models import RecategorizacionEjecucion, RecategorizacionResultado
 from padron.serializers import JugadorSerializer
 from padron.services import (
     GENERO_PERSONA_A_CATEGORIA,
+    RECATEGORIZATION_TASK,
+    RECATEGORIZATION_TASK_NAME,
     RecategorizationDecisionError,
     RecategorizationInProgress,
     accept_all_suggestions,
@@ -84,7 +86,7 @@ def automatizacion_detail(request, pk):
 @permission_classes([CanManageAutomatizaciones])
 def automatizacion_execution_list(request):
     schedules = list(Schedule.objects.order_by("pk").values("name", "func"))
-    schedule_names = {}
+    schedule_names = {RECATEGORIZATION_TASK: RECATEGORIZATION_TASK_NAME}
     for schedule in schedules:
         schedule_names.setdefault(schedule["func"], schedule["name"] or schedule["func"])
 
@@ -97,16 +99,26 @@ def automatizacion_execution_list(request):
 
     executions = Task.objects.filter(func__in=schedule_names).order_by("-stopped", "-id")
     page = Paginator(executions, 5).get_page(page_number)
-    results = [
-        {
+    recategorization_ids = [
+        task.args[0] for task in page.object_list if task.func == RECATEGORIZATION_TASK and task.args
+    ]
+    recategorizations = RecategorizacionEjecucion.objects.in_bulk(recategorization_ids)
+    results = []
+    for task in page.object_list:
+        recategorization = None
+        if task.func == RECATEGORIZATION_TASK and task.args:
+            recategorization = recategorizations.get(task.args[0])
+        results.append({
             "id": task.pk,
             "executed_at": task.stopped,
             "automation": schedule_names[task.func],
+            "func": task.func,
             "scope": task.func.split(".", 1)[0].replace("_", " ").capitalize(),
             "success": task.success,
-        }
-        for task in page.object_list
-    ]
+            "is_manual": task.func == RECATEGORIZATION_TASK,
+            "executed_by": recategorization.ejecutado_por if recategorization else None,
+            "recategorization_id": recategorization.pk if recategorization else None,
+        })
     return Response({
         "results": results,
         "count": page.paginator.count,
