@@ -1,4 +1,5 @@
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -6,8 +7,10 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
+from configuracion.services import club_details, club_name
+
 from .models import EstadoComprobanteChoices, MedioPago
-from .pdf_utils import CLUB_NAME, format_amount, table
+from .pdf_utils import format_amount, table
 from .services import receipt_detail
 
 
@@ -47,7 +50,8 @@ def render_receipt_pdf(receipt):
     socio = detail["socio"] or {}
     width = A4[0] - 40 * mm
     story = [
-        Paragraph(CLUB_NAME, subtitle),
+        Paragraph(escape(club_name()), subtitle),
+        *([Paragraph(escape(details), subtitle)] if (details := club_details()) else []),
         Paragraph(f"RECIBO {detail['tipo']}", title),
         Paragraph("Documento no válido como factura", subtitle),
         Spacer(1, 6 * mm),
@@ -113,7 +117,7 @@ def render_receipt_pdf(receipt):
         topMargin=18 * mm,
         bottomMargin=18 * mm,
         title=f"Recibo {format_receipt_number(detail['tipo'], detail['numero'])}",
-        author=CLUB_NAME,
+        author=club_name(),
         pageCompression=0,
     ).build(story)
     return buffer.getvalue()

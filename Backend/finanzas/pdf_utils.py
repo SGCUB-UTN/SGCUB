@@ -1,7 +1,6 @@
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 
-CLUB_NAME = "Club Universitario de Berisso"
 BORDER = colors.HexColor("#c4c7c5")
 HEADER_BACKGROUND = colors.HexColor("#eef1f4")
 

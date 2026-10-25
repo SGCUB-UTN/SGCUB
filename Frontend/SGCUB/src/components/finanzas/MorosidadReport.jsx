@@ -137,6 +137,11 @@ function MorosidadReport({
             <div className="border-l-4 border-primary bg-surface-container-low px-4 py-3"><p className="text-sm text-on-surface-variant">Deuda vencida total</p><p className="text-xl font-bold text-on-surface">{formatAmount(deudaTotal)}</p></div>
             <div className="border-l-4 border-outline bg-surface-container-low px-4 py-3"><p className="text-sm text-on-surface-variant">Sin cuenta corriente</p><p className="text-xl font-bold text-on-surface">{reporte.sin_cuenta}</p></div>
           </div>
+          {reporte.cuotas_vencidas_minimas > 1 && (
+            <p className="mb-4 text-sm text-on-surface-variant">
+              Se consideran morosos los socios con {reporte.cuotas_vencidas_minimas} o más cuotas vencidas (se cambia en Configuración).
+            </p>
+          )}
 
           {reporte.filas.length === 0 ? (
             <div className="py-12 text-center border border-dashed border-outline-variant/50 text-on-surface-variant"><span className="material-symbols-outlined text-3xl">task_alt</span><p className="mt-2 font-semibold text-on-surface">No hay socios con deuda vencida en este alcance.</p></div>

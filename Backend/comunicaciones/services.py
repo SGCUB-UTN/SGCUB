@@ -1,8 +1,11 @@
 import logging
+from email.utils import formataddr
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template import Context, Template
 from django.utils.html import strip_tags
+
+from configuracion.models import ConfiguracionGeneral
 
 from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion
 
@@ -85,7 +88,7 @@ HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="header">
-      <h1>Club Social y Deportivo - SGCUB</h1>
+      <h1>{{ club }}</h1>
       <p>Canal Oficial de Comunicaciones Institucionales</p>
     </div>
     <div class="content">
@@ -108,17 +111,22 @@ def enviar_email_individual(destinatario: str, asunto: str, contenido: str, envi
     Actualiza el estado y detalle_fallo del EnvioNotificacion si se proporciona su ID.
     """
     asunto_completo = f"[SGCUB] {asunto}" if asunto else "[SGCUB] Comunicado Institucional"
+    configuracion = ConfiguracionGeneral.load()
     remitente = getattr(settings, "DEFAULT_FROM_EMAIL", "sgcub.notificaciones@gmail.com")
+    if configuracion.email_nombre_remitente:
+        remitente = formataddr((configuracion.email_nombre_remitente, remitente))
+    firma = configuracion.email_firma
 
     try:
         # Renderizar plantilla HTML
         template = Template(HTML_EMAIL_TEMPLATE)
         context = Context({
             "asunto": asunto,
-            "contenido":contenido + "\nClub Social y Deportivo - SGCUB"
+            "club": configuracion.club_nombre,
+            "contenido": f"{contenido}\n{firma}" if firma else contenido,
         })
         html_content = template.render(context)
-        text_content = f"{asunto}\n\n{contenido}\n\n---\nClub Social y Deportivo - SGCUB"
+        text_content = f"{asunto}\n\n{contenido}\n\n---\n{firma}"
 
         msg = EmailMultiAlternatives(
             subject=asunto_completo,

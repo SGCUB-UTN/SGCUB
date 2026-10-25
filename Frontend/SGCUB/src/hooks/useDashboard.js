@@ -4,8 +4,7 @@ import { getResumenFinanciero } from '../api/resumenFinanciero'
 import { getSocios } from '../api/socios'
 import { parseDueDate } from '../components/documental/dueDate'
 import { getDocumentos, getTiposDocumento } from '../api/documentacion'
-
-const UPCOMING_DAYS_WINDOW = 30
+import { DEFAULT_DOCUMENT_ALERT_DAYS, getDocumentAlertDays } from '../api/configuracion'
 
 /**
  * Derives collection KPIs from the comprobantes list for the current calendar month.
@@ -35,9 +34,10 @@ function calcularRecaudacionMes(comprobantes) {
  * Classifies active documents into expired and upcoming-to-expire groups.
  *
  * @param {Array} documentos - Active documents from the documentacion API.
+ * @param {number} alertDays - Days before the due date a document counts as upcoming to expire.
  * @returns {{ vencidos: Array, proximosAVencer: Array }}
  */
-function clasificarDocumentos(documentos) {
+function clasificarDocumentos(documentos, alertDays) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -54,7 +54,7 @@ function clasificarDocumentos(documentos) {
 
     if (parsed.daysFromToday < 0) {
       vencidos.push({ ...enriched, diasVencido: Math.floor(-parsed.daysFromToday) })
-    } else if (parsed.daysFromToday <= UPCOMING_DAYS_WINDOW) {
+    } else if (parsed.daysFromToday <= alertDays) {
       proximosAVencer.push({ ...enriched, diasRestantes: Math.ceil(parsed.daysFromToday) })
     }
   })
@@ -74,6 +74,7 @@ export default function useDashboard() {
   const [comprobantes, setComprobantes] = useState([])
   const [documentos, setDocumentos] = useState([])
   const [tiposDocumento, setTiposDocumento] = useState([])
+  const [alertDays, setAlertDays] = useState(DEFAULT_DOCUMENT_ALERT_DAYS)
 
   const [isLoading, setIsLoading] = useState(true)
   const [errors, setErrors] = useState({
@@ -95,6 +96,7 @@ export default function useDashboard() {
         getComprobantes(),
         getDocumentos(''),
         getTiposDocumento(),
+        getDocumentAlertDays(),
       ])
 
       if (!active) return
@@ -105,6 +107,7 @@ export default function useDashboard() {
         comprobantesResult,
         documentosResult,
         tiposResult,
+        alertDaysResult,
       ] = results
 
       setResumenFinanciero(resumenResult.status === 'fulfilled' ? resumenResult.value : null)
@@ -112,6 +115,7 @@ export default function useDashboard() {
       setComprobantes(comprobantesResult.status === 'fulfilled' ? (comprobantesResult.value ?? []) : [])
       setDocumentos(documentosResult.status === 'fulfilled' ? (documentosResult.value ?? []) : [])
       setTiposDocumento(tiposResult.status === 'fulfilled' ? (tiposResult.value ?? []) : [])
+      if (alertDaysResult.status === 'fulfilled') setAlertDays(alertDaysResult.value)
 
       setErrors({
         resumenFinanciero: resumenResult.status === 'rejected' ? resumenResult.reason : null,
@@ -159,8 +163,8 @@ export default function useDashboard() {
   }, [documentos])
 
   const { vencidos, proximosAVencer } = useMemo(
-    () => clasificarDocumentos(documentosActivos),
-    [documentosActivos],
+    () => clasificarDocumentos(documentosActivos, alertDays),
+    [documentosActivos, alertDays],
   )
 
   // --- Utility: resolve tipo documento name ---

@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'usuarios',
     'django_cleanup.apps.CleanupConfig',
     'comet',
+    'configuracion',
 ]
 Q_CLUSTER = {
     'name': 'django_q_cluster',

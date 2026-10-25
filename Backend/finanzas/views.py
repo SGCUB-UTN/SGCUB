@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
+from configuracion.services import Seccion, record_catalog_update, record_change
 from padron.models import Socio
 
 from .models import (
@@ -491,6 +492,13 @@ def configuracion_financiera_versiones(request):
 	return Response(VersionConfiguracionFinancieraSerializer(versiones, many=True).data)
 
 
+PAYMENT_METHOD_FIELDS = {"nombre": "Nombre", "activo": "Habilitado"}
+
+
+def request_user(request):
+	return request.user if request.user.is_authenticated else None
+
+
 @extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
 @api_view(["GET", "POST"])
 def medio_pago_list_create(request):
@@ -503,7 +511,9 @@ def medio_pago_list_create(request):
 	serializer = MedioPagoAceptadoSerializer(data=request.data)
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	return Response(MedioPagoAceptadoSerializer(serializer.save()).data, status=status.HTTP_201_CREATED)
+	medio = serializer.save()
+	record_change(Seccion.FINANZAS, f"Medio de pago {medio.nombre}", "", "Alta", request_user(request))
+	return Response(MedioPagoAceptadoSerializer(medio).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
@@ -519,12 +529,23 @@ def medio_pago_detail(request, pk):
 		if medio.activo and not MedioPago.objects.filter(activo=True).exclude(pk=medio.pk).exists():
 			return Response({"detail": "Tiene que quedar al menos un medio de pago habilitado."}, status=status.HTTP_400_BAD_REQUEST)
 		medio.delete()
+		record_change(Seccion.FINANZAS, f"Medio de pago {medio.nombre}", "Existente", "Eliminado", request_user(request))
 		return Response(status=status.HTTP_204_NO_CONTENT)
 
+	before = {"nombre": medio.nombre, "activo": medio.activo}
 	serializer = MedioPagoAceptadoSerializer(medio, data=request.data, partial=True)
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	return Response(MedioPagoAceptadoSerializer(serializer.save()).data)
+	medio = serializer.save()
+	record_catalog_update(
+		Seccion.FINANZAS,
+		f"Medio de pago {before['nombre']}",
+		before,
+		{"nombre": medio.nombre, "activo": medio.activo},
+		PAYMENT_METHOD_FIELDS,
+		request_user(request),
+	)
+	return Response(MedioPagoAceptadoSerializer(medio).data)
 
 
 @extend_schema(tags=["Finanzas/Beca"], request=BeneficioSerializer)

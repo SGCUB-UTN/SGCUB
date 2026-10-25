@@ -6,6 +6,9 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from django.db.models import OuterRef, Subquery
 
+from configuracion.models import ConfiguracionGeneral
+from configuracion.services import Seccion, record_catalog_update, record_change
+
 from .models import Documento, TipoDocumento, EstadoDocumento
 from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
 
@@ -53,6 +56,22 @@ def documento_detail(request, pk):
         documento.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+DOCUMENT_TYPE_FIELDS = {
+    "nombre": "Nombre",
+    "activo": "Habilitado",
+    "obligatorio": "Obligatorio",
+    "aplica_jugador": "Aplica a jugadores",
+    "aplica_socio": "Aplica a socios",
+    "aplica_docente": "Aplica a docentes",
+    "requiere_vencimiento": "Requiere vencimiento",
+    "vigencia_meses": "Vigencia (meses)",
+}
+
+
+def request_user(request):
+    return request.user if request.user.is_authenticated else None
+
+
 @extend_schema(tags=["Documental / Tipos"], request=TipoDocumentoSerializer, responses=TipoDocumentoSerializer)
 @api_view(["GET", "POST"])
 def tipo_documento_list(request):
@@ -65,7 +84,9 @@ def tipo_documento_list(request):
     serializer = TipoDocumentoSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    return Response(TipoDocumentoSerializer(serializer.save()).data, status=status.HTTP_201_CREATED)
+    tipo = serializer.save()
+    record_change(Seccion.DOCUMENTACION, f"Tipo de documento {tipo.nombre}", "", "Alta", request_user(request))
+    return Response(TipoDocumentoSerializer(tipo).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Documental / Tipos"], request=TipoDocumentoSerializer, responses=TipoDocumentoSerializer)
@@ -79,12 +100,23 @@ def tipo_documento_detail(request, pk):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         tipo.delete()
+        record_change(Seccion.DOCUMENTACION, f"Tipo de documento {tipo.nombre}", "Existente", "Eliminado", request_user(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    before = {field: getattr(tipo, field) for field in DOCUMENT_TYPE_FIELDS}
     serializer = TipoDocumentoSerializer(tipo, data=request.data, partial=True)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    return Response(TipoDocumentoSerializer(serializer.save()).data)
+    tipo = serializer.save()
+    record_catalog_update(
+        Seccion.DOCUMENTACION,
+        f"Tipo de documento {before['nombre']}",
+        before,
+        {field: getattr(tipo, field) for field in DOCUMENT_TYPE_FIELDS},
+        DOCUMENT_TYPE_FIELDS,
+        request_user(request),
+    )
+    return Response(TipoDocumentoSerializer(tipo).data)
 
 @extend_schema(tags=["Documental / Estados"], request=EstadoDocumentoSerializer, responses=EstadoDocumentoSerializer)
 @api_view(["GET"])
@@ -94,14 +126,13 @@ def estado_documento_list(request):
     return Response(serializer.data)
 
 from django.utils import timezone
-from datetime import timedelta
 
 @extend_schema(tags=["Documental / Alertas"])
 @api_view(["GET"])
 def alertas_count(request):
     refresh_document_states()
     hoy = timezone.now().date()
-    limite = hoy + timedelta(days=30)
+    dias_alerta = ConfiguracionGeneral.load().dias_alerta_documentos
     
     # Subquery to get the most recently uploaded document per persona+tipo
     latest_docs = Documento.objects.filter(
@@ -146,7 +177,7 @@ def alertas_count(request):
         dias = (vencimiento - hoy).days
         if dias < 0:
             vencidos += 1
-        elif dias <= 30:
+        elif dias <= dias_alerta:
             proximos += 1
 
     return Response({
