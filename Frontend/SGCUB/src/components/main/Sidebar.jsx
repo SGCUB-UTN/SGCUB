@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import PermissionGate from '../../auth/PermissionGate';
 import { PERMISSIONS } from '../../auth/permissions';
-import { useAuth } from '../../auth/useAuth';
 import StatusBadge from '../shared/StatusBadge';
 import './sidebar.css';
 
@@ -10,8 +9,6 @@ const DURACION_CONTRAER = 220;
 
 export default function Sidebar({ collapsed, onToggle }) {
   const { pathname } = useLocation();
-  const { hasPermission } = useAuth();
-  const showAdminSection = hasPermission(PERMISSIONS.manageUsers) || hasPermission(PERMISSIONS.manageAutomations);
 
   const [alertas, setAlertas] = useState(null);
 
@@ -51,7 +48,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/finanzas/estado-cuenta', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
-  const adminActive = ['/usuarios', '/automatizaciones']
+  const adminActive = ['/usuarios', '/automatizaciones', '/configuracion']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
   return (
@@ -258,36 +255,40 @@ export default function Sidebar({ collapsed, onToggle }) {
               </div>
             </details>
             {/* Sección Administración */}
-            {showAdminSection && (
-              <details open className="app-sidebar-group flex flex-col gap-0.5">
-                <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
-                  <div className="flex items-center gap-space-sm">
-                    <span className="material-symbols-outlined text-[20px]">manage_accounts</span>
-                    <span className="app-sidebar-label text-base font-semibold text-on-surface">Administración</span>
-                  </div>
-                  <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
-                </summary>
-                <hr className="app-sidebar-divider border-0 border-t border-outline-variant/40 my-2 mx-space-sm" />
-                <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
-                  <PermissionGate permission={PERMISSIONS.manageUsers}>
-                    <NavLink to="/usuarios" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                      <span className="app-sidebar-subitem-main">
-                        <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
-                        <span className="app-sidebar-label text-base">Usuarios</span>
-                      </span>
-                    </NavLink>
-                  </PermissionGate>
-                  <PermissionGate permission={PERMISSIONS.manageAutomations}>
-                    <NavLink to="/automatizaciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                      <span className="app-sidebar-subitem-main">
-                        <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">autorenew</span>
-                        <span className="app-sidebar-label text-base">Automatizaciones</span>
-                      </span>
-                    </NavLink>
-                  </PermissionGate>
+            <details open className="app-sidebar-group flex flex-col gap-0.5">
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]">manage_accounts</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Administración</span>
                 </div>
-              </details>
-            )}
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
+              <hr className="app-sidebar-divider border-0 border-t border-outline-variant/40 my-2 mx-space-sm" />
+              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <PermissionGate permission={PERMISSIONS.manageUsers}>
+                  <NavLink to="/usuarios" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                    <span className="app-sidebar-subitem-main">
+                      <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
+                      <span className="app-sidebar-label text-base">Usuarios</span>
+                    </span>
+                  </NavLink>
+                </PermissionGate>
+                <NavLink to="/configuracion" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">settings</span>
+                    <span className="app-sidebar-label text-base">Configuración</span>
+                  </span>
+                </NavLink>
+                <PermissionGate permission={PERMISSIONS.manageAutomations}>
+                  <NavLink to="/automatizaciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                    <span className="app-sidebar-subitem-main">
+                      <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">autorenew</span>
+                      <span className="app-sidebar-label text-base">Automatizaciones</span>
+                    </span>
+                  </NavLink>
+                </PermissionGate>
+              </div>
+            </details>
             
           </nav>
         </div>

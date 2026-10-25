@@ -43,6 +43,7 @@ import Comunicaciones from './pages/Comunicaciones'
 import HistorialComunicaciones from './pages/HistorialComunicaciones'
 import Automatizaciones from './pages/Automatizaciones'
 import RecategorizacionRevision from './pages/RecategorizacionRevision'
+import Configuracion from './pages/Configuracion'
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -175,7 +176,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'administracion',
-            element: <EnDesarrollo title="Administración" />,
+            element: <Navigate to="/configuracion" replace />,
+          },
+          {
+            path: 'configuracion',
+            element: <Configuracion />,
           },
           // Secciones del rol Administrador
           {
