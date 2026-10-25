@@ -20,6 +20,7 @@ from .services import (
     recategorization_task_hook,
     run_recategorization,
     start_recategorization,
+    update_categories_year,
 )
 
 
@@ -1712,3 +1713,18 @@ class RecategorizationServiceTests(TestCase):
 
         player.refresh_from_db()
         self.assertEqual(self.categories["2016"].pk, player.categoria_id)
+
+    def test_category_year_rollover_logs_name_and_birth_year_changes(self):
+        current_year = get_anio_actual()
+        Categoria.objects.update(anio_vigente=current_year - 1)
+        Categoria.objects.create(nombre=str(current_year - 9), edad_maxima=8, genero="M", anio_vigente=current_year - 1)
+
+        log = update_categories_year(None, "Ana Admin").registro
+        repeated = update_categories_year(None, "Ana Admin").registro
+
+        self.assertIn(f"[NOMBRE] {current_year - 9} -> {current_year - 8} (hasta 8 años)", log)
+        self.assertIn(f"[AÑOS] 5TA: nacidos desde {current_year - 18} -> desde {current_year - 17} (hasta 17 años)", log)
+        self.assertIn(f"[AÑOS] SENIOR: nacidos hasta {current_year - 36} -> hasta {current_year - 35} (desde 35 años)", log)
+        self.assertIn(f"[AÑO] 1RA: {current_year - 1} -> {current_year}, sin límite de edad", log)
+        self.assertIn("Resultado: 11 categorías actualizadas", log)
+        self.assertIn("no hubo cambios", repeated)

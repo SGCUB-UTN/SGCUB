@@ -36,6 +36,8 @@ RECATEGORIZATION_TASK_NAME = "Recategorización de jugadores"
 RECATEGORIZATION_HOOK = "padron.services.recategorization_task_hook"
 CATEGORY_UPDATE_TASK = "padron.services.pasr_de_anio_vigente_a_categoria"
 CATEGORY_UPDATE_TASK_NAME = "Actualizar las categorías al nuevo año"
+CATEGORY_GENDER_LABELS = {**dict(Categoria.GENERO_CHOICES), "": "Sin género"}
+NO_AGE_LIMIT = 99
 
 
 class RecategorizationInProgress(Exception):
@@ -487,17 +489,78 @@ def accept_all_suggestions(execution_id, user):
 
 def pasr_de_anio_vigente_a_categoria():
     current_year = date.today().year
-    categorias = Categoria.objects.exclude(anio_vigente=current_year)
-    updated = 0
+    categorias = Categoria.objects.exclude(anio_vigente=current_year).order_by("edad_maxima", "edad_minima", "categoria_id")
+    changes = []
     for categoria in categorias:
+        changes.append((categoria, categoria.nombre, categoria.anio_vigente))
         categoria.anio_vigente = current_year
 
         if categoria.nombre.isdigit() and len(categoria.nombre) == 4:
             categoria.nombre = str(categoria.anio_vigente - categoria.edad_maxima)
 
         categoria.save()
-        updated += 1
-    return updated
+    return changes
+
+
+def _age_limits(category):
+    return category.edad_minima > 0, 0 < category.edad_maxima < NO_AGE_LIMIT
+
+
+def _age_limit_label(category):
+    has_min, has_max = _age_limits(category)
+    if has_min and has_max:
+        return f"de {category.edad_minima} a {category.edad_maxima} años"
+    if has_min:
+        return f"desde {category.edad_minima} años"
+    if has_max:
+        return f"hasta {category.edad_maxima} años"
+    return ""
+
+
+def _birth_years_label(category, year):
+    has_min, has_max = _age_limits(category)
+    oldest = year - category.edad_maxima
+    youngest = year - category.edad_minima
+    if has_min and has_max:
+        return f"entre {oldest} y {youngest}"
+    if has_min:
+        return f"hasta {youngest}"
+    return f"desde {oldest}"
+
+
+def _category_change_line(category, previous_name, previous_year):
+    ages = _age_limit_label(category)
+    if category.nombre != previous_name:
+        return f"[NOMBRE] {previous_name} -> {category.nombre}" + (f" ({ages})" if ages else "")
+    if not ages:
+        return f"[AÑO] {category.nombre}: {previous_year} -> {category.anio_vigente}, sin límite de edad"
+    born = "nacidas" if category.genero == Categoria.GENERO_FEMENINO else "nacidos"
+    before = _birth_years_label(category, previous_year)
+    after = _birth_years_label(category, category.anio_vigente)
+    return f"[AÑOS] {category.nombre}: {born} {before} -> {after} ({ages})"
+
+
+def category_update_log(changes, executed_by, started):
+    current_year = get_anio_actual()
+    lines = [
+        f"Actualización de categorías al año {current_year} ejecutada el {format_datetime(started)} por {executed_by}.",
+        "",
+    ]
+    if not changes:
+        lines.append(f"Las categorías ya estaban en {current_year}: no hubo cambios.")
+        return "\n".join(lines) + "\n"
+
+    for gender, label in CATEGORY_GENDER_LABELS.items():
+        group = [change for change in changes if change[0].genero == gender]
+        if group:
+            lines.append(label)
+            lines += [f"  {_category_change_line(*change)}" for change in group]
+            lines.append("")
+
+    renamed = sum(1 for category, previous_name, _ in changes if category.nombre != previous_name)
+    updated = "1 categoría actualizada" if len(changes) == 1 else f"{len(changes)} categorías actualizadas"
+    lines.append(f"Resultado: {updated} ({renamed} {'cambió' if renamed == 1 else 'cambiaron'} de nombre).")
+    return "\n".join(lines) + "\n"
 
 
 def categories_status():
@@ -530,12 +593,15 @@ def update_categories_year(user, executed_by):
     started = timezone.now()
     try:
         with transaction.atomic():
-            updated = pasr_de_anio_vigente_a_categoria()
+            changes = pasr_de_anio_vigente_a_categoria()
             update = ActualizacionCategoriasEjecucion.objects.create(
-                usuario=user, ejecutado_por=executed_by, categorias_actualizadas=updated,
+                usuario=user,
+                ejecutado_por=executed_by,
+                categorias_actualizadas=len(changes),
+                registro=category_update_log(changes, executed_by, started),
             )
     except Exception as error:
         record_task_history(CATEGORY_UPDATE_TASK, False, started, result=str(error))
         raise
-    record_task_history(CATEGORY_UPDATE_TASK, True, started, args=(update.pk,), result=f"{updated} categorías actualizadas")
+    record_task_history(CATEGORY_UPDATE_TASK, True, started, args=(update.pk,), result=update.registro)
     return update

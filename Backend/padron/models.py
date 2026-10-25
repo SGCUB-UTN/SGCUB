@@ -515,6 +515,7 @@ class ActualizacionCategoriasEjecucion(models.Model):
     )
     ejecutado_por = models.CharField(max_length=150)
     categorias_actualizadas = models.PositiveIntegerField(default=0)
+    registro = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "actualizacion_categorias_ejecucion"
