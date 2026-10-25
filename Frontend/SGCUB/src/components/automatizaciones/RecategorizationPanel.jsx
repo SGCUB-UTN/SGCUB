@@ -58,11 +58,12 @@ function Results({ execution }) {
 }
 
 function PendingReviewFooter({ execution }) {
+  const remaining = execution.pendientes_sin_revisar + execution.errores_sin_revisar
   return (
     <ActionFooter icon="pending_actions">
       <span className="font-bold">La revisión todavía no finalizó.</span>
       <span className="text-amber-800">
-        Faltan {execution.pendientes_sin_revisar + execution.errores} {execution.pendientes_sin_revisar === 1 ? 'jugador' : 'jugadores'}.
+        Faltan {remaining} {remaining === 1 ? 'jugador' : 'jugadores'}.
       </span>
       <span className="text-amber-800">Resultado:</span>
       <ResultCounts execution={execution} />

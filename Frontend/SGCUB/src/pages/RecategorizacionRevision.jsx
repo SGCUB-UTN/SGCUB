@@ -8,10 +8,12 @@ import useRecategorization from '../hooks/useRecategorization'
 const AUTOMATIONS_PATH = '/automatizaciones'
 
 function ReviewProgress({ execution }) {
-  const reviewed = execution.pendientes - execution.pendientes_sin_revisar
-  const percent = execution.pendientes ? Math.round((reviewed / execution.pendientes) * 100) : 100
+  const total = execution.pendientes + execution.errores
+  const remaining = execution.pendientes_sin_revisar + execution.errores_sin_revisar
+  const reviewed = total - remaining
+  const percent = total ? Math.round((reviewed / total) * 100) : 100
 
-  if (execution.pendientes_sin_revisar === 0) {
+  if (remaining === 0) {
     return (
       <ActionNotice tone="success" icon="task_alt">
         <strong>¡Listo!</strong> Revisaste todos los jugadores y la recategorización {execution.anio} quedó finalizada.
@@ -24,10 +26,10 @@ function ReviewProgress({ execution }) {
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-base">
         <p className="font-semibold text-slate-900">
-          Revisaste {reviewed} de {execution.pendientes} jugadores
+          Revisaste {reviewed} de {total} jugadores
         </p>
         <p className="text-slate-600">
-          Faltan <strong className="text-amber-700">{execution.pendientes_sin_revisar}</strong>
+          Faltan <strong className="text-amber-700">{remaining}</strong>
         </p>
       </div>
       <div
@@ -35,7 +37,7 @@ function ReviewProgress({ execution }) {
         role="progressbar"
         aria-label="Avance de la revisión"
         aria-valuemin={0}
-        aria-valuemax={execution.pendientes}
+        aria-valuemax={total}
         aria-valuenow={reviewed}
       >
         <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${percent}%` }} />
