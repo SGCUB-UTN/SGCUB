@@ -121,7 +121,11 @@ function ResultRow({ type, result, ...actions }) {
   return (
     <tr className="align-top text-slate-600">
       <PlayerCell result={result} />
-      <td className="whitespace-nowrap px-4 py-3">{result.anio_nacimiento ?? 'Sin fecha'}</td>
+      <td className="whitespace-nowrap px-4 py-3">
+        {result.anio_nacimiento
+          ? `${result.anio_nacimiento} (${new Date().getFullYear() - result.anio_nacimiento} años)`
+          : 'Sin fecha'}
+      </td>
       {type === RESULT_TYPES.exito && (
         <>
           <CategoryCell main={result.categoria_anterior} secondary={result.categoria_secundaria_anterior} />

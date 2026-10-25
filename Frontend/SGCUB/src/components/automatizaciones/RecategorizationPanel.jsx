@@ -62,7 +62,7 @@ function PendingReviewFooter({ execution }) {
     <ActionFooter icon="pending_actions">
       <span className="font-bold">La revisión todavía no finalizó.</span>
       <span className="text-amber-800">
-        Faltan {execution.pendientes_sin_revisar} {execution.pendientes_sin_revisar === 1 ? 'jugador' : 'jugadores'}.
+        Faltan {execution.pendientes_sin_revisar + execution.errores} {execution.pendientes_sin_revisar === 1 ? 'jugador' : 'jugadores'}.
       </span>
       <span className="text-amber-800">Resultado:</span>
       <ResultCounts execution={execution} />
@@ -105,7 +105,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
           Primero ejecutá "Actualizar categorías al nuevo año" para {categories.anio_actual} (tarjeta de arriba). Después vas a poder ejecutar la recategorización.
         </ActionNotice>
       )}
-      {!isLoading && isPendingReview && <PendingReviewFooter execution={execution} />}
+      {!isLoading && isPendingReview && <PendingReviewFooter execution={execution}/>}
     </ActionCard>
   )
 }

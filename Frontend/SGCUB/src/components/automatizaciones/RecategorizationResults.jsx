@@ -8,7 +8,6 @@ import {
 import useCategorias from '../../hooks/useCategorias'
 import { SUBMIT_BUTTON_CLASS } from '../finanzas/formParts'
 import { getErrorMessage } from '../personas/format'
-import StatCard from '../shared/StatCard'
 import EditRecategorizationModal from './EditRecategorizationModal'
 import RecategorizationLogModal from './RecategorizationLogModal'
 import RecategorizationResultsTable from './RecategorizationResultsTable'
@@ -21,19 +20,20 @@ const getTabs = (execution) => [
     type: RESULT_TYPES.exito,
     label: 'Cambios realizados',
     count: execution.exitosos,
-    help: 'Jugadores que se actualizaron solos, sin dudas. Si alguno quedó mal, usá "Modificar".',
+    help: 'Jugadores que se actualizaron solos correctamente.',
   },
   {
     type: RESULT_TYPES.pendiente,
     label: 'Pendientes de revisión',
     count: execution.pendientes_sin_revisar,
-    attention: execution.pendientes_sin_revisar > 0,
-    help: 'Estos jugadores necesitan que decidas: aceptá la categoría sugerida, mantené la actual o editala. No cambian hasta que decidas.',
+    badgeClass: execution.pendientes_sin_revisar > 0 ? 'bg-amber-100 text-amber-800' : null,
+    help: 'Modificaciones que requieren revisión manual. Puedes aceptar la sugerida, mantener la categoría actual o editarla.',
   },
   {
     type: RESULT_TYPES.error,
     label: 'Errores',
     count: execution.errores,
+    badgeClass: execution.errores > 0 ? 'bg-red-100 text-red-800' : null,
     help: 'No se pudieron recategorizar porque les falta algún dato. Corregí sus categorías con "Editar" o completá su ficha.',
   },
 ]
@@ -201,7 +201,7 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 id="recategorization-results-title" className="text-lg font-bold text-slate-900">Detalle por jugador</h2>
-          <p className="mt-0.5 text-sm text-slate-500">Hacé clic en una tarjeta o pestaña para ver cada grupo.</p>
+          <p className="mt-0.5 mb-3 text-sm text-slate-500">Revisar las diferentes pestañas para ver los resultados.</p>
         </div>
         <button
           type="button"
@@ -212,42 +212,12 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
           Ver registro
         </button>
       </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard
-          label="Cambios realizados"
-          value={execution.exitosos}
-          caption="automáticos"
-          icon="check_circle"
-          tone="positive"
-          onClick={() => changeTab(RESULT_TYPES.exito)}
-          isSelected={activeTab === RESULT_TYPES.exito}
-        />
-        <StatCard
-          label="Pendientes de revisión"
-          value={execution.pendientes_sin_revisar}
-          caption={`de ${execution.pendientes}`}
-          icon="rule"
-          tone="warning"
-          onClick={() => changeTab(RESULT_TYPES.pendiente)}
-          isSelected={activeTab === RESULT_TYPES.pendiente}
-        />
-        <StatCard
-          label="Errores"
-          value={execution.errores}
-          caption="a corregir"
-          icon="error"
-          tone="error"
-          onClick={() => changeTab(RESULT_TYPES.error)}
-          isSelected={activeTab === RESULT_TYPES.error}
-        />
-      </div>
-
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 pt-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 pt-2 sm:flex-row sm:items-end sm:justify-between">
           <div role="tablist" aria-label="Resultados de la recategorización" className="-mb-px flex gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = tab.type === activeTab
+              const defaultBadgeClass = isActive ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'
               return (
                 <button
                   key={tab.type}
@@ -258,10 +228,9 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
                   className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors ${isActive ? 'border-sky-700 text-sky-800' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                 >
                   {tab.label}
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${isActive ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${tab.badgeClass ?? defaultBadgeClass}`}>
                     {tab.count}
                   </span>
-                  {tab.attention && <span className="h-2 w-2 rounded-full bg-amber-500" aria-label="Requiere atención" />}
                 </button>
               )
             })}
@@ -271,9 +240,9 @@ export default function RecategorizationResults({ execution, canEdit, onExecutio
               type="button"
               onClick={() => setIsAcceptAllOpen(true)}
               disabled={busyId !== null}
-              className="mb-3 inline-flex items-center justify-center gap-2 self-start rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto"
+              className=" inline-flex items-center justify-center gap-1.5 self-start rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto"
             >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">done_all</span>
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">done_all</span>
               Aceptar todos los sugeridos
             </button>
           )}

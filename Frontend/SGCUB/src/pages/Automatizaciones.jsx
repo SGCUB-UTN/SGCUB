@@ -443,7 +443,7 @@ export default function Automatizaciones() {
           ))}
         </RecordSection>
 
-        <RecordSection title="Registro de últimas ejecuciones">
+        <RecordSection title="Historial de ejecuciónes">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {executionError && (
               <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
