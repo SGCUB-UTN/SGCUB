@@ -224,6 +224,7 @@ class RecategorizationApiTests(APITestCase):
         self.assertEqual(summary["estado"], "revision_pendiente")
         self.assertEqual((summary["exitosos"], summary["pendientes"], summary["errores"]), (2, 2, 0))
         self.assertEqual(summary["pendientes_sin_revisar"], 2)
+        self.assertEqual(summary["errores_sin_revisar"], 0)
 
     def test_run_requires_who_executes_it(self):
         response = self.client.post(reverse("recategorizacion-ejecutar"), {"ejecutado_por": "  "}, format="json")
@@ -354,6 +355,23 @@ class RecategorizationApiTests(APITestCase):
         log = self.client.get(reverse("recategorizacion-registro", args=[execution.pk])).data["registro"]
         self.assertEqual(log.count("[SUGERENCIA ACEPTADA]"), 2)
         self.assertIn("Revisión manual completada", log)
+
+    def test_run_finishes_only_after_errors_are_edited(self):
+        missing_birth_date = self.create_player(2015, self.categories["2016"])
+        missing_birth_date.socio.persona.fecha_nacimiento = None
+        missing_birth_date.socio.persona.save(update_fields=["fecha_nacimiento"])
+        execution = self.run_execution()
+
+        accepted = self.client.post(reverse("recategorizacion-aceptar-sugeridos", args=[execution.pk]))
+        edited = self.decide(
+            self.result_for(execution, missing_birth_date), decision="editada", categoria=self.categories["2015"].pk
+        )
+
+        self.assertEqual(accepted.data["ultima_ejecucion"]["estado"], "revision_pendiente")
+        self.assertEqual(accepted.data["ultima_ejecucion"]["errores_sin_revisar"], 1)
+        self.assertEqual(edited.status_code, status.HTTP_200_OK)
+        self.assertEqual(edited.data["ultima_ejecucion"]["errores_sin_revisar"], 0)
+        self.assertEqual(edited.data["ultima_ejecucion"]["estado"], "finalizada")
 
     def test_manual_recategorization_runs_appear_in_the_execution_history(self):
         execution = self.run_execution()

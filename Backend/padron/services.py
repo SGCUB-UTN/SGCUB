@@ -321,7 +321,7 @@ def _process_execution(execution):
     execution.exitosos = totals[Tipo.EXITO]
     execution.pendientes = totals[Tipo.PENDIENTE]
     execution.errores = totals[Tipo.ERROR]
-    execution.estado = Estado.REVISION_PENDIENTE if execution.pendientes else Estado.FINALIZADA
+    execution.estado = Estado.REVISION_PENDIENTE if execution.pendientes or execution.errores else Estado.FINALIZADA
     execution.fecha_fin = timezone.now()
     log_lines += [
         "",
@@ -344,7 +344,7 @@ def _append_decision_log(execution, line):
 
 
 def _finish_if_reviewed(execution):
-    unresolved = execution.resultados.filter(tipo=Tipo.PENDIENTE, decision="").exists()
+    unresolved = execution.resultados.filter(tipo__in=[Tipo.PENDIENTE, Tipo.ERROR], decision="").exists()
     if execution.estado == Estado.REVISION_PENDIENTE and not unresolved:
         execution.estado = Estado.FINALIZADA
         execution.registro += f"Revisión manual completada el {format_datetime(timezone.now())}.\n"

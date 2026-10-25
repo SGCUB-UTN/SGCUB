@@ -180,6 +180,7 @@ def _serialize_execution(execution):
         "pendientes": execution.pendientes,
         "errores": execution.errores,
         "pendientes_sin_revisar": execution.resultados.filter(tipo=Tipo.PENDIENTE, decision="").count(),
+        "errores_sin_revisar": execution.resultados.filter(tipo=Tipo.ERROR, decision="").count(),
     }
 
 
