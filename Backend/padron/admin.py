@@ -4,7 +4,7 @@ from django.contrib import admin
 from .models import (
     Genero, Localidad, Barrio, Domicilio, Persona, EstadoAdministrativo, Socio,
     Categoria, EstadoDeportivo, Jugador, CargoDocente, Docente,
-    VinculoFamiliar, DocenteCategoria,
+    VinculoFamiliar, DocenteCategoria, RecategorizacionEjecucion, RecategorizacionResultado,
 )
 admin.site.register(Genero)
 admin.site.register(Localidad)
@@ -20,3 +20,5 @@ admin.site.register(CargoDocente)
 admin.site.register(Docente)
 admin.site.register(VinculoFamiliar)
 admin.site.register(DocenteCategoria)
+admin.site.register(RecategorizacionEjecucion)
+admin.site.register(RecategorizacionResultado)
