@@ -1,13 +1,23 @@
 from django.contrib.auth import get_user_model
 from django.db.models import ProtectedError
+from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from padron.serializers import SocioSerializer 
+from padron.serializers import SocioSerializer
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
-from .models import CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, Socio
+from .models import CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio
+from .services import (
+    RecategorizationInProgress,
+    build_category_ladders,
+    classify_player,
+    pasr_de_anio_vigente_a_categoria,
+    run_recategorization,
+    start_recategorization,
+)
 
 
 class PadronViewTests(APITestCase):
@@ -1386,3 +1396,223 @@ class PadronViewTests(APITestCase):
         )
         self.assertEqual(status.HTTP_400_BAD_REQUEST, docente_resp.status_code)
         self.assertIn("vinculos_familiares", docente_resp.data)
+
+
+class RecategorizationServiceTests(TestCase):
+    CURRENT_YEAR = 2026
+
+    def setUp(self):
+        self.male, _ = Genero.objects.get_or_create(nombre="Masculino")
+        self.female, _ = Genero.objects.get_or_create(nombre="Femenino")
+        self.other, _ = Genero.objects.get_or_create(nombre="Otro")
+        # Replace the seeded categories with a small, known ladder
+        Categoria.objects.all().delete()
+        self.categories = {
+            name: Categoria.objects.create(nombre=name, edad_maxima=max_age, genero="M", anio_vigente=self.CURRENT_YEAR)
+            for name, max_age in [
+                ("2016", 10), ("2015", 11), ("PRE 9NA", 12), ("9NA", 13),
+                ("4TA", 19), ("3RA", 26), ("1RA", 99),
+            ]
+        }
+        self.unassigned = Categoria.objects.create(nombre="No asignado")
+        self.dni_counter = 40000000
+
+    def create_player(self, birth_year, category, secondary=None, gender=None, birth_date=True):
+        self.dni_counter += 1
+        person = Persona.objects.create(
+            nombre="Jugador",
+            apellido=str(self.dni_counter),
+            dni=str(self.dni_counter),
+            fecha_nacimiento=date(birth_year, 6, 1) if birth_date else None,
+            genero=gender or self.male,
+        )
+        member = Socio.objects.create(persona=person)
+        return Jugador.objects.create(socio=member, categoria=category, categoria_secundaria=secondary)
+
+    def classify(self, player, last_run_year=None):
+        return classify_player(player, build_category_ladders(), self.CURRENT_YEAR, last_run_year)
+
+    def test_same_year_run_keeps_player_in_matching_category(self):
+        result = self.classify(self.create_player(2015, self.categories["2015"]), last_run_year=2026)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+        self.assertEqual(self.categories["2015"], result.categoria_nueva)
+
+    def test_first_run_only_validates_current_assignment(self):
+        result = self.classify(self.create_player(2015, self.categories["2016"]))
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_MENOR, result.motivo)
+        self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+
+    def test_new_year_run_moves_player_to_next_category(self):
+        result = self.classify(self.create_player(2015, self.categories["2016"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+        self.assertEqual(self.categories["2015"], result.categoria_nueva)
+
+    def test_new_year_run_keeps_player_in_multi_year_category(self):
+        result = self.classify(self.create_player(2008, self.categories["4TA"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+        self.assertEqual(self.categories["4TA"], result.categoria_nueva)
+
+    def test_new_year_run_flags_player_already_in_expected_or_higher_category(self):
+        for category in (self.categories["2015"], self.categories["PRE 9NA"]):
+            with self.subTest(category=category.nombre):
+                result = self.classify(self.create_player(2015, category), last_run_year=2025)
+
+                self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+                self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_IGUAL_O_MAYOR, result.motivo)
+                self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+
+    def test_new_year_run_flags_player_more_than_one_category_behind(self):
+        result = self.classify(self.create_player(2014, self.categories["2016"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_MENOR, result.motivo)
+        self.assertEqual(self.categories["PRE 9NA"], result.categoria_sugerida)
+
+    def test_same_year_run_flags_player_in_higher_category(self):
+        result = self.classify(self.create_player(2015, self.categories["9NA"]), last_run_year=2026)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_MAYOR, result.motivo)
+        self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+
+    def test_secondary_category_matching_birth_year_is_suggested_as_main(self):
+        player = self.create_player(2015, self.categories["9NA"], secondary=self.categories["2015"])
+
+        result = self.classify(player, last_run_year=2026)
+
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.SECUNDARIA_CORRESPONDE, result.motivo)
+        self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+        self.assertTrue(result.quitar_secundaria_sugerido)
+
+    def test_player_with_secondary_category_requires_review(self):
+        player = self.create_player(2015, self.categories["2016"], secondary=self.categories["9NA"])
+
+        result = self.classify(player, last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, result.tipo)
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.TIENE_SECUNDARIA, result.motivo)
+        self.assertEqual(self.categories["2015"], result.categoria_sugerida)
+        self.assertFalse(result.quitar_secundaria_sugerido)
+
+    def test_secondary_category_too_young_is_suggested_for_removal(self):
+        player = self.create_player(2014, self.categories["9NA"], secondary=self.categories["2016"])
+
+        result = self.classify(player, last_run_year=2026)
+
+        self.assertEqual(RecategorizacionResultado.MotivoChoices.CATEGORIA_MAYOR, result.motivo)
+        self.assertTrue(result.quitar_secundaria_sugerido)
+        self.assertIn("2016", result.detalle)
+
+    def test_adult_player_is_never_promoted_automatically(self):
+        adult = self.classify(self.create_player(1995, self.categories["1RA"]), last_run_year=2025)
+        turning_twenty = self.classify(self.create_player(2006, self.categories["4TA"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, adult.tipo)
+        self.assertEqual(self.categories["1RA"], adult.categoria_nueva)
+        self.assertEqual(RecategorizacionResultado.TipoChoices.PENDIENTE, turning_twenty.tipo)
+        self.assertEqual(self.categories["3RA"], turning_twenty.categoria_sugerida)
+
+    def test_players_without_required_data_are_reported_as_errors(self):
+        cases = [
+            (self.create_player(2015, self.categories["2015"], birth_date=False), "sin_fecha_nacimiento"),
+            (self.create_player(2015, self.categories["2015"], gender=self.other), "sin_genero"),
+            (self.create_player(2015, self.categories["2015"], gender=self.female), "sin_categoria_disponible"),
+            (self.create_player(2015, self.unassigned), "categoria_incompatible"),
+        ]
+        for player, reason in cases:
+            with self.subTest(reason=reason):
+                result = self.classify(player, last_run_year=2026)
+
+                self.assertEqual(RecategorizacionResultado.TipoChoices.ERROR, result.tipo)
+                self.assertEqual(reason, result.motivo)
+                self.assertIsNone(result.categoria_sugerida)
+
+    def test_run_applies_successes_and_stores_every_result(self):
+        RecategorizacionEjecucion.objects.create(
+            anio=2025, ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.FINALIZADA
+        )
+        promoted = self.create_player(2015, self.categories["2016"])
+        pending = self.create_player(2015, self.categories["9NA"])
+        partial_leave = self.create_player(2014, self.categories["2015"])
+        partial_leave.deactivate()
+        complete_leave = self.create_player(2014, self.categories["2015"])
+        complete_leave.socio.deactivate()
+        execution = RecategorizacionEjecucion.objects.create(anio=self.CURRENT_YEAR, ejecutado_por="Admin")
+
+        run_recategorization(execution.pk)
+
+        execution.refresh_from_db()
+        promoted.refresh_from_db()
+        pending.refresh_from_db()
+        partial_leave.refresh_from_db()
+        self.assertEqual(self.categories["2015"], promoted.categoria)
+        self.assertEqual(self.categories["9NA"], pending.categoria)
+        self.assertEqual(self.categories["PRE 9NA"], partial_leave.categoria)
+        self.assertEqual((2, 1, 0), (execution.exitosos, execution.pendientes, execution.errores))
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.REVISION_PENDIENTE, execution.estado)
+        self.assertFalse(execution.resultados.filter(jugador=complete_leave).exists())
+        self.assertEqual(self.categories["2016"], execution.resultados.get(jugador=promoted).categoria_anterior)
+        self.assertIn("Última ejecución previa: 2025", execution.registro)
+        self.assertIn("2 exitosos | 1 pendientes | 0 errores", execution.registro)
+
+    def test_run_without_pending_reviews_is_finished(self):
+        self.create_player(2015, self.categories["2015"])
+        execution = RecategorizacionEjecucion.objects.create(anio=self.CURRENT_YEAR, ejecutado_por="Admin")
+
+        run_recategorization(execution.pk)
+
+        execution.refresh_from_db()
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.FINALIZADA, execution.estado)
+        self.assertIsNotNone(execution.fecha_fin)
+
+    def test_failed_run_is_marked_and_rolled_back(self):
+        player = self.create_player(2015, self.categories["2016"])
+        RecategorizacionEjecucion.objects.create(
+            anio=2025, ejecutado_por="Admin", estado=RecategorizacionEjecucion.EstadoChoices.FINALIZADA
+        )
+        execution = RecategorizacionEjecucion.objects.create(anio=self.CURRENT_YEAR, ejecutado_por="Admin")
+
+        with patch("padron.services.RecategorizacionResultado.objects.bulk_create", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                run_recategorization(execution.pk)
+
+        execution.refresh_from_db()
+        player.refresh_from_db()
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.FALLIDA, execution.estado)
+        self.assertIn("boom", execution.registro)
+        self.assertEqual(self.categories["2016"], player.categoria)
+
+    def test_start_enqueues_run_and_blocks_while_another_is_active(self):
+        user = get_user_model().objects.create_user(username="admin", password="Clave-segura-123")
+
+        with patch("django_q.tasks.async_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+            execution = start_recategorization(user, "Administrador")
+
+        enqueue.assert_called_once_with("padron.services.run_recategorization", execution.pk)
+        self.assertEqual(user, execution.usuario)
+        with self.assertRaises(RecategorizationInProgress):
+            start_recategorization(user, "Administrador")
+
+    def test_start_discards_stale_runs(self):
+        stale = RecategorizacionEjecucion.objects.create(
+            ejecutado_por="Admin", fecha_inicio=timezone.now() - timedelta(hours=1)
+        )
+
+        with patch("django_q.tasks.async_task"):
+            start_recategorization(None, "Administrador")
+
+        stale.refresh_from_db()
+        self.assertEqual(RecategorizacionEjecucion.EstadoChoices.FALLIDA, stale.estado)
+
+    def test_category_year_rollover_no_longer_moves_players(self):
+        Categoria.objects.update(anio_vigente=2000)
+        player = self.create_player(2010, self.categories["2016"])
+
+        pasr_de_anio_vigente_a_categoria()
+
+        player.refresh_from_db()
+        self.assertEqual(self.categories["2016"].pk, player.categoria_id)

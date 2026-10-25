@@ -523,6 +523,13 @@ class RecategorizacionEjecucion(models.Model):
     class Meta:
         db_table = "recategorizacion_ejecucion"
         ordering = ["-fecha_inicio", "-ejecucion_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["estado"],
+                condition=models.Q(estado__in=["en_curso", "revision_pendiente"]),
+                name="recategorizacion_ejecucion_activa_unica",
+            )
+        ]
 
     def __str__(self):
         return f"Recategorización {self.anio} - {self.get_estado_display()}"
@@ -543,6 +550,7 @@ class RecategorizacionResultado(models.Model):
         SIN_FECHA_NACIMIENTO = "sin_fecha_nacimiento", "Sin fecha de nacimiento"
         SIN_GENERO = "sin_genero", "Sin género compatible con las categorías"
         SIN_CATEGORIA_DISPONIBLE = "sin_categoria_disponible", "Sin categoría disponible para su edad"
+        CATEGORIA_INCOMPATIBLE = "categoria_incompatible", "Categoría principal sin asignar o de otro género"
         ERROR_INESPERADO = "error_inesperado", "Error inesperado"
 
     class DecisionChoices(models.TextChoices):

@@ -6,7 +6,6 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from .search import normalize_text, normalized_field
-from .services import recategorizar_jugadores
 from .services import pasr_de_anio_vigente_a_categoria
 
 from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
@@ -509,13 +508,6 @@ def vinculo_familiar_detail(request, pk):
             return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
     contact.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-@extend_schema(tags=["Padron / Jugador"], summary="Recategorizar jugadores")
-@api_view(["POST"])
-def recategorize_players_view(request):
-    recategorizar_jugadores()
-    return Response({"message": "Recategorización de jugadores completada."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Padron / Categoria"], summary="Actualizar año vigente de categorías")
