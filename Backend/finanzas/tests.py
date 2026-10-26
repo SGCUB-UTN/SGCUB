@@ -32,6 +32,7 @@ from .generators import GeneradorItemsCuota
 from .models import (
 	Beca,
 	Comprobante,
+	ConceptoMovimiento,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -626,6 +627,50 @@ class MediosDePagoEnPagosTests(APITestCase):
 		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"nombre": "Transferencia bancaria"}, format="json")
 
 		self.assertIn(b"Transferencia bancaria", render_receipt_pdf(Comprobante.objects.get()))
+
+
+class ConceptosMovimientoTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="caja"))
+
+	def crear(self, nombre, origen="IngresoManual"):
+		return self.client.post(reverse("concepto-movimiento-list"), {"nombre": nombre, "origen": origen}, format="json")
+
+	def test_lista_los_conceptos_iniciales_filtrados_por_origen(self):
+		response = self.client.get(reverse("concepto-movimiento-list"), {"origen": "IngresoManual"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			[concepto["nombre"] for concepto in response.data],
+			["Venta de indumentaria", "Donación", "Otro ingreso"],
+		)
+
+	def test_alta_de_concepto_nuevo(self):
+		response = self.crear("  Rifa anual  ")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["nombre"], "Rifa anual")
+		self.assertTrue(ConceptoMovimiento.objects.filter(nombre="Rifa anual", origen="IngresoManual").exists())
+
+	def test_alta_repetida_devuelve_el_concepto_existente(self):
+		existente = ConceptoMovimiento.objects.get(nombre="Donación", origen="IngresoManual")
+
+		response = self.crear("DONACIÓN")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["concepto_movimiento_id"], existente.pk)
+		self.assertEqual(ConceptoMovimiento.objects.filter(origen="IngresoManual", nombre__iexact="donación").count(), 1)
+
+	def test_el_mismo_nombre_puede_existir_en_otro_origen(self):
+		response = self.crear("Donación", origen="Egreso")
+
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def test_rechaza_nota_de_credito_y_nombre_vacio(self):
+		self.assertEqual(self.crear("Ajuste", origen="NotaCredito").status_code, 400)
+		self.assertEqual(self.crear("   ").status_code, 400)
+
+
 class MovimientosManualesTests(APITestCase):
 	def setUp(self):
 		self.usuario = get_user_model().objects.create_user(username="caja")

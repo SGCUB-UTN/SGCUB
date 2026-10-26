@@ -9,9 +9,11 @@ from rest_framework import serializers
 from .generators import PERIOD_FORMAT
 from .models import (
     CONFIGURATION_FIELDS,
+    MANUAL_MOVEMENT_ORIGINS,
     Beca,
     Comprobante,
     ConceptoItemChoices,
+    ConceptoMovimiento,
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
@@ -515,6 +517,19 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
 
     def get_saldo_reversible(self, obj):
         return remaining_reversible_amount(obj)
+
+
+class ConceptoMovimientoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConceptoMovimiento
+        fields = ["concepto_movimiento_id", "nombre", "origen"]
+        read_only_fields = ["concepto_movimiento_id"]
+        validators = []
+
+    def validate_origen(self, value):
+        if value not in MANUAL_MOVEMENT_ORIGINS:
+            raise serializers.ValidationError("Solo los ingresos manuales y los egresos tienen conceptos.")
+        return value
 
 
 class MovimientoManualSerializer(serializers.Serializer):

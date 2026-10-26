@@ -17,6 +17,7 @@ from .models import (
 	Beca,
 	Comprobante,
 	ConceptoItemChoices,
+	ConceptoMovimiento,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -46,6 +47,7 @@ from .serializers import (
 	BeneficioSerializer,
 	AnulacionSerializer,
 	CUOTA_ITEM_PREFETCHES,
+	ConceptoMovimientoSerializer,
 	ConfiguracionFinancieraSerializer,
 	MedioPagoAceptadoSerializer,
 	VersionConfiguracionFinancieraSerializer,
@@ -498,6 +500,33 @@ def movimiento_cuenta_manual(request):
 	except PagoInvalidoError as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(MovimientoCuentaSerializer(movement).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], request=ConceptoMovimientoSerializer, responses=ConceptoMovimientoSerializer)
+@api_view(["GET", "POST"])
+def concepto_movimiento_list_create(request):
+	if request.method == "GET":
+		concepts = ConceptoMovimiento.objects.all()
+		origin = request.query_params.get("origen")
+		if origin:
+			concepts = concepts.filter(origen=origin)
+		return Response(ConceptoMovimientoSerializer(concepts, many=True).data)
+
+	serializer = ConceptoMovimientoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	data = serializer.validated_data
+	concept, created = ConceptoMovimiento.objects.get_or_create(
+		nombre__iexact=data["nombre"],
+		origen=data["origen"],
+		defaults={"nombre": data["nombre"]},
+	)
+	if created:
+		record_change(Seccion.FINANZAS, f"Concepto de movimiento {concept.nombre}", "", "Alta", request_user(request))
+	return Response(
+		ConceptoMovimientoSerializer(concept).data,
+		status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+	)
 
 
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)
