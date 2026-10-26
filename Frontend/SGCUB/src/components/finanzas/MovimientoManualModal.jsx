@@ -4,10 +4,11 @@ import { useMediaQuery } from '@mantine/hooks'
 import { formatAmount, formatDate, formatDni, formatNumber, getErrorMessage } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { claseInput } from '../socios/socioForm'
-import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
+import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import SocioPicker from './SocioPicker'
 import DownloadComprobanteButtom from './DownloadComprobanteButtom'
 import { crearMovimientoManual } from '../../api/movimientos'
+import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import { FormSection, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 
 const OPERATIONS = [
@@ -17,11 +18,6 @@ const OPERATIONS = [
     description: 'Venta de indumentaria, donación u otro ingreso ajeno a cuotas.',
     icon: 'add_circle',
     type: 'Abono',
-    concepts: [
-      'Venta de indumentaria',
-      'Donación',
-      'Otro ingreso',
-    ],
   },
   {
     value: 'Egreso',
@@ -29,13 +25,6 @@ const OPERATIONS = [
     description: 'Devolución por transferencia duplicada, error en el monto o reintegro.',
     icon: 'remove_circle',
     type: 'Cargo',
-    concepts: [
-      'Devolución por transferencia duplicada',
-      'Devolución por error en monto transferido',
-      'Reintegro de gastos',
-      'Compra de insumos / Materiales',
-      'Otro egreso',
-    ],
   },
 ]
 
@@ -45,7 +34,11 @@ const PAYMENT_METHODS = [
   { value: 'BilleteraVirtual', label: 'Billetera virtual' },
 ]
 
-const methodLabel = (value) => PAYMENT_METHODS.find((option) => option.value === value)?.label ?? value
+const OTHER_CONCEPTS = ['Otro ingreso', 'Otro egreso']
+
+const isOther = (name) => OTHER_CONCEPTS.includes(name)
+
+const methodLabel =(value) => PAYMENT_METHODS.find((option) => option.value === value)?.label ?? value
 
 const roundCents = (value) => Math.round(value * 100) / 100
 
@@ -138,10 +131,8 @@ function MovimientoManualForm({
   onSuccess,
 }) {
   const [operationValue, setOperationValue] = useState(initialOperation)
-  const [concept, setConcept] = useState(() => {
-    const op = OPERATIONS.find((o) => o.value === initialOperation) || OPERATIONS[0]
-    return op.concepts[0]
-  })
+  const [selectedConcept, setConcept] = useState('')
+  const { concepts, createConcept } = useConceptosMovimiento()
   const [paymentMethod, setPaymentMethod] = useState('')
   const [amount, setAmount] = useState('')
   const [detail, setDetail] = useState('')
@@ -152,20 +143,24 @@ function MovimientoManualForm({
 
   const currentOp = OPERATIONS.find((op) => op.value === operationValue) || OPERATIONS[0]
   const isIngreso = operationValue === 'IngresoManual'
-  const isOtherConcept = concept === 'Otro ingreso' || concept === 'Otro egreso'
+  const conceptOptions = concepts
+    .filter((c) => c.origen === currentOp.value)
+    .sort((a, b) => isOther(a.nombre) - isOther(b.nombre))
+  const concept = selectedConcept || conceptOptions[0]?.nombre || ''
+  const isOtherConcept = isOther(concept)
   const enteredAmount = roundCents(Number(amount || 0))
 
   const handleOperationChange = (newOpValue) => {
     setOperationValue(newOpValue)
-    const op = OPERATIONS.find((o) => o.value === newOpValue) || OPERATIONS[0]
-    setConcept(op.concepts[0])
+    setConcept('')
     setSubmitError('')
   }
 
+  const conceptError = showErrors && !concept
   const methodError = showErrors && !paymentMethod
   const amountError = showErrors && !(enteredAmount > 0)
   const detailError = showErrors && isOtherConcept && !detail.trim()
-  const isValid = Boolean(paymentMethod) && enteredAmount > 0 && (!isOtherConcept || Boolean(detail.trim()))
+  const isValid = Boolean(concept) && Boolean(paymentMethod) && enteredAmount > 0 && (!isOtherConcept || Boolean(detail.trim()))
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -231,17 +226,20 @@ function MovimientoManualForm({
           </FormSection>
 
           <FormSection icon="receipt_long" title="Concepto" disabled={!socio}>
-            <Campo id="concepto-manual" label="Concepto del movimiento" requerido>
-              <SelectConFlecha
-                id="concepto-manual"
-                value={concept}
-                onChange={(e) => setConcept(e.target.value)}
-              >
-                {currentOp.concepts.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </SelectConFlecha>
-            </Campo>
+            <SelectConAlta
+              key={currentOp.value}
+              id="concepto-manual"
+              label="Concepto del movimiento"
+              labelNuevo="Concepto nuevo"
+              requerido
+              error={conceptError ? 'Seleccioná un concepto.' : undefined}
+              bind={{ id: 'concepto-manual', value: concept, onChange: (event) => setConcept(event.target.value) }}
+              opciones={conceptOptions.map((c) => ({ value: c.nombre, label: c.nombre }))}
+              opcionVacia={<option value="" disabled>Seleccioná un concepto...</option>}
+              textoAgregar="+ Agregar concepto nuevo..."
+              placeholderNuevo={isIngreso ? 'Ej: Rifa anual' : 'Ej: Pago de arbitraje'}
+              onCrear={async (nombre) => (await createConcept(nombre, currentOp.value)).nombre}
+            />
           </FormSection>
 
           <FormSection
