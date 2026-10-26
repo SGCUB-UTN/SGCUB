@@ -4,6 +4,7 @@ import {
   getConfiguracionGeneral,
   getVersionesConfiguracionFinanciera,
   guardarConfiguracion,
+  revertirVersionConfiguracionFinanciera,
 } from '../api/configuracion'
 import { createTipoDocumento, deleteTipoDocumento, getTiposDocumento, updateTipoDocumento } from '../api/documentacion'
 import { deleteMedioPago, getMediosPago, patchMedioPago, postMedioPago } from '../api/mediosPago'
@@ -137,6 +138,17 @@ function useConfiguracion() {
     return result
   }, [update])
 
+  const revertVersion = useCallback(async (versionId) => {
+    const reverted = await revertirVersionConfiguracionFinanciera(versionId)
+    const [financiera, versiones] = await Promise.all([
+      getConfiguracionFinanciera(),
+      getVersionesConfiguracionFinanciera(),
+    ])
+    setData((current) => ({ ...current, financiera, versiones }))
+    restart(data.general, financiera)
+    return reverted
+  }, [data.general, restart])
+
   return {
     ...data,
     isLoading,
@@ -152,6 +164,7 @@ function useConfiguracion() {
     discard,
     validate,
     save,
+    revertVersion,
     createMedio: withMedios(postMedioPago),
     updateMedio: withMedios(patchMedioPago),
     deleteMedio: withMedios(deleteMedioPago),
