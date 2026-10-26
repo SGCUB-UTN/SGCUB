@@ -70,7 +70,6 @@ from .services import (
 	CuotaDuplicadaError,
 	PagoInvalidoError,
 	SocioInactivoError,
-	amend_paid_receipt,
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
@@ -235,16 +234,13 @@ def corregir_pago(request, pk):
 
 	data = serializer.validated_data
 	try:
-		pago_original, comprobante_original, pago, comprobante, excedente_mov, notas_credito_movs = amend_paid_receipt(
-			payment_id=pk,
-			cuota_ids=data["cuota_ids"],
-			payment_methods=data["medios"],
-			total=data["monto_total"],
-			reason=data["motivo"],
-			user=request.user if request.user.is_authenticated else None,
-			update_payment=data.get("actualizar_medios", True),
-			surplus_data=data.get("excedente"),
-			credit_notes_data=data.get("notas_credito"),
+		pago_original, comprobante_original, pago, comprobante = correct_payment(
+			pk,
+			data["cuota_ids"],
+			data["medios"],
+			data["monto_total"],
+			data["motivo"],
+			request.user if request.user.is_authenticated else None,
 		)
 	except Pago.DoesNotExist:
 		return Response({"detail": "El pago no existe."}, status=status.HTTP_404_NOT_FOUND)
@@ -253,11 +249,9 @@ def corregir_pago(request, pk):
 
 	return Response({
 		"pago_original": PagoSerializer(pago_original).data,
-		"pago": PagoSerializer(pago).data if pago is not None else None,
+		"pago": PagoSerializer(pago).data,
 		"comprobante_original": ComprobanteSerializer(comprobante_original).data,
-		"comprobante": ComprobanteSerializer(comprobante).data if comprobante is not None else None,
-		"excedente": MovimientoCuentaSerializer(excedente_mov).data if excedente_mov is not None else None,
-		"notas_credito": MovimientoCuentaSerializer(notas_credito_movs, many=True).data,
+		"comprobante": ComprobanteSerializer(comprobante).data,
 		"motivo": data["motivo"],
 		"usuario": request.user.get_username() if request.user.is_authenticated else None,
 		"fecha": timezone.localtime().isoformat(),

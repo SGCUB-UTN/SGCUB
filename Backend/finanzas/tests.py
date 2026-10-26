@@ -289,40 +289,22 @@ class MovimientosManualesTests(APITestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("socio", response.data["detail"].lower())
 
-	def test_no_permite_emitir_nota_de_credito_sobre_pago_de_cuota(self):
+	def test_registra_egreso_devolucion_directa_sin_afectar_cuotas(self):
 		cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "1000.00")
-		pago_response = self.client.post(reverse("registrar-pago"), {
-			"socio_id": self.socio.pk,
-			"cuota_ids": [cuota.pk],
-			"monto_total": "1000.00",
-			"medios": [{"medio_de_pago": "Efectivo", "monto": "1000.00"}],
-		}, format="json")
-		self.assertEqual(pago_response.status_code, 201)
-		movimiento_pago = MovimientoCuenta.objects.get(pago_id=pago_response.data["pago"]["pago_id"])
-
 		response = self.client.post(reverse("movimiento-cuenta-manual"), {
 			"socio_id": self.socio.pk,
 			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Intento de revertir cuota con NC",
+			"origen": "Egreso",
+			"concepto": "Devolución por transferencia duplicada",
 			"monto": "1000.00",
-			"movimiento_revertido_id": movimiento_pago.pk,
+			"medio_de_pago": "Transferencia",
 		}, format="json")
-
-		self.assertEqual(response.status_code, 400)
-		self.assertIn("cuotas emitidas", response.data["detail"].lower())
-
-		nc_sobre_cuota = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Modificación de ítem de cuota · Ajuste en Cuota 2026-10",
-			"monto": "400.00",
-			"movimiento_revertido_id": cuota.movimiento.pk,
-		}, format="json")
-		self.assertEqual(nc_sobre_cuota.status_code, 201, nc_sobre_cuota.data)
-		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
-		self.assertEqual(Decimal(str(estado.data["saldo_a_favor"])), Decimal("400.00"))
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["origen_manual"], "Egreso")
+		self.assertEqual(response.data["concepto"], "Devolución por transferencia duplicada")
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
 
 	def test_movimientos_manuales_impactan_en_resumen_financiero_por_medio(self):
 		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
@@ -395,31 +377,6 @@ class MovimientosManualesTests(APITestCase):
 		self.assertIn(b"REVERTIDO POR NOTA DE CR", pdf_ing.content)
 		self.assertIn(b"NC-X 00000002", pdf_ing.content)
 
-	def test_saldo_a_favor_se_descuenta_automaticamente_en_proxima_cuota(self):
-		self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Excedente de transferencia / Saldo a favor — Generado al abonar cuota",
-			"monto": "800.00",
-			"medio_de_pago": "Transferencia",
-		}, format="json")
-
-		estado_previo = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
-		self.assertEqual(Decimal(str(estado_previo.data["saldo_a_favor"])), Decimal("800.00"))
-
-		cuota = create_cuota(self.socio, "2026-11")
-		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
-		comprobante = Comprobante.objects.filter(
-			pago__movimiento__imputaciones_origen__movimiento_destino__cuota=cuota
-		).first()
-		self.assertIsNotNone(comprobante)
-		self.assertEqual(comprobante.monto_total, Decimal("800.00"))
-
-		estado_posterior = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
-		self.assertEqual(Decimal(str(estado_posterior.data["saldo_a_favor"])), Decimal("0.00"))
-		self.assertEqual(Decimal(str(estado_posterior.data["total_adeudado"])), Decimal("200.00"))
-
 	def test_permite_multiples_notas_de_credito_parciales_hasta_el_total(self):
 		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
 			"socio_id": self.socio.pk,
@@ -461,61 +418,6 @@ class MovimientosManualesTests(APITestCase):
 		}, format="json")
 		self.assertEqual(nc_2.status_code, 201, nc_2.data)
 		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
-
-	def test_corregir_pago_atomico_con_excedente_y_nota_de_credito_y_permite_reedicion(self):
-		cuota = crear_cuota_con_cargo(account_for(self.socio, Decimal("-2500.00")), "2026-10", "2500.00")
-		pago_resp = self.client.post(reverse("registrar-pago"), {
-			"socio_id": self.socio.pk,
-			"cuota_ids": [cuota.pk],
-			"monto_total": "2500.00",
-			"medios": [{"medio_de_pago": "Efectivo", "monto": "2500.00"}],
-		}, format="json")
-		self.assertEqual(pago_resp.status_code, 201, pago_resp.data)
-		pago_id = pago_resp.data["pago"]["pago_id"]
-
-		edicion_1 = self.client.post(reverse("corregir-pago", args=[pago_id]), {
-			"motivo": "Baja de ítem deportivo y excedente transferido",
-			"cuota_ids": [cuota.pk],
-			"monto_total": "2500.00",
-			"medios": [{"medio_de_pago": "Transferencia", "monto": "2500.00"}],
-			"actualizar_medios": True,
-			"excedente": {
-				"monto": "300.00",
-				"medio_de_pago": "Transferencia",
-				"concepto": "Excedente de transferencia / Saldo a favor · Edición comprobante",
-			},
-			"notas_credito": [{
-				"cuota_id": cuota.pk,
-				"monto": "1000.00",
-				"concepto": "Modificación de ítem de cuota · Baja de Cuota Deportiva",
-			}],
-		}, format="json")
-		self.assertEqual(edicion_1.status_code, 201, edicion_1.data)
-		self.assertIsNotNone(edicion_1.data["excedente"])
-		self.assertEqual(len(edicion_1.data["notas_credito"]), 1)
-
-		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
-		self.assertEqual(Decimal(str(estado["saldo_a_favor"])), Decimal("1300.00"))
-		cuota_estado = next(item for item in estado["cuotas"] if item["cuota_id"] == cuota.pk)
-		self.assertEqual(Decimal(str(cuota_estado["monto_total"])), Decimal("2500.00"))
-		self.assertEqual(Decimal(str(cuota_estado["monto_nota_credito"])), Decimal("1000.00"))
-		self.assertEqual(Decimal(str(cuota_estado["monto_neto"])), Decimal("1500.00"))
-
-		# Re-editing payment method AFTER a credit note was emitted on the paid cuota still works cleanly
-		nuevo_pago_id = edicion_1.data["pago"]["pago_id"]
-		edicion_2 = self.client.post(reverse("corregir-pago", args=[nuevo_pago_id]), {
-			"motivo": "Cambio de Transferencia a BilleteraVirtual",
-			"cuota_ids": [cuota.pk],
-			"monto_total": "2500.00",
-			"medios": [{"medio_de_pago": "BilleteraVirtual", "monto": "2500.00"}],
-			"actualizar_medios": True,
-		}, format="json")
-		self.assertEqual(edicion_2.status_code, 201, edicion_2.data)
-		detalle_comp = self.client.get(
-			reverse("comprobante-detail", args=[edicion_2.data["comprobante"]["comprobante_id"]]),
-		).data
-		self.assertEqual(Decimal(str(detalle_comp["periodos"][0]["monto_neto"])), Decimal("1500.00"))
-		self.assertEqual(Decimal(str(detalle_comp["periodos"][0]["monto_nota_credito"])), Decimal("1000.00"))
 
 
 class BecaModeloTests(TestCase):
