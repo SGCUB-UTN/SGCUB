@@ -20,6 +20,7 @@ from .models import (
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
+	EjecucionTareaCuota,
 	Imputacion,
 	ItemPago,
 	ItemCuota,
@@ -58,6 +59,8 @@ from .serializers import (
 	CuotaCreateSerializer,
 	CuotaSerializer,
 	CuotaUpdateSerializer,
+	EjecucionTareaCuotaDetalleSerializer,
+	EjecucionTareaCuotaSerializer,
 	RegistroPagoSerializer,
 	ImputacionSerializer,
 	ItemPagoSerializer,
@@ -93,6 +96,7 @@ from .services import (
 	update_discount,
 	update_scholarship,
 )
+from .period_summary import period_summary, requested_period, unpaid_cuotas
 from .tasks import run_cuota_generation, run_manual_surcharges
 
 
@@ -883,3 +887,45 @@ def resumen_financiero_pdf(request):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+def _period_or_error(request):
+	try:
+		return requested_period(request.query_params.get("periodo", "").strip()), None
+	except ValueError as error:
+		return None, Response({"periodo": [str(error)]}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(tags=["Finanzas/Cuota"], summary="Fases e indicadores de las cuotas de un período")
+@api_view(["GET"])
+def cuota_periodo_resumen(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	return Response(period_summary(period))
+
+
+@extend_schema(tags=["Finanzas/Cuota"], summary="Cuotas impagas de un período")
+@api_view(["GET"])
+def cuota_periodo_impagas(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	return Response({"period": period, "results": unpaid_cuotas(period)})
+
+
+@extend_schema(tags=["Finanzas/Cuota"], responses=EjecucionTareaCuotaSerializer(many=True), summary="Ejecuciones de las tareas de cuotas de un período")
+@api_view(["GET"])
+def cuota_ejecucion_list(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	runs = EjecucionTareaCuota.objects.filter(periodo=period).select_related("usuario")
+	return Response(EjecucionTareaCuotaSerializer(runs, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/Cuota"], responses=EjecucionTareaCuotaDetalleSerializer, summary="Registro de una ejecución de tarea de cuotas")
+@api_view(["GET"])
+def cuota_ejecucion_detail(request, pk):
+	run = get_object_or_404(EjecucionTareaCuota.objects.select_related("usuario"), pk=pk)
+	return Response(EjecucionTareaCuotaDetalleSerializer(run).data)

@@ -54,6 +54,7 @@ from .models import (
 	TipoTareaCuotaChoices,
 )
 from .pdf_utils import format_amount
+from .period_summary import period_summary
 from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
@@ -4016,3 +4017,92 @@ class EjecucionTareasCuotaTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200, response.data)
 		self.assertEqual(EjecucionTareaCuota.objects.get().origen, OrigenEjecucionChoices.MANUAL)
+
+
+class PeriodoCuotasTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.socio = crear_socio("71000001")
+		self.jugador = crear_socio("71000002", con_jugador=True)
+		self.baja_parcial = crear_socio("71000003", con_jugador=True, jugador_inactivo=True)
+		self.cuotas = {
+			socio.pk: create_cuota(socio, "2026-10", today=date(2026, 10, 1))
+			for socio in (self.socio, self.jugador, self.baja_parcial)
+		}
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.cuotas[self.socio.pk].pk],
+			"monto_total": "1000.00",
+			"medios": [{"medio_de_pago": "Efectivo", "monto": "1000.00"}],
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def get(self, nombre, **params):
+		return self.client.get(reverse(nombre), {"periodo": "2026-10", **params})
+
+	def test_indicadores_por_tipo_de_cuota(self):
+		response = self.get("cuota-periodo-resumen")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		data = response.data
+		self.assertEqual(data["period"], "2026-10")
+		self.assertIn("2026-10", data["periods"])
+		self.assertEqual(data["members"]["generated"], 1)
+		self.assertEqual(data["members"]["collected"], Decimal("1000.00"))
+		self.assertEqual(data["members"]["unpaid"], 0)
+		self.assertEqual(data["players"]["generated"], 2)
+		self.assertEqual(data["players"]["billed"], Decimal("3500.00"))
+		self.assertEqual(data["players"]["unpaid_amount"], Decimal("3500.00"))
+		self.assertEqual(data["players"]["partial_leave"], {"generated": 1, "unpaid": 1})
+		self.assertEqual(data["totals"]["billed"], Decimal("4500.00"))
+		self.assertEqual(data["totals"]["collection_rate"], Decimal("22.2"))
+
+	def test_listado_de_impagas_del_periodo(self):
+		response = self.get("cuota-periodo-impagas")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		filas = {fila["socio_id"]: fila for fila in response.data["results"]}
+		self.assertEqual(set(filas), {self.jugador.pk, self.baja_parcial.pk})
+		self.assertEqual(filas[self.jugador.pk]["type"], "Jugador")
+		self.assertEqual(filas[self.baja_parcial.pk]["type"], "BajaParcial")
+		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("2500.00"))
+		self.assertEqual(filas[self.jugador.pk]["surcharges"], Decimal("0.00"))
+		self.assertEqual(filas[self.jugador.pk]["pending"], Decimal("2500.00"))
+
+	def test_fases_segun_la_fecha_y_las_ejecuciones(self):
+		fases = {fase["key"]: fase["status"] for fase in period_summary("2026-10", today=date(2026, 10, 5))["phases"]}
+		self.assertEqual(fases, {"generation": "done", "first_due": "pending", "second_due": "pending"})
+
+		fases = {fase["key"]: fase["status"] for fase in period_summary("2026-10", today=date(2026, 10, 15))["phases"]}
+		self.assertEqual(fases["first_due"], "missed")
+
+		apply_scheduled_surcharges(date(2026, 10, 15))
+
+		fases = {fase["key"]: fase for fase in period_summary("2026-10", today=date(2026, 10, 15))["phases"]}
+		self.assertEqual(fases["first_due"]["status"], "done")
+		self.assertEqual(fases["first_due"]["run_date"], date(2026, 10, 11))
+		self.assertIsNotNone(fases["first_due"]["executed_at"])
+		self.assertEqual(fases["second_due"]["status"], "pending")
+
+	def test_ejecuciones_del_periodo_y_su_registro(self):
+		apply_scheduled_surcharges(date(2026, 10, 15))
+
+		response = self.get("cuota-ejecucion-list")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		[ejecucion] = response.data
+		self.assertEqual(ejecucion["tipo"], "Recargo1")
+		self.assertIn("existen 2 cuotas impagas", ejecucion["resumen"])
+		self.assertNotIn("registro", ejecucion)
+
+		detalle = self.client.get(reverse("cuota-ejecucion-detail", args=[ejecucion["ejecucion_id"]]))
+
+		self.assertEqual(detalle.status_code, 200)
+		self.assertIn("Verificación del período 2026-10", detalle.data["registro"])
+		self.assertEqual(detalle.data["metricas"]["cuotas_impagas"], 2)
+
+	def test_periodo_invalido(self):
+		response = self.get("cuota-periodo-resumen", periodo="octubre")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("periodo", response.data)

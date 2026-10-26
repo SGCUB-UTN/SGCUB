@@ -15,6 +15,7 @@ from .models import (
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
+    EjecucionTareaCuota,
     ExclusionBeca,
     Imputacion,
     ItemPago,
@@ -39,6 +40,7 @@ from .services import (
     remaining_reversible_amount,
     reversed_amount_for,
     surcharge_reason,
+    user_name,
 )
 
 CUOTA_ITEM_PREFETCHES = (
@@ -679,3 +681,35 @@ class BecaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Beca
         fields = "__all__"
+
+
+class EjecucionTareaCuotaSerializer(serializers.ModelSerializer):
+    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+    origen_display = serializers.CharField(source="get_origen_display", read_only=True)
+    usuario = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EjecucionTareaCuota
+        fields = [
+            "ejecucion_id",
+            "tipo",
+            "tipo_display",
+            "periodo",
+            "fecha_inicio",
+            "fecha_fin",
+            "origen",
+            "origen_display",
+            "usuario",
+            "exitosa",
+            "resumen",
+        ]
+        read_only_fields = fields
+
+    def get_usuario(self, obj):
+        return user_name(obj.usuario) if obj.usuario_id else None
+
+
+class EjecucionTareaCuotaDetalleSerializer(EjecucionTareaCuotaSerializer):
+    class Meta(EjecucionTareaCuotaSerializer.Meta):
+        fields = [*EjecucionTareaCuotaSerializer.Meta.fields, "metricas", "registro"]
+        read_only_fields = fields
