@@ -7,6 +7,7 @@ import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatDate, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
+import { currentPeriod } from '../../shared/periodFormat'
 import StatCard from '../../shared/StatCard'
 import { EmptyState, SecondaryButton, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
@@ -60,11 +61,15 @@ export function FinancialStatement({ socio, finances }) {
     })
   }
 
-  const summary = useMemo(() => ({
-    pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
-    debt: Number(account?.total_adeudado ?? 0),
-    activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
-  }), [account, cuotas, becas])
+  const summary = useMemo(() => {
+    const period = currentPeriod()
+    const dueUnpaidCuotas = cuotas.filter((cuota) => String(cuota.periodo) <= period && !isPaid(cuota))
+    return {
+      pendingCount: dueUnpaidCuotas.length,
+      debt: dueUnpaidCuotas.reduce((sum, cuota) => sum + Number(cuota.saldo_pendiente ?? 0), 0),
+      activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
+    }
+  }, [cuotas, becas])
 
   if (loading) {
     return <div className="py-16 flex flex-col items-center gap-3 text-on-surface-variant"><span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span><p>Cargando estado de cuenta...</p></div>
