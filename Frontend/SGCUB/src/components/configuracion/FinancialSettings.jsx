@@ -431,7 +431,7 @@ function MovementConceptsSection() {
               key={tab.value}
               type="button"
               onClick={() => { setSelectedOrigin(tab.value); setError('') }}
-              className={`px-3 py-1 text-xs font-semibold rounded-full border transition-colors cursor-pointer ${
+              className={`px-3 py-1 text-xs font-semibold rounded-sm border transition-colors cursor-pointer ${
                 selectedOrigin === tab.value
                   ? 'bg-primary text-on-primary border-primary'
                   : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant/50 hover:bg-surface-container-low'

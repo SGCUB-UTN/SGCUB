@@ -48,8 +48,35 @@ export default function Sidebar({ collapsed, onToggle }) {
   const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/finanzas/estado-cuenta', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
+  const cometActive = pathname === '/comet' || pathname.startsWith('/comet/');
   const adminActive = ['/usuarios', '/automatizaciones', '/configuracion']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
+
+  const [openSections, setOpenSections] = useState({
+    personas: personasActive,
+    finanzas: finanzasActive,
+    comunicaciones: comunicacionesActive,
+    comet: cometActive,
+    admin: adminActive,
+  });
+
+  useEffect(() => {
+    setOpenSections((current) => ({
+      ...current,
+      ...(personasActive && { personas: true }),
+      ...(finanzasActive && { finanzas: true }),
+      ...(comunicacionesActive && { comunicaciones: true }),
+      ...(cometActive && { comet: true }),
+      ...(adminActive && { admin: true }),
+    }));
+  }, [personasActive, finanzasActive, comunicacionesActive, cometActive, adminActive]);
+
+  const toggleSection = (sectionKey) => {
+    setOpenSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  };
 
   return (
     <aside className={`app-sidebar ${claseEstado}`}>
@@ -73,7 +100,14 @@ export default function Sidebar({ collapsed, onToggle }) {
             </NavLink>
             
             {/* Sección Personas */}
-            <details open className="app-sidebar-group flex flex-col gap-0.5">
+            <details
+              open={openSections.personas}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.personas === isOpen ? prev : { ...prev, personas: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${personasActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">groups</span>
@@ -104,7 +138,14 @@ export default function Sidebar({ collapsed, onToggle }) {
             </details>
 
             {/* Sección Finanzas */}
-            <details open className="app-sidebar-group flex flex-col gap-0.5">
+            <details
+              open={openSections.finanzas}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.finanzas === isOpen ? prev : { ...prev, finanzas: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
@@ -171,7 +212,14 @@ export default function Sidebar({ collapsed, onToggle }) {
                 </div>
             </NavLink>
 
-            <details open className="app-sidebar-group flex flex-col gap-0.5">
+            <details
+              open={openSections.comunicaciones}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.comunicaciones === isOpen ? prev : { ...prev, comunicaciones: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${comunicacionesActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">campaign</span>
@@ -195,7 +243,14 @@ export default function Sidebar({ collapsed, onToggle }) {
               </div>
             </details>
             {/* Sección COMET */}
-            <details open className="app-sidebar-group flex flex-col gap-0.5">
+            <details
+              open={openSections.comet}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.comet === isOpen ? prev : { ...prev, comet: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${pathname === '/comet' || pathname.startsWith('/comet/') ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
@@ -255,7 +310,14 @@ export default function Sidebar({ collapsed, onToggle }) {
               </div>
             </details>
             {/* Sección Administración */}
-            <details open className="app-sidebar-group flex flex-col gap-0.5">
+            <details
+              open={openSections.admin}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.admin === isOpen ? prev : { ...prev, admin: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
                   <span className="material-symbols-outlined text-[20px]">manage_accounts</span>
