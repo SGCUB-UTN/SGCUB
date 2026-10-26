@@ -277,6 +277,7 @@ class ConfiguracionFinancieraTests(APITestCase):
 			({"dia_vencimiento_1": 20, "dia_vencimiento_2": 10}, "dia_vencimiento_2"),
 			({"dia_vencimiento_1": 0}, "dia_vencimiento_1"),
 			({"dia_vencimiento_2": 32}, "dia_vencimiento_2"),
+			({"dia_vencimiento_1": 29, "dia_vencimiento_2": 29}, "dia_vencimiento_1"),
 			({"monto_cuota_social": "0.00"}, "monto_cuota_social"),
 			({"valor_recargo_1": "-1.00"}, "valor_recargo_1"),
 			({"tipo_recargo_2": "Porcentaje", "valor_recargo_2": "120.00"}, "valor_recargo_2"),
