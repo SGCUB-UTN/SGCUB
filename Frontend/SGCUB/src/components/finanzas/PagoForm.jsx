@@ -11,16 +11,9 @@ import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
-
-const PAYMENT_METHODS = [
-  { value: 'Efectivo', label: 'Efectivo', icon: 'payments' },
-  { value: 'Transferencia', label: 'Transferencia', icon: 'account_balance' },
-  { value: 'BilleteraVirtual', label: 'Billetera virtual', icon: 'wallet' },
-]
+import useMediosPago from '../../hooks/useMediosPago'
 
 const COLUMN_COUNT = 3
-
-const methodLabel = (value) => PAYMENT_METHODS.find((option) => option.value === value)?.label ?? value
 
 const roundCents = (value) => Math.round(value * 100) / 100
 
@@ -237,7 +230,7 @@ function CuotaLine({ line, expandedIds, onToggleExpand, onRemoveItem, onAssignBe
 
 const ROW_ICON_BUTTON_CLASS = 'w-11 h-11 shrink-0 rounded-lg flex items-center justify-center transition-colors cursor-pointer'
 
-function PaymentRow({ row, index, takenMethods, canRemove, showActionSlot, showErrors, onChange, onRemove }) {
+function PaymentRow({ row, index, paymentMethods, takenMethods, canRemove, showActionSlot, showErrors, onChange, onRemove }) {
   const methodError = showErrors && !row.medio
   const amountError = showErrors && !(Number(row.monto) > 0)
 
@@ -251,7 +244,7 @@ function PaymentRow({ row, index, takenMethods, canRemove, showActionSlot, showE
           conError={methodError}
         >
           <option value="">Seleccioná un medio</option>
-          {PAYMENT_METHODS.map((method) => (
+          {paymentMethods.map((method) => (
             <option key={method.value} value={method.value} disabled={takenMethods.includes(method.value)}>
               {method.label}
             </option>
@@ -326,6 +319,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const [receipt, setReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const { paymentMethods, methodLabel } = useMediosPago()
 
   const enteredTotal = roundCents(paymentRows.reduce((total, row) => total + Number(row.monto || 0), 0))
   const lines = allocate(pendingCuotas, enteredTotal)
@@ -355,7 +349,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
 
   const addRow = () => setPaymentRows((rows) => [...rows, emptyPaymentRow(amountInput(debtTotal - enteredTotal))])
 
-  const canAddRow = paymentRows.length < PAYMENT_METHODS.length
+  const canAddRow = paymentRows.length < paymentMethods.length
   const showActionSlot = canAddRow || paymentRows.length > 1
 
   const exceedsDebt = enteredTotal > pendingTotal
@@ -469,6 +463,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
                   key={index}
                   row={row}
                   index={index}
+                  paymentMethods={paymentMethods}
                   takenMethods={paymentRows.filter((_, position) => position !== index).map((other) => other.medio).filter(Boolean)}
                   canRemove={paymentRows.length > 1}
                   showActionSlot={showActionSlot}

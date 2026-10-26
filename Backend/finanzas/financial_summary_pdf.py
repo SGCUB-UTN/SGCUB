@@ -1,5 +1,6 @@
 from decimal import Decimal
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -7,7 +8,9 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, TableStyle
 
-from .pdf_utils import CLUB_NAME, format_amount, table
+from configuracion.services import club_name
+
+from .pdf_utils import format_amount, table
 
 PAGE_SIZE = landscape(A4)
 MARGIN = 15 * mm
@@ -78,7 +81,7 @@ def render_financial_summary_pdf(report):
     debtors = report["deudores"]
 
     story = [
-        Paragraph(CLUB_NAME, subtitle_style),
+        Paragraph(escape(club_name()), subtitle_style),
         Paragraph("Informe Contable Financiero", title_style),
         Paragraph(
             f"Período: {report['periodo_label']} · Generado el {report['fecha']:%d/%m/%Y %H:%M}",
@@ -133,7 +136,7 @@ def render_financial_summary_pdf(report):
         topMargin=MARGIN,
         bottomMargin=MARGIN,
         title=f"Informe Financiero {report['periodo_label']}",
-        author=CLUB_NAME,
+        author=club_name(),
         pageCompression=0,
     ).build(story)
     return buffer.getvalue()

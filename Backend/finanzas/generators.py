@@ -33,7 +33,7 @@ class GeneradorItemsCuota:
     def __init__(self, socio, application_date, configuration=None):
         self.socio = socio
         self.application_date = application_date
-        self.configuration = configuration or ConfiguracionFinanciera.load()
+        self.configuration = configuration or ConfiguracionFinanciera.load(application_date)
 
     def build_items(self):
         if not self._is_member_active():

@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
+from configuracion.services import Seccion, record_catalog_update, record_change
 from padron.models import Socio
 
 from .models import (
@@ -27,6 +28,7 @@ from .models import (
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
 	MedioDePagoChoices,
+	MedioPago,
 	TipoMovimientoChoices,
 )
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
@@ -45,6 +47,8 @@ from .serializers import (
 	AnulacionSerializer,
 	CUOTA_ITEM_PREFETCHES,
 	ConfiguracionFinancieraSerializer,
+	MedioPagoAceptadoSerializer,
+	VersionConfiguracionFinancieraSerializer,
 	CorreccionPagoSerializer,
 	EdicionDescuentoSerializer,
 	ComprobanteListSerializer,
@@ -70,6 +74,7 @@ from .services import (
 	CuotaDuplicadaError,
 	PagoInvalidoError,
 	SocioInactivoError,
+	affected_cuotas,
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
@@ -79,6 +84,7 @@ from .services import (
 	ensure_cuota_without_payments,
 	generar_cuotas_mensuales,
 	grant_scholarship,
+	parse_period,
 	pending_amounts,
 	register_payment,
 	create_manual_movement,
@@ -527,18 +533,87 @@ def imputacion_detail(request, pk):
 	return Response(ImputacionSerializer(get_object_or_404(Imputacion, pk=pk)).data)
 
 
-@extend_schema(tags=["Finanzas/Configuracion"], request=ConfiguracionFinancieraSerializer, responses=ConfiguracionFinancieraSerializer)
-@api_view(["GET", "PUT", "PATCH"])
+@extend_schema(tags=["Finanzas/Configuracion"], responses=ConfiguracionFinancieraSerializer)
+@api_view(["GET"])
 def configuracion_financiera(request):
-	configuracion = ConfiguracionFinanciera.load()
-	if request.method == "GET":
-		return Response(ConfiguracionFinancieraSerializer(configuracion).data)
+	"""Version in force for `periodo` (current period by default). New versions are created from
+	POST /api/configuracion/guardar/, together with the rest of the configuration and its responsable."""
+	configuracion = ConfiguracionFinanciera.load(request.query_params.get("periodo"))
+	return Response(ConfiguracionFinancieraSerializer(configuracion).data)
 
-	serializer = ConfiguracionFinancieraSerializer(configuracion, data=request.data, partial=request.method == "PATCH")
+
+@extend_schema(tags=["Finanzas/Configuracion"])
+@api_view(["GET"])
+def configuracion_financiera_impacto(request):
+	"""How many cuotas a new version from `periodo` would update, to warn before saving it."""
+	try:
+		periodo = parse_period(request.query_params.get("periodo", "")).strftime("%Y-%m")
+	except ValueError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response({"periodo": periodo, "cuotas_afectadas": affected_cuotas(periodo).count()})
+
+
+@extend_schema(tags=["Finanzas/Configuracion"], responses=VersionConfiguracionFinancieraSerializer(many=True))
+@api_view(["GET"])
+def configuracion_financiera_versiones(request):
+	versiones = ConfiguracionFinanciera.objects.select_related("usuario_creacion").order_by("-fecha_creacion", "-pk")
+	return Response(VersionConfiguracionFinancieraSerializer(versiones, many=True).data)
+
+
+PAYMENT_METHOD_FIELDS = {"nombre": "Nombre", "activo": "Habilitado"}
+
+
+def request_user(request):
+	return request.user if request.user.is_authenticated else None
+
+
+@extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
+@api_view(["GET", "POST"])
+def medio_pago_list_create(request):
+	if request.method == "GET":
+		medios = MedioPago.objects.all()
+		if request.query_params.get("activos") in ("1", "true"):
+			medios = medios.filter(activo=True)
+		return Response(MedioPagoAceptadoSerializer(medios, many=True).data)
+
+	serializer = MedioPagoAceptadoSerializer(data=request.data)
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	usuario = request.user if request.user.is_authenticated else None
-	return Response(ConfiguracionFinancieraSerializer(serializer.save(usuario_actualizacion=usuario)).data)
+	medio = serializer.save()
+	record_change(Seccion.FINANZAS, f"Medio de pago {medio.nombre}", "", "Alta", request_user(request))
+	return Response(MedioPagoAceptadoSerializer(medio).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/MedioPago"], request=MedioPagoAceptadoSerializer, responses=MedioPagoAceptadoSerializer)
+@api_view(["PATCH", "DELETE"])
+def medio_pago_detail(request, pk):
+	medio = get_object_or_404(MedioPago, pk=pk)
+	if request.method == "DELETE":
+		if ItemPago.objects.filter(medio_de_pago=medio.codigo).exists():
+			return Response(
+				{"detail": "El medio de pago ya se usó en pagos registrados: deshabilitalo en lugar de eliminarlo."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+		if medio.activo and not MedioPago.objects.filter(activo=True).exclude(pk=medio.pk).exists():
+			return Response({"detail": "Tiene que quedar al menos un medio de pago habilitado."}, status=status.HTTP_400_BAD_REQUEST)
+		medio.delete()
+		record_change(Seccion.FINANZAS, f"Medio de pago {medio.nombre}", "Existente", "Eliminado", request_user(request))
+		return Response(status=status.HTTP_204_NO_CONTENT)
+
+	before = {"nombre": medio.nombre, "activo": medio.activo}
+	serializer = MedioPagoAceptadoSerializer(medio, data=request.data, partial=True)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	medio = serializer.save()
+	record_catalog_update(
+		Seccion.FINANZAS,
+		f"Medio de pago {before['nombre']}",
+		before,
+		{"nombre": medio.nombre, "activo": medio.activo},
+		PAYMENT_METHOD_FIELDS,
+		request_user(request),
+	)
+	return Response(MedioPagoAceptadoSerializer(medio).data)
 
 
 @extend_schema(tags=["Finanzas/Beca"], request=BeneficioSerializer)

@@ -40,6 +40,7 @@ export default function DocumentacionUploadModal({
 
   if (!isOpen) return null;
 
+  const requiresDueDate = Boolean(tipos.find(t => String(t.id_tipo_documento) === String(form.tipo_documento))?.requiere_vencimiento)
   const hasInvalidDates = Boolean(form.fecha_emision && form.fecha_vencimiento && form.fecha_vencimiento <= form.fecha_emision)
 
   const handleBackdropClick = (e) => {
@@ -71,8 +72,8 @@ export default function DocumentacionUploadModal({
               <input type="date" name="fecha_emision" value={form.fecha_emision} max={shiftDate(form.fecha_vencimiento, -1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
             </div>
             <div>
-              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento</label>
-              <input type="date" name="fecha_vencimiento" value={form.fecha_vencimiento} min={shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
+              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento{requiresDueDate && ' *'}</label>
+              <input type="date" name="fecha_vencimiento" required={requiresDueDate} value={form.fecha_vencimiento} min={shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
             </div>
             {hasInvalidDates && (
               <p className="col-span-2 -mt-2 text-sm text-error" role="alert">{INVALID_DATES_MESSAGE}</p>

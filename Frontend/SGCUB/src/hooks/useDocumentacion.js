@@ -1,23 +1,23 @@
 import { useState, useEffect, useCallback, useMemo, useId } from 'react'
 import { getDocumentos, createDocumento, deleteDocumento, getTiposDocumento, getEstadosDocumento, updateDocumento } from '../api/documentacion'
+import { DEFAULT_DOCUMENT_ALERT_DAYS, getDocumentAlertDays } from '../api/configuracion'
 
 export default function useDocumentacion(personaId = null, fetchAll = false) {
   const [documentos, setDocumentos] = useState([])
   const [tipos, setTipos] = useState([])
   const [estados, setEstados] = useState([])
+  const [diasAviso, setDiasAviso] = useState(DEFAULT_DOCUMENT_ALERT_DAYS)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const { documentosActivos, documentosHistoricos } = useMemo(() => {
     if (!documentos || documentos.length === 0) return { documentosActivos: [], documentosHistoricos: [] };
-
-    const DIAS_AVISO = 30;
     const docsWithStatus = documentos.map(d => {
       let status = 'vigente';
       if (d.fecha_vencimiento) {
         const dias = (new Date(`${d.fecha_vencimiento.split('T')[0]}T23:59:59`) - new Date()) / 86400000;
         if (dias < 0) status = 'vencido';
-        else if (dias <= DIAS_AVISO) status = 'por_vencer';
+        else if (dias <= diasAviso) status = 'por_vencer';
       }
       return { ...d, status };
     });
@@ -39,7 +39,7 @@ export default function useDocumentacion(personaId = null, fetchAll = false) {
     });
 
     return { documentosActivos: activeDocs, documentosHistoricos: historicDocs };
-  }, [documentos]);
+  }, [documentos, diasAviso]);
 
   const cargarDatos = useCallback(async () => {
     if (!fetchAll && !personaId) {
@@ -50,11 +50,13 @@ export default function useDocumentacion(personaId = null, fetchAll = false) {
     setIsLoading(true)
     setError(null)
     try {
-      const [docsData, tiposData, estadosData] = await Promise.all([
+      const [docsData, tiposData, estadosData, alertDays] = await Promise.all([
         getDocumentos(fetchAll ? '' : personaId),
         getTiposDocumento(),
-        getEstadosDocumento()
+        getEstadosDocumento(),
+        getDocumentAlertDays().catch(() => DEFAULT_DOCUMENT_ALERT_DAYS),
       ])
+      setDiasAviso(alertDays)
       setDocumentos(docsData)
       setTipos(tiposData)
       setEstados(estadosData)

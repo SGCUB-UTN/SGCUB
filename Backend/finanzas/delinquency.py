@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.db.models import Q
 from django.utils import timezone
 
+from configuracion.models import ConfiguracionGeneral
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .models import OVERDUE_CUOTA_STATES, Cuota, EstadoCuotaChoices
@@ -118,6 +119,8 @@ def delinquency_report(scope, **filters):
     today = timezone.localdate()
     socios = list(filter_socios(scope, **filters).order_by("persona__apellido", "persona__nombre"))
     cuotas_by_account, pending = overdue_cuotas_by_account(socios)
+    # Overdue cuotas a socio needs to count as delinquent
+    threshold = ConfiguracionGeneral.load().cuotas_vencidas_morosidad
 
     rows = []
     without_account = 0
@@ -127,7 +130,7 @@ def delinquency_report(scope, **filters):
             without_account += 1
             continue
         cuotas = cuotas_by_account.get(account.pk)
-        if cuotas:
+        if cuotas and len(cuotas) >= threshold:
             rows.append(report_row(socio, cuotas, pending, today))
 
     return {
@@ -135,4 +138,5 @@ def delinquency_report(scope, **filters):
         "fecha": timezone.localtime(),
         "alcance": SCOPE_LABELS[scope],
         "sin_cuenta": without_account,
+        "cuotas_vencidas_minimas": threshold,
     }

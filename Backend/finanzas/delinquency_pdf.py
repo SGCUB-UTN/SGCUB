@@ -1,5 +1,6 @@
 from decimal import Decimal
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -7,7 +8,9 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, TableStyle
 
-from .pdf_utils import CLUB_NAME, format_amount, table
+from configuracion.services import club_name
+
+from .pdf_utils import format_amount, table
 
 PAGE_SIZE = landscape(A4)
 MARGIN = 15 * mm
@@ -48,7 +51,7 @@ def render_delinquency_pdf(report):
     width = PAGE_SIZE[0] - 2 * MARGIN
     rows = report["filas"]
     story = [
-        Paragraph(CLUB_NAME, subtitle),
+        Paragraph(escape(club_name()), subtitle),
         Paragraph("Reporte de morosidad", title),
         Paragraph(f"Generado el {report['fecha']:%d/%m/%Y %H:%M} · Alcance: {report['alcance']}", subtitle),
         Spacer(1, 6 * mm),
@@ -81,7 +84,7 @@ def render_delinquency_pdf(report):
         topMargin=MARGIN,
         bottomMargin=MARGIN,
         title="Reporte de morosidad",
-        author=CLUB_NAME,
+        author=club_name(),
         pageCompression=0,
     ).build(story)
     return buffer.getvalue()

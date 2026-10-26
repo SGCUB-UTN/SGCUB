@@ -1,0 +1,279 @@
+import { useState } from 'react'
+import { formatDate, getErrorMessage } from '../personas/format'
+import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
+import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
+import { SMALL_BUTTON_CLASSES, TABLE_CLASSES, compactInputClass } from './settingsForm'
+import { BlockTitle, CompactField, CompactSelect, IconButton, SettingsSection, StatusPill } from './settingsParts'
+
+const CellError = ({ message }) => (message ? <p className="mt-1 text-xs font-medium text-error" role="alert">{message}</p> : null)
+
+function ScheduledVersions({ versions }) {
+  if (!versions.length) return null
+  return (
+    <div className="flex items-start gap-2 text-sm text-sky-900" role="status">
+      <span className="material-symbols-outlined shrink-0 text-[18px] text-sky-700" aria-hidden="true">event_upcoming</span>
+      <div>
+        <p className="font-semibold">Cambios programados</p>
+        <ul className="mt-1 flex flex-col gap-1">
+          {versions.map((version) => (
+            <li key={version.configuracion_financiera_id}>
+              <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
+              {' '}(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):
+              {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function FeesSection({ config, onShowHistory }) {
+  const form = config.draft.financiera
+  const errors = config.errors.financiera
+  const setField = config.setFinancialField
+
+  const moneyField = (field, label, hint) => (
+    <CompactField id={field} label={label} hint={hint} error={errors[field]} className="w-36">
+      <MoneyInput id={field} value={form[field]} onChange={(value) => setField(field, value)} invalid={Boolean(errors[field])} />
+    </CompactField>
+  )
+
+  return (
+    <SettingsSection
+      icon="payments"
+      title="Aranceles y recargos por mora"
+      extra={(
+        <button type="button" className={SMALL_BUTTON_CLASSES.link} onClick={onShowHistory}>
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">history</span>
+          Historial de versiones
+        </button>
+      )}
+    >
+      <ScheduledVersions versions={scheduledVersions(config.versiones)} />
+
+      <div>
+        <BlockTitle>Cuotas y aranceles</BlockTitle>
+        <div className="flex flex-wrap items-start gap-6">
+          {moneyField('monto_cuota_social', 'Cuota social')}
+          {moneyField('monto_cuota_deportiva', 'Cuota deportiva', '')}
+          {moneyField('monto_inscripcion', 'Inscripción inicial', '')}
+        </div>
+      </div>
+
+      <hr className="border-outline-variant/30" />
+
+      <div>
+        <BlockTitle>Recargos por mora</BlockTitle>
+        <div className="flex flex-col gap-2">
+          {[1, 2].map((number) => {
+            const typeField = `tipo_recargo_${number}`
+            const valueField = `valor_recargo_${number}`
+            const ValueInput = form[typeField] === 'Porcentaje' ? PercentInput : MoneyInput
+            return (
+              <div key={number} className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                <span className="w-32 pt-1.5 text-sm font-medium text-on-surface">{`Al ${number}° vencimiento:`}</span>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <CompactSelect
+                      small
+                      className="w-40"
+                      value={form[typeField]}
+                      onChange={(event) => setField(typeField, event.target.value)}
+                      aria-label={`Tipo de recargo al ${number}° vencimiento`}
+                    >
+                      {SURCHARGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </CompactSelect>
+                    <div className="w-28">
+                      <ValueInput
+                        small
+                        value={form[valueField]}
+                        onChange={(value) => setField(valueField, value)}
+                        invalid={Boolean(errors[valueField])}
+                        aria-label={`Valor del recargo al ${number}° vencimiento`}
+                      />
+                    </div>
+                  </div>
+                  <CellError message={errors[valueField]} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </SettingsSection>
+  )
+}
+
+function CalendarSection({ config }) {
+  const form = config.draft.financiera
+  const errors = config.errors.financiera
+  const setField = config.setFinancialField
+
+  const dayField = (field, label, help) => (
+    <CompactField id={field} label={label} help={help} error={errors[field]} className="w-44">
+      <IntegerInput
+        id={field}
+        maxLength={2}
+        placeholder="1 a 28"
+        value={form[field]}
+        onChange={(value) => setField(field, value)}
+        invalid={Boolean(errors[field])}
+      />
+    </CompactField>
+  )
+
+  return (
+    <SettingsSection
+      icon="calendar_month"
+      title="Calendario de facturación"
+    >
+      <div className="flex flex-wrap items-start gap-6">
+        {dayField('dia_generacion', 'Día de generación', 'Se crean las cuotas del mes')}
+        {dayField('dia_vencimiento_1', 'Día del 1° vencimiento', 'Luego se aplica el 1° recargo')}
+        {dayField('dia_vencimiento_2', 'Día del 2° vencimiento', 'Luego se aplica el 2° recargo')}
+      </div>
+    </SettingsSection>
+  )
+}
+
+function PaymentMethodRow({ medio, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(medio.nombre)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const run = async (action) => {
+    setBusy(true)
+    setError('')
+    try {
+      await action()
+      setEditing(false)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'No se pudo guardar el medio de pago.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <tr className={TABLE_CLASSES.row}>
+      <td className={TABLE_CLASSES.cell}>
+        {editing ? (
+          <input
+            className={compactInputClass(false, 'max-w-xs')}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            aria-label="Nombre del medio de pago"
+            autoFocus
+          />
+        ) : (
+          <span className={`font-medium ${medio.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{medio.nombre}</span>
+        )}
+        <CellError message={error} />
+      </td>
+      <td className={TABLE_CLASSES.cell}><StatusPill active={medio.activo} /></td>
+      <td className={TABLE_CLASSES.actionsCell}>
+        <div className="flex justify-end gap-1">
+          {editing ? (
+            <>
+              <button type="button" className={SMALL_BUTTON_CLASSES.primary} disabled={busy || !name.trim()} onClick={() => run(() => onUpdate(medio.medio_pago_id, { nombre: name }))}>Guardar</button>
+              <button type="button" className={SMALL_BUTTON_CLASSES.secondary} disabled={busy} onClick={() => { setEditing(false); setName(medio.nombre); setError('') }}>Cancelar</button>
+            </>
+          ) : (
+            <>
+              <IconButton icon="edit" label="Renombrar" disabled={busy} onClick={() => setEditing(true)} />
+              <IconButton
+                icon={medio.activo ? 'toggle_on' : 'toggle_off'}
+                label={medio.activo ? 'Deshabilitar' : 'Habilitar'}
+                disabled={busy}
+                onClick={() => run(() => onUpdate(medio.medio_pago_id, { activo: !medio.activo }))}
+              />
+              <IconButton
+                icon="delete"
+                label={medio.en_uso ? 'Ya se usó en pagos: deshabilitalo en lugar de eliminarlo' : 'Eliminar'}
+                disabled={busy || medio.en_uso}
+                onClick={() => run(() => onDelete(medio.medio_pago_id))}
+              />
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function PaymentMethodsSection({ medios, onCreate, onUpdate, onDelete }) {
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const add = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await onCreate({ nombre: name })
+      setName('')
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'No se pudo agregar el medio de pago.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsSection
+      icon="account_balance_wallet"
+      title="Medios de pago aceptados"
+      flush
+    >
+      <div className={TABLE_CLASSES.wrapper}>
+        <table className={TABLE_CLASSES.table}>
+          <thead className={TABLE_CLASSES.head}>
+            <tr>
+              <th className={TABLE_CLASSES.headCell}>Medio de pago</th>
+              <th className={TABLE_CLASSES.headCell}>Estado</th>
+              <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {medios.map((medio) => (
+              <PaymentMethodRow key={medio.medio_pago_id} medio={medio} onUpdate={onUpdate} onDelete={onDelete} />
+            ))}
+          </tbody>
+          <tfoot className="border-t border-outline-variant/30 bg-surface-container-low/40">
+            <tr>
+              <td colSpan={3} className={TABLE_CLASSES.cell}>
+                <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    className={compactInputClass(Boolean(error), 'sm:max-w-xs')}
+                    placeholder="Ej: Tarjeta de débito"
+                    value={name}
+                    onChange={(event) => { setName(event.target.value); setError('') }}
+                    aria-label="Nuevo medio de pago"
+                  />
+                  <button type="submit" className={SMALL_BUTTON_CLASSES.secondary} disabled={saving || !name.trim()}>
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                    Agregar medio
+                  </button>
+                </form>
+                <CellError message={error} />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </SettingsSection>
+  )
+}
+
+export default function FinancialSettings({ config, onShowHistory }) {
+  return (
+    <div className="flex flex-col">
+      <FeesSection config={config} onShowHistory={onShowHistory} />
+      <CalendarSection config={config} />
+      <PaymentMethodsSection medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
+    </div>
+  )
+}

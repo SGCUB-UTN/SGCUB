@@ -5,9 +5,9 @@ export const RECATEGORIZATION_REVIEW_PATH = '/automatizaciones/recategorizacion'
 export const AREA_ORDER = ['Padrón', 'Finanzas', 'Sistema']
 
 const AUTOMATION_CATALOG = {
-  'finanzas.services.generar_cuotas_mensuales': {
+  'finanzas.services.generate_scheduled_cuotas': {
     title: 'Generar las cuotas del mes',
-    description: 'Crea la cuota mensual de cada socio activo, con sus becas y descuentos.',
+    description: 'Se ejecuta todos los días y, el día de generación definido en Configuración, crea la cuota mensual de cada socio activo, con sus becas y descuentos.',
     whenOff: 'Si la apagás, no se van a crear las cuotas nuevas y los socios no van a tener la cuota del mes para pagar.',
     icon: 'request_quote',
     area: 'Finanzas',
@@ -44,6 +44,9 @@ const AUTOMATION_CATALOG = {
     changesLabel: ['jugador actualizado', 'jugadores actualizados'],
   },
 }
+
+// Executions recorded before the generation became a daily check keep their description
+AUTOMATION_CATALOG['finanzas.services.generar_cuotas_mensuales'] = AUTOMATION_CATALOG['finanzas.services.generate_scheduled_cuotas']
 
 export const describeChanges = (execution) => {
   if (execution.changes == null) return '—'

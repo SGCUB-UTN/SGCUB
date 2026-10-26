@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from importlib import import_module
@@ -44,19 +45,25 @@ from .models import (
 	ItemCuota,
 	ItemPago,
 	MedioDePagoChoices,
+	MedioPago,
 	MovimientoCuenta,
 	Pago,
 	SecuenciaComprobante,
 )
 from .pdf_utils import format_amount
-from .serializers import CuentaCorrienteEstadoSerializer
+from .receipts import render_receipt_pdf
+from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
 	create_cuota,
 	cuota_state,
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
+	generate_scheduled_cuotas,
+	grant_scholarship,
 	next_receipt_number,
+	pending_amounts,
+	register_payment,
 	sync_cuota_charge,
 )
 from .views import _build_financial_report
@@ -148,13 +155,29 @@ class GeneradorItemsCuotaTests(TestCase):
 		self.assertEqual(self.conceptos(socio), [])
 
 
+def next_period_start(months=1):
+	first_day = timezone.localdate().replace(day=1)
+	for _ in range(months):
+		first_day = (first_day + timedelta(days=32)).replace(day=1)
+	return first_day
+
+
+def guardar_version(client, periodo, responsable="Ana Tesorera", **datos):
+	return client.post(
+		reverse("configuracion-guardar"),
+		json.dumps({"responsable": responsable, "financiera": {"periodo_vigencia": periodo, **datos}}),
+		content_type="application/json",
+	)
+
+
 class ConfiguracionFinancieraTests(APITestCase):
 	def setUp(self):
-		self.usuario = get_user_model().objects.create_user(username="tesorero")
+		self.usuario = get_user_model().objects.create_user(username="tesorero", first_name="Ana", last_name="Tesorera")
 		self.client.force_authenticate(user=self.usuario)
+		self.periodo = next_period_start().strftime("%Y-%m")
 
-	def actualizar(self, **datos):
-		return self.client.patch(reverse("configuracion-financiera"), datos, format="json")
+	def actualizar(self, periodo=None, **datos):
+		return guardar_version(self.client, periodo or self.periodo, **datos)
 
 	def test_valores_iniciales(self):
 		response = self.client.get(reverse("configuracion-financiera"))
@@ -176,26 +199,85 @@ class ConfiguracionFinancieraTests(APITestCase):
 		)
 		self.assertEqual(response.status_code, 200, response.data)
 		socio = crear_socio("40000001", con_jugador=True)
+		inicio = next_period_start()
 
-		generar_cuotas_mensuales(date(2026, 11, 1), today=date(2026, 11, 1))
+		generar_cuotas_mensuales(inicio, today=inicio)
 
 		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio)
-		self.assertEqual(cuota.fecha_venc1, date(2026, 11, 5))
-		self.assertEqual(cuota.fecha_venc2, date(2026, 11, 15))
+		self.assertEqual(cuota.fecha_venc1, inicio.replace(day=5))
+		self.assertEqual(cuota.fecha_venc2, inicio.replace(day=15))
 		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
 
-	def test_registra_quien_actualizo(self):
+	def test_la_nueva_version_no_afecta_los_periodos_anteriores(self):
+		self.actualizar(monto_cuota_social="1200.00")
+
+		self.assertEqual(ConfiguracionFinanciera.load().monto_cuota_social, Decimal("1000.00"))
+		self.assertEqual(ConfiguracionFinanciera.load(self.periodo).monto_cuota_social, Decimal("1200.00"))
+		self.assertEqual(ConfiguracionFinanciera.load(next_period_start(5)).monto_cuota_social, Decimal("1200.00"))
+
+	def test_la_ultima_version_creada_para_un_periodo_es_la_vigente(self):
+		self.actualizar(monto_cuota_social="1200.00")
+		self.actualizar(monto_cuota_deportiva="2000.00")
+
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
+		self.assertEqual(configuracion.monto_cuota_social, Decimal("1200.00"))
+		self.assertEqual(configuracion.monto_cuota_deportiva, Decimal("2000.00"))
+
+	def test_registra_quien_actualizo_y_desde_que_periodo(self):
 		self.actualizar(valor_recargo_1="150.00")
 
-		configuracion = ConfiguracionFinanciera.load()
-		self.assertEqual(configuracion.usuario_actualizacion, self.usuario)
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
+		self.assertEqual(configuracion.usuario_creacion, self.usuario)
+		self.assertEqual(configuracion.periodo_vigencia, self.periodo)
 		self.assertEqual(configuracion.valor_recargo_1, Decimal("150.00"))
+
+	def test_historial_de_versiones_con_cambios(self):
+		self.actualizar(monto_cuota_social="1200.00", dia_vencimiento_1=5)
+
+		response = self.client.get(reverse("configuracion-financiera-versiones"))
+
+		self.assertEqual(response.status_code, 200)
+		ultima = response.data[0]
+		self.assertEqual(ultima["periodo_vigencia"], self.periodo)
+		self.assertEqual(ultima["usuario_nombre"], "Ana Tesorera")
+		self.assertEqual(
+			{cambio["campo"]: (cambio["anterior"], cambio["nuevo"]) for cambio in ultima["cambios"]},
+			{"monto_cuota_social": ("1000.00", "1200.00"), "dia_vencimiento_1": ("10", "5")},
+		)
+
+	def test_registra_el_responsable_y_versiona_la_inscripcion(self):
+		response = self.actualizar(monto_inscripcion="5000.00", responsable="Carlos Díaz")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["financiera"]["responsable"], "Carlos Díaz")
+		self.assertEqual(ConfiguracionFinanciera.load(self.periodo).monto_inscripcion, Decimal("5000.00"))
+		self.assertEqual(ConfiguracionFinanciera.load().monto_inscripcion, Decimal("0.00"))
+
+	def test_el_endpoint_de_la_configuracion_financiera_es_de_solo_lectura(self):
+		response = self.client.post(reverse("configuracion-financiera"), {"periodo_vigencia": self.periodo}, format="json")
+
+		self.assertEqual(response.status_code, 405)
+
+	def test_el_periodo_de_vigencia_debe_ser_posterior_al_actual(self):
+		actual = timezone.localdate().strftime("%Y-%m")
+		for periodo in (actual, "2020-01", "2026/13", ""):
+			with self.subTest(periodo=periodo):
+				response = guardar_version(self.client, periodo, monto_cuota_social="1200.00")
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("periodo_vigencia", response.data["financiera"])
+
+	def test_rechaza_una_version_sin_cambios(self):
+		response = self.actualizar(monto_cuota_social="1000.00")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(ConfiguracionFinanciera.objects.count(), 1)
 
 	def test_validaciones(self):
 		casos = [
 			({"dia_vencimiento_1": 20, "dia_vencimiento_2": 10}, "dia_vencimiento_2"),
 			({"dia_vencimiento_1": 0}, "dia_vencimiento_1"),
 			({"dia_vencimiento_2": 32}, "dia_vencimiento_2"),
+			({"dia_vencimiento_1": 29, "dia_vencimiento_2": 29}, "dia_vencimiento_1"),
 			({"monto_cuota_social": "0.00"}, "monto_cuota_social"),
 			({"valor_recargo_1": "-1.00"}, "valor_recargo_1"),
 			({"tipo_recargo_2": "Porcentaje", "valor_recargo_2": "120.00"}, "valor_recargo_2"),
@@ -205,7 +287,7 @@ class ConfiguracionFinancieraTests(APITestCase):
 			with self.subTest(datos=datos):
 				response = self.actualizar(**datos)
 				self.assertEqual(response.status_code, 400)
-				self.assertIn(campo, response.data)
+				self.assertIn(campo, response.data["financiera"])
 
 	def test_calculo_de_recargos_fijo_y_porcentual(self):
 		self.actualizar(
@@ -214,13 +296,263 @@ class ConfiguracionFinancieraTests(APITestCase):
 			tipo_recargo_2="Porcentaje",
 			valor_recargo_2="10.00",
 		)
-		configuracion = ConfiguracionFinanciera.load()
+		configuracion = ConfiguracionFinanciera.load(self.periodo)
 
 		self.assertEqual(configuracion.surcharge(1, Decimal("2500.00")), Decimal("200.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("2500.00")), Decimal("250.00"))
 		self.assertEqual(configuracion.surcharge(2, Decimal("1333.33")), Decimal("133.33"))
 
 
+class GeneracionProgramadaTests(TestCase):
+	def setUp(self):
+		ConfiguracionFinanciera.objects.create(dia_generacion=5)
+		self.socio = crear_socio("61000001")
+
+	def test_genera_solo_el_dia_configurado(self):
+		antes = generate_scheduled_cuotas(today=date(2026, 10, 4))
+		self.assertEqual(antes["cuotas_creadas"], 0)
+		self.assertFalse(Cuota.objects.exists())
+
+		resultado = generate_scheduled_cuotas(today=date(2026, 10, 5))
+
+		self.assertEqual(resultado["cuotas_creadas"], 1)
+		self.assertEqual(Cuota.objects.get().periodo, "2026-10")
+
+	def test_usa_el_dia_de_la_version_vigente_para_el_mes(self):
+		ConfiguracionFinanciera.objects.create(periodo_vigencia="2026-11", dia_generacion=3)
+
+		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 5))["cuotas_creadas"], 0)
+		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 3))["cuotas_creadas"], 1)
+
+	def test_valida_el_dia_de_generacion(self):
+		self.client.force_login(get_user_model().objects.create_user(username="tesorero"))
+		periodo = next_period_start().strftime("%Y-%m")
+		for datos in ({"dia_generacion": 0}, {"dia_generacion": 29}, {"dia_generacion": 12, "dia_vencimiento_1": 10}):
+			with self.subTest(datos=datos):
+				response = guardar_version(self.client, periodo, **datos)
+				self.assertEqual(response.status_code, 400)
+				self.assertIn("dia_generacion", response.json()["financiera"])
+
+
+class ActualizacionCuotasPorConfiguracionTests(APITestCase):
+	"""A new version updates every unpaid cuota (partially paid included) of the periods it applies to."""
+
+	def setUp(self):
+		self.usuario = get_user_model().objects.create_user(username="tesorero", first_name="Ana", last_name="Tesorera")
+		self.client.force_authenticate(user=self.usuario)
+		self.inicio = next_period_start()
+		self.periodo = self.inicio.strftime("%Y-%m")
+
+	def nueva_version(self, periodo=None, **datos):
+		return guardar_version(self.client, periodo or self.periodo, **datos)
+
+	def cuota(self, dni, periodo=None, con_jugador=False):
+		return create_cuota(crear_socio(dni, con_jugador=con_jugador), periodo or self.periodo)
+
+	def pagar(self, cuota, monto):
+		register_payment(
+			cuota.movimiento.cuenta_corriente.socio_id,
+			[cuota.pk],
+			[{"medio_de_pago": "Efectivo", "monto": Decimal(monto)}],
+			Decimal(monto),
+		)
+
+	def test_actualiza_montos_movimiento_y_saldo_de_cuotas_impagas(self):
+		cuota = self.cuota("60000001", con_jugador=True)
+
+		response = self.nueva_version(monto_cuota_social="1200.00", monto_cuota_deportiva="1800.00")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 1)
+		cuota.refresh_from_db()
+		cuota.movimiento.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
+		self.assertEqual(cuota.movimiento.cuenta_corriente.saldo, Decimal("-3000.00"))
+		self.assertEqual(
+			sorted(cuota.items.values_list("concepto", "monto")),
+			[("CuotaDeportiva", Decimal("1800.00")), ("CuotaSocial", Decimal("1200.00"))],
+		)
+		anulado = ItemCuota.all_objects.anulados().get(cuota=cuota, concepto="CuotaSocial")
+		self.assertEqual(anulado.monto, Decimal("1000.00"))
+		self.assertEqual(anulado.usuario_anulacion, self.usuario)
+		self.assertIn(self.periodo, anulado.motivo_anulacion)
+
+	def test_actualiza_las_cuotas_parcialmente_pagas(self):
+		cuota = self.cuota("60000002")
+		self.pagar(cuota, "400.00")
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1200.00"))
+		self.assertEqual(pending_amounts([cuota])[cuota.pk], Decimal("800.00"))
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
+
+	def test_no_modifica_las_cuotas_pagas(self):
+		cuota = self.cuota("60000003")
+		self.pagar(cuota, "1000.00")
+
+		response = self.nueva_version(monto_cuota_social="1200.00")
+
+		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 0)
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+
+	def test_actualiza_los_vencimientos(self):
+		cuota = self.cuota("60000004")
+
+		self.nueva_version(dia_vencimiento_1=5, dia_vencimiento_2=15)
+
+		cuota.refresh_from_db()
+		self.assertEqual((cuota.fecha_venc1, cuota.fecha_venc2), (self.inicio.replace(day=5), self.inicio.replace(day=15)))
+
+	def test_no_modifica_cuotas_de_periodos_anteriores_a_la_vigencia(self):
+		cuota = self.cuota("60000005")
+
+		response = self.nueva_version(periodo=next_period_start(2).strftime("%Y-%m"), monto_cuota_social="1200.00")
+
+		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 0)
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+
+	def test_no_modifica_cuotas_de_una_version_programada_posterior(self):
+		posterior = next_period_start(2).strftime("%Y-%m")
+		self.nueva_version(periodo=posterior, monto_cuota_social="1500.00")
+		cuota_posterior = self.cuota("60000006", periodo=posterior)
+		cuota = self.cuota("60000007")
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		cuota_posterior.refresh_from_db()
+		self.assertEqual(cuota.movimiento.monto, Decimal("1200.00"))
+		self.assertEqual(cuota_posterior.movimiento.monto, Decimal("1500.00"))
+
+	def test_recalcula_las_becas_porcentuales(self):
+		socio = crear_socio("60000008")
+		grant_scholarship(socio.pk, "Porcentaje", Decimal("50.00"), timezone.localdate(), "Beca deportiva", "Comisión")
+		cuota = create_cuota(socio, self.periodo)
+		self.assertEqual(cuota.movimiento.monto, Decimal("500.00"))
+
+		self.nueva_version(monto_cuota_social="1200.00")
+
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.items.get(concepto="Beca").monto, Decimal("600.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("600.00"))
+
+	def test_impacto_cuenta_las_cuotas_que_se_actualizarian(self):
+		self.cuota("60000009")
+		pagada = self.cuota("60000010")
+		self.pagar(pagada, "1000.00")
+
+		response = self.client.get(reverse("configuracion-financiera-impacto"), {"periodo": self.periodo})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["cuotas_afectadas"], 1)
+
+
+class MediosDePagoTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+
+	def crear(self, nombre):
+		return self.client.post(reverse("medio-pago-list"), {"nombre": nombre}, format="json")
+
+	def test_lista_los_medios_iniciales(self):
+		response = self.client.get(reverse("medio-pago-list"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			{medio["codigo"] for medio in response.data},
+			{"Efectivo", "Transferencia", "BilleteraVirtual"},
+		)
+
+	def test_alta_genera_el_codigo_y_rechaza_duplicados(self):
+		response = self.crear("Tarjeta de débito")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["codigo"], "TarjetaDeDebito")
+		self.assertEqual(self.crear("tarjeta de DÉBITO").status_code, 400)
+
+	def test_un_medio_deshabilitado_no_acepta_pagos_ni_figura_en_los_activos(self):
+		medio = MedioPago.objects.get(codigo="Transferencia")
+		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"activo": False}, format="json")
+
+		activos = self.client.get(reverse("medio-pago-list"), {"activos": "true"}).data
+		serializer = MedioPagoSerializer(data={"medio_de_pago": "Transferencia", "monto": "10.00"})
+
+		self.assertNotIn("Transferencia", [item["codigo"] for item in activos])
+		self.assertFalse(serializer.is_valid())
+		self.assertIn("medio_de_pago", serializer.errors)
+
+	def test_no_elimina_un_medio_usado_en_pagos(self):
+		pago = Pago.objects.create(estado_pago=EstadoPagoChoices.ACREDITADO)
+		ItemPago.objects.create(pago=pago, medio_de_pago="Efectivo", monto=Decimal("10.00"))
+		medio = MedioPago.objects.get(codigo="Efectivo")
+
+		response = self.client.delete(reverse("medio-pago-detail", args=[medio.pk]))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(MedioPago.objects.filter(pk=medio.pk).exists())
+
+	def test_elimina_un_medio_sin_pagos(self):
+		medio_id = self.crear("Cheque").data["medio_pago_id"]
+
+		response = self.client.delete(reverse("medio-pago-detail", args=[medio_id]))
+
+		self.assertEqual(response.status_code, 204)
+		self.assertFalse(MedioPago.objects.filter(pk=medio_id).exists())
+
+	def test_debe_quedar_al_menos_un_medio_habilitado(self):
+		MedioPago.objects.exclude(codigo="Efectivo").update(activo=False)
+		medio = MedioPago.objects.get(codigo="Efectivo")
+
+		response = self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"activo": False}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(MedioPago.objects.get(pk=medio.pk).activo)
+
+
+class MediosDePagoEnPagosTests(APITestCase):
+	"""The payment method catalog applies to the payment flow and the receipt."""
+
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.socio = crear_socio("62000001")
+		self.cuota = create_cuota(self.socio, "2026-10", today=date(2026, 10, 1))
+
+	def pagar(self, medio):
+		return self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.cuota.pk],
+			"monto_total": "1000.00",
+			"medios": [{"medio_de_pago": medio, "monto": "1000.00"}],
+		}, format="json")
+
+	def test_no_registra_pagos_con_un_medio_deshabilitado(self):
+		MedioPago.objects.filter(codigo="Transferencia").update(activo=False)
+
+		response = self.pagar("Transferencia")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Pago.objects.exists())
+
+	def test_registra_pagos_con_un_medio_nuevo_y_el_recibo_muestra_su_nombre(self):
+		codigo = self.client.post(reverse("medio-pago-list"), {"nombre": "Tarjeta de debito"}, format="json").data["codigo"]
+
+		response = self.pagar(codigo)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = Comprobante.objects.get()
+		self.assertIn(b"Tarjeta de debito", render_receipt_pdf(receipt))
+
+	def test_el_recibo_usa_el_nombre_actual_del_medio(self):
+		self.pagar("Transferencia")
+		medio = MedioPago.objects.get(codigo="Transferencia")
+		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"nombre": "Transferencia bancaria"}, format="json")
+
+		self.assertIn(b"Transferencia bancaria", render_receipt_pdf(Comprobante.objects.get()))
 class MovimientosManualesTests(APITestCase):
 	def setUp(self):
 		self.usuario = get_user_model().objects.create_user(username="caja")
@@ -2468,7 +2800,7 @@ class TareasProgramadasTests(TestCase):
 
 	def test_tareas_registradas_en_django_q(self):
 		esperadas = {
-			self.migracion.MONTHLY_GENERATION: ("finanzas.services.generar_cuotas_mensuales", Schedule.MONTHLY, 1, 1),
+			self.migracion.MONTHLY_GENERATION: ("finanzas.services.generate_scheduled_cuotas", Schedule.DAILY, None, 1),
 			self.migracion.DAILY_SURCHARGES: ("finanzas.services.apply_surcharges", Schedule.DAILY, None, 2),
 		}
 		for nombre, (funcion, tipo, dia, hora) in esperadas.items():
@@ -2486,6 +2818,7 @@ class TareasProgramadasTests(TestCase):
 
 	def test_django_q_ejecuta_las_tareas_programadas(self):
 		crear_socio("90000001", con_jugador=True)
+		ConfiguracionFinanciera.objects.update_or_create(pk=1, defaults={"dia_generacion": timezone.localdate().day})
 
 		for tarea in Schedule.objects.filter(name__in=[self.migracion.MONTHLY_GENERATION, self.migracion.DAILY_SURCHARGES]):
 			with self.subTest(tarea=tarea.name):

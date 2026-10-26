@@ -1,9 +1,14 @@
+import re
+import unicodedata
 from decimal import Decimal
 
 from django.db.models import Prefetch
+from django.utils import timezone
 from rest_framework import serializers
 
+from .generators import PERIOD_FORMAT
 from .models import (
+    CONFIGURATION_FIELDS,
     Beca,
     Comprobante,
     ConceptoItemChoices,
@@ -20,6 +25,7 @@ from .models import (
     TipoMovimientoOrigenChoices,
     EstadoCuotaChoices,
     MedioDePagoChoices,
+    MedioPago,
     ModalidadMontoChoices,
 )
 from .services import (
@@ -62,12 +68,56 @@ def cuota_account(cuota):
 
 
 class MedioPagoSerializer(serializers.Serializer):
-    medio_de_pago = serializers.ChoiceField(choices=MedioDePagoChoices.choices)
+    medio_de_pago = serializers.CharField(max_length=40)
     monto = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
         min_value=Decimal("0.01"),
     )
+
+
+    def validate_medio_de_pago(self, value):
+        if not MedioPago.objects.filter(codigo=value, activo=True).exists():
+            raise serializers.ValidationError("El medio de pago no existe o no está habilitado.")
+        return value
+
+
+def payment_method_code(name):
+    """'Tarjeta de débito' -> 'TarjetaDeDebito'."""
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return "".join(word[:1].upper() + word[1:] for word in re.findall(r"[A-Za-z0-9]+", plain))[:40]
+
+
+class MedioPagoAceptadoSerializer(serializers.ModelSerializer):
+    en_uso = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MedioPago
+        fields = ["medio_pago_id", "codigo", "nombre", "activo", "en_uso"]
+        read_only_fields = ["medio_pago_id", "codigo"]
+
+    def get_en_uso(self, obj) -> bool:
+        return ItemPago.objects.filter(medio_de_pago=obj.codigo).exists()
+
+    def validate_nombre(self, value):
+        value = value.strip()
+        if not payment_method_code(value):
+            raise serializers.ValidationError("Ingresá un nombre con letras o números.")
+        others = MedioPago.objects.exclude(pk=getattr(self.instance, "pk", None))
+        if others.filter(nombre__iexact=value).exists() or (
+            self.instance is None and others.filter(codigo=payment_method_code(value)).exists()
+        ):
+            raise serializers.ValidationError("Ya existe un medio de pago con ese nombre.")
+        return value
+
+    def validate_activo(self, value):
+        if self.instance and self.instance.activo and not value:
+            if not MedioPago.objects.filter(activo=True).exclude(pk=self.instance.pk).exists():
+                raise serializers.ValidationError("Tiene que quedar al menos un medio de pago habilitado.")
+        return value
+
+    def create(self, validated_data):
+        return MedioPago.objects.create(codigo=payment_method_code(validated_data["nombre"]), **validated_data)
 
 
 class CorreccionPagoSerializer(serializers.Serializer):
@@ -490,19 +540,50 @@ class ImputacionSerializer(serializers.ModelSerializer):
         read_only_fields = ["imputacion_id"]
 
 
+def user_display_name(user):
+    return (user.get_full_name().strip() or user.username) if user else None
+
+
 class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = ConfiguracionFinanciera
-        exclude = ["configuracion_financiera_id"]
-        read_only_fields = ["fecha_actualizacion", "usuario_actualizacion"]
+        fields = [
+            "configuracion_financiera_id",
+            "periodo_vigencia",
+            *CONFIGURATION_FIELDS,
+            "fecha_creacion",
+            "cuotas_actualizadas",
+            "responsable",
+            "usuario_creacion",
+            "usuario_nombre",
+        ]
+        read_only_fields = ["configuracion_financiera_id", "fecha_creacion", "cuotas_actualizadas", "responsable", "usuario_creacion"]
         extra_kwargs = {
+            "periodo_vigencia": {"required": True},
+            "monto_inscripcion": {"min_value": Decimal("0.00")},
             "monto_cuota_social": {"min_value": Decimal("0.01")},
             "monto_cuota_deportiva": {"min_value": Decimal("0.01")},
-            "dia_vencimiento_1": {"min_value": 1, "max_value": 31},
-            "dia_vencimiento_2": {"min_value": 1, "max_value": 31},
+            "dia_vencimiento_1": {"min_value": 1, "max_value": 28},
+            "dia_vencimiento_2": {"min_value": 1, "max_value": 28},
+            "dia_generacion": {"min_value": 1, "max_value": 28},
             "valor_recargo_1": {"min_value": Decimal("0.00")},
             "valor_recargo_2": {"min_value": Decimal("0.00")},
         }
+
+    def get_usuario_nombre(self, obj) -> str | None:
+        return user_display_name(obj.usuario_creacion)
+
+    def validate_periodo_vigencia(self, value):
+        try:
+            period = parse_period(value).strftime(PERIOD_FORMAT)
+        except ValueError as error:
+            raise serializers.ValidationError(str(error)) from None
+        current = timezone.localdate().strftime(PERIOD_FORMAT)
+        if period <= current:
+            raise serializers.ValidationError("El período de vigencia debe ser posterior al período actual.")
+        return period
 
     def validate(self, attrs):
         def current(field):
@@ -511,12 +592,31 @@ class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
         errors = {}
         if current("dia_vencimiento_2") < current("dia_vencimiento_1"):
             errors["dia_vencimiento_2"] = "El segundo vencimiento no puede ser anterior al primero."
+        if current("dia_generacion") > current("dia_vencimiento_1"):
+            errors["dia_generacion"] = "Las cuotas deben generarse antes del primer vencimiento o el mismo día."
         for number in (1, 2):
             if current(f"tipo_recargo_{number}") == ModalidadMontoChoices.PORCENTAJE and current(f"valor_recargo_{number}") > 100:
                 errors[f"valor_recargo_{number}"] = "El porcentaje de recargo no puede superar el 100%."
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+class VersionConfiguracionFinancieraSerializer(ConfiguracionFinancieraSerializer):
+    cambios = serializers.SerializerMethodField()
+
+    class Meta(ConfiguracionFinancieraSerializer.Meta):
+        fields = [*ConfiguracionFinancieraSerializer.Meta.fields, "cambios"]
+
+    def get_cambios(self, obj) -> list:
+        previous = obj.previous_version()
+        if previous is None:
+            return []
+        return [
+            {"campo": field, "anterior": str(getattr(previous, field)), "nuevo": str(getattr(obj, field))}
+            for field in CONFIGURATION_FIELDS
+            if getattr(previous, field) != getattr(obj, field)
+        ]
 
 
 class OtorgarBecaSerializer(serializers.Serializer):

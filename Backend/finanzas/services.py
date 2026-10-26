@@ -163,10 +163,10 @@ def lock_cuota_charge(cuota):
 
 @transaction.atomic
 def create_cuota(socio, period, first_due_date=None, second_due_date=None, configuration=None, today=None):
-    configuration = configuration or ConfiguracionFinanciera.load()
     today = today or timezone.localdate()
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
+    configuration = configuration or ConfiguracionFinanciera.load(period)
     items = GeneradorItemsCuota(socio, first_day, configuration).build_items()
     if not items:
         raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
@@ -288,6 +288,101 @@ def delete_cuota(cuota):
     cuota.delete()
 
 
+def user_name(user):
+    if user is None:
+        return "Sistema"
+    return (user.get_full_name().strip() or user.username)[:120]
+
+
+def affected_cuotas(period):
+    """Cuotas a version from `period` applies to: up to the next scheduled version and not fully paid."""
+    cuotas = (
+        Cuota.objects.filter(movimiento__isnull=False, periodo__gte=period)
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .order_by("periodo", "pk")
+    )
+    next_period = (
+        ConfiguracionFinanciera.objects.filter(periodo_vigencia__gt=period)
+        .order_by("periodo_vigencia")
+        .values_list("periodo_vigencia", flat=True)
+        .first()
+    )
+    return cuotas.filter(periodo__lt=next_period) if next_period else cuotas
+
+
+CONFIGURATION_AMOUNTS = (
+    (ConceptoItemChoices.CUOTA_SOCIAL, "monto_cuota_social"),
+    (ConceptoItemChoices.CUOTA_DEPORTIVA, "monto_cuota_deportiva"),
+)
+
+
+def update_cuota_amounts(cuota, configuration, reason, authorized_by, user):
+    changed = False
+    for concept, field in CONFIGURATION_AMOUNTS:
+        amount = getattr(configuration, field)
+        for item in cuota.items.filter(concepto=concept).exclude(monto=amount):
+            annul_item(item, reason, authorized_by, user)
+            ItemCuota.objects.create(
+                cuota=cuota,
+                concepto=concept,
+                fecha_aplicacion=item.fecha_aplicacion,
+                monto=amount,
+                motivo=benefit_reason(reason),
+                autorizado_por=authorized_by,
+            )
+            changed = True
+    return changed
+
+
+def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
+    first_day = cuota_period_start(cuota)
+    dates = (
+        due_date(first_day, configuration.dia_vencimiento_1),
+        due_date(first_day, configuration.dia_vencimiento_2),
+    )
+    if (cuota.fecha_venc1, cuota.fecha_venc2) == dates:
+        return False
+    cuota.fecha_venc1, cuota.fecha_venc2 = dates
+    update_fields = ["fecha_venc1", "fecha_venc2"]
+    # Surcharges of the old dates no longer apply, unless a payment already covered them
+    if not has_active_payments(cuota):
+        for item in cuota.items.filter(concepto=ConceptoItemChoices.MORA):
+            annul_item(item, reason, authorized_by, user)
+        cuota.recargos_aplicados = 0
+        update_fields.append("recargos_aplicados")
+    cuota.save(update_fields=update_fields)
+    return True
+
+
+def apply_configuration_to_cuota(cuota_id, configuration, user=None):
+    cuota = lock_cuota(cuota_id)
+    reason = f"Actualización de la configuración vigente desde {configuration.periodo_vigencia}"
+    authorized_by = user_name(user)
+    amounts_changed = update_cuota_amounts(cuota, configuration, reason, authorized_by, user)
+    dates_changed = update_cuota_due_dates(cuota, configuration, reason, authorized_by, user)
+    if not (amounts_changed or dates_changed):
+        return False
+    # Percentage scholarships depend on the amounts: they are recalculated even with partial payments
+    socio_id = cuota.movimiento.cuenta_corriente.socio_id
+    scholarships = list(scholarships_for_period(cuota_period_start(cuota)).filter(socio_id=socio_id))
+    rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
+    sync_cuota_charge(cuota)
+    apply_cuota_surcharges(cuota.pk, configuration=configuration)
+    return True
+
+
+@transaction.atomic
+def create_configuration_version(parameters, user=None, responsable=""):
+    """Creates the version and updates every unpaid cuota (partially paid included) it applies to."""
+    configuration = ConfiguracionFinanciera.objects.create(**parameters, usuario_creacion=user, responsable=responsable[:120])
+    configuration.cuotas_actualizadas = sum(
+        apply_configuration_to_cuota(cuota_id, configuration, user)
+        for cuota_id in affected_cuotas(configuration.periodo_vigencia).values_list("pk", flat=True)
+    )
+    configuration.save(update_fields=["cuotas_actualizadas"])
+    return configuration
+
+
 def generar_cuotas_mensuales(fecha=None, today=None):
     today = today or timezone.localdate()
     fecha = fecha or today
@@ -295,7 +390,7 @@ def generar_cuotas_mensuales(fecha=None, today=None):
         raise TypeError("La fecha de generación debe ser una fecha.")
 
     period = fecha.strftime(PERIOD_FORMAT)
-    configuration = ConfiguracionFinanciera.load()
+    configuration = ConfiguracionFinanciera.load(period)
     socios = (
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
         .select_related("estado_administrativo", "jugador__estado")
@@ -329,6 +424,15 @@ def generar_cuotas_mensuales(fecha=None, today=None):
         result["items_deportivos"] += concepts.count(ConceptoItemChoices.CUOTA_DEPORTIVA)
 
     return result
+
+
+def generate_scheduled_cuotas(today=None):
+    """Runs every day: generates the month's cuotas only on the day set in the configuration in force."""
+    today = today or timezone.localdate()
+    generation_day = ConfiguracionFinanciera.load(today).dia_generacion
+    if today.day != generation_day:
+        return {"periodo": today.strftime(PERIOD_FORMAT), "cuotas_creadas": 0, "dia_generacion": generation_day}
+    return generar_cuotas_mensuales(today, today=today)
 
 
 def pending_amounts(cuotas, ignored_origin=None):
@@ -726,9 +830,9 @@ def surcharge_reason(number):
 
 def apply_cuota_surcharges(cuota_id, today=None, configuration=None):
     today = today or timezone.localdate()
-    configuration = configuration or ConfiguracionFinanciera.load()
     with transaction.atomic():
         cuota = lock_cuota(cuota_id)
+        configuration = configuration or ConfiguracionFinanciera.load(cuota.periodo)
         pending = pending_amounts([cuota])[cuota.pk]
         if pending <= 0:
             refresh_cuota_state(cuota, pending, today)
@@ -785,7 +889,6 @@ def stale_state_filter(today):
 
 def apply_surcharges(today=None):
     today = today or timezone.localdate()
-    configuration = ConfiguracionFinanciera.load()
     previous_states = dict(
         Cuota.objects.filter(movimiento__isnull=False)
         .filter(Q(fecha_venc1__lt=today, recargos_aplicados__lt=2) | stale_state_filter(today))
@@ -802,7 +905,7 @@ def apply_surcharges(today=None):
         "estados_actualizados": 0,
     }
     for cuota_id in previous_states:
-        for number, item in apply_cuota_surcharges(cuota_id, today, configuration):
+        for number, item in apply_cuota_surcharges(cuota_id, today):
             key = "recargos_primer_vencimiento" if number == 1 else "recargos_segundo_vencimiento"
             result[key] += 1
             result["monto_total"] += item.monto

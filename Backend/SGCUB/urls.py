@@ -34,6 +34,7 @@ urlpatterns = [
     path("api/documental/", include("documental.urls")),
     path("api/comunicaciones/", include("comunicaciones.urls")),
     path("api/comet/", include("comet.urls")),
+    path("api/configuracion/", include("configuracion.urls")),
      ]
 if settings.DEBUG:
     urlpatterns += [
