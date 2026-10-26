@@ -63,7 +63,7 @@ def render_period_label(period_str):
 def build_periodos_rows(periodos):
     rows = []
     for p in periodos:
-        rows.append([Paragraph(f"<b>{render_period_label(p['periodo'])}</b>"), format_amount(p["monto_aplicado"])])
+        rows.append([Paragraph(f"<b>{render_period_label(p['periodo'])} ({p['periodo']})</b>"), format_amount(p["monto_aplicado"])])
         for line in p.get("detalle", []):
             rows.append([f"      • {line['concepto_nombre']}", format_amount(line["monto"])])
     return rows
