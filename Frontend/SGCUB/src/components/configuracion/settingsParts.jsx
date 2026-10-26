@@ -1,4 +1,3 @@
-import { BUTTON_CLASSES } from './settingsForm'
 
 export const INPUT_CLASS = 'w-full h-11 px-3 rounded-md border border-outline-variant/60 bg-surface-container-lowest text-base text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:bg-surface-container-low disabled:text-on-surface-variant'
 
@@ -51,6 +50,25 @@ export function Field({ label, hint, error, htmlFor, children }) {
   )
 }
 
+// Native select that reads clearly as a field: white background, visible border and a chevron
+export function SelectInput({ invalid = false, compact = false, children, className = '', ...props }) {
+  const sizeClass = compact ? INPUT_CLASS.replace('h-11', 'h-9') : INPUT_CLASS
+  return (
+    <div className={`relative ${className}`}>
+      <select
+        {...props}
+        aria-invalid={invalid || undefined}
+        className={`${sizeClass} appearance-none cursor-pointer pr-10 ${invalid ? 'border-2 border-error' : 'border-outline'}`}
+      >
+        {children}
+      </select>
+      <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-on-surface-variant" aria-hidden="true">
+        expand_more
+      </span>
+    </div>
+  )
+}
+
 export function PrefixedInput({ prefix, suffix, ...props }) {
   return (
     <div className="relative">
@@ -91,27 +109,5 @@ export function SwitchRow({ label, description, checked, onChange, disabled = fa
         disabled={disabled}
       />
     </label>
-  )
-}
-
-export function SaveBar({ changes, status, onSave, onReset, saveLabel = 'Guardar cambios' }) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-outline-variant/30 pt-4">
-      {status.error && <Notice tone="error">{status.error}</Notice>}
-      {status.message && <Notice tone="success">{status.message}</Notice>}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {changes.length > 0 && (
-          <button type="button" className={BUTTON_CLASSES.secondary} onClick={onReset} disabled={status.saving}>
-            Descartar
-          </button>
-        )}
-        <button type="button" className={BUTTON_CLASSES.primary} onClick={onSave} disabled={!changes.length || status.saving}>
-          <span className={`material-symbols-outlined text-[20px] ${status.saving ? 'animate-spin' : ''}`} aria-hidden="true">
-            {status.saving ? 'progress_activity' : 'save'}
-          </span>
-          {status.saving ? 'Guardando...' : saveLabel}
-        </button>
-      </div>
-    </div>
   )
 }

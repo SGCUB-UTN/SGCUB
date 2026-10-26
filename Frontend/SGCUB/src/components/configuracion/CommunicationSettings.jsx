@@ -1,5 +1,4 @@
-import { Field, INPUT_CLASS, Notice, SaveBar, SettingsCard, SwitchRow } from './settingsParts'
-import { useSettingsForm } from './settingsForm'
+import { Field, INPUT_CLASS, Notice, SettingsCard, SwitchRow } from './settingsParts'
 
 const NOTIFICATIONS = [
   {
@@ -29,15 +28,10 @@ const NOTIFICATIONS = [
   },
 ]
 
-const FIELDS = [
-  ...NOTIFICATIONS.map(({ field }) => field),
-  'dias_recordatorio_vencimiento',
-  'email_nombre_remitente',
-  'email_firma',
-]
-
 export default function CommunicationSettings({ config }) {
-  const { form, setField, changes, errors, status, save, reset } = useSettingsForm(config.general, FIELDS, config.saveGeneral)
+  const form = config.draft.general
+  const errors = config.errors.general
+  const setField = config.setGeneralField
 
   return (
     <div className="flex flex-col gap-5">
@@ -88,7 +82,6 @@ export default function CommunicationSettings({ config }) {
             />
           </Field>
         </div>
-        <SaveBar changes={changes} status={status} onSave={save} onReset={reset} />
       </SettingsCard>
     </div>
   )

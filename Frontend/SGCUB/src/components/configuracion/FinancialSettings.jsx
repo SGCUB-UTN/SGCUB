@@ -1,19 +1,8 @@
 import { useState } from 'react'
 import { formatDate, getErrorMessage } from '../personas/format'
-import ApplyFromPeriodModal from './ApplyFromPeriodModal'
-import {
-  CUOTA_FIELD_LABELS,
-  CUOTA_FIELDS,
-  SURCHARGE_TYPES,
-  formatCuotaValue,
-  formatVigencia,
-  scheduledVersions,
-  validateCuotaForm,
-} from './financialFields'
-import { Field, INPUT_CLASS, IconButton, Notice, PrefixedInput, SaveBar, SettingsCard } from './settingsParts'
-import { BUTTON_CLASSES, changedFields, useSettingsForm } from './settingsForm'
-
-const toForm = (version) => Object.fromEntries(CUOTA_FIELDS.map((field) => [field, version?.[field] ?? '']))
+import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
+import { BUTTON_CLASSES } from './settingsForm'
+import { Field, INPUT_CLASS, IconButton, Notice, PrefixedInput, SettingsCard } from './settingsParts'
 
 function SurchargeInputs({ due, form, errors, onChange }) {
   const typeField = `tipo_recargo_${due}`
@@ -61,39 +50,10 @@ function ScheduledVersions({ versions }) {
   )
 }
 
-function CuotaParametersCard({ current, versions, onSave, onShowHistory }) {
-  const [form, setForm] = useState(() => toForm(current))
-  const [syncedCurrent, setSyncedCurrent] = useState(current)
-  const [errors, setErrors] = useState({})
-  const [confirming, setConfirming] = useState(false)
-  const [notice, setNotice] = useState('')
-
-  if (current !== syncedCurrent) {
-    setSyncedCurrent(current)
-    setForm(toForm(current))
-  }
-
-  const changes = changedFields(form, current, CUOTA_FIELDS)
-  const setField = (field, value) => {
-    setForm((previous) => ({ ...previous, [field]: value }))
-    setErrors((previous) => ({ ...previous, [field]: undefined }))
-    setNotice('')
-  }
-
-  const requestSave = () => {
-    const validation = validateCuotaForm(form)
-    setErrors(validation)
-    if (!Object.keys(validation).length) setConfirming(true)
-  }
-
-  const confirm = async (period) => {
-    const created = await onSave({
-      periodo_vigencia: period,
-      ...Object.fromEntries(changes.map((field) => [field, form[field]])),
-    })
-    const updated = created.cuotas_actualizadas
-    setNotice(`Los cambios se guardaron y aplican ${formatVigencia(period).toLowerCase()}.${updated ? ` Se actualizaron ${updated} cuotas.` : ''}`)
-  }
+function CuotaParametersCard({ config, versions, onShowHistory }) {
+  const form = config.draft.financiera
+  const errors = config.errors.financiera
+  const setField = config.setFinancialField
 
   const numberField = (field, props = {}) => (
     <Field label={CUOTA_FIELD_LABELS[field]} htmlFor={field} error={errors[field]} hint={props.hint}>
@@ -111,7 +71,7 @@ function CuotaParametersCard({ current, versions, onSave, onShowHistory }) {
     <SettingsCard
       icon="request_quote"
       title="Cuotas: montos, fechas y recargos"
-      description={`Valores vigentes: ${formatVigencia(current.periodo_vigencia).toLowerCase()}. Los cambios se aplican a partir del período que elijas al guardar.`}
+      description={`Valores vigentes: ${formatVigencia(config.financiera.periodo_vigencia).toLowerCase()}. Al guardar se elige desde qué mes aplican los cambios.`}
       actions={(
         <button type="button" className={BUTTON_CLASSES.secondary} onClick={onShowHistory}>
           <span className="material-symbols-outlined text-[20px]" aria-hidden="true">history</span>
@@ -121,7 +81,8 @@ function CuotaParametersCard({ current, versions, onSave, onShowHistory }) {
     >
       <ScheduledVersions versions={versions} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {numberField('monto_inscripcion', { input: { prefix: '$', min: '0', step: '0.01' }, hint: 'Todavía no se cobra.' })}
         {numberField('monto_cuota_social', { input: { prefix: '$', min: '0.01', step: '0.01' } })}
         {numberField('monto_cuota_deportiva', { input: { prefix: '$', min: '0.01', step: '0.01' }, hint: 'Se suma a la cuota social de los jugadores activos.' })}
       </div>
@@ -136,56 +97,32 @@ function CuotaParametersCard({ current, versions, onSave, onShowHistory }) {
         <SurchargeInputs due={1} form={form} errors={errors} onChange={setField} />
         <SurchargeInputs due={2} form={form} errors={errors} onChange={setField} />
       </div>
-
-      <SaveBar
-        changes={changes}
-        status={{ saving: false, message: notice, error: '' }}
-        onSave={requestSave}
-        onReset={() => { setForm(toForm(current)); setErrors({}) }}
-        saveLabel="Guardar y elegir vigencia"
-      />
-
-      <ApplyFromPeriodModal
-        opened={confirming}
-        onClose={() => setConfirming(false)}
-        changes={changes}
-        current={current}
-        form={form}
-        onConfirm={confirm}
-      />
     </SettingsCard>
   )
 }
 
-const GENERAL_FIELDS = ['monto_inscripcion', 'cuotas_vencidas_morosidad']
-
-function RegistrationAndDelinquencyCard({ general, onSave }) {
-  const { form, setField, changes, errors, status, save, reset } = useSettingsForm(general, GENERAL_FIELDS, onSave)
+function DelinquencyCard({ config }) {
   return (
-    <SettingsCard
-      icon="how_to_reg"
-      title="Inscripción y morosidad"
-      description="Estos valores se aplican apenas se guardan."
-    >
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field
-          label="Monto de inscripción"
-          htmlFor="monto_inscripcion"
-          error={errors.monto_inscripcion}
-          hint="Todavía no se cobra: queda guardado para cuando se habilite el cobro de inscripciones."
-        >
-          <PrefixedInput id="monto_inscripcion" type="number" min="0" step="0.01" prefix="$" value={form.monto_inscripcion} onChange={(event) => setField('monto_inscripcion', event.target.value)} />
-        </Field>
+    <SettingsCard icon="how_to_reg" title="Morosidad" description="Se aplica apenas se guarda.">
+      <div className="max-w-sm">
         <Field
           label="Cuotas vencidas para considerar moroso"
           htmlFor="cuotas_vencidas_morosidad"
-          error={errors.cuotas_vencidas_morosidad}
+          error={config.errors.general.cuotas_vencidas_morosidad}
           hint="El reporte de morosidad solo incluye a los socios con esta cantidad de cuotas vencidas o más."
         >
-          <input id="cuotas_vencidas_morosidad" type="number" min="1" max="24" step="1" className={INPUT_CLASS} value={form.cuotas_vencidas_morosidad} onChange={(event) => setField('cuotas_vencidas_morosidad', event.target.value)} />
+          <input
+            id="cuotas_vencidas_morosidad"
+            type="number"
+            min="1"
+            max="24"
+            step="1"
+            className={INPUT_CLASS}
+            value={config.draft.general.cuotas_vencidas_morosidad}
+            onChange={(event) => config.setGeneralField('cuotas_vencidas_morosidad', event.target.value)}
+          />
         </Field>
       </div>
-      <SaveBar changes={changes} status={status} onSave={save} onReset={reset} />
     </SettingsCard>
   )
 }
@@ -307,13 +244,8 @@ function PaymentMethodsCard({ medios, onCreate, onUpdate, onDelete }) {
 export default function FinancialSettings({ config, onShowHistory }) {
   return (
     <div className="flex flex-col gap-5">
-      <CuotaParametersCard
-        current={config.financiera}
-        versions={scheduledVersions(config.versiones)}
-        onSave={config.saveFinancialVersion}
-        onShowHistory={onShowHistory}
-      />
-      <RegistrationAndDelinquencyCard general={config.general} onSave={config.saveGeneral} />
+      <CuotaParametersCard config={config} versions={scheduledVersions(config.versiones)} onShowHistory={onShowHistory} />
+      <DelinquencyCard config={config} />
       <PaymentMethodsCard medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
     </div>
   )

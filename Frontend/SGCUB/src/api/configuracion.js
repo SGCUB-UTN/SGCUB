@@ -5,14 +5,28 @@ const financialEndpoint = 'finanzas/configuracion/'
 
 export const DEFAULT_DOCUMENT_ALERT_DAYS = 30
 
-// Settings that apply as soon as they are saved (club, registration fee, alerts, notifications)
+// Club data, delinquency, alerts and notifications
 export const getConfiguracionGeneral = async () => {
   const response = await api.get(generalEndpoint)
   return response.data
 }
 
-export const patchConfiguracionGeneral = async (configuracion) => {
-  const response = await api.patch(generalEndpoint, configuracion)
+/**
+ * Saves every change of the configuration screen at once.
+ * payload: { responsable, general: {...}, financiera: { periodo_vigencia, ... } | null, quitar_logo }
+ * With a logo file the request goes as multipart, with the payload as JSON in `datos`.
+ */
+export const guardarConfiguracion = async (payload, logo = null) => {
+  if (!logo) {
+    const response = await api.post(`${generalEndpoint}guardar/`, payload)
+    return response.data
+  }
+  const formData = new FormData()
+  formData.append('datos', JSON.stringify(payload))
+  formData.append('club_logo', logo)
+  const response = await api.post(`${generalEndpoint}guardar/`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return response.data
 }
 
@@ -30,12 +44,6 @@ export const getDocumentAlertDays = async () => {
 // Cuota parameters, versioned by the period they apply from ('YYYY-MM'); without it, the current one
 export const getConfiguracionFinanciera = async (periodo) => {
   const response = await api.get(financialEndpoint, { params: periodo ? { periodo } : {} })
-  return response.data
-}
-
-// Only the fields sent change; the rest come from the version in force for periodo_vigencia
-export const postConfiguracionFinanciera = async (version) => {
-  const response = await api.post(financialEndpoint, version)
   return response.data
 }
 

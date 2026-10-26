@@ -11,6 +11,7 @@ export const SURCHARGE_TYPES = [
 
 // Cuota parameters: changing them requires the period they apply from
 export const CUOTA_FIELDS = [
+  'monto_inscripcion',
   'monto_cuota_social',
   'monto_cuota_deportiva',
   'dia_generacion',
@@ -23,6 +24,7 @@ export const CUOTA_FIELDS = [
 ]
 
 export const CUOTA_FIELD_LABELS = {
+  monto_inscripcion: 'Valor de inscripción',
   monto_cuota_social: 'Cuota social',
   monto_cuota_deportiva: 'Cuota deportiva',
   dia_generacion: 'Día de generación de cuotas',
@@ -34,7 +36,7 @@ export const CUOTA_FIELD_LABELS = {
   valor_recargo_2: 'Recargo (2° vencimiento)',
 }
 
-const AMOUNT_FIELDS = ['monto_cuota_social', 'monto_cuota_deportiva']
+const AMOUNT_FIELDS = ['monto_inscripcion', 'monto_cuota_social', 'monto_cuota_deportiva']
 const DAY_FIELDS = ['dia_generacion', 'dia_vencimiento_1', 'dia_vencimiento_2']
 
 export const formatCuotaValue = (field, value, version) => {
@@ -53,6 +55,12 @@ export const formatVigencia = (period) => (period === INITIAL_PERIOD ? 'Desde el
 
 export const nextPeriod = (today = new Date()) => currentPeriod(new Date(today.getFullYear(), today.getMonth() + 1, 1))
 
+// The next `count` periods, starting with next month: the ones a new version can apply from
+export const upcomingPeriods = (count = 6, today = new Date()) => Array.from(
+  { length: count },
+  (_, index) => currentPeriod(new Date(today.getFullYear(), today.getMonth() + 1 + index, 1)),
+)
+
 // Versions that start after the current period: the latest one created for each period
 export const scheduledVersions = (versions) => {
   const current = currentPeriod()
@@ -70,7 +78,9 @@ export const validateCuotaForm = (form) => {
   const errors = {}
   const number = (field) => Number(form[field])
   AMOUNT_FIELDS.forEach((field) => {
-    if (!(number(field) > 0)) errors[field] = 'Ingresá un monto mayor a cero.'
+    if (field === 'monto_inscripcion') {
+      if (form[field] === '' || number(field) < 0) errors[field] = 'Ingresá un monto igual o mayor a cero.'
+    } else if (!(number(field) > 0)) errors[field] = 'Ingresá un monto mayor a cero.'
   })
   DAY_FIELDS.forEach((field) => {
     const max = field === 'dia_generacion' ? 28 : 31

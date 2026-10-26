@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
-import { Field, INPUT_CLASS, IconButton, Notice, SaveBar, SettingsCard, SwitchRow } from './settingsParts'
-import { BUTTON_CLASSES, fieldErrors, useSettingsForm } from './settingsForm'
+import { BUTTON_CLASSES, fieldErrors } from './settingsForm'
+import { Field, INPUT_CLASS, IconButton, Notice, SettingsCard, SwitchRow } from './settingsParts'
 
 const PROFILES = [
   { field: 'aplica_jugador', label: 'Jugadores' },
@@ -205,10 +205,10 @@ function DocumentTypesCard({ tipos, onCreate, onUpdate, onDelete }) {
   )
 }
 
-const ALERT_FIELDS = ['dias_alerta_documentos']
-
-function DocumentAlertsCard({ general, onSave }) {
-  const { form, setField, changes, errors, status, save, reset } = useSettingsForm(general, ALERT_FIELDS, onSave)
+function DocumentAlertsCard({ config }) {
+  const form = config.draft.general
+  const errors = config.errors.general
+  const setField = config.setGeneralField
   return (
     <SettingsCard icon="notification_important" title="Alertas de vencimiento" description="Se aplica apenas se guarda.">
       <div className="max-w-sm">
@@ -221,7 +221,6 @@ function DocumentAlertsCard({ general, onSave }) {
           <input id="dias_alerta_documentos" type="number" min="1" max="365" step="1" className={INPUT_CLASS} value={form.dias_alerta_documentos} onChange={(event) => setField('dias_alerta_documentos', event.target.value)} />
         </Field>
       </div>
-      <SaveBar changes={changes} status={status} onSave={save} onReset={reset} />
     </SettingsCard>
   )
 }
@@ -230,7 +229,7 @@ export default function DocumentSettings({ config }) {
   return (
     <div className="flex flex-col gap-5">
       <DocumentTypesCard tipos={config.tipos} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
-      <DocumentAlertsCard general={config.general} onSave={config.saveGeneral} />
+      <DocumentAlertsCard config={config} />
     </div>
   )
 }
