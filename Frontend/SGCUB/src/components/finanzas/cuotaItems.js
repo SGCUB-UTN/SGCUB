@@ -12,15 +12,7 @@ const BENEFIT_CONCEPTS = [SCHOLARSHIP_CONCEPT, DISCOUNT_CONCEPT]
 
 const PAID_BLOCKER = 'La cuota está paga'
 
-export const itemLabel = (item) => {
-  if (item.es_descuento && (item.motivo || '').startsWith('Nota de crédito NC-X')) {
-    return 'Ajuste por Nota de Crédito'
-  }
-  if (item.es_descuento && (item.motivo || '').startsWith('Saldo a favor aplicado')) {
-    return 'Saldo a favor aplicado'
-  }
-  return item.descripcion ?? item.concepto_nombre ?? item.concepto
-}
+export const itemLabel = (item) => item.descripcion ?? item.concepto_nombre ?? item.concepto
 
 export const isLateFee = (item) => item.concepto === LATE_FEE_CONCEPT
 
@@ -37,9 +29,6 @@ const hasPayments = (cuota) => Number(cuota.monto_pagado ?? 0) > 0
 const unpaidLateFee = (cuota) => Number(cuota.saldo_pendiente ?? 0) - Number(cuota.saldo_sin_recargo ?? cuota.saldo_pendiente ?? 0)
 
 export const removalBlocker = (cuota, item) => {
-  if (item.es_descuento && ((item.motivo || '').startsWith('Nota de crédito NC-X') || (item.motivo || '').startsWith('Saldo a favor aplicado'))) {
-    return null
-  }
   if (isLateFee(item)) {
     if (isPaid(cuota)) return PAID_BLOCKER
     return hasPayments(cuota) && unpaidLateFee(cuota) <= 0 ? 'El recargo ya fue pagado' : ''

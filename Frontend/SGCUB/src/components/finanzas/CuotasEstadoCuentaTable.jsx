@@ -24,7 +24,7 @@ const rowBadge = (cuota) => {
   return { label: OVERDUE_BADGE_LABELS[state], title: cuotaStateLabel(state), className: cuotaStateBadgeClass(state) }
 }
 
-const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.monto_nota_credito ?? 0}-${cuota.saldo_pendiente}`
+const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.saldo_pendiente}`
 
 const byPeriodDesc = (a, b) => String(b.periodo).localeCompare(String(a.periodo)) || b.cuota_id - a.cuota_id
 
@@ -52,11 +52,6 @@ function SectionRow({ title, count }) {
 
 function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged }) {
   const badge = rowBadge(cuota)
-  const totalOriginal = Number(cuota.monto_total ?? 0)
-  const ncDiscount = Number(cuota.monto_nota_credito ?? 0)
-  const netTotal = cuota.monto_neto != null ? Number(cuota.monto_neto) : Math.max(0, totalOriginal - ncDiscount)
-  const hasNcDiscount = ncDiscount > 0 && netTotal < totalOriginal
-
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -77,7 +72,7 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
           <span className={`material-symbols-outlined text-[22px] transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
         </td>
         <td className="py-3 px-4">
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
             <span className="font-medium text-on-surface text-base">{cuota.periodo ? formatPeriod(cuota.periodo) : '—'}</span>
             {badge && (
               <span
@@ -87,28 +82,11 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
                 {badge.label}
               </span>
             )}
-            {hasNcDiscount && (
-              <span
-                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border bg-amber-50 text-amber-800 border-amber-200 whitespace-nowrap"
-                title={`Nota de Crédito por −${formatAmount(ncDiscount)}`}
-              >
-                NC −{formatAmount(ncDiscount)}
-              </span>
-            )}
             {isPartiallyPaid(cuota) && <span className="text-sm text-amber-700">Pago parcial</span>}
           </div>
         </td>
-        <td className="py-3 px-4 text-right text-on-surface-variant tabular-nums">
-          {hasNcDiscount ? (
-            <span className="inline-flex flex-col items-end leading-tight">
-              <span className="text-xs line-through text-outline">{formatAmount(totalOriginal)}</span>
-              <span className="font-semibold text-on-surface">{formatAmount(netTotal)}</span>
-            </span>
-          ) : (
-            formatAmount(totalOriginal)
-          )}
-        </td>
-        <td className="py-3 px-4 text-right font-semibold text-on-surface tabular-nums">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
+        <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
+        <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
       </tr>
       {expanded && (
         <CuotaDetailPanel
