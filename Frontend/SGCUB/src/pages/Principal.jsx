@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import useDashboard from '../hooks/useDashboard'
 import DocumentSummarySection from '../components/dashboard/DocumentSummarySection'
 import FinancialKpiSection from '../components/dashboard/FinancialKpiSection'
 import ProcessStatusSection from '../components/dashboard/ProcessStatusSection'
+import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
 import PageHeader from '../components/shared/PageHeader'
-import { PrimaryButton } from '../components/personas/tabs/parts'
+import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 
 const DATE_LABEL = new Date().toLocaleDateString('es-AR', {
@@ -15,6 +17,7 @@ const DATE_LABEL = new Date().toLocaleDateString('es-AR', {
 
 export default function Principal() {
   const { openPayment } = useRegisterPayment()
+  const [movimientoManualAbierto, setMovimientoManualAbierto] = useState(false)
   const {
     isLoading,
     totalRecaudadoMes,
@@ -37,10 +40,7 @@ export default function Principal() {
         actions={(
           <>
             <PrimaryButton icon="payments" onClick={() => openPayment()}>Registrar pago</PrimaryButton>
-            <span className="inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded-lg text-sm text-on-surface-variant bg-surface-container-low">
-              <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">calendar_today</span>
-              <span className="capitalize">{DATE_LABEL}</span>
-            </span>
+            <SecondaryButton icon="add_card" onClick={() => setMovimientoManualAbierto(true)}>Otros movimientos</SecondaryButton>
           </>
         )}
       />
@@ -65,6 +65,11 @@ export default function Principal() {
         />
         <ProcessStatusSection />
       </div>
+
+      <MovimientoManualModal
+        opened={movimientoManualAbierto}
+        onClose={() => setMovimientoManualAbierto(false)}
+      />
     </div>
   )
 }

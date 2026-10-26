@@ -7,6 +7,7 @@ import { getMovimientos } from '../api/movimientos'
 import PagoForm from '../components/finanzas/PagoForm'
 import ComprobantesTable from '../components/finanzas/ComprobantesTable'
 import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
+import AmendPagoModal from '../components/finanzas/AmendPagoModal'
 import MovimientoManualDetailModal from '../components/finanzas/MovimientoManualDetailModal'
 import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
 import PageHeader from '../components/shared/PageHeader'
@@ -31,7 +32,9 @@ function Caja() {
   const [errorDetalle, setErrorDetalle] = useState(null)
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null)
   const [movimientoManualAbierto, setMovimientoManualAbierto] = useState(false)
-  const [ingresoARevertir, setIngresoARevertir] = useState(null)
+  const [modalSocio, setModalSocio] = useState(null)
+  const [modalOperacion, setModalOperacion] = useState('IngresoManual')
+  const [pagoEnCorreccion, setPagoEnCorreccion] = useState(null)
 
   const cargarComprobantes = useCallback(async () => {
     try {
@@ -87,8 +90,9 @@ function Caja() {
     return () => { activo = false }
   }, [socioId])
 
-  const abrirModalMovimientoManual = (reversedMovement = null) => {
-    setIngresoARevertir(reversedMovement)
+  const abrirModalMovimientoManual = (socio = null, operacion = 'IngresoManual') => {
+    setModalSocio(socio || carga.socio)
+    setModalOperacion(operacion)
     setMovimientoManualAbierto(true)
   }
 
@@ -149,7 +153,16 @@ function Caja() {
         error={errorDetalle}
         opened={Boolean(comprobanteSeleccionado)}
         onClose={() => setComprobanteSeleccionado(null)}
-        onAmended={async ({ replacementComprobante } = {}) => {
+        onCorrect={setPagoEnCorreccion}
+      />
+      <AmendPagoModal
+        key={pagoEnCorreccion?.pago_id ?? 'closed'}
+        comprobante={comprobanteSeleccionado}
+        pago={pagoEnCorreccion}
+        detail={detalleComprobante}
+        opened={Boolean(pagoEnCorreccion)}
+        onClose={() => setPagoEnCorreccion(null)}
+        onSuccess={async () => {
           await recargarCaja()
           if (socioId) {
             try {
@@ -158,20 +171,12 @@ function Caja() {
             } catch {
               setCarga((actual) => ({
                 ...actual,
-                error: 'La modificación se registró, pero no se pudo actualizar la cuenta corriente.',
+                error: 'La corrección se registró, pero no se pudo actualizar la cuenta corriente.',
               }))
             }
           }
-          const target = replacementComprobante ?? comprobanteSeleccionado
-          if (target?.comprobante_id) {
-            try {
-              const updatedDetail = await getComprobante(target.comprobante_id)
-              setComprobanteSeleccionado((prev) => (replacementComprobante ? { ...prev, ...replacementComprobante } : prev))
-              setDetalleComprobante(updatedDetail)
-            } catch {
-              // Keep existing detail if refresh fails
-            }
-          }
+          setPagoEnCorreccion(null)
+          setComprobanteSeleccionado(null)
         }}
       />
 
@@ -183,17 +188,18 @@ function Caja() {
         onSelectMovimiento={setMovimientoSeleccionado}
         onIssueCreditNote={(movimiento) => {
           setMovimientoSeleccionado(null)
-          abrirModalMovimientoManual(movimiento)
+          abrirModalMovimientoManual(movimiento?.socio, 'Egreso')
         }}
       />
 
       <MovimientoManualModal
         opened={movimientoManualAbierto}
-        initialSocio={ingresoARevertir?.socio ?? carga.socio}
-        initialReversedMovement={ingresoARevertir}
+        initialSocio={modalSocio}
+        initialOperation={modalOperacion}
         onClose={() => {
           setMovimientoManualAbierto(false)
-          setIngresoARevertir(null)
+          setModalSocio(null)
+          setModalOperacion('IngresoManual')
         }}
         onSuccess={() => {
           recargarCaja()
