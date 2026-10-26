@@ -90,6 +90,7 @@ from .services import (
 	create_manual_movement,
 	remove_cuota_item,
 	reschedule_cuota,
+	revert_configuration_version,
 	update_discount,
 	update_scholarship,
 )
@@ -560,6 +561,30 @@ def configuracion_financiera_versiones(request):
 	return Response(VersionConfiguracionFinancieraSerializer(versiones, many=True).data)
 
 
+@extend_schema(tags=["Finanzas/Configuracion"], responses=VersionConfiguracionFinancieraSerializer)
+@api_view(["POST"])
+def configuracion_financiera_revertir(request, pk):
+	version = get_object_or_404(ConfiguracionFinanciera, pk=pk)
+	current_period = timezone.localdate().strftime("%Y-%m")
+	if version.periodo_vigencia <= current_period:
+		return Response(
+			{"detail": "Solo se pueden revertir cambios programados para períodos futuros."},
+			status=status.HTTP_400_BAD_REQUEST,
+		)
+	latest = ConfiguracionFinanciera.load(version.periodo_vigencia)
+	if latest.pk != version.pk:
+		return Response(
+			{"detail": "Solo se puede revertir la última versión vigente para ese período."},
+			status=status.HTTP_400_BAD_REQUEST,
+		)
+	responsable = str(request.data.get("responsable") or "").strip()
+	try:
+		reverted = revert_configuration_version(version, user=request_user(request), responsable=responsable)
+	except ValueError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(VersionConfiguracionFinancieraSerializer(reverted).data)
+
+
 PAYMENT_METHOD_FIELDS = {"nombre": "Nombre", "activo": "Habilitado"}
 
 
@@ -771,8 +796,10 @@ def _build_financial_report(period_date):
 
     pagos_por_medio = _totales_por_medio_de_pago()
 
+    current_period = timezone.localdate().strftime("%Y-%m")
     unpaid_cuotas = list(
-        Cuota.objects.exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        Cuota.objects.filter(periodo__lte=current_period)
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .select_related("movimiento__cuenta_corriente__socio__persona")
         .prefetch_related("items")
     )
