@@ -153,7 +153,7 @@ export default function UnpaidCuotasTable({ rows = [], isLoading = false, error 
         <TableSearchInput
           value={search}
           onChange={withPageReset(setSearch)}
-          placeholder="Buscar por nombre, DNI o N° de socio..."
+          placeholder="Nombre, DNI o N° de socio"
           label="Buscar cuotas impagas"
         />
         <div role="group" aria-label="Filtrar por tipo" className="flex flex-wrap items-center gap-2">
