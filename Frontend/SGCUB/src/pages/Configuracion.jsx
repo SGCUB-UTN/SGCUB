@@ -23,6 +23,12 @@ const savedMessage = (result) => {
     + (updated ? ` y se actualizaron ${updated} ${updated === 1 ? 'cuota' : 'cuotas'}.` : '.')
 }
 
+const revertedMessage = (version) => {
+  const updated = version.cuotas_actualizadas
+  return `Se revirtió el cambio programado ${formatVigencia(version.periodo_vigencia).toLowerCase()}`
+    + (updated ? ` y se actualizaron ${updated} ${updated === 1 ? 'cuota' : 'cuotas'}.` : '.')
+}
+
 export default function Configuracion() {
   const config = useConfiguracion()
   const [history, setHistory] = useState({ opened: false, section: '' })
@@ -73,7 +79,13 @@ export default function Configuracion() {
               id: 'finanzas',
               label: 'Finanzas y facturación',
               icon: 'payments',
-              content: <FinancialSettings config={config} onShowHistory={() => openHistory('Finanzas')} />,
+              content: (
+                <FinancialSettings
+                  config={config}
+                  onShowHistory={() => openHistory('Finanzas')}
+                  onReverted={(version) => setNotice({ tone: 'success', message: revertedMessage(version) })}
+                />
+              ),
             },
             {
               id: 'documentacion',
