@@ -23,17 +23,12 @@ export const cuotaTypeLabel = (type) => CUOTA_TYPE_LABELS[type] ?? type ?? '—'
 export const cuotaTypeBadgeClass = (type) => CUOTA_TYPE_BADGE_CLASSES[type] ?? CUOTA_TYPE_BADGE_CLASSES[CUOTA_TYPES.MEMBER]
 
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
-const compactMoney = new Intl.NumberFormat('es-AR', {
-  style: 'currency',
-  currency: 'ARS',
-  notation: 'compact',
-  maximumFractionDigits: 1,
-})
+const wholeMoney = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 const percentage = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
 
 export const formatMoney = (amount) => money.format(Number(amount ?? 0))
 
-export const formatCompactMoney = (amount) => compactMoney.format(Number(amount ?? 0))
+export const formatWholeMoney = (amount) => wholeMoney.format(Number(amount ?? 0))
 
 export const formatPercentage = (value) => `${percentage.format(Number(value ?? 0))} %`
 

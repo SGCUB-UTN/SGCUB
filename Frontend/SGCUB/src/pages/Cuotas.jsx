@@ -168,10 +168,6 @@ function Cuotas() {
         actions={(
           <div className="flex flex-wrap items-center gap-2.5">
             <PeriodSelector value={period} options={summary.data?.periods} onChange={changePeriod} />
-            <button type="button" onClick={abrirAgregar} className={SECONDARY_BUTTON_CLASS}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">add</span>
-              Nueva cuota
-            </button>
             <button type="button" aria-disabled="true" title="Disponible próximamente" className={UPCOMING_BUTTON_CLASS}>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">notifications</span>
               Notificar
@@ -189,7 +185,12 @@ function Cuotas() {
         <div role="region" aria-labelledby="period-kpis-title">
           <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" />
           <div className={SECTION_CLASS}>
-            <PeriodKpis summary={summary.data} isLoading={summary.isLoading} error={summary.error} />
+            <PeriodKpis
+              summary={summary.data}
+              unpaid={unpaid.data}
+              isLoading={summary.isLoading || unpaid.isLoading}
+              error={summary.error || unpaid.error}
+            />
           </div>
         </div>
 
