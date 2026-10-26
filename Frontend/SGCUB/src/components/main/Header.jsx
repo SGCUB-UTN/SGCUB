@@ -1,4 +1,5 @@
 import { useAuth } from "../../auth/useAuth";
+import useTheme from "../../hooks/useTheme";
 import HeaderSearch from "./HeaderSearch";
 import "./header.css";
 
@@ -9,6 +10,7 @@ const getRoleLabel = (user) => {
 
 export default function Header({ collapsed = false }) {
   const { user, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <header className={`app-header fixed top-0 right-0 bg-surface-container-lowest border-b border-outline-variant/30 z-40 flex flex-row flex-nowrap items-center px-6 ${collapsed ? 'app-header--collapsed' : ''}`}>
@@ -18,8 +20,18 @@ export default function Header({ collapsed = false }) {
       </div>
 
       <div className="app-header-actions ml-auto flex shrink-0 items-center gap-4">
-        
-        
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-outline-variant/40 bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+            {isDark ? "light_mode" : "dark_mode"}
+          </span>
+        </button>
+
         <div className="h-6 w-px bg-outline-variant/30"></div>
         
         <div className="flex items-center gap-2">
