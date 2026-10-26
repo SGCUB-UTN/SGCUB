@@ -149,7 +149,7 @@ export default function UnpaidCuotasTable({ rows = [], isLoading = false, error 
 
   return (
     <div className="min-w-0">
-      <div className="px-4 sm:px-5 pb-4 flex flex-col xl:flex-row xl:items-center gap-3">
+      <div className="px-4 sm:px-5 py-4 flex flex-col xl:flex-row xl:items-center gap-3">
         <TableSearchInput
           value={search}
           onChange={withPageReset(setSearch)}

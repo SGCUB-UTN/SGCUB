@@ -180,40 +180,30 @@ function Cuotas() {
         )}
       />
 
-      <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm divide-y divide-outline-variant/30">
+      <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
         <div className={SECTION_CLASS}>
           <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
         </div>
 
-        <div role="region" className={`${SECTION_CLASS} flex flex-col gap-4`} aria-labelledby="period-kpis-title">
-          <SectionHeading
-            id="period-kpis-title"
-            title="Indicadores del período"
-            description="Montos y cantidades de las cuotas emitidas para el período seleccionado."
-          />
-          <PeriodKpis summary={summary.data} isLoading={summary.isLoading} error={summary.error} />
-        </div>
-
-        <div role="region" className={`${SECTION_CLASS} flex flex-col gap-3`} aria-labelledby="task-runs-title">
-          <SectionHeading
-            id="task-runs-title"
-            title="Historial de automatizaciones"
-            description="Generación de cuotas y recargos por vencimiento ejecutados para este período."
-          />
-          <TaskRunList runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
-        </div>
-
-        <div role="region" className="pt-4 sm:pt-5 flex flex-col gap-4" aria-labelledby="unpaid-cuotas-title">
-          <div className="px-4 sm:px-5 flex flex-col gap-3">
-            <SectionHeading
-              id="unpaid-cuotas-title"
-              title="Cuotas impagas al día de la fecha"
-              description="Socios, jugadores y jugadores de baja parcial que todavía no pagaron la cuota del período."
-            />
-            {actionError && (
-              <p role="alert" className="text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
-            )}
+        <div role="region" aria-labelledby="period-kpis-title">
+          <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" />
+          <div className={SECTION_CLASS}>
+            <PeriodKpis summary={summary.data} isLoading={summary.isLoading} error={summary.error} />
           </div>
+        </div>
+
+        <div role="region" aria-labelledby="task-runs-title">
+          <SectionHeading id="task-runs-title" icon="history" title="Historial de automatizaciones" />
+          <div className={SECTION_CLASS}>
+            <TaskRunList runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
+          </div>
+        </div>
+
+        <div role="region" aria-labelledby="unpaid-cuotas-title">
+          <SectionHeading id="unpaid-cuotas-title" icon="pending_actions" title="Cuotas impagas al día de la fecha" />
+          {actionError && (
+            <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
+          )}
           <UnpaidCuotasTable
             key={period}
             rows={unpaid.data ?? []}
