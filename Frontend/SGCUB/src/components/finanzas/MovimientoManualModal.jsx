@@ -14,27 +14,24 @@ const OPERATIONS = [
   {
     value: 'IngresoManual',
     title: 'Ingreso manual',
-    description: 'Venta de indumentaria, donación, buffet u otro ingreso ajeno a cuotas.',
-    icon: 'add_card',
+    description: 'Venta de indumentaria, donación u otro ingreso ajeno a cuotas.',
+    icon: 'add_circle',
     type: 'Abono',
     concepts: [
       'Venta de indumentaria',
       'Donación',
-      'Evento / Buffet',
-      'Alquiler de instalaciones',
       'Otro ingreso',
     ],
   },
   {
     value: 'Egreso',
     title: 'Egreso / Devolución',
-    description: 'Devolución por transferencia duplicada, error en monto o reintegro.',
-    icon: 'payments',
+    description: 'Devolución por transferencia duplicada, error en el monto o reintegro.',
+    icon: 'remove_circle',
     type: 'Cargo',
     concepts: [
       'Devolución por transferencia duplicada',
       'Devolución por error en monto transferido',
-      'Devolución a socio',
       'Reintegro de gastos',
       'Compra de insumos / Materiales',
       'Otro egreso',
@@ -332,7 +329,7 @@ function MovimientoManualForm({
           <h3 id="manual-summary-title" className="text-lg font-bold text-on-surface">Resumen del movimiento</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
-            <TicketSection title="Concepto a imputar">
+            <TicketSection title="Concepto a imputar" spread={false}>
               <SummaryLine label="Operación" value={currentOp.title} />
               <SummaryLine label="Concepto" value={concept} />
               {detail.trim() && <SummaryLine label="Observación" value={detail.trim()} />}

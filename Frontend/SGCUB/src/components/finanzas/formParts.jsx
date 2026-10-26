@@ -14,8 +14,8 @@ export function SummaryLine({ label, value, isTotal = false, valueClassName = ''
   const valueTone = valueClassName || 'text-on-surface'
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className={isTotal ? 'text-base font-bold text-on-surface' : 'text-base text-on-surface-variant'}>{label}</span>
-      <span className={`${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
+      <span className={`shrink-0 ${isTotal ? 'text-base font-bold text-on-surface' : 'text-base text-on-surface-variant'}`}>{label}</span>
+      <span className={`min-w-0 text-right break-words ${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
     </div>
   )
 }
@@ -111,11 +111,11 @@ export const TICKET_CLASS = 'h-full flex flex-col gap-4 p-5 rounded-lg border bo
 
 export const SUBMIT_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-primary hover:bg-primary/90 text-surface-container-lowest shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 
-export function TicketSection({ title, children }) {
+export function TicketSection({ title, spread = true, children }) {
   return (
     <div className="flex flex-1 flex-col gap-1.5 pb-3 border-b border-dashed border-slate-300">
       <h4 className={SUMMARY_GROUP_CLASS}>{title}</h4>
-      <div className="flex flex-1 flex-col justify-evenly gap-1.5">{children}</div>
+      <div className={`flex flex-1 flex-col gap-1.5 ${spread ? 'justify-evenly' : 'justify-start'}`}>{children}</div>
     </div>
   )
 }
