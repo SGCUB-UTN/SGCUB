@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
-import { BUTTON_CLASSES, fieldErrors } from './settingsForm'
-import { Field, INPUT_CLASS, IconButton, Notice, SettingsCard, SwitchRow } from './settingsParts'
+import { IntegerInput } from './formattedInputs'
+import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, fieldErrors } from './settingsForm'
+import { Field, INPUT_CLASS, IconButton, Notice, SettingsSection, StatusPill, SwitchRow } from './settingsParts'
 
 const PROFILES = [
   { field: 'aplica_jugador', label: 'Jugadores' },
@@ -86,7 +87,7 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
         error={errors.vigencia_meses}
         hint="Opcional. Al cargar un documento, sugiere el vencimiento a partir de la fecha de emisión."
       >
-        <input id="tipo-vigencia" type="number" min="1" max="120" step="1" className={INPUT_CLASS} value={form.vigencia_meses} onChange={(event) => setField('vigencia_meses', event.target.value)} />
+        <IntegerInput id="tipo-vigencia" unit="meses" value={form.vigencia_meses} onChange={(value) => setField('vigencia_meses', value)} invalid={Boolean(errors.vigencia_meses)} />
       </Field>
 
       {errors.general && <Notice tone="error">{errors.general}</Notice>}
@@ -117,23 +118,19 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   }
 
   return (
-    <tr className="border-t border-outline-variant/30 align-top">
-      <td className="px-4 py-3">
-        <p className={`font-semibold ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
-        {error && <p className="mt-1 text-sm text-error" role="alert">{error}</p>}
+    <tr className={TABLE_CLASSES.row}>
+      <td className={TABLE_CLASSES.cell}>
+        <p className={`font-medium ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
+        {error && <p className="mt-1 text-xs font-medium text-error" role="alert">{error}</p>}
       </td>
-      <td className="px-4 py-3 text-on-surface-variant">{profilesLabel(tipo)}</td>
-      <td className="px-4 py-3 text-on-surface-variant">{tipo.obligatorio ? 'Sí' : 'No'}</td>
-      <td className="px-4 py-3 text-on-surface-variant">
+      <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{profilesLabel(tipo)}</td>
+      <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{tipo.obligatorio ? 'Sí' : 'No'}</td>
+      <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>
         {tipo.requiere_vencimiento ? 'Obligatorio' : 'Opcional'}
         {tipo.vigencia_meses ? ` · ${tipo.vigencia_meses} ${tipo.vigencia_meses === 1 ? 'mes' : 'meses'}` : ''}
       </td>
-      <td className="px-4 py-3">
-        <span className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${tipo.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-          {tipo.activo ? 'Habilitado' : 'Deshabilitado'}
-        </span>
-      </td>
-      <td className="px-2 py-1.5">
+      <td className={TABLE_CLASSES.cell}><StatusPill active={tipo.activo} /></td>
+      <td className={TABLE_CLASSES.actionsCell}>
         <div className="flex justify-end">
           <IconButton icon="edit" label="Editar" disabled={busy} onClick={() => onEdit(tipo)} />
           <IconButton
@@ -154,7 +151,7 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   )
 }
 
-function DocumentTypesCard({ tipos, onCreate, onUpdate, onDelete }) {
+function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
   const [modal, setModal] = useState({ opened: false, tipo: null, key: 0 })
   const open = (tipo = null) => setModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
   const close = () => setModal((current) => ({ ...current, opened: false }))
@@ -162,27 +159,27 @@ function DocumentTypesCard({ tipos, onCreate, onUpdate, onDelete }) {
   const save = (data) => (modal.tipo ? onUpdate(modal.tipo.id_tipo_documento, data) : onCreate(data))
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon="folder_managed"
       title="Tipos de documento"
-      description="Los tipos deshabilitados conservan sus documentos, pero no se pueden usar en cargas nuevas."
-      actions={(
-        <button type="button" className={BUTTON_CLASSES.primary} onClick={() => open()}>
-          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">add</span>
+      flush
+      extra={(
+        <button type="button" className={SMALL_BUTTON_CLASSES.primary} onClick={() => open()}>
+          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
           Nuevo tipo
         </button>
       )}
     >
-      <div className="overflow-x-auto rounded-lg border border-outline-variant/40">
-        <table className="w-full min-w-[720px] text-left text-base">
-          <thead className="bg-surface-container-low text-sm uppercase tracking-wider text-on-surface-variant">
+      <div className={TABLE_CLASSES.wrapper}>
+        <table className={`${TABLE_CLASSES.table} min-w-[720px]`}>
+          <thead className={TABLE_CLASSES.head}>
             <tr>
-              <th className="px-4 py-2.5 font-semibold">Tipo</th>
-              <th className="px-4 py-2.5 font-semibold">Se pide a</th>
-              <th className="px-4 py-2.5 font-semibold">Obligatorio</th>
-              <th className="px-4 py-2.5 font-semibold">Vencimiento</th>
-              <th className="px-4 py-2.5 font-semibold">Estado</th>
-              <th className="px-4 py-2.5"><span className="sr-only">Acciones</span></th>
+              <th className={TABLE_CLASSES.headCell}>Tipo</th>
+              <th className={TABLE_CLASSES.headCell}>Se pide a</th>
+              <th className={TABLE_CLASSES.headCell}>Obligatorio</th>
+              <th className={TABLE_CLASSES.headCell}>Vencimiento</th>
+              <th className={TABLE_CLASSES.headCell}>Estado</th>
+              <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -201,35 +198,42 @@ function DocumentTypesCard({ tipos, onCreate, onUpdate, onDelete }) {
       >
         {modal.opened && <DocumentTypeForm key={modal.key} tipo={modal.tipo} onSave={save} onClose={close} />}
       </Modal>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
-function DocumentAlertsCard({ config }) {
-  const form = config.draft.general
-  const errors = config.errors.general
-  const setField = config.setGeneralField
+function DocumentAlertsSection({ config }) {
+  const error = config.errors.general.dias_alerta_documentos
   return (
-    <SettingsCard icon="notification_important" title="Alertas de vencimiento" description="Se aplica apenas se guarda.">
-      <div className="max-w-sm">
-        <Field
-          label="Días de aviso antes del vencimiento"
-          htmlFor="dias_alerta_documentos"
-          error={errors.dias_alerta_documentos}
-          hint='Un documento pasa a "Por vencer" cuando le quedan estos días o menos.'
-        >
-          <input id="dias_alerta_documentos" type="number" min="1" max="365" step="1" className={INPUT_CLASS} value={form.dias_alerta_documentos} onChange={(event) => setField('dias_alerta_documentos', event.target.value)} />
-        </Field>
+    <SettingsSection
+      icon="notification_important"
+      title="Alertas de vencimiento"
+    >
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <label htmlFor="dias_alerta_documentos" className="text-sm font-medium text-on-surface">Días de aviso antes del vencimiento</label>
+          <div className="w-20">
+            <IntegerInput
+              id="dias_alerta_documentos"
+              unit="días"
+              maxLength={2}
+              value={config.draft.general.dias_alerta_documentos}
+              onChange={(value) => config.setGeneralField('dias_alerta_documentos', value)}
+              invalid={Boolean(error)}
+            />
+          </div>
+        </div>
+        {error && <p className="text-xs font-medium text-error" role="alert">{error}</p>}
       </div>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
 export default function DocumentSettings({ config }) {
   return (
-    <div className="flex flex-col gap-5">
-      <DocumentTypesCard tipos={config.tipos} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
-      <DocumentAlertsCard config={config} />
+    <div className="flex flex-col">
+      <DocumentTypesSection tipos={config.tipos} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
+      <DocumentAlertsSection config={config} />
     </div>
   )
 }

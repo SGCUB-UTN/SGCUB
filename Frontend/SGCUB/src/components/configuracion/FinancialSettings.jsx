@@ -1,129 +1,139 @@
 import { useState } from 'react'
 import { formatDate, getErrorMessage } from '../personas/format'
 import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
-import { BUTTON_CLASSES } from './settingsForm'
-import { Field, INPUT_CLASS, IconButton, Notice, PrefixedInput, SettingsCard } from './settingsParts'
+import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
+import { SMALL_BUTTON_CLASSES, TABLE_CLASSES, compactInputClass } from './settingsForm'
+import { BlockTitle, CompactField, CompactSelect, IconButton, SettingsSection, StatusPill } from './settingsParts'
 
-function SurchargeInputs({ due, form, errors, onChange }) {
-  const typeField = `tipo_recargo_${due}`
-  const valueField = `valor_recargo_${due}`
-  const isPercentage = form[typeField] === 'Porcentaje'
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Field label={`Tipo de recargo al ${due}° vencimiento`} htmlFor={typeField}>
-        <select id={typeField} className={INPUT_CLASS} value={form[typeField]} onChange={(event) => onChange(typeField, event.target.value)}>
-          {SURCHARGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-        </select>
-      </Field>
-      <Field label={`Recargo al ${due}° vencimiento`} htmlFor={valueField} error={errors[valueField]}>
-        <PrefixedInput
-          id={valueField}
-          type="number"
-          min="0"
-          max={isPercentage ? '100' : undefined}
-          step="0.01"
-          prefix={isPercentage ? undefined : '$'}
-          suffix={isPercentage ? '%' : undefined}
-          value={form[valueField]}
-          onChange={(event) => onChange(valueField, event.target.value)}
-        />
-      </Field>
-    </div>
-  )
-}
+const CellError = ({ message }) => (message ? <p className="mt-1 text-xs font-medium text-error" role="alert">{message}</p> : null)
 
 function ScheduledVersions({ versions }) {
   if (!versions.length) return null
   return (
-    <Notice tone="info">
-      <p className="font-semibold">Cambios programados</p>
-      <ul className="mt-1 flex flex-col gap-2">
-        {versions.map((version) => (
-          <li key={version.configuracion_financiera_id}>
-            <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
-            {' '}(cargado por {version.usuario_nombre ?? 'el sistema'} el {formatDate(version.fecha_creacion)}):
-            {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
-          </li>
-        ))}
-      </ul>
-    </Notice>
+    <div className="flex items-start gap-2 text-sm text-sky-900" role="status">
+      <span className="material-symbols-outlined shrink-0 text-[18px] text-sky-700" aria-hidden="true">event_upcoming</span>
+      <div>
+        <p className="font-semibold">Cambios programados</p>
+        <ul className="mt-1 flex flex-col gap-1">
+          {versions.map((version) => (
+            <li key={version.configuracion_financiera_id}>
+              <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
+              {' '}(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):
+              {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }
 
-function CuotaParametersCard({ config, versions, onShowHistory }) {
+function FeesSection({ config, onShowHistory }) {
   const form = config.draft.financiera
   const errors = config.errors.financiera
   const setField = config.setFinancialField
 
-  const numberField = (field, props = {}) => (
-    <Field label={CUOTA_FIELD_LABELS[field]} htmlFor={field} error={errors[field]} hint={props.hint}>
-      <PrefixedInput
-        id={field}
-        type="number"
-        value={form[field]}
-        onChange={(event) => setField(field, event.target.value)}
-        {...props.input}
-      />
-    </Field>
+  const moneyField = (field, label, hint) => (
+    <CompactField id={field} label={label} hint={hint} error={errors[field]} className="w-36">
+      <MoneyInput id={field} value={form[field]} onChange={(value) => setField(field, value)} invalid={Boolean(errors[field])} />
+    </CompactField>
   )
 
   return (
-    <SettingsCard
-      icon="request_quote"
-      title="Cuotas: montos, fechas y recargos"
-      description={`Valores vigentes: ${formatVigencia(config.financiera.periodo_vigencia).toLowerCase()}. Al guardar se elige desde qué mes aplican los cambios.`}
-      actions={(
-        <button type="button" className={BUTTON_CLASSES.secondary} onClick={onShowHistory}>
-          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">history</span>
+    <SettingsSection
+      icon="payments"
+      title="Aranceles y recargos por mora"
+      extra={(
+        <button type="button" className={SMALL_BUTTON_CLASSES.link} onClick={onShowHistory}>
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">history</span>
           Historial de versiones
         </button>
       )}
     >
-      <ScheduledVersions versions={versions} />
+      <ScheduledVersions versions={scheduledVersions(config.versiones)} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {numberField('monto_inscripcion', { input: { prefix: '$', min: '0', step: '0.01' }, hint: 'Todavía no se cobra.' })}
-        {numberField('monto_cuota_social', { input: { prefix: '$', min: '0.01', step: '0.01' } })}
-        {numberField('monto_cuota_deportiva', { input: { prefix: '$', min: '0.01', step: '0.01' }, hint: 'Se suma a la cuota social de los jugadores activos.' })}
+      <div>
+        <BlockTitle>Cuotas y aranceles</BlockTitle>
+        <div className="flex flex-wrap items-start gap-6">
+          {moneyField('monto_cuota_social', 'Cuota social')}
+          {moneyField('monto_cuota_deportiva', 'Cuota deportiva', '')}
+          {moneyField('monto_inscripcion', 'Inscripción inicial', '')}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {numberField('dia_generacion', { input: { min: '1', max: '28', step: '1' }, hint: 'Día del mes en que se crean las cuotas (1 a 28).' })}
-        {numberField('dia_vencimiento_1', { input: { min: '1', max: '31', step: '1' } })}
-        {numberField('dia_vencimiento_2', { input: { min: '1', max: '31', step: '1' }, hint: 'En meses más cortos se usa el último día.' })}
-      </div>
+      <hr className="border-outline-variant/30" />
 
-      <div className="flex flex-col gap-4">
-        <SurchargeInputs due={1} form={form} errors={errors} onChange={setField} />
-        <SurchargeInputs due={2} form={form} errors={errors} onChange={setField} />
+      <div>
+        <BlockTitle>Recargos por mora</BlockTitle>
+        <div className="flex flex-col gap-2">
+          {[1, 2].map((number) => {
+            const typeField = `tipo_recargo_${number}`
+            const valueField = `valor_recargo_${number}`
+            const ValueInput = form[typeField] === 'Porcentaje' ? PercentInput : MoneyInput
+            return (
+              <div key={number} className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                <span className="w-32 pt-1.5 text-sm font-medium text-on-surface">{`Al ${number}° vencimiento:`}</span>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <CompactSelect
+                      small
+                      className="w-40"
+                      value={form[typeField]}
+                      onChange={(event) => setField(typeField, event.target.value)}
+                      aria-label={`Tipo de recargo al ${number}° vencimiento`}
+                    >
+                      {SURCHARGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </CompactSelect>
+                    <div className="w-28">
+                      <ValueInput
+                        small
+                        value={form[valueField]}
+                        onChange={(value) => setField(valueField, value)}
+                        invalid={Boolean(errors[valueField])}
+                        aria-label={`Valor del recargo al ${number}° vencimiento`}
+                      />
+                    </div>
+                  </div>
+                  <CellError message={errors[valueField]} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
-function DelinquencyCard({ config }) {
+function CalendarSection({ config }) {
+  const form = config.draft.financiera
+  const errors = config.errors.financiera
+  const setField = config.setFinancialField
+
+  const dayField = (field, label, help) => (
+    <CompactField id={field} label={label} help={help} error={errors[field]} className="w-44">
+      <IntegerInput
+        id={field}
+        maxLength={2}
+        placeholder="1 a 28"
+        value={form[field]}
+        onChange={(value) => setField(field, value)}
+        invalid={Boolean(errors[field])}
+      />
+    </CompactField>
+  )
+
   return (
-    <SettingsCard icon="how_to_reg" title="Morosidad" description="Se aplica apenas se guarda.">
-      <div className="max-w-sm">
-        <Field
-          label="Cuotas vencidas para considerar moroso"
-          htmlFor="cuotas_vencidas_morosidad"
-          error={config.errors.general.cuotas_vencidas_morosidad}
-          hint="El reporte de morosidad solo incluye a los socios con esta cantidad de cuotas vencidas o más."
-        >
-          <input
-            id="cuotas_vencidas_morosidad"
-            type="number"
-            min="1"
-            max="24"
-            step="1"
-            className={INPUT_CLASS}
-            value={config.draft.general.cuotas_vencidas_morosidad}
-            onChange={(event) => config.setGeneralField('cuotas_vencidas_morosidad', event.target.value)}
-          />
-        </Field>
+    <SettingsSection
+      icon="calendar_month"
+      title="Calendario de facturación"
+    >
+      <div className="flex flex-wrap items-start gap-6">
+        {dayField('dia_generacion', 'Día de generación', 'Se crean las cuotas del mes')}
+        {dayField('dia_vencimiento_1', 'Día del 1° vencimiento', 'Luego se aplica el 1° recargo')}
+        {dayField('dia_vencimiento_2', 'Día del 2° vencimiento', 'Luego se aplica el 2° recargo')}
       </div>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
@@ -147,27 +157,28 @@ function PaymentMethodRow({ medio, onUpdate, onDelete }) {
   }
 
   return (
-    <li className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3">
+    <tr className={TABLE_CLASSES.row}>
+      <td className={TABLE_CLASSES.cell}>
         {editing ? (
           <input
-            className={`${INPUT_CLASS} max-w-xs`}
+            className={compactInputClass(false, 'max-w-xs')}
             value={name}
             onChange={(event) => setName(event.target.value)}
             aria-label="Nombre del medio de pago"
             autoFocus
           />
         ) : (
-          <span className={`flex-1 text-base font-semibold ${medio.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{medio.nombre}</span>
+          <span className={`font-medium ${medio.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{medio.nombre}</span>
         )}
-        <span className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${medio.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-          {medio.activo ? 'Habilitado' : 'Deshabilitado'}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
+        <CellError message={error} />
+      </td>
+      <td className={TABLE_CLASSES.cell}><StatusPill active={medio.activo} /></td>
+      <td className={TABLE_CLASSES.actionsCell}>
+        <div className="flex justify-end gap-1">
           {editing ? (
             <>
-              <button type="button" className={BUTTON_CLASSES.primary} disabled={busy || !name.trim()} onClick={() => run(() => onUpdate(medio.medio_pago_id, { nombre: name }))}>Guardar</button>
-              <button type="button" className={BUTTON_CLASSES.secondary} disabled={busy} onClick={() => { setEditing(false); setName(medio.nombre); setError('') }}>Cancelar</button>
+              <button type="button" className={SMALL_BUTTON_CLASSES.primary} disabled={busy || !name.trim()} onClick={() => run(() => onUpdate(medio.medio_pago_id, { nombre: name }))}>Guardar</button>
+              <button type="button" className={SMALL_BUTTON_CLASSES.secondary} disabled={busy} onClick={() => { setEditing(false); setName(medio.nombre); setError('') }}>Cancelar</button>
             </>
           ) : (
             <>
@@ -187,13 +198,12 @@ function PaymentMethodRow({ medio, onUpdate, onDelete }) {
             </>
           )}
         </div>
-      </div>
-      {error && <p className="text-sm text-error" role="alert">{error}</p>}
-    </li>
+      </td>
+    </tr>
   )
 }
 
-function PaymentMethodsCard({ medios, onCreate, onUpdate, onDelete }) {
+function PaymentMethodsSection({ medios, onCreate, onUpdate, onDelete }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -213,40 +223,57 @@ function PaymentMethodsCard({ medios, onCreate, onUpdate, onDelete }) {
   }
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon="account_balance_wallet"
       title="Medios de pago aceptados"
-      description="Solo los medios habilitados se pueden elegir al registrar un pago. Los que ya se usaron no se eliminan: se deshabilitan."
+      flush
     >
-      <ul className="divide-y divide-outline-variant/30 rounded-lg border border-outline-variant/40">
-        {medios.map((medio) => (
-          <PaymentMethodRow key={medio.medio_pago_id} medio={medio} onUpdate={onUpdate} onDelete={onDelete} />
-        ))}
-      </ul>
-      <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-start">
-        <input
-          className={`${INPUT_CLASS} sm:max-w-sm`}
-          placeholder="Ej: Tarjeta de débito"
-          value={name}
-          onChange={(event) => { setName(event.target.value); setError('') }}
-          aria-label="Nuevo medio de pago"
-        />
-        <button type="submit" className={BUTTON_CLASSES.primary} disabled={saving || !name.trim()}>
-          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">add</span>
-          Agregar medio
-        </button>
-      </form>
-      {error && <Notice tone="error">{error}</Notice>}
-    </SettingsCard>
+      <div className={TABLE_CLASSES.wrapper}>
+        <table className={TABLE_CLASSES.table}>
+          <thead className={TABLE_CLASSES.head}>
+            <tr>
+              <th className={TABLE_CLASSES.headCell}>Medio de pago</th>
+              <th className={TABLE_CLASSES.headCell}>Estado</th>
+              <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {medios.map((medio) => (
+              <PaymentMethodRow key={medio.medio_pago_id} medio={medio} onUpdate={onUpdate} onDelete={onDelete} />
+            ))}
+          </tbody>
+          <tfoot className="border-t border-outline-variant/30 bg-surface-container-low/40">
+            <tr>
+              <td colSpan={3} className={TABLE_CLASSES.cell}>
+                <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    className={compactInputClass(Boolean(error), 'sm:max-w-xs')}
+                    placeholder="Ej: Tarjeta de débito"
+                    value={name}
+                    onChange={(event) => { setName(event.target.value); setError('') }}
+                    aria-label="Nuevo medio de pago"
+                  />
+                  <button type="submit" className={SMALL_BUTTON_CLASSES.secondary} disabled={saving || !name.trim()}>
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                    Agregar medio
+                  </button>
+                </form>
+                <CellError message={error} />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </SettingsSection>
   )
 }
 
 export default function FinancialSettings({ config, onShowHistory }) {
   return (
-    <div className="flex flex-col gap-5">
-      <CuotaParametersCard config={config} versions={scheduledVersions(config.versiones)} onShowHistory={onShowHistory} />
-      <DelinquencyCard config={config} />
-      <PaymentMethodsCard medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
+    <div className="flex flex-col">
+      <FeesSection config={config} onShowHistory={onShowHistory} />
+      <CalendarSection config={config} />
+      <PaymentMethodsSection medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
     </div>
   )
 }

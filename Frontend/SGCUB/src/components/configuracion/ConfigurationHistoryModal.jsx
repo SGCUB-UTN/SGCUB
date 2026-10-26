@@ -27,6 +27,7 @@ const buildEntries = (versions, changes) => [
   ...versions.map((version) => ({
     key: `version-${version.configuracion_financiera_id}`,
     fecha: version.fecha_creacion,
+    responsable: version.responsable,
     usuario: version.usuario_nombre,
     seccion: 'Finanzas',
     lines: version.cambios.length
@@ -38,6 +39,7 @@ const buildEntries = (versions, changes) => [
   ...changes.map((change) => ({
     key: `change-${change.historial_configuracion_id}`,
     fecha: change.fecha,
+    responsable: change.responsable,
     usuario: change.usuario_nombre,
     seccion: change.seccion,
     lines: [`${change.campo}: ${change.valor_anterior || '—'} → ${change.valor_nuevo || '—'}`],
@@ -92,7 +94,7 @@ function HistoryContent({ versions, initialSection }) {
           <thead className="sticky top-0 bg-surface-container-low text-sm uppercase tracking-wider text-on-surface-variant">
             <tr>
               <th className="px-4 py-2.5 font-semibold">Fecha</th>
-              <th className="px-4 py-2.5 font-semibold">Usuario</th>
+              <th className="px-4 py-2.5 font-semibold">Responsable</th>
               <th className="px-4 py-2.5 font-semibold">Sección</th>
               <th className="px-4 py-2.5 font-semibold">Cambio</th>
               <th className="px-4 py-2.5 font-semibold">Vigencia</th>
@@ -108,7 +110,12 @@ function HistoryContent({ versions, initialSection }) {
             {!load.loading && entries.map((entry) => (
               <tr key={entry.key} className="border-t border-outline-variant/30 align-top">
                 <td className="whitespace-nowrap px-4 py-3 text-on-surface-variant">{formatDateTime(entry.fecha)}</td>
-                <td className="px-4 py-3 text-on-surface">{entry.usuario ?? 'Sistema'}</td>
+                <td className="px-4 py-3 text-on-surface">
+                  {entry.responsable || entry.usuario || 'Sistema'}
+                  {entry.responsable && entry.usuario && (
+                    <p className="text-sm text-on-surface-variant">Registrado por {entry.usuario}</p>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-on-surface-variant">{sectionLabel(entry.seccion)}</td>
                 <td className="px-4 py-3 text-on-surface">
                   <ul className="flex flex-col gap-0.5">

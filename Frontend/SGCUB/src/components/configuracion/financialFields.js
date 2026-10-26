@@ -1,4 +1,4 @@
-import { formatAmount } from '../personas/format'
+import { formatMoney, formatPercent } from './numberFormat'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 
 // Version created before the configuration was versioned: it applies since always
@@ -41,12 +41,12 @@ const DAY_FIELDS = ['dia_generacion', 'dia_vencimiento_1', 'dia_vencimiento_2']
 
 export const formatCuotaValue = (field, value, version) => {
   if (value === null || value === undefined || value === '') return '—'
-  if (AMOUNT_FIELDS.includes(field)) return formatAmount(value)
+  if (AMOUNT_FIELDS.includes(field)) return formatMoney(value)
   if (DAY_FIELDS.includes(field)) return `Día ${value}`
   if (field.startsWith('tipo_recargo')) return SURCHARGE_TYPES.find((type) => type.value === value)?.label ?? value
   if (field.startsWith('valor_recargo')) {
     const type = version?.[field.replace('valor', 'tipo')]
-    return type === 'Porcentaje' ? `${Number(value)}%` : formatAmount(value)
+    return type === 'Porcentaje' ? formatPercent(value) : formatMoney(value)
   }
   return String(value)
 }
@@ -83,8 +83,7 @@ export const validateCuotaForm = (form) => {
     } else if (!(number(field) > 0)) errors[field] = 'Ingresá un monto mayor a cero.'
   })
   DAY_FIELDS.forEach((field) => {
-    const max = field === 'dia_generacion' ? 28 : 31
-    if (!Number.isInteger(number(field)) || number(field) < 1 || number(field) > max) errors[field] = `Ingresá un día entre 1 y ${max}.`
+    if (form[field] === '' || !Number.isInteger(number(field)) || number(field) < 1 || number(field) > 28) errors[field] = 'Ingresá un día entre 1 y 28.'
   })
   if (!errors.dia_vencimiento_2 && number('dia_vencimiento_2') < number('dia_vencimiento_1')) {
     errors.dia_vencimiento_2 = 'El segundo vencimiento no puede ser anterior al primero.'

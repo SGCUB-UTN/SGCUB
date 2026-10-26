@@ -139,7 +139,7 @@ function MorosidadReport({
           </div>
           {reporte.cuotas_vencidas_minimas > 1 && (
             <p className="mb-4 text-sm text-on-surface-variant">
-              Se consideran morosos los socios con {reporte.cuotas_vencidas_minimas} o más cuotas vencidas (se cambia en Configuración).
+              Se consideran morosos los socios con {reporte.cuotas_vencidas_minimas} o más cuotas vencidas.
             </p>
           )}
 

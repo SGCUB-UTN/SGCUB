@@ -1,4 +1,6 @@
-import { Field, INPUT_CLASS, Notice, SettingsCard, SwitchRow } from './settingsParts'
+import { IntegerInput } from './formattedInputs'
+import { compactInputClass } from './settingsForm'
+import { CompactField, SettingsSection } from './settingsParts'
 
 const NOTIFICATIONS = [
   {
@@ -9,7 +11,8 @@ const NOTIFICATIONS = [
   {
     field: 'notificar_recordatorio_vencimiento',
     label: 'Recordatorio antes del vencimiento',
-    description: 'Recuerda que la cuota está por vencer, con la anticipación indicada abajo.',
+    description: 'Recuerda que la cuota está por vencer, con la anticipación indicada.',
+    withReminderDays: true,
   },
   {
     field: 'notificar_cuota_vencida',
@@ -24,9 +27,50 @@ const NOTIFICATIONS = [
   {
     field: 'notificar_comprobante_pago',
     label: 'Enviar comprobantes de pago',
-    description: 'Envía por email el comprobante cada vez que se registra un pago.',
+    description: 'Envía por mail el comprobante cada vez que se registra un pago.',
   },
 ]
+
+function NotificationOption({ option, form, errors, setField }) {
+  const id = `notificacion-${option.field}`
+  const checked = Boolean(form[option.field])
+  return (
+    <li className="flex flex-col gap-2 py-2.5">
+      {/* The checkbox is centered on the title and its description */}
+      <div className="flex items-center gap-3">
+        <input
+          id={id}
+          type="checkbox"
+          className="h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          checked={checked}
+          onChange={(event) => setField(option.field, event.target.checked)}
+          aria-describedby={`${id}-descripcion`}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <label htmlFor={id} className="text-sm font-medium text-on-surface cursor-pointer">{option.label}</label>
+          <p id={`${id}-descripcion`} className="text-xs text-on-surface-variant">{option.description}</p>
+        </div>
+      </div>
+      {option.withReminderDays && (
+        <div className="pl-7">
+          <CompactField id="dias_recordatorio_vencimiento" label="Días de anticipación" error={errors.dias_recordatorio_vencimiento}>
+            <div className="w-20">
+              <IntegerInput
+                id="dias_recordatorio_vencimiento"
+                unit="días"
+                maxLength={2}
+                value={form.dias_recordatorio_vencimiento}
+                onChange={(value) => setField('dias_recordatorio_vencimiento', value)}
+                disabled={!checked}
+                invalid={Boolean(errors.dias_recordatorio_vencimiento)}
+              />
+            </div>
+          </CompactField>
+        </div>
+      )}
+    </li>
+  )
+}
 
 export default function CommunicationSettings({ config }) {
   const form = config.draft.general
@@ -34,55 +78,43 @@ export default function CommunicationSettings({ config }) {
   const setField = config.setGeneralField
 
   return (
-    <div className="flex flex-col gap-5">
-      <SettingsCard icon="notifications_active" title="Notificaciones automáticas" description="Elegí qué avisos recibe el socio por email.">
-        <Notice tone="info">
-          Por ahora se guarda la preferencia: el envío automático de estos avisos se va a habilitar en una próxima versión.
-        </Notice>
-        <div className="flex flex-col gap-2">
-          {NOTIFICATIONS.map(({ field, label, description }) => (
-            <SwitchRow key={field} label={label} description={description} checked={Boolean(form[field])} onChange={(value) => setField(field, value)} />
+    <div className="flex flex-col">
+      <SettingsSection
+        icon="notifications_active"
+        title="Notificaciones automáticas"
+      >
+        <ul className="-my-2.5 divide-y divide-outline-variant/20">
+          {NOTIFICATIONS.map((option) => (
+            <NotificationOption key={option.field} option={option} form={form} errors={errors} setField={setField} />
           ))}
-        </div>
-        <div className="max-w-sm">
-          <Field
-            label="Días de anticipación del recordatorio"
-            htmlFor="dias_recordatorio_vencimiento"
-            error={errors.dias_recordatorio_vencimiento}
-            hint="Cuántos días antes del primer vencimiento se envía el recordatorio."
-          >
-            <input
-              id="dias_recordatorio_vencimiento"
-              type="number"
-              min="1"
-              max="30"
-              step="1"
-              className={INPUT_CLASS}
-              value={form.dias_recordatorio_vencimiento}
-              onChange={(event) => setField('dias_recordatorio_vencimiento', event.target.value)}
-              disabled={!form.notificar_recordatorio_vencimiento}
-            />
-          </Field>
-        </div>
-      </SettingsCard>
+        </ul>
+      </SettingsSection>
 
-      <SettingsCard icon="mail" title="Emails" description="Se usan en todos los emails que envía el sistema, incluidos los comunicados.">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="Nombre del remitente" htmlFor="email_nombre_remitente" error={errors.email_nombre_remitente} hint="Es el nombre que ve el socio como remitente.">
-            <input id="email_nombre_remitente" className={INPUT_CLASS} maxLength={80} value={form.email_nombre_remitente} onChange={(event) => setField('email_nombre_remitente', event.target.value)} />
-          </Field>
-          <Field label="Firma" htmlFor="email_firma" error={errors.email_firma} hint="Se agrega al final de cada email.">
-            <textarea
+      <SettingsSection
+        icon="mail"
+        title="Servicio de mail"
+      >
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <CompactField id="email_nombre_remitente" label="Nombre del remitente" error={errors.email_nombre_remitente}>
+            <input
+              id="email_nombre_remitente"
+              className={compactInputClass(Boolean(errors.email_nombre_remitente))}
+              maxLength={80}
+              value={form.email_nombre_remitente}
+              onChange={(event) => setField('email_nombre_remitente', event.target.value)}
+            />
+          </CompactField>
+          <CompactField id="email_firma" label="Firma" error={errors.email_firma}>
+            <input
               id="email_firma"
-              rows={3}
+              className={compactInputClass(Boolean(errors.email_firma))}
               maxLength={500}
-              className={`${INPUT_CLASS} h-auto py-2`}
               value={form.email_firma}
               onChange={(event) => setField('email_firma', event.target.value)}
             />
-          </Field>
+          </CompactField>
         </div>
-      </SettingsCard>
+      </SettingsSection>
     </div>
   )
 }
