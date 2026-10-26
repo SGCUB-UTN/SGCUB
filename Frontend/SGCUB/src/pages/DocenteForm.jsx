@@ -717,7 +717,7 @@ function DocenteForm() {
                         onClick={() => fileInputRef.current?.click()}
                         disabled={criminalRecordDelivered}
                         title={criminalRecordDelivered ? 'Desmarcá "El documento fue entregado" para adjuntar el PDF' : undefined}
-                        className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-on-primary hover:bg-on-primary-container rounded-md text-sm font-semibold shadow-sm transition-colors cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
+                        className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-md text-sm font-semibold shadow-sm transition-colors cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
                       >
                         <span className="material-symbols-outlined text-[18px]">upload_file</span>
                         <span>Seleccionar archivo</span>

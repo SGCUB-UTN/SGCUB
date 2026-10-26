@@ -25,6 +25,10 @@ export const crearConceptoMovimiento = async (concepto) => {
   return response.data
 }
 
+export const eliminarConceptoMovimiento = async (conceptoId) => {
+  await api.delete(`${endpoint}conceptos/${conceptoId}/`)
+}
+
 const nombreArchivo =(contentDisposition, movimientoId) => {
   const coincidencia = /filename="([^"]+)"/.exec(contentDisposition ?? '')
   return coincidencia ? coincidencia[1] : `comprobante-movimiento-${movimientoId}.pdf`

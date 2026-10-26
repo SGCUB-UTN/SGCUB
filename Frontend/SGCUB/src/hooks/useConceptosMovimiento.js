@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { crearConceptoMovimiento, getConceptosMovimiento } from '../api/movimientos'
+import { crearConceptoMovimiento, eliminarConceptoMovimiento, getConceptosMovimiento } from '../api/movimientos'
 
 function useConceptosMovimiento() {
   const [concepts, setConcepts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const reload = useCallback(() => {
+    return getConceptosMovimiento()
+      .then((data) => setConcepts(data))
+      .catch((requestError) => setError(requestError))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -33,7 +39,12 @@ function useConceptosMovimiento() {
     return concept
   }, [])
 
-  return { concepts, isLoading, error, createConcept }
+  const deleteConcept = useCallback(async (conceptoId) => {
+    await eliminarConceptoMovimiento(conceptoId)
+    setConcepts((current) => current.filter((c) => c.concepto_movimiento_id !== conceptoId))
+  }, [])
+
+  return { concepts, isLoading, error, reload, createConcept, deleteConcept }
 }
 
 export default useConceptosMovimiento
