@@ -1,5 +1,6 @@
 import { Modal, Text } from '@mantine/core'
 import { describeChanges } from './automationCatalog'
+import LogDownloadButton from './LogDownloadButton'
 
 // Keys of the summary each task stores in django-q (finanzas.services)
 const DETAIL_LABELS = {
@@ -39,9 +40,14 @@ function ExecutionDetail({ execution }) {
     )
   }
   return (
-    <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-700">
-      {detail || 'La ejecución no dejó registro.'}
-    </pre>
+    <>
+      <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-700">
+        {detail || 'La ejecución no dejó registro.'}
+      </pre>
+      {detail && (
+        <LogDownloadButton fileName={`registro-${execution.executed_at.slice(0, 10)}.txt`} log={detail} />
+      )}
+    </>
   )
 }
 

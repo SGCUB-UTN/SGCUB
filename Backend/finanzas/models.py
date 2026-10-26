@@ -48,6 +48,12 @@ class TipoMovimientoChoices(models.TextChoices):
     CARGO = "Cargo", "Cargo"
 
 
+class TipoMovimientoOrigenChoices(models.TextChoices):
+    INGRESO_MANUAL = "IngresoManual", "Ingreso manual"
+    EGRESO = "Egreso", "Egreso"
+    NOTA_CREDITO = "NotaCredito", "Nota de crédito"
+
+
 class ModalidadMontoChoices(models.TextChoices):
     MONTO_FIJO = "MontoFijo", "Monto fijo"
     PORCENTAJE = "Porcentaje", "Porcentaje"
@@ -304,10 +310,35 @@ class MovimientoCuenta(models.Model):
         null=True,
         blank=True,
     )
-    movimiento_revertido = models.OneToOneField(
+    movimiento_revertido = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
-        related_name="reversion",
+        related_name="reversiones",
+        related_query_name="reversion",
+        null=True,
+        blank=True,
+    )
+    medio_de_pago = models.CharField(
+        max_length=40,
+        choices=MedioDePagoChoices.choices,
+        null=True,
+        blank=True,
+    )
+    origen_manual = models.CharField(
+        max_length=40,
+        choices=TipoMovimientoOrigenChoices.choices,
+        null=True,
+        blank=True,
+    )
+    numero_comprobante = models.PositiveIntegerField(
+        unique=True,
+        null=True,
+        blank=True,
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="movimientos_financieros",
         null=True,
         blank=True,
     )
@@ -328,6 +359,7 @@ class MovimientoCuenta(models.Model):
                     models.Q(cuota__isnull=False, pago__isnull=True, movimiento_revertido__isnull=True)
                     | models.Q(cuota__isnull=True, pago__isnull=False, movimiento_revertido__isnull=True)
                     | models.Q(cuota__isnull=True, pago__isnull=True, movimiento_revertido__isnull=False)
+                    | models.Q(cuota__isnull=True, pago__isnull=True, movimiento_revertido__isnull=True)
                 ),
                 name="movimiento_cuenta_single_origin",
             ),

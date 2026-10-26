@@ -24,7 +24,7 @@ function Actions({ execution, canRun, categoriesUpToDate, onRun }) {
   return (
     <>
       {status === 'finalizada' && (
-        <ActionButton to={RECATEGORIZATION_REVIEW_PATH} variant="secondary" icon="list_alt">Ver último resultado</ActionButton>
+        <ActionButton to={RECATEGORIZATION_REVIEW_PATH} variant="secondary" >Ver último resultado</ActionButton>
       )}
       {canRun && (
         <ActionButton onClick={onRun} disabled={!categoriesUpToDate}>Ejecutar recategorización</ActionButton>
@@ -53,6 +53,17 @@ function PendingReviewFooter({ execution }) {
       </span>
       <span className="text-amber-800">Resultado:</span>
       <ResultCounts execution={execution} />
+    </ActionFooter>
+  )
+}
+
+function CategoriesOutdatedFooter() {
+  return (
+    <ActionFooter icon="event_repeat">
+      <span className="font-bold">Las categorías no están actualizadas al nuevo año.</span>
+      <span className="text-amber-800">
+        Ejecutá "Actualizar categorías al nuevo año" para poder ejecutar la recategorización.
+      </span>
     </ActionFooter>
   )
 }
@@ -95,11 +106,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
       {!isLoading && notice && (
         <ActionNotice tone={notice.tone} icon={notice.icon} spin={notice.spin}>{notice.text(execution)}</ActionNotice>
       )}
-      {!isLoading && !error && !isActive && !categoriesUpToDate && (
-        <ActionNotice tone="warning" icon="event_repeat">
-          Primero ejecutá "Actualizar categorías al nuevo año" para {categories.anio_actual} (tarjeta de arriba). Después vas a poder ejecutar la recategorización.
-        </ActionNotice>
-      )}
+      {!isLoading && !error && !isActive && !categoriesUpToDate && <CategoriesOutdatedFooter />}
       {!isLoading && isPendingReview && <PendingReviewFooter execution={execution}/>}
       {!isLoading && execution?.estado === 'fallida' && <FailedRunFooter />}
     </ActionCard>

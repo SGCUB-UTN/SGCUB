@@ -32,6 +32,7 @@ from .models import (
     Pago,
     SecuenciaComprobante,
     TipoMovimientoChoices,
+    TipoMovimientoOrigenChoices,
 )
 
 class CuotaDuplicadaError(Exception):
@@ -56,6 +57,71 @@ class BeneficioInvalidoError(Exception):
 
 class ComprobanteInvalidoError(Exception):
     pass
+
+
+def reversed_amount_for(movement):
+    if movement is None:
+        return Decimal("0.00")
+    prefetched = getattr(movement, "_prefetched_objects_cache", {})
+    if "reversiones" in prefetched:
+        return sum((rev.monto for rev in movement.reversiones.all()), Decimal("0.00"))
+    return movement.reversiones.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+
+
+def remaining_reversible_amount(movement):
+    if movement is None:
+        return Decimal("0.00")
+    return max(Decimal("0.00"), movement.monto - reversed_amount_for(movement))
+
+
+@transaction.atomic
+def create_manual_movement(
+    socio_id,
+    movement_type,
+    origin,
+    concept,
+    amount,
+    payment_method=None,
+    reversed_movement_id=None,
+    user=None,
+):
+    account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
+    reversed_movement = None
+    if reversed_movement_id:
+        reversed_movement = MovimientoCuenta.objects.select_for_update().filter(
+            pk=reversed_movement_id,
+            cuenta_corriente=account,
+        ).first()
+        if reversed_movement is None:
+            raise PagoInvalidoError("El movimiento a revertir no pertenece al socio indicado.")
+
+        available_to_reverse = remaining_reversible_amount(reversed_movement)
+        if available_to_reverse <= Decimal("0.00"):
+            raise PagoInvalidoError("El movimiento indicado ya fue revertido en su totalidad.")
+
+        if amount > available_to_reverse:
+            raise PagoInvalidoError(
+                f"El monto no puede superar el saldo disponible del movimiento original ({available_to_reverse})."
+            )
+
+        if payment_method is None:
+            payment_method = reversed_movement.medio_de_pago
+
+    movement = MovimientoCuenta.objects.create(
+        cuenta_corriente=account,
+        movimiento_revertido=reversed_movement,
+        tipo_movimiento=movement_type,
+        fecha=timezone.now(),
+        monto=amount,
+        concepto=concept,
+        medio_de_pago=payment_method,
+        origen_manual=origin,
+        numero_comprobante=next_receipt_number(),
+        usuario=user,
+    )
+    account.saldo += amount if movement_type == TipoMovimientoChoices.ABONO else -amount
+    account.save(update_fields=["saldo"])
+    return movement
 
 
 def next_receipt_number():
@@ -136,6 +202,7 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
         # instead of waiting for the daily task.
         apply_cuota_surcharges(cuota.pk, today, configuration)
         cuota.refresh_from_db()
+    return cuota
     return cuota
 
 
@@ -386,7 +453,7 @@ def pending_amounts(cuotas, ignored_origin=None):
         if cuota.estado_cuota == EstadoCuotaChoices.PAGA and cuota.pk not in imputed_cuota_ids:
             pending[cuota.pk] = Decimal("0.00")
         else:
-            pending[cuota.pk] = cuota.movimiento.monto - applied.get(cuota.pk, Decimal("0.00"))
+            pending[cuota.pk] = max(Decimal("0.00"), cuota.movimiento.monto - applied.get(cuota.pk, Decimal("0.00")))
     return pending
 
 
@@ -703,6 +770,9 @@ def correct_payment(payment_id, cuota_ids, payment_methods, total, reason, user=
         refresh_cuota_state(cuota, pending[cuota.pk])
     validate_receipt(receipt)
     return original, original_receipt, replacement, receipt
+
+
+
 
 
 BENEFIT_SCHOLARSHIP = "Beca"

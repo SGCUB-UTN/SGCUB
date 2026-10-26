@@ -29,11 +29,17 @@ from .models import (
 	EstadoPagoChoices,
 	MedioDePagoChoices,
 	MedioPago,
+	TipoMovimientoChoices,
 )
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
 from .financial_summary_pdf import financial_summary_filename, render_financial_summary_pdf
-from .receipts import receipt_filename, render_receipt_pdf
+from .receipts import (
+	manual_movement_filename,
+	receipt_filename,
+	render_manual_movement_pdf,
+	render_receipt_pdf,
+)
 from .serializers import (
 	BecaSerializer,
 	OtorgarBecaSerializer,
@@ -56,6 +62,7 @@ from .serializers import (
 	ItemPagoSerializer,
 	ItemCuotaSerializer,
 	MovimientoCuentaSerializer,
+	MovimientoManualSerializer,
 	PagoSerializer,
 	CuentaCorrienteEstadoSerializer,
 	ComprobanteDetalleSerializer,
@@ -80,6 +87,7 @@ from .services import (
 	parse_period,
 	pending_amounts,
 	register_payment,
+	create_manual_movement,
 	remove_cuota_item,
 	reschedule_cuota,
 	update_discount,
@@ -366,16 +374,36 @@ def estado_cuenta_socio(request, socio_id):
 	return Response(CuentaCorrienteEstadoSerializer(cuenta).data)
 
 
-@extend_schema(tags=["Finanzas/Resumen"])
-@api_view(["GET"])
-def resumen_financiero(request):
-	reporte = delinquency_report("activos")
-	pagos_por_medio = {
+def _totales_por_medio_de_pago():
+	totales = {
 		item["medio_de_pago"]: item["total"]
 		for item in ItemPago.objects.filter(
 			pago__estado_pago=EstadoPagoChoices.ACREDITADO,
 		).values("medio_de_pago").annotate(total=Sum("monto"))
 	}
+	movimientos_manuales = (
+		MovimientoCuenta.objects.filter(origen_manual__isnull=False)
+		.select_related("movimiento_revertido")
+	)
+	for mov in movimientos_manuales:
+		medio = mov.medio_de_pago or (
+			mov.movimiento_revertido.medio_de_pago if mov.movimiento_revertido else None
+		)
+		if not medio:
+			continue
+		actual = totales.get(medio, Decimal("0.00"))
+		if mov.tipo_movimiento == TipoMovimientoChoices.ABONO:
+			totales[medio] = actual + mov.monto
+		else:
+			totales[medio] = actual - mov.monto
+	return totales
+
+
+@extend_schema(tags=["Finanzas/Resumen"])
+@api_view(["GET"])
+def resumen_financiero(request):
+	reporte = delinquency_report("activos")
+	pagos_por_medio = _totales_por_medio_de_pago()
 	filas_morosas = reporte["filas"]
 
 	return Response({
@@ -432,13 +460,65 @@ def delinquency_report_pdf(request):
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)
 @api_view(["GET"])
 def movimiento_cuenta_list(request):
-	return Response(MovimientoCuentaSerializer(MovimientoCuenta.objects.order_by("pk"), many=True).data)
+	movements = MovimientoCuenta.objects.select_related(
+		"cuenta_corriente__socio__persona",
+		"cuota",
+	).prefetch_related("cuota__items", "reversiones").order_by("pk")
+	socio_id = request.query_params.get("socio_id")
+	if socio_id:
+		if not socio_id.isdigit():
+			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+		movements = movements.filter(cuenta_corriente__socio_id=int(socio_id))
+	if request.query_params.get("solo_manuales") == "true":
+		movements = movements.filter(origen_manual__isnull=False)
+	return Response(MovimientoCuentaSerializer(movements, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], request=MovimientoManualSerializer, responses=MovimientoCuentaSerializer)
+@api_view(["POST"])
+def movimiento_cuenta_manual(request):
+	serializer = MovimientoManualSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	data = serializer.validated_data
+	try:
+		movement = create_manual_movement(
+			data["socio_id"],
+			data["tipo"],
+			data["origen"],
+			data["concepto"],
+			data["monto"],
+			data["medio_de_pago"],
+			data["movimiento_revertido_id"],
+			request.user if request.user.is_authenticated else None,
+		)
+	except CuentaCorriente.DoesNotExist:
+		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
+	except PagoInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(MovimientoCuentaSerializer(movement).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)
 @api_view(["GET"])
 def movimiento_cuenta_detail(request, pk):
 	return Response(MovimientoCuentaSerializer(get_object_or_404(MovimientoCuenta, pk=pk)).data)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def movimiento_cuenta_pdf(request, pk):
+	movement = get_object_or_404(
+		MovimientoCuenta.objects.select_related(
+			"cuenta_corriente__socio__persona",
+			"movimiento_revertido__cuota",
+		).prefetch_related("reversiones"),
+		pk=pk,
+		origen_manual__isnull=False,
+	)
+	response = HttpResponse(render_manual_movement_pdf(movement), content_type="application/pdf")
+	response["Content-Disposition"] = f'attachment; filename="{manual_movement_filename(movement)}"'
+	return response
 
 
 @extend_schema(tags=["Finanzas/Imputacion"], responses=ImputacionSerializer)
@@ -675,16 +755,21 @@ def _build_financial_report(period_date):
         ).aggregate(total=Sum("monto_total"))["total"]
         or Decimal("0.00")
     )
+    movimientos_periodo = MovimientoCuenta.objects.filter(
+        origen_manual__isnull=False,
+        fecha__year=period_date.year,
+        fecha__month=period_date.month,
+    ).select_related("movimiento_revertido")
+    for m in movimientos_periodo:
+        medio = m.medio_de_pago or (m.movimiento_revertido.medio_de_pago if m.movimiento_revertido else None)
+        if not medio:
+            continue
+        total_recaudado_periodo += m.monto if m.tipo_movimiento == TipoMovimientoChoices.ABONO else -m.monto
 
     reporte_mora = delinquency_report("activos")
     filas_mora = reporte_mora["filas"]
 
-    pagos_por_medio = {
-        item["medio_de_pago"]: item["total"]
-        for item in ItemPago.objects.filter(
-            pago__estado_pago=EstadoPagoChoices.ACREDITADO,
-        ).values("medio_de_pago").annotate(total=Sum("monto"))
-    }
+    pagos_por_medio = _totales_por_medio_de_pago()
 
     unpaid_cuotas = list(
         Cuota.objects.exclude(estado_cuota=EstadoCuotaChoices.PAGA)

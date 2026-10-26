@@ -32,6 +32,8 @@ from .views import (
     cuota_item_list,
     movimiento_cuenta_detail,
     movimiento_cuenta_list,
+    movimiento_cuenta_manual,
+    movimiento_cuenta_pdf,
     pago_detail,
     pago_list,
     registrar_pago,
@@ -77,7 +79,9 @@ urlpatterns = [
     path("morosidad/", reporte_morosidad, name="reporte-morosidad"),
     path("morosidad/pdf/", delinquency_report_pdf, name="reporte-morosidad-pdf"),
     path("movimiento-cuenta/", movimiento_cuenta_list, name="movimiento-cuenta-list"),
+    path("movimiento-cuenta/manual/", movimiento_cuenta_manual, name="movimiento-cuenta-manual"),
     path("movimiento-cuenta/<int:pk>/", movimiento_cuenta_detail, name="movimiento-cuenta-detail"),
+    path("movimiento-cuenta/<int:pk>/pdf/", movimiento_cuenta_pdf, name="movimiento-cuenta-pdf"),
     path("imputacion/", imputacion_list, name="imputacion-list"),
     path("imputacion/<int:pk>/", imputacion_detail, name="imputacion-detail"),
 ]

@@ -552,6 +552,7 @@ class CategoryUpdateApiTests(APITestCase):
         self.assertTrue(entry["is_manual"])
         self.assertEqual(entry["executed_by"], "Ana Admin")
         self.assertIsNone(entry["recategorization_id"])
+        self.assertIn(f"[NOMBRE] {self.current_year - 12} -> {self.current_year - 11} (hasta 11 años)", entry["detail"])
 
     def test_failed_update_is_rolled_back_and_logged_as_failed(self):
         with patch("padron.services.ActualizacionCategoriasEjecucion.objects.create", side_effect=RuntimeError("boom")):

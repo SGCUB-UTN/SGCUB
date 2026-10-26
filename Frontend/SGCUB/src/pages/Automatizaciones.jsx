@@ -396,7 +396,6 @@ export default function Automatizaciones() {
             </>
           )}
           confirmLabel="Actualizar categorías"
-          confirmIcon="event_repeat"
           savingLabel="Actualizando..."
           errorMessage="No se pudieron actualizar las categorías."
           onConfirm={startCategoryUpdate}
