@@ -117,7 +117,7 @@ export default function DocumentacionUploadModal({
                 <button 
                   type="button" 
                   onClick={() => fileInputRef.current?.click()} 
-                  className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-on-primary hover:bg-on-primary-container rounded-md text-sm font-semibold shadow-sm transition-colors cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-md text-sm font-semibold shadow-sm transition-colors cursor-pointer shrink-0"
                 >
                   <span className="material-symbols-outlined text-[18px]">upload_file</span>
                   <span>Seleccionar</span>

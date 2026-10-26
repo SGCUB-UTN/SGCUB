@@ -15,7 +15,21 @@ export const crearMovimientoManual = async (movimiento) => {
   return response.data
 }
 
-const nombreArchivo = (contentDisposition, movimientoId) => {
+export const getConceptosMovimiento = async () => {
+  const response = await api.get(`${endpoint}conceptos/`)
+  return response.data
+}
+
+export const crearConceptoMovimiento = async (concepto) => {
+  const response = await api.post(`${endpoint}conceptos/`, concepto)
+  return response.data
+}
+
+export const eliminarConceptoMovimiento = async (conceptoId) => {
+  await api.delete(`${endpoint}conceptos/${conceptoId}/`)
+}
+
+const nombreArchivo =(contentDisposition, movimientoId) => {
   const coincidencia = /filename="([^"]+)"/.exec(contentDisposition ?? '')
   return coincidencia ? coincidencia[1] : `comprobante-movimiento-${movimientoId}.pdf`
 }
