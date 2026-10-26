@@ -16,6 +16,8 @@ from .models import (
     ItemCuota,
     MovimientoCuenta,
     Pago,
+    TipoMovimientoChoices,
+    TipoMovimientoOrigenChoices,
     EstadoCuotaChoices,
     MedioDePagoChoices,
     ModalidadMontoChoices,
@@ -28,12 +30,15 @@ from .services import (
     parse_period,
     pending_amounts,
     receipt_detail,
+    remaining_reversible_amount,
+    reversed_amount_for,
     surcharge_reason,
 )
 
 CUOTA_ITEM_PREFETCHES = (
     Prefetch("items", queryset=ItemCuota.objects.select_related("beca")),
     Prefetch("items", queryset=ItemCuota.all_objects.anulados().select_related("beca"), to_attr="items_anulados"),
+    Prefetch("movimiento__reversiones"),
 )
 
 
@@ -425,10 +430,57 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
 
 class MovimientoCuentaSerializer(serializers.ModelSerializer):
+    tipo_movimiento_nombre = serializers.CharField(source="get_tipo_movimiento_display", read_only=True)
+    origen_manual_nombre = serializers.CharField(source="get_origen_manual_display", read_only=True)
+    medio_de_pago_nombre = serializers.CharField(source="get_medio_de_pago_display", read_only=True)
+    socio = serializers.SerializerMethodField()
+    monto_revertido = serializers.SerializerMethodField()
+    saldo_reversible = serializers.SerializerMethodField()
+
     class Meta:
         model = MovimientoCuenta
-        fields = "__all__"
-        read_only_fields = ["movimiento_cuenta_id"]
+        fields = [
+            "movimiento_cuenta_id", "numero_comprobante", "cuenta_corriente", "socio", "pago", "cuota",
+            "movimiento_revertido", "monto_revertido", "saldo_reversible",
+            "tipo_movimiento", "tipo_movimiento_nombre",
+            "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
+            "origen_manual", "origen_manual_nombre", "usuario",
+        ]
+        read_only_fields = ["movimiento_cuenta_id", "numero_comprobante"]
+
+    def get_socio(self, obj):
+        account = getattr(obj, "cuenta_corriente", None)
+        return socio_data(account.socio) if account and getattr(account, "socio", None) else None
+
+    def get_monto_revertido(self, obj):
+        return reversed_amount_for(obj)
+
+    def get_saldo_reversible(self, obj):
+        return remaining_reversible_amount(obj)
+
+
+class MovimientoManualSerializer(serializers.Serializer):
+    socio_id = serializers.IntegerField(min_value=1)
+    tipo = serializers.ChoiceField(choices=TipoMovimientoChoices.choices)
+    origen = serializers.ChoiceField(choices=TipoMovimientoOrigenChoices.choices)
+    concepto = serializers.CharField(max_length=200, trim_whitespace=True)
+    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    medio_de_pago = serializers.ChoiceField(
+        choices=MedioDePagoChoices.choices,
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    movimiento_revertido_id = serializers.IntegerField(required=False, min_value=1, allow_null=True, default=None)
+
+    def validate(self, attrs):
+        if attrs["tipo"] == TipoMovimientoChoices.CARGO and attrs["origen"] == TipoMovimientoOrigenChoices.INGRESO_MANUAL:
+            raise serializers.ValidationError({"origen": "Un cargo no puede ser un ingreso manual."})
+        if attrs["tipo"] == TipoMovimientoChoices.ABONO and attrs["origen"] == TipoMovimientoOrigenChoices.EGRESO:
+            raise serializers.ValidationError({"origen": "Un abono no puede ser un egreso."})
+        if attrs["origen"] == TipoMovimientoOrigenChoices.NOTA_CREDITO and attrs["tipo"] != TipoMovimientoChoices.CARGO:
+            raise serializers.ValidationError({"tipo": "Una nota de crédito debe ser un cargo."})
+        return attrs
 
 
 class ImputacionSerializer(serializers.ModelSerializer):

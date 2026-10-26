@@ -221,6 +221,205 @@ class ConfiguracionFinancieraTests(APITestCase):
 		self.assertEqual(configuracion.surcharge(2, Decimal("1333.33")), Decimal("133.33"))
 
 
+class MovimientosManualesTests(APITestCase):
+	def setUp(self):
+		self.usuario = get_user_model().objects.create_user(username="caja")
+		self.client.force_authenticate(user=self.usuario)
+		self.socio = crear_socio("49000001")
+		account_for(self.socio)
+
+	def test_registra_ingreso_manual_y_actualiza_saldo(self):
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "2500.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["monto"]), Decimal("2500.00"))
+		self.assertEqual(response.data["origen_manual"], "IngresoManual")
+		self.assertEqual(account_for(self.socio).saldo, Decimal("2500.00"))
+
+	def test_registra_nota_de_credito_revirtiendo_movimiento(self):
+		original = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Transferencia duplicada",
+			"monto": "1000.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(original.status_code, 201, original.data)
+
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución de transferencia duplicada",
+			"monto": "1000.00",
+			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["movimiento_revertido"], original.data["movimiento_cuenta_id"])
+		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
+
+	def test_no_permite_revertir_otro_socio_ni_revertir_dos_veces(self):
+		original = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "100.00",
+		}, format="json")
+		otra_persona = crear_socio("49000002")
+		account_for(otra_persona)
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": otra_persona.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución inválida",
+			"monto": "100.00",
+			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("socio", response.data["detail"].lower())
+
+	def test_registra_egreso_devolucion_directa_sin_afectar_cuotas(self):
+		cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "1000.00")
+		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "Egreso",
+			"concepto": "Devolución por transferencia duplicada",
+			"monto": "1000.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["origen_manual"], "Egreso")
+		self.assertEqual(response.data["concepto"], "Devolución por transferencia duplicada")
+		cuota.refresh_from_db()
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
+		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+
+	def test_movimientos_manuales_impactan_en_resumen_financiero_por_medio(self):
+		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación",
+			"monto": "3000.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(ingreso.status_code, 201)
+
+		self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución parcial",
+			"monto": "500.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+
+		self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "Egreso",
+			"concepto": "Reintegro de gastos",
+			"monto": "200.00",
+			"medio_de_pago": "Efectivo",
+		}, format="json")
+
+		resumen = self.client.get(reverse("resumen-financiero"))
+		self.assertEqual(resumen.status_code, 200)
+		self.assertEqual(resumen.data["transferencia_bancaria"], Decimal("2500.00"))
+		self.assertEqual(resumen.data["pago_efectivo"], Decimal("-200.00"))
+
+	def test_genera_pdf_de_nota_de_credito_y_movimiento_manual(self):
+		crear_cuota_con_cargo(account_for(self.socio), "2026-10", "2000.00")
+
+		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Donación · Aporte extraordinario",
+			"monto": "1500.00",
+			"medio_de_pago": "Transferencia",
+		}, format="json")
+		self.assertEqual(ingreso.status_code, 201)
+		self.assertEqual(ingreso.data["numero_comprobante"], 1)
+
+		nota_credito = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución total de operación · Ref. #" + str(ingreso.data["numero_comprobante"]),
+			"monto": "1500.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+		self.assertEqual(nota_credito.status_code, 201)
+		self.assertEqual(nota_credito.data["numero_comprobante"], 2)
+
+		pdf_nc = self.client.get(reverse("movimiento-cuenta-pdf", args=[nota_credito.data["movimiento_cuenta_id"]]))
+		self.assertEqual(pdf_nc.status_code, 200)
+		self.assertEqual(pdf_nc["Content-Type"], "application/pdf")
+		self.assertIn("nota-credito-X-00000002.pdf", pdf_nc["Content-Disposition"])
+		self.assertIn(b"NOTA DE CR", pdf_nc.content)
+		self.assertIn(b"NC-X 00000002", pdf_nc.content)
+
+		pdf_ing = self.client.get(reverse("movimiento-cuenta-pdf", args=[ingreso.data["movimiento_cuenta_id"]]))
+		self.assertEqual(pdf_ing.status_code, 200)
+		self.assertIn(b"REVERTIDO POR NOTA DE CR", pdf_ing.content)
+		self.assertIn(b"NC-X 00000002", pdf_ing.content)
+
+	def test_permite_multiples_notas_de_credito_parciales_hasta_el_total(self):
+		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Abono",
+			"origen": "IngresoManual",
+			"concepto": "Venta de indumentaria · Camiseta y short",
+			"monto": "1000.00",
+			"medio_de_pago": "Efectivo",
+		}, format="json")
+		self.assertEqual(ingreso.status_code, 201)
+
+		nc_1 = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución parcial · Camiseta",
+			"monto": "600.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+		self.assertEqual(nc_1.status_code, 201, nc_1.data)
+
+		nc_exceso = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución excedida",
+			"monto": "450.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+		self.assertEqual(nc_exceso.status_code, 400)
+
+		nc_2 = self.client.post(reverse("movimiento-cuenta-manual"), {
+			"socio_id": self.socio.pk,
+			"tipo": "Cargo",
+			"origen": "NotaCredito",
+			"concepto": "Devolución parcial · Short",
+			"monto": "400.00",
+			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
+		}, format="json")
+		self.assertEqual(nc_2.status_code, 201, nc_2.data)
+		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
+
+
 class BecaModeloTests(TestCase):
 	def setUp(self):
 		self.socio = crear_socio("50000001")
