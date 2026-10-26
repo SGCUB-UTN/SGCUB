@@ -1,34 +1,135 @@
 import { useState } from 'react'
+import { Modal, Text } from '@mantine/core'
 import { formatDate, getErrorMessage } from '../personas/format'
 import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
 import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
-import { SMALL_BUTTON_CLASSES, TABLE_CLASSES, compactInputClass } from './settingsForm'
-import { BlockTitle, CompactField, CompactSelect, IconButton, SettingsSection, StatusPill } from './settingsParts'
+import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, compactInputClass } from './settingsForm'
+import { BlockTitle, CompactField, CompactSelect, IconButton, Notice, SettingsSection, StatusPill } from './settingsParts'
 
 const CellError = ({ message }) => (message ? <p className="mt-1 text-xs font-medium text-error" role="alert">{message}</p> : null)
 
-function ScheduledVersions({ versions }) {
-  if (!versions.length) return null
+const previousValues = (version) => ({
+  ...version,
+  ...Object.fromEntries((version.cambios ?? []).map((cambio) => [cambio.campo, cambio.anterior])),
+})
+
+function RevertVersionModal({ version, opened, busy, error, onClose, onConfirm }) {
   return (
-    <div className="flex items-start gap-2 text-sm text-sky-900" role="status">
-      <span className="material-symbols-outlined shrink-0 text-[18px] text-sky-700" aria-hidden="true">event_upcoming</span>
-      <div>
-        <p className="font-semibold">Cambios programados</p>
-        <ul className="mt-1 flex flex-col gap-1">
-          {versions.map((version) => (
-            <li key={version.configuracion_financiera_id}>
-              <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
-              {' '}(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):
-              {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
-            </li>
-          ))}
-        </ul>
+    <Modal
+      opened={opened}
+      onClose={() => !busy && onClose()}
+      centered
+      size="md"
+      title={<Text fw={700} size="xl">Revertir cambio programado</Text>}
+    >
+      {version && (
+        <div className="flex flex-col gap-4">
+          <p className="text-base text-on-surface">
+            ¿Estás seguro de que querés revertir el cambio programado{' '}
+            <strong>{formatVigencia(version.periodo_vigencia).toLowerCase()}</strong>?
+            {' '}Las cuotas impagas o con pago parcial de ese período en adelante volverán a los valores anteriores:
+          </p>
+
+          <ul className="rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-4 py-3 text-sm text-on-surface flex flex-col gap-1.5">
+            {version.cambios.map((cambio) => (
+              <li key={cambio.campo} className="flex items-center justify-between gap-3">
+                <span className="font-medium">{CUOTA_FIELD_LABELS[cambio.campo]}</span>
+                <span>
+                  <span className="text-on-surface-variant line-through mr-2">
+                    {formatCuotaValue(cambio.campo, cambio.nuevo, version)}
+                  </span>
+                  <span className="font-semibold text-primary">
+                    {formatCuotaValue(cambio.campo, cambio.anterior, previousValues(version))}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {error && <Notice tone="error">{error}</Notice>}
+
+          <div className="mt-2 flex justify-end gap-2 border-t border-outline-variant/30 pt-4">
+            <button type="button" className={BUTTON_CLASSES.secondary} onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
+            <button type="button" className={BUTTON_CLASSES.danger} onClick={onConfirm} disabled={busy}>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
+              {busy ? 'Revirtiendo...' : 'Revertir'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function ScheduledVersions({ versions, onRevert, onReverted }) {
+  const [confirmingVersion, setConfirmingVersion] = useState(null)
+  const [reverting, setReverting] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!versions.length) return null
+
+  const handleConfirmRevert = async () => {
+    if (!confirmingVersion) return
+    setReverting(true)
+    setError('')
+    try {
+      const result = await onRevert(confirmingVersion.configuracion_financiera_id)
+      setConfirmingVersion(null)
+      onReverted?.(result)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'No se pudo revertir el cambio programado.'))
+    } finally {
+      setReverting(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-start gap-2 text-sm text-sky-900" role="status">
+        <span className="material-symbols-outlined shrink-0 text-[18px] text-sky-700" aria-hidden="true">event_upcoming</span>
+        <div className="flex-1">
+          <p className="font-semibold">Cambios programados</p>
+          <ul className="mt-1.5 flex flex-col gap-2">
+            {versions.map((version) => (
+              <li key={version.configuracion_financiera_id} className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
+                  {' '}(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):
+                  {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
+                </span>
+                <button
+                  type="button"
+                  className={SMALL_BUTTON_CLASSES.secondary}
+                  disabled={reverting}
+                  onClick={() => {
+                    setError('')
+                    setConfirmingVersion(version)
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[16px]" aria-hidden="true">undo</span>
+                  Revertir
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
+
+      <RevertVersionModal
+        version={confirmingVersion}
+        opened={Boolean(confirmingVersion)}
+        busy={reverting}
+        error={error}
+        onClose={() => setConfirmingVersion(null)}
+        onConfirm={handleConfirmRevert}
+      />
     </div>
   )
 }
 
-function FeesSection({ config, onShowHistory }) {
+function FeesSection({ config, onShowHistory, onReverted }) {
   const form = config.draft.financiera
   const errors = config.errors.financiera
   const setField = config.setFinancialField
@@ -50,7 +151,11 @@ function FeesSection({ config, onShowHistory }) {
         </button>
       )}
     >
-      <ScheduledVersions versions={scheduledVersions(config.versiones)} />
+      <ScheduledVersions
+        versions={scheduledVersions(config.versiones, config.financiera)}
+        onRevert={config.revertVersion}
+        onReverted={onReverted}
+      />
 
       <div>
         <BlockTitle>Cuotas y aranceles</BlockTitle>
@@ -268,10 +373,10 @@ function PaymentMethodsSection({ medios, onCreate, onUpdate, onDelete }) {
   )
 }
 
-export default function FinancialSettings({ config, onShowHistory }) {
+export default function FinancialSettings({ config, onShowHistory, onReverted }) {
   return (
     <div className="flex flex-col">
-      <FeesSection config={config} onShowHistory={onShowHistory} />
+      <FeesSection config={config} onShowHistory={onShowHistory} onReverted={onReverted} />
       <CalendarSection config={config} />
       <PaymentMethodsSection medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
     </div>

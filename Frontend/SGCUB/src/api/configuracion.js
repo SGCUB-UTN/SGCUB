@@ -52,6 +52,11 @@ export const getVersionesConfiguracionFinanciera = async () => {
   return response.data
 }
 
+export const revertirVersionConfiguracionFinanciera = async (versionId, payload = {}) => {
+  const response = await api.post(`${financialEndpoint}versiones/${versionId}/revertir/`, payload)
+  return response.data
+}
+
 // How many unpaid cuotas a new version from that period would update
 export const getImpactoConfiguracionFinanciera = async (periodo) => {
   const response = await api.get(`${financialEndpoint}impacto/`, { params: { periodo } })

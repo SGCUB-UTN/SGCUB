@@ -111,8 +111,10 @@ export default function useResumenFinanciero() {
 
   const debtorRows = useMemo(() => {
     const bySocio = new Map()
+    const period = currentPeriod()
 
     cuotas.forEach((cuota) => {
+      if (String(cuota.periodo) > period) return
       const pending = Number(cuota.saldo_pendiente ?? 0)
       if (pending <= 0 || cuotaState(cuota) === CUOTA_STATES.PAGA) return
 

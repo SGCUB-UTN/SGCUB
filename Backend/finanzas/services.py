@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -149,6 +149,18 @@ def due_date(first_day, day):
     return first_day.replace(day=min(day, monthrange(first_day.year, first_day.month)[1]))
 
 
+CUOTA_WINDOW_MONTHS = 3
+
+
+def generation_periods(base_date=None, months=CUOTA_WINDOW_MONTHS):
+    first_day = (base_date or timezone.localdate()).replace(day=1)
+    periods = []
+    for _ in range(months):
+        periods.append(first_day.strftime(PERIOD_FORMAT))
+        first_day = (first_day + timedelta(days=32)).replace(day=1)
+    return periods
+
+
 def lock_account(socio):
     account, _ = CuentaCorriente.objects.get_or_create(socio=socio)
     return CuentaCorriente.objects.select_for_update().get(pk=account.pk)
@@ -206,21 +218,22 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     return cuota
 
 
-def create_first_cuota(socio):
-    period = timezone.localdate().strftime(PERIOD_FORMAT)
-    try:
-        return create_cuota(socio, period)
-    except SocioInactivoError:
-        return None
+def create_first_cuota(socio, today=None):
+    today = today or timezone.localdate()
+    created = []
+    for period in generation_periods(today):
+        try:
+            created.append(create_cuota(socio, period, today=today))
+        except CuotaDuplicadaError:
+            continue
+        except SocioInactivoError:
+            return None
+    return created[0] if created else None
 
 
-@transaction.atomic
-def create_or_update_player_current_cuota(socio_id):
-    today = timezone.localdate()
-    period = today.strftime(PERIOD_FORMAT)
-    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+def _ensure_player_cuota_for_period(socio, period, today):
     cuota = Cuota.objects.filter(
-        movimiento__cuenta_corriente__socio_id=socio_id,
+        movimiento__cuenta_corriente__socio_id=socio.pk,
         periodo=period,
     ).first()
     if cuota is None:
@@ -244,8 +257,16 @@ def create_or_update_player_current_cuota(socio_id):
     sports_item.cuota = cuota
     sports_item.save()
     sync_cuota_charge(cuota)
-    refresh_cuota_scholarships(cuota, socio_id, "Beca recalculada por el alta de la cuota deportiva")
+    refresh_cuota_scholarships(cuota, socio.pk, "Beca recalculada por el alta de la cuota deportiva")
     return cuota
+
+
+@transaction.atomic
+def create_or_update_player_current_cuota(socio_id):
+    today = timezone.localdate()
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    results = [_ensure_player_cuota_for_period(socio, period, today) for period in generation_periods(today)]
+    return results[0] if results else None
 
 
 def has_payments(cuota):
@@ -383,45 +404,80 @@ def create_configuration_version(parameters, user=None, responsable=""):
     return configuration
 
 
-def generar_cuotas_mensuales(fecha=None, today=None):
+@transaction.atomic
+def revert_configuration_version(version, user=None, responsable=""):
+    """Reverts a scheduled future version back to the parameters of the previous version."""
+    previous = version.previous_version()
+    if previous is None:
+        raise ValueError("No hay una versión anterior a la cual revertir.")
+    parameters = {**previous.parameters(), "periodo_vigencia": version.periodo_vigencia}
+    return create_configuration_version(
+        parameters,
+        user=user,
+        responsable=(responsable or version.responsable or user_name(user))[:120],
+    )
+
+
+def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS):
     today = today or timezone.localdate()
     fecha = fecha or today
     if not isinstance(fecha, date):
         raise TypeError("La fecha de generación debe ser una fecha.")
 
-    period = fecha.strftime(PERIOD_FORMAT)
-    configuration = ConfiguracionFinanciera.load(period)
-    socios = (
+    periods = generation_periods(fecha, months=meses)
+    first_start = parse_period(periods[0])
+    _, last_end = (
+        parse_period(periods[-1]),
+        parse_period(periods[-1]).replace(day=monthrange(parse_period(periods[-1]).year, parse_period(periods[-1]).month)[1]),
+    )
+    active_scholarships = (
+        Beca.objects.exclude(estado=EstadoBecaChoices.CANCELADA)
+        .filter(fecha_aplicacion__lte=last_end)
+        .filter(Q(fecha_fin__isnull=True) | Q(fecha_fin__gte=first_start))
+        .prefetch_related("exclusiones")
+        .order_by("fecha_aplicacion", "pk")
+    )
+    socios = list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
         .select_related("estado_administrativo", "jugador__estado")
         .prefetch_related(Prefetch(
             "becas",
-            queryset=scholarships_for_period(parse_period(period)),
-            to_attr="becas_del_periodo",
+            queryset=active_scholarships,
+            to_attr="becas_activas",
         ))
         .order_by("pk")
     )
     result = {
-        "periodo": period,
+        "periodo": periods[0],
+        "periodos": periods,
         "cuotas_creadas": 0,
         "cuotas_existentes": 0,
         "items_sociales": 0,
         "items_deportivos": 0,
     }
 
-    for socio in socios:
-        try:
-            cuota = create_cuota(socio, period, configuration=configuration, today=today)
-        except CuotaDuplicadaError:
-            result["cuotas_existentes"] += 1
-            continue
-        except SocioInactivoError:
-            continue
+    for period in periods:
+        configuration = ConfiguracionFinanciera.load(period)
+        period_start = parse_period(period)
+        for socio in socios:
+            socio.becas_del_periodo = [
+                scholarship
+                for scholarship in getattr(socio, "becas_activas", ())
+                if scholarship.covers_period(period_start)
+                and not any(exc.periodo == period for exc in scholarship.exclusiones.all())
+            ]
+            try:
+                cuota = create_cuota(socio, period, configuration=configuration, today=today)
+            except CuotaDuplicadaError:
+                result["cuotas_existentes"] += 1
+                continue
+            except SocioInactivoError:
+                continue
 
-        concepts = list(cuota.items.values_list("concepto", flat=True))
-        result["cuotas_creadas"] += 1
-        result["items_sociales"] += concepts.count(ConceptoItemChoices.CUOTA_SOCIAL)
-        result["items_deportivos"] += concepts.count(ConceptoItemChoices.CUOTA_DEPORTIVA)
+            concepts = list(cuota.items.values_list("concepto", flat=True))
+            result["cuotas_creadas"] += 1
+            result["items_sociales"] += concepts.count(ConceptoItemChoices.CUOTA_SOCIAL)
+            result["items_deportivos"] += concepts.count(ConceptoItemChoices.CUOTA_DEPORTIVA)
 
     return result
 

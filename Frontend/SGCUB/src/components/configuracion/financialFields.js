@@ -62,7 +62,8 @@ export const upcomingPeriods = (count = 6, today = new Date()) => Array.from(
 )
 
 // Versions that start after the current period: the latest one created for each period
-export const scheduledVersions = (versions) => {
+// if it still differs from the current period's configuration
+export const scheduledVersions = (versions, currentConfig = null) => {
   const current = currentPeriod()
   const byPeriod = {}
   versions
@@ -71,7 +72,13 @@ export const scheduledVersions = (versions) => {
       const kept = byPeriod[version.periodo_vigencia]
       if (!kept || version.configuracion_financiera_id > kept.configuracion_financiera_id) byPeriod[version.periodo_vigencia] = version
     })
-  return Object.values(byPeriod).sort((a, b) => a.periodo_vigencia.localeCompare(b.periodo_vigencia))
+  return Object.values(byPeriod)
+    .filter((version) => {
+      if (!version.cambios?.length) return false
+      if (!currentConfig) return true
+      return CUOTA_FIELDS.some((field) => String(version[field] ?? '') !== String(currentConfig[field] ?? ''))
+    })
+    .sort((a, b) => a.periodo_vigencia.localeCompare(b.periodo_vigencia))
 }
 
 export const validateCuotaForm = (form) => {

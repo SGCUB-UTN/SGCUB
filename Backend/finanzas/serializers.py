@@ -448,6 +448,13 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             context={"pending": self._account_pending(obj)},
         ).data
 
+    def _current_period(self):
+        return timezone.localdate().strftime(PERIOD_FORMAT)
+
+    def _due_cuotas(self, obj):
+        current = self._current_period()
+        return [cuota for cuota in self._account_cuotas(obj) if str(cuota.periodo) <= current]
+
     def get_cuotas_generadas(self, obj):
         return len(self._account_cuotas(obj))
 
@@ -455,7 +462,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
         return sum(1 for cuota in self._account_cuotas(obj) if cuota.estado_cuota == EstadoCuotaChoices.PAGA)
 
     def get_cuotas_impagas(self, obj):
-        return sum(1 for cuota in self._account_cuotas(obj) if cuota.estado_cuota != EstadoCuotaChoices.PAGA)
+        return sum(1 for cuota in self._due_cuotas(obj) if cuota.estado_cuota != EstadoCuotaChoices.PAGA)
 
     def get_total_pagado(self, obj):
         pending = self._account_pending(obj)
@@ -465,7 +472,8 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
         )
 
     def get_total_adeudado(self, obj):
-        return sum(self._account_pending(obj).values(), Decimal("0.00"))
+        pending = self._account_pending(obj)
+        return sum((pending[cuota.pk] for cuota in self._due_cuotas(obj)), Decimal("0.00"))
 
     def get_total_mora(self, obj):
         return sum(
