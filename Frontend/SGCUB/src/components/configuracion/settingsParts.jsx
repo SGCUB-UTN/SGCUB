@@ -127,21 +127,3 @@ export function IconButton({ icon, label, onClick, disabled = false }) {
     </button>
   )
 }
-
-export function SwitchRow({ label, description, checked, onChange, disabled = false }) {
-  return (
-    <label className={`flex items-start justify-between gap-4 rounded-lg border border-outline-variant/40 px-4 py-3 ${disabled ? 'opacity-60' : 'cursor-pointer hover:bg-surface-container-low'}`}>
-      <span className="min-w-0">
-        <span className="block text-base font-semibold text-on-surface">{label}</span>
-        {description && <span className="block text-sm text-on-surface-variant">{description}</span>}
-      </span>
-      <input
-        type="checkbox"
-        className="mt-1 h-5 w-5 shrink-0 accent-primary cursor-pointer"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        disabled={disabled}
-      />
-    </label>
-  )
-}

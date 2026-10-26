@@ -3,26 +3,23 @@ import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
 import { IntegerInput } from './formattedInputs'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, fieldErrors } from './settingsForm'
-import { Field, INPUT_CLASS, IconButton, Notice, SettingsSection, StatusPill, SwitchRow } from './settingsParts'
+import { Field, INPUT_CLASS, IconButton, Notice, SettingsSection, StatusPill } from './settingsParts'
 
+// Documentation is only loaded for players and docentes
 const PROFILES = [
   { field: 'aplica_jugador', label: 'Jugadores' },
-  { field: 'aplica_socio', label: 'Socios' },
   { field: 'aplica_docente', label: 'Docentes' },
 ]
 
 const EMPTY_TYPE = {
   nombre: '',
   aplica_jugador: true,
-  aplica_socio: true,
   aplica_docente: false,
   obligatorio: false,
-  requiere_vencimiento: false,
-  vigencia_meses: '',
 }
 
 function DocumentTypeForm({ tipo, onSave, onClose }) {
-  const [form, setForm] = useState(() => (tipo ? { ...tipo, vigencia_meses: tipo.vigencia_meses ?? '' } : EMPTY_TYPE))
+  const [form, setForm] = useState(() => tipo ?? EMPTY_TYPE)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -38,9 +35,8 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
       await onSave({
         nombre: form.nombre,
         obligatorio: form.obligatorio,
-        requiere_vencimiento: form.requiere_vencimiento,
-        vigencia_meses: form.vigencia_meses === '' ? null : Number(form.vigencia_meses),
         ...Object.fromEntries(PROFILES.map(({ field }) => [field, form[field]])),
+        aplica_socio: false,
       })
       onClose()
     } catch (requestError) {
@@ -69,26 +65,23 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
         {errors.perfiles && <p className="text-sm text-error" role="alert">{errors.perfiles}</p>}
       </fieldset>
 
-      <SwitchRow
-        label="Obligatorio"
-        description="Forma parte de la documentación que la persona tiene que presentar."
-        checked={form.obligatorio}
-        onChange={(value) => setField('obligatorio', value)}
-      />
-      <SwitchRow
-        label="Requiere fecha de vencimiento"
-        description="No se puede cargar el documento sin indicar cuándo vence."
-        checked={form.requiere_vencimiento}
-        onChange={(value) => setField('requiere_vencimiento', value)}
-      />
-      <Field
-        label="Vigencia por defecto (meses)"
-        htmlFor="tipo-vigencia"
-        error={errors.vigencia_meses}
-        hint="Opcional. Al cargar un documento, sugiere el vencimiento a partir de la fecha de emisión."
-      >
-        <IntegerInput id="tipo-vigencia" unit="meses" value={form.vigencia_meses} onChange={(value) => setField('vigencia_meses', value)} invalid={Boolean(errors.vigencia_meses)} />
-      </Field>
+      {/* The checkbox is centered on the title and its description */}
+      <div className="flex items-center gap-3">
+        <input
+          id="tipo-obligatorio"
+          type="checkbox"
+          className="h-4 w-4 shrink-0 accent-primary cursor-pointer"
+          checked={form.obligatorio}
+          onChange={(event) => setField('obligatorio', event.target.checked)}
+          aria-describedby="tipo-obligatorio-descripcion"
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <label htmlFor="tipo-obligatorio" className="text-sm font-semibold text-on-surface cursor-pointer">Obligatorio</label>
+          <p id="tipo-obligatorio-descripcion" className="text-sm text-on-surface-variant">
+            Forma parte de la documentación que la persona tiene que presentar.
+          </p>
+        </div>
+      </div>
 
       {errors.general && <Notice tone="error">{errors.general}</Notice>}
       <div className="flex justify-end gap-2">
@@ -125,10 +118,6 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
       </td>
       <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{profilesLabel(tipo)}</td>
       <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{tipo.obligatorio ? 'Sí' : 'No'}</td>
-      <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>
-        {tipo.requiere_vencimiento ? 'Obligatorio' : 'Opcional'}
-        {tipo.vigencia_meses ? ` · ${tipo.vigencia_meses} ${tipo.vigencia_meses === 1 ? 'mes' : 'meses'}` : ''}
-      </td>
       <td className={TABLE_CLASSES.cell}><StatusPill active={tipo.activo} /></td>
       <td className={TABLE_CLASSES.actionsCell}>
         <div className="flex justify-end">
@@ -177,7 +166,6 @@ function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
               <th className={TABLE_CLASSES.headCell}>Tipo</th>
               <th className={TABLE_CLASSES.headCell}>Se pide a</th>
               <th className={TABLE_CLASSES.headCell}>Obligatorio</th>
-              <th className={TABLE_CLASSES.headCell}>Vencimiento</th>
               <th className={TABLE_CLASSES.headCell}>Estado</th>
               <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
             </tr>
