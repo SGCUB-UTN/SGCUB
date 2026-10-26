@@ -10,6 +10,8 @@ import EditCuotaModal from '../components/cuota/EditCuotaModal'
 import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import SectionHeading from '../components/cuota/SectionHeading'
+import TaskRunList from '../components/cuota/TaskRunList'
+import TaskRunLogModal from '../components/cuota/TaskRunLogModal'
 import { isValidPeriod } from '../components/cuota/cuotaPeriod'
 import PageHeader from '../components/shared/PageHeader'
 import { currentPeriod } from '../components/shared/periodFormat'
@@ -35,7 +37,7 @@ function Cuotas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
   const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
-  const { summary, reload } = useCuotaPeriod(period)
+  const { summary, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
   const [cuotas, setCuotas] = useState([])
@@ -49,6 +51,7 @@ function Cuotas() {
   const [guardando, setGuardando] = useState(false)
   const [errorFormulario, setErrorFormulario] = useState('')
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
+  const [logRun, setLogRun] = useState(null)
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
 
@@ -197,6 +200,15 @@ function Cuotas() {
           <SectionHeading id="period-kpis-title" title="Indicadores del período" description="Montos y cantidades de las cuotas emitidas para el período seleccionado." />
           <PeriodKpis summary={summary.data} isLoading={summary.isLoading} error={summary.error} />
         </div>
+
+        <div role="region" className={`${SECTION_CLASS} flex flex-col gap-3`} aria-labelledby="task-runs-title">
+          <SectionHeading
+            id="task-runs-title"
+            title="Historial de automatizaciones"
+            description="Generación de cuotas y recargos por vencimiento ejecutados para este período."
+          />
+          <TaskRunList runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
+        </div>
       </div>
 
       <div aria-label="Cuotas">
@@ -215,6 +227,8 @@ function Cuotas() {
           onChanged={refresh}
         />
       </div>
+
+      <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 
       <AddCuotaModal
         opened={modalAgregar}
