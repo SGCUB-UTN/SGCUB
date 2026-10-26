@@ -106,21 +106,11 @@ function MovimientoManualDetailModal({
     ? Number(movimiento.saldo_reversible)
     : Math.max(0, Math.round((Number(movimiento.monto || 0) - reversedSum) * 100) / 100)
 
-  const isSurplusMovement = movimiento.es_excedente ?? (movimiento.concepto || '').startsWith('Excedente de transferencia / Saldo a favor')
   const isRefundedByEgreso = creditNoteChild?.origen_manual === 'Egreso'
 
   const canIssueCreditNote = (
     movimiento.origen_manual === 'IngresoManual'
     && isAbono
-    && !isSurplusMovement
-    && remainingReversible > 0
-    && Boolean(onIssueCreditNote)
-  )
-
-  const canRefundSurplus = (
-    movimiento.origen_manual === 'IngresoManual'
-    && isAbono
-    && isSurplusMovement
     && remainingReversible > 0
     && Boolean(onIssueCreditNote)
   )
@@ -346,21 +336,10 @@ function MovimientoManualDetailModal({
               <button
                 type="button"
                 onClick={() => onIssueCreditNote(movimiento)}
-                className="inline-flex items-center justify-center gap-2 w-full h-10 px-4 border border-primary/40 bg-white rounded text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">assignment_return</span>
-                Emitir nota de crédito
-              </button>
-            )}
-
-            {canRefundSurplus && (
-              <button
-                type="button"
-                onClick={() => onIssueCreditNote(movimiento)}
-                className="inline-flex items-center justify-center gap-2 w-full h-10 px-4 border border-error/40 bg-white rounded text-sm font-semibold text-error hover:bg-error/5 transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 w-full h-10 px-4 border border-outline-variant/60 bg-white rounded text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]" aria-hidden="true">payments</span>
-                Devolver saldo / excedente
+                Registrar devolución / egreso
               </button>
             )}
           </div>
