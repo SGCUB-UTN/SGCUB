@@ -72,7 +72,6 @@ from .services import (
 	assign_benefit,
 	cancel_scholarship,
 	correct_payment,
-	create_configuration_version,
 	create_cuota,
 	delete_cuota,
 	ensure_cuota_without_payments,
@@ -454,24 +453,13 @@ def imputacion_detail(request, pk):
 	return Response(ImputacionSerializer(get_object_or_404(Imputacion, pk=pk)).data)
 
 
-@extend_schema(tags=["Finanzas/Configuracion"], request=ConfiguracionFinancieraSerializer, responses=ConfiguracionFinancieraSerializer)
-@api_view(["GET", "POST"])
+@extend_schema(tags=["Finanzas/Configuracion"], responses=ConfiguracionFinancieraSerializer)
+@api_view(["GET"])
 def configuracion_financiera(request):
-	if request.method == "GET":
-		configuracion = ConfiguracionFinanciera.load(request.query_params.get("periodo"))
-		return Response(ConfiguracionFinancieraSerializer(configuracion).data)
-
-	# The new version starts from the one in force for its period: only the fields sent change
-	base = ConfiguracionFinanciera.load(request.data.get("periodo_vigencia"))
-	serializer = ConfiguracionFinancieraSerializer(data={**base.parameters(), **request.data})
-	if not serializer.is_valid():
-		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	if all(serializer.validated_data[field] == value for field, value in base.parameters().items()):
-		return Response({"detail": "No hay cambios para guardar."}, status=status.HTTP_400_BAD_REQUEST)
-
-	usuario = request.user if request.user.is_authenticated else None
-	configuracion = create_configuration_version(serializer.validated_data, usuario)
-	return Response(ConfiguracionFinancieraSerializer(configuracion).data, status=status.HTTP_201_CREATED)
+	"""Version in force for `periodo` (current period by default). New versions are created from
+	POST /api/configuracion/guardar/, together with the rest of the configuration and its responsable."""
+	configuracion = ConfiguracionFinanciera.load(request.query_params.get("periodo"))
+	return Response(ConfiguracionFinancieraSerializer(configuracion).data)
 
 
 @extend_schema(tags=["Finanzas/Configuracion"])

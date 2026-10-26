@@ -1,9 +1,11 @@
+import json
 from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -12,8 +14,8 @@ from comunicaciones.services import enviar_email_individual
 from documental.models import TipoDocumento
 from finanzas.delinquency import delinquency_report
 from finanzas.delinquency_pdf import render_delinquency_pdf
-from finanzas.models import CuentaCorriente, Cuota, EstadoCuotaChoices, ItemCuota, MedioPago, MovimientoCuenta
-from padron.models import Persona, Socio
+from finanzas.models import ConfiguracionFinanciera, CuentaCorriente, Cuota, EstadoCuotaChoices, ItemCuota, MedioPago, MovimientoCuenta
+from padron.models import Localidad, Persona, Socio
 
 from .models import ConfiguracionGeneral, HistorialConfiguracion
 
@@ -22,9 +24,20 @@ class ConfiguracionGeneralTests(APITestCase):
     def setUp(self):
         self.usuario = get_user_model().objects.create_user(username="admin", first_name="Laura", last_name="Gómez")
         self.client.force_authenticate(user=self.usuario)
+        self.localidad = Localidad.objects.create(nombre="Berisso Test")
+
+    def guardar(self, responsable="Marta Ruiz", **datos):
+        return self.client.post(reverse("configuracion-guardar"), {"responsable": responsable, **datos}, format="json")
 
     def actualizar(self, **datos):
-        return self.client.patch(reverse("configuracion-general"), datos, format="json")
+        return self.guardar(general=datos)
+
+    def subir(self, archivo):
+        return self.client.post(
+            reverse("configuracion-guardar"),
+            {"datos": json.dumps({"responsable": "Marta Ruiz"}), "club_logo": archivo},
+            format="multipart",
+        )
 
     def test_valores_iniciales(self):
         response = self.client.get(reverse("configuracion-general"))
@@ -35,16 +48,31 @@ class ConfiguracionGeneralTests(APITestCase):
         self.assertEqual(response.data["dias_alerta_documentos"], 30)
         self.assertFalse(response.data["notificar_generacion_cuota"])
 
-    def test_registra_cada_cambio_en_el_historial(self):
-        response = self.actualizar(monto_inscripcion="5000.00", notificar_comprobante_pago=True, club_nombre="Club Universitario de Berisso")
+    def test_la_configuracion_general_es_de_solo_lectura(self):
+        response = self.client.patch(reverse("configuracion-general"), {"club_nombre": "Otro"}, format="json")
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_registra_cada_cambio_en_el_historial_con_el_responsable(self):
+        response = self.actualizar(cuotas_vencidas_morosidad=3, notificar_comprobante_pago=True, club_nombre="Club Universitario de Berisso")
 
         self.assertEqual(response.status_code, 200, response.data)
         cambios = {cambio.campo: cambio for cambio in HistorialConfiguracion.objects.all()}
-        self.assertEqual(set(cambios), {"Monto de inscripción", "Enviar comprobantes de pago"})
-        inscripcion = cambios["Monto de inscripción"]
-        self.assertEqual((inscripcion.seccion, inscripcion.valor_anterior, inscripcion.valor_nuevo), ("Finanzas", "0.00", "5000.00"))
-        self.assertEqual(inscripcion.usuario, self.usuario)
+        self.assertEqual(set(cambios), {"Cuotas vencidas para considerar moroso", "Enviar comprobantes de pago"})
+        morosidad = cambios["Cuotas vencidas para considerar moroso"]
+        self.assertEqual((morosidad.seccion, morosidad.valor_anterior, morosidad.valor_nuevo), ("Finanzas", "1", "3"))
+        self.assertEqual((morosidad.usuario, morosidad.responsable), (self.usuario, "Marta Ruiz"))
         self.assertEqual(cambios["Enviar comprobantes de pago"].valor_nuevo, "Sí")
+
+    def test_exige_responsable_y_algun_cambio(self):
+        sin_responsable = self.guardar(responsable=" ", general={"cuotas_vencidas_morosidad": 3})
+        sin_cambios = self.guardar()
+
+        self.assertEqual(sin_responsable.status_code, 400)
+        self.assertIn("responsable", sin_responsable.data)
+        self.assertEqual(ConfiguracionGeneral.load().cuotas_vencidas_morosidad, 1)
+        self.assertEqual(sin_cambios.status_code, 400)
+        self.assertIn("detail", sin_cambios.data)
 
     def test_historial_filtrado_por_seccion(self):
         self.actualizar(dias_alerta_documentos=15, email_firma="Comisión Directiva")
@@ -54,27 +82,84 @@ class ConfiguracionGeneralTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([cambio["campo"] for cambio in response.data], ["Días de aviso antes del vencimiento"])
         self.assertEqual(response.data[0]["usuario_nombre"], "Laura Gómez")
+        self.assertEqual(response.data[0]["responsable"], "Marta Ruiz")
 
     def test_validaciones(self):
         casos = [
             ({"club_nombre": "  "}, "club_nombre"),
             ({"club_cuit": "30-123"}, "club_cuit"),
             ({"club_email": "no-es-email"}, "club_email"),
-            ({"monto_inscripcion": "-1.00"}, "monto_inscripcion"),
             ({"cuotas_vencidas_morosidad": 0}, "cuotas_vencidas_morosidad"),
             ({"dias_alerta_documentos": 0}, "dias_alerta_documentos"),
             ({"dias_recordatorio_vencimiento": 31}, "dias_recordatorio_vencimiento"),
+            ({"domicilio_calle": "Calle 1"}, "domicilio_numero"),
         ]
         for datos, campo in casos:
             with self.subTest(datos=datos):
                 response = self.actualizar(**datos)
                 self.assertEqual(response.status_code, 400)
-                self.assertIn(campo, response.data)
+                self.assertIn(campo, response.data["general"])
 
     def test_normaliza_el_cuit(self):
         response = self.actualizar(club_cuit="30123456789")
 
-        self.assertEqual(response.data["club_cuit"], "30-12345678-9")
+        self.assertEqual(response.data["general"]["club_cuit"], "30-12345678-9")
+
+    def test_guarda_el_domicilio_del_club(self):
+        response = self.actualizar(domicilio_calle="Calle 8", domicilio_numero="4100", domicilio_localidad=self.localidad.pk)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.actualizar(domicilio_piso="2")
+
+        configuracion = ConfiguracionGeneral.load()
+        self.assertEqual((configuracion.club_domicilio.calle, configuracion.club_domicilio.piso), ("Calle 8", "2"))
+        self.assertEqual(
+            list(HistorialConfiguracion.objects.filter(campo="Domicilio").order_by("pk").values_list("valor_anterior", "valor_nuevo")),
+            [("", "Calle 8 4100, Berisso Test"), ("Calle 8 4100, Berisso Test", "Calle 8 4100, Piso 2, Berisso Test")],
+        )
+
+    def test_sube_y_quita_el_logo(self):
+        response = self.subir(SimpleUploadedFile("logo.png", b"PNG", content_type="image/png"))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("configuracion/logo/logo", response.data["general"]["club_logo"])
+
+        self.guardar(quitar_logo=True)
+
+        self.assertFalse(ConfiguracionGeneral.load().club_logo)
+        self.assertEqual(
+            list(HistorialConfiguracion.objects.filter(campo="Logo").order_by("pk").values_list("valor_nuevo", flat=True)),
+            ["Cargado", "Quitado"],
+        )
+
+    def test_rechaza_logos_que_no_son_imagenes(self):
+        response = self.subir(SimpleUploadedFile("logo.pdf", b"%PDF", content_type="application/pdf"))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("club_logo", response.data["general"])
+
+    def test_guarda_general_y_nueva_version_en_una_sola_operacion(self):
+        periodo = (timezone.localdate().replace(day=1) + timedelta(days=32)).strftime("%Y-%m")
+
+        response = self.guardar(
+            general={"dias_alerta_documentos": 20},
+            financiera={"periodo_vigencia": periodo, "monto_inscripcion": "5000.00"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        version = ConfiguracionFinanciera.load(periodo)
+        self.assertEqual((version.monto_inscripcion, version.responsable), (Decimal("5000.00"), "Marta Ruiz"))
+        self.assertEqual(ConfiguracionFinanciera.load().monto_inscripcion, Decimal("0.00"))
+        self.assertEqual(ConfiguracionGeneral.load().dias_alerta_documentos, 20)
+
+    def test_si_una_parte_es_invalida_no_guarda_nada(self):
+        response = self.guardar(
+            general={"dias_alerta_documentos": 20},
+            financiera={"periodo_vigencia": timezone.localdate().strftime("%Y-%m"), "monto_cuota_social": "1200.00"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("periodo_vigencia", response.data["financiera"])
+        self.assertEqual(ConfiguracionGeneral.load().dias_alerta_documentos, 30)
+        self.assertEqual(ConfiguracionFinanciera.objects.count(), 1)
 
     def test_registra_cambios_de_medios_de_pago_y_tipos_de_documento(self):
         medio = MedioPago.objects.get(codigo="Transferencia")

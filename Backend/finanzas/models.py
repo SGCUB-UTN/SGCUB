@@ -390,6 +390,7 @@ def period_key(period=None):
 
 # Cuota parameters that only change from a given period on
 CONFIGURATION_FIELDS = (
+    "monto_inscripcion",
     "monto_cuota_social",
     "monto_cuota_deportiva",
     "dia_vencimiento_1",
@@ -407,6 +408,8 @@ class ConfiguracionFinanciera(models.Model):
 
     configuracion_financiera_id = models.AutoField(primary_key=True)
     periodo_vigencia = models.CharField(max_length=7, default=INITIAL_CONFIGURATION_PERIOD)
+    # Not charged yet: the registration fee will be developed later
+    monto_inscripcion = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     monto_cuota_social = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1000.00"))
     monto_cuota_deportiva = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1500.00"))
     dia_vencimiento_1 = models.PositiveSmallIntegerField(default=10)
@@ -427,6 +430,8 @@ class ConfiguracionFinanciera(models.Model):
     valor_recargo_2 = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     fecha_creacion = models.DateTimeField(default=timezone.now)
     cuotas_actualizadas = models.PositiveIntegerField(default=0)
+    # Person who authorized the version, chosen when saving; `usuario_creacion` is who was logged in
+    responsable = models.CharField(max_length=120, blank=True)
     usuario_creacion = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

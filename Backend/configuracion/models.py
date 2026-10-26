@@ -1,8 +1,9 @@
-from decimal import Decimal
-
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils import timezone
+
+LOGO_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "svg"]
 
 
 class SeccionConfiguracionChoices(models.TextChoices):
@@ -20,12 +21,21 @@ class ConfiguracionGeneral(models.Model):
 
     club_nombre = models.CharField(max_length=120, default="Club Universitario de Berisso")
     club_cuit = models.CharField(max_length=13, blank=True)
-    club_direccion = models.CharField(max_length=200, blank=True)
+    club_logo = models.FileField(
+        upload_to="configuracion/logo/",
+        blank=True,
+        validators=[FileExtensionValidator(LOGO_EXTENSIONS)],
+    )
+    club_domicilio = models.ForeignKey(
+        "padron.Domicilio",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
     club_telefono = models.CharField(max_length=30, blank=True)
     club_email = models.EmailField(blank=True)
 
-    # Not charged yet: the registration fee will be developed later
-    monto_inscripcion = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     cuotas_vencidas_morosidad = models.PositiveSmallIntegerField(default=1)
 
     dias_alerta_documentos = models.PositiveSmallIntegerField(default=30)
@@ -59,6 +69,8 @@ class HistorialConfiguracion(models.Model):
     campo = models.CharField(max_length=120)
     valor_anterior = models.TextField(blank=True)
     valor_nuevo = models.TextField(blank=True)
+    # Person who authorized the change, chosen when saving; `usuario` is who was logged in
+    responsable = models.CharField(max_length=120, blank=True)
     fecha = models.DateTimeField(default=timezone.now)
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,

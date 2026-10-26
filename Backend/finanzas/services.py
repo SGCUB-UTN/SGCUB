@@ -305,9 +305,9 @@ def apply_configuration_to_cuota(cuota_id, configuration, user=None):
 
 
 @transaction.atomic
-def create_configuration_version(parameters, user=None):
+def create_configuration_version(parameters, user=None, responsable=""):
     """Creates the version and updates every unpaid cuota (partially paid included) it applies to."""
-    configuration = ConfiguracionFinanciera.objects.create(**parameters, usuario_creacion=user)
+    configuration = ConfiguracionFinanciera.objects.create(**parameters, usuario_creacion=user, responsable=responsable[:120])
     configuration.cuotas_actualizadas = sum(
         apply_configuration_to_cuota(cuota_id, configuration, user)
         for cuota_id in affected_cuotas(configuration.periodo_vigencia).values_list("pk", flat=True)
