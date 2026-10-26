@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.conf import settings
 from django.db import IntegrityError, models, transaction
 import django.utils.timezone
 
@@ -213,10 +214,16 @@ class Categoria(models.Model):
         (GENERO_FEMENINO, "Femenino"),
     ]
 
+    class TipoChoices(models.TextChoices):
+        JUVENIL = "juvenil", "Juvenil"
+        MAYOR = "mayor", "Mayor"
+
     categoria_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=50)
     anio_vigente = models.PositiveIntegerField(default=get_anio_actual)
+    edad_minima = models.PositiveSmallIntegerField(default=0)
     edad_maxima = models.PositiveSmallIntegerField(default=0)
+    tipo = models.CharField(max_length=10, choices=TipoChoices.choices, default=TipoChoices.JUVENIL)
     genero = models.CharField(
         max_length=1,
         choices=GENERO_CHOICES,
@@ -238,7 +245,12 @@ class Categoria(models.Model):
         return get_anio_actual() - birth_date.year
 
     def accepts_age(self, birth_date):
-        return self.competition_age(birth_date) <= self.edad_maxima
+        return self.edad_minima <= self.competition_age(birth_date) <= self.edad_maxima
+
+    def age_range_label(self):
+        if self.edad_minima:
+            return f"admite desde {self.edad_minima} hasta {self.edad_maxima}"
+        return f"admite hasta {self.edad_maxima}"
 
     def __str__(self):
         return f"{self.nombre} ({self.anio_vigente})"
@@ -488,3 +500,173 @@ class DocenteCategoria(models.Model):
                 name="docente_categoria_unico",
             )
         ]
+
+
+class ActualizacionCategoriasEjecucion(models.Model):
+    actualizacion_id = models.AutoField(primary_key=True)
+    anio = models.PositiveIntegerField(default=get_anio_actual)
+    fecha = models.DateTimeField(default=django.utils.timezone.now)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="actualizaciones_categorias",
+        null=True,
+        blank=True,
+    )
+    ejecutado_por = models.CharField(max_length=150)
+    categorias_actualizadas = models.PositiveIntegerField(default=0)
+    registro = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "actualizacion_categorias_ejecucion"
+        ordering = ["-fecha", "-actualizacion_id"]
+
+    def __str__(self):
+        return f"Actualización de categorías {self.anio}"
+
+
+class RecategorizacionEjecucion(models.Model):
+    class EstadoChoices(models.TextChoices):
+        EN_CURSO = "en_curso", "En curso"
+        REVISION_PENDIENTE = "revision_pendiente", "Revisión pendiente"
+        FINALIZADA = "finalizada", "Finalizada"
+        FALLIDA = "fallida", "Fallida"
+
+    ejecucion_id = models.AutoField(primary_key=True)
+    anio = models.PositiveIntegerField(default=get_anio_actual)
+    fecha_inicio = models.DateTimeField(default=django.utils.timezone.now)
+    fecha_fin = models.DateTimeField(null=True, blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="recategorizaciones",
+        null=True,
+        blank=True,
+    )
+    ejecutado_por = models.CharField(max_length=150)
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoChoices.choices,
+        default=EstadoChoices.EN_CURSO,
+    )
+    exitosos = models.PositiveIntegerField(default=0)
+    pendientes = models.PositiveIntegerField(default=0)
+    errores = models.PositiveIntegerField(default=0)
+    registro = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "recategorizacion_ejecucion"
+        ordering = ["-fecha_inicio", "-ejecucion_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["estado"],
+                condition=models.Q(estado__in=["en_curso", "revision_pendiente"]),
+                name="recategorizacion_ejecucion_activa_unica",
+            )
+        ]
+
+    def __str__(self):
+        return f"Recategorización {self.anio} - {self.get_estado_display()}"
+
+
+class RecategorizacionResultado(models.Model):
+    class TipoChoices(models.TextChoices):
+        EXITO = "exito", "Éxito"
+        PENDIENTE = "pendiente", "Pendiente de revisión"
+        ERROR = "error", "Error"
+
+    class MotivoChoices(models.TextChoices):
+        CATEGORIA_IGUAL_O_MAYOR = "categoria_igual_o_mayor", "Categoría igual o mayor a la que corresponde"
+        CATEGORIA_MAYOR = "categoria_mayor", "Categoría mayor a la que corresponde"
+        CATEGORIA_MENOR = "categoria_menor", "Categoría menor a la que corresponde"
+        SECUNDARIA_CORRESPONDE = "secundaria_corresponde", "La categoría secundaria corresponde como principal"
+        TIENE_SECUNDARIA = "tiene_secundaria", "Posee categoría secundaria"
+        CUARTA_DIVISION = "cuarta_division", "Jugador de 4ta división"
+        EDAD_NO_ADMITIDA = "edad_no_admitida", "Su categoría no admite su edad"
+        SIN_FECHA_NACIMIENTO = "sin_fecha_nacimiento", "Sin fecha de nacimiento"
+        SIN_GENERO = "sin_genero", "Sin género compatible con las categorías"
+        SIN_CATEGORIA_DISPONIBLE = "sin_categoria_disponible", "Sin categoría disponible para su edad"
+        CATEGORIA_INCOMPATIBLE = "categoria_incompatible", "Categoría principal sin asignar o de otro género"
+        ERROR_INESPERADO = "error_inesperado", "Error inesperado"
+
+    class DecisionChoices(models.TextChoices):
+        ACEPTADA = "aceptada", "Sugerencia aceptada"
+        MANTENIDA = "mantenida", "Categoría anterior mantenida"
+        EDITADA = "editada", "Edición manual"
+
+    resultado_id = models.AutoField(primary_key=True)
+    ejecucion = models.ForeignKey(
+        RecategorizacionEjecucion,
+        on_delete=models.CASCADE,
+        related_name="resultados",
+    )
+    jugador = models.ForeignKey(
+        Jugador,
+        on_delete=models.CASCADE,
+        related_name="recategorizaciones",
+    )
+    tipo = models.CharField(max_length=10, choices=TipoChoices.choices)
+    motivo = models.CharField(max_length=30, choices=MotivoChoices.choices, blank=True, default="")
+    detalle = models.CharField(max_length=255, blank=True, default="")
+    categoria_anterior = models.ForeignKey(
+        Categoria,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    categoria_secundaria_anterior = models.ForeignKey(
+        Categoria,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    categoria_nueva = models.ForeignKey(
+        Categoria,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    categoria_secundaria_nueva = models.ForeignKey(
+        Categoria,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    categoria_sugerida = models.ForeignKey(
+        Categoria,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    quitar_secundaria_sugerido = models.BooleanField(default=False)
+    decision = models.CharField(max_length=10, choices=DecisionChoices.choices, blank=True, default="")
+    usuario_decision = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="decisiones_recategorizacion",
+        null=True,
+        blank=True,
+    )
+    fecha_decision = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "recategorizacion_resultado"
+        ordering = ["resultado_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ejecucion", "jugador"],
+                name="recategorizacion_ejecucion_jugador_unico",
+            )
+        ]
+
+    @property
+    def is_resolved(self):
+        return self.tipo != self.TipoChoices.PENDIENTE or bool(self.decision)
+
+    def __str__(self):
+        return f"{self.jugador} - {self.get_tipo_display()}"

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core'
-import { GENERO_OPTIONS } from './categoriaFormat'
+import { GENERO_OPTIONS, TIPO_OPTIONS } from './categoriaFormat'
 import { collectErrorMessages } from '../personas/format'
 
-const FIELDS = ['nombre', 'anio_vigente', 'edad_maxima', 'genero']
+const FIELDS = ['nombre', 'anio_vigente', 'edad_minima', 'edad_maxima', 'genero', 'tipo']
 
-const emptyForm = () => ({ nombre: '', anio_vigente: new Date().getFullYear(), edad_maxima: '', genero: null })
+const emptyForm = () => ({
+  nombre: '', anio_vigente: new Date().getFullYear(), edad_minima: 0, edad_maxima: '', genero: null, tipo: 'juvenil',
+})
 
 const parseErrors = (requestError) => {
   const data = requestError.response?.data
@@ -28,8 +30,10 @@ function CategoriaFormModal({ opened, onClose, onSubmit, categoria }) {
     ? {
       nombre: categoria.nombre ?? '',
       anio_vigente: categoria.anio_vigente ?? new Date().getFullYear(),
+      edad_minima: categoria.edad_minima ?? 0,
       edad_maxima: categoria.edad_maxima ?? '',
       genero: categoria.genero || null,
+      tipo: categoria.tipo || 'juvenil',
     }
     : emptyForm()))
   const [errors, setErrors] = useState({})
@@ -81,6 +85,17 @@ function CategoriaFormModal({ opened, onClose, onSubmit, categoria }) {
               min={1900}
               required
             />
+          </Group>
+          <Group grow align="flex-start">
+            <NumberInput
+              label="Edad mínima"
+              placeholder="Ej: 35"
+              value={form.edad_minima}
+              onChange={(value) => setField('edad_minima', value)}
+              error={errors.edad_minima}
+              min={0}
+              required
+            />
             <NumberInput
               label="Edad máxima"
               placeholder="Ej: 15"
@@ -98,6 +113,15 @@ function CategoriaFormModal({ opened, onClose, onSubmit, categoria }) {
             value={form.genero}
             onChange={(value) => setField('genero', value)}
             error={errors.genero}
+            required
+          />
+          <Select
+            label="Tipo"
+            description="Juveniles se recategorizan solos, salvo la de mayor edad (4ta), que siempre se revisa a mano. Mayores no se recategorizan."
+            data={TIPO_OPTIONS}
+            value={form.tipo}
+            onChange={(value) => setField('tipo', value)}
+            error={errors.tipo}
             required
           />
           {errors.general && <Text color="red" size="sm">{errors.general}</Text>}

@@ -1,0 +1,29 @@
+import { categoriaAdmiteEdad } from '../categorias/categoriaFormat'
+
+export const RESULT_TYPES = {
+  exito: 'exito',
+  pendiente: 'pendiente',
+  error: 'error',
+}
+
+export const DECISIONS = {
+  aceptada: 'aceptada',
+  mantenida: 'mantenida',
+  editada: 'editada',
+}
+
+export const DECISION_STYLES = {
+  aceptada: 'bg-emerald-50 text-emerald-700',
+  mantenida: 'bg-slate-100 text-slate-700',
+  editada: 'bg-sky-50 text-sky-700',
+}
+
+export const categoryName = (category) => category?.nombre ?? '—'
+
+// Same rule as the player form: only categories of the player's gender that admit their age
+export const eligibleCategories = (categories, result) => {
+  if (!result?.genero || !result?.anio_nacimiento) return categories
+  return categories.filter((category) => (
+    category.genero === result.genero && categoriaAdmiteEdad(category, result.anio_nacimiento)
+  ))
+}

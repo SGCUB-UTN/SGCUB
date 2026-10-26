@@ -1,77 +1,607 @@
-from .models import Categoria, Jugador
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, timedelta
+from uuid import uuid4
+
+from django.db import IntegrityError, transaction
+from django.db.models import Min, Q
+from django.utils import timezone
+
+from .models import (
+    ESTADO_ADMINISTRATIVO_INACTIVO,
+    ESTADO_DEPORTIVO_ACTIVO,
+    ActualizacionCategoriasEjecucion,
+    Categoria,
+    Jugador,
+    RecategorizacionEjecucion,
+    RecategorizacionResultado,
+    get_anio_actual,
+)
 
 GENERO_PERSONA_A_CATEGORIA = {
     "Masculino": Categoria.GENERO_MASCULINO,  # "M"
     "Femenino": Categoria.GENERO_FEMENINO,    # "F"
 }
 
+STALE_RUN_TIMEOUT = timedelta(minutes=30)
 
-def recategorizar_jugadores():
-    jugadores = Jugador.objects.all()
-    for jugador in jugadores:
-        recategorizar_jugador(jugador)
+Estado = RecategorizacionEjecucion.EstadoChoices
+Tipo = RecategorizacionResultado.TipoChoices
+Motivo = RecategorizacionResultado.MotivoChoices
+Decision = RecategorizacionResultado.DecisionChoices
+TipoCategoria = Categoria.TipoChoices
+
+DECISION_LOG_HEADER = "Revisiones manuales:"
+RECATEGORIZATION_TASK = "padron.services.run_recategorization"
+RECATEGORIZATION_TASK_NAME = "Recategorización de jugadores"
+RECATEGORIZATION_HOOK = "padron.services.recategorization_task_hook"
+CATEGORY_UPDATE_TASK = "padron.services.pasr_de_anio_vigente_a_categoria"
+CATEGORY_UPDATE_TASK_NAME = "Actualizar las categorías al nuevo año"
+CATEGORY_GENDER_LABELS = {**dict(Categoria.GENERO_CHOICES), "": "Sin género"}
+NO_AGE_LIMIT = 99
 
 
-def recategorizar_jugador(jugador):
-    if not jugador.socio.persona.fecha_nacimiento:
-        return
-        
-    anio_nacimiento = jugador.socio.persona.fecha_nacimiento.year
-    categoria_actual = jugador.categoria
+class RecategorizationInProgress(Exception):
+    pass
 
-    genero_obj = jugador.socio.persona.genero
-    genero_nombre = genero_obj.nombre if genero_obj else None
-    genero_categoria = GENERO_PERSONA_A_CATEGORIA.get(genero_nombre, None)
 
-    if genero_categoria is None:
-        return
+class CategoriesOutdated(Exception):
+    pass
 
-    # Determinamos la edad del jugador en la temporada actual
-    edad_competencia = date.today().year - anio_nacimiento
-    
-    # ¿Está el jugador en una categoría incorrecta?
-    # Es incorrecta si es de otro género, o si el jugador es DEMASIADO GRANDE para esa categoría.
-    # Si el jugador es más chico (juega en una categoría más grande), ES VÁLIDO.
-    es_invalida = (
-        not categoria_actual or 
-        categoria_actual.genero != genero_categoria or 
-        edad_competencia > categoria_actual.edad_maxima
+
+class RecategorizationDecisionError(Exception):
+    pass
+
+
+@dataclass
+class Clasificacion:
+    tipo: str
+    motivo: str = ""
+    detalle: str = ""
+    categoria_nueva: Categoria | None = None
+    categoria_sugerida: Categoria | None = None
+    quitar_secundaria_sugerido: bool = False
+
+
+def build_category_ladders():
+    ladders = {gender: [] for gender in GENERO_PERSONA_A_CATEGORIA.values()}
+    for category in Categoria.objects.filter(genero__in=ladders).order_by("edad_maxima", "categoria_id"):
+        ladders[category.genero].append(category)
+    return ladders
+
+
+def admits_age(category, age):
+    return category.edad_minima <= age <= category.edad_maxima
+
+
+def category_for_age(ladder, age):
+    return next((category for category in ladder if admits_age(category, age)), None)
+
+
+def category_admits(category, gender, age):
+    return category is not None and category.genero == gender and admits_age(category, age)
+
+
+def can_keep_categories(player, current_year):
+    person = player.socio.persona
+    gender = GENERO_PERSONA_A_CATEGORIA.get(getattr(person.genero, "nombre", None))
+    if not person.fecha_nacimiento or gender is None:
+        return False
+    age = current_year - person.fecha_nacimiento.year
+    secondary = player.categoria_secundaria
+    return category_admits(player.categoria, gender, age) and (
+        secondary is None or category_admits(secondary, gender, age)
     )
 
-    if es_invalida:
-        # Buscamos la categoría natural a la que pertenece
-        # IMPORTANTE: limitamos a edad_maxima <= 20 para NO auto-promover a Primera/Reserva
-        nueva_categoria = Categoria.objects.filter(
-            genero=genero_categoria,
-            edad_maxima__gte=edad_competencia,
-            edad_maxima__lte=20
-        ).order_by('edad_maxima').first()
 
-        if nueva_categoria != categoria_actual:
-            if nueva_categoria:
-                jugador.categoria = nueva_categoria
-            else:
-                from .models import get_default_categoria
-                jugador.categoria_id = get_default_categoria()
-                
-            jugador.save()
-            estado = nueva_categoria.nombre if nueva_categoria else "Desasignado (Pasó edad de Cuarta)"
-            print(f"Recategorizando jugador {jugador} pasado a: {estado}")
+def _error(motivo, detalle):
+    return Clasificacion(tipo=Tipo.ERROR, motivo=motivo, detalle=detalle)
+
+
+def _classify_senior_category(principal, age):
+    """Mayores are never recategorized; they are only flagged when their age no longer fits."""
+    if admits_age(principal, age):
+        return Clasificacion(tipo=Tipo.EXITO, categoria_nueva=principal)
+    return Clasificacion(
+        tipo=Tipo.PENDIENTE,
+        motivo=Motivo.EDAD_NO_ADMITIDA,
+        detalle=f"Tiene {age} años y {principal.nombre} {principal.age_range_label()}.",
+    )
+
+
+def _classify_fourth_division(principal, age):
+    """4ta división (the oldest youth category) is always reviewed by hand: the player may stay or move up."""
+    if admits_age(principal, age):
+        detalle = f"Tiene {age} años: revisá si sigue en {principal.nombre} o pasa a mayores."
+    else:
+        detalle = f"Tiene {age} años y {principal.nombre} {principal.age_range_label()}: elegí su categoría de mayores."
+    return Clasificacion(tipo=Tipo.PENDIENTE, motivo=Motivo.CUARTA_DIVISION, detalle=detalle)
+
+
+def _classify_youth_category(principal, expected, age, birth_year, ladder, current_year, last_run_year):
+    if expected is None:
+        return Clasificacion(
+            tipo=Tipo.PENDIENTE,
+            motivo=Motivo.EDAD_NO_ADMITIDA,
+            detalle=f"Tiene {age} años y ya no entra en juveniles ni en 4ta división: elegí su categoría de mayores.",
+        )
+
+    if last_run_year is None or last_run_year >= current_year:
+        if principal.edad_maxima == expected.edad_maxima:
+            return Clasificacion(tipo=Tipo.EXITO, categoria_nueva=principal)
+        if principal.edad_maxima > expected.edad_maxima:
+            return Clasificacion(
+                tipo=Tipo.PENDIENTE,
+                motivo=Motivo.CATEGORIA_MAYOR,
+                detalle=f"Está en {principal.nombre}, mayor a la que le corresponde ({expected.nombre}).",
+                categoria_sugerida=expected,
+            )
+    else:
+        previous_expected = category_for_age(ladder, last_run_year - birth_year)
+        was_in_natural_category = (
+            previous_expected is not None and principal.edad_maxima == previous_expected.edad_maxima
+        )
+        if was_in_natural_category:
+            new_category = principal if principal.edad_maxima == expected.edad_maxima else expected
+            return Clasificacion(tipo=Tipo.EXITO, categoria_nueva=new_category)
+        if principal.edad_maxima >= expected.edad_maxima:
+            return Clasificacion(
+                tipo=Tipo.PENDIENTE,
+                motivo=Motivo.CATEGORIA_IGUAL_O_MAYOR,
+                detalle=f"Está en {principal.nombre}, igual o mayor a la que le corresponde ({expected.nombre}).",
+                categoria_sugerida=expected,
+            )
+
+    return Clasificacion(
+        tipo=Tipo.PENDIENTE,
+        motivo=Motivo.CATEGORIA_MENOR,
+        detalle=f"Está en {principal.nombre}, menor a la que le corresponde ({expected.nombre}).",
+        categoria_sugerida=expected,
+    )
+
+
+def classify_player(player, ladders, current_year, last_run_year):
+    person = player.socio.persona
+    if not person.fecha_nacimiento:
+        return _error(Motivo.SIN_FECHA_NACIMIENTO, "El jugador no tiene fecha de nacimiento cargada.")
+
+    gender = GENERO_PERSONA_A_CATEGORIA.get(getattr(person.genero, "nombre", None))
+    if gender is None:
+        return _error(Motivo.SIN_GENERO, "El género del jugador no tiene categorías asociadas.")
+
+    ladder = ladders.get(gender, [])
+    birth_year = person.fecha_nacimiento.year
+    age = current_year - birth_year
+    if category_for_age(ladder, age) is None:
+        return _error(Motivo.SIN_CATEGORIA_DISPONIBLE, f"Ninguna categoría admite jugadores de {age} años.")
+
+    principal = player.categoria
+    if principal is None or principal.genero != gender:
+        return _error(Motivo.CATEGORIA_INCOMPATIBLE, "La categoría principal no está asignada o es de otro género.")
+
+    expected = None
+    youth_ladder = [category for category in ladder if category.tipo == TipoCategoria.JUVENIL]
+    if principal.tipo == TipoCategoria.MAYOR:
+        result = _classify_senior_category(principal, age)
+    elif principal == youth_ladder[-1]:
+        result = _classify_fourth_division(principal, age)
+    else:
+        expected = category_for_age(youth_ladder, age)
+        result = _classify_youth_category(
+            principal, expected, age, birth_year, youth_ladder, current_year, last_run_year
+        )
+
+    secondary = player.categoria_secundaria
+    if secondary is None:
+        return result
+
+    if (
+        expected is not None
+        and secondary.genero == gender
+        and secondary.edad_maxima == expected.edad_maxima
+        and principal.edad_maxima != expected.edad_maxima
+    ):
+        return Clasificacion(
+            tipo=Tipo.PENDIENTE,
+            motivo=Motivo.SECUNDARIA_CORRESPONDE,
+            detalle=(
+                f"Le corresponde {secondary.nombre}, que tenía como secundaria: "
+                "se sugiere como principal y quitar la secundaria."
+            ),
+            categoria_sugerida=secondary,
+            quitar_secundaria_sugerido=True,
+        )
+
+    remove_secondary = not category_admits(secondary, gender, age)
+    secondary_detail = (
+        f"Posee categoría secundaria {secondary.nombre}"
+        + (", que ya no admite su edad." if remove_secondary else ".")
+    )
+    if result.tipo == Tipo.EXITO:
+        # The main category is applied right away; only the secondary one is left for review.
+        if result.categoria_nueva != principal:
+            secondary_detail = f"Pasó a {result.categoria_nueva.nombre}. {secondary_detail}"
+        return Clasificacion(
+            tipo=Tipo.PENDIENTE,
+            motivo=Motivo.TIENE_SECUNDARIA,
+            detalle=secondary_detail,
+            categoria_nueva=result.categoria_nueva,
+            quitar_secundaria_sugerido=remove_secondary,
+        )
+    result.detalle = f"{result.detalle} {secondary_detail}"
+    result.quitar_secundaria_sugerido = remove_secondary
+    return result
+
+
+def players_to_recategorize():
+    return (
+        Jugador.objects
+        .filter(Q(estado__nombre=ESTADO_DEPORTIVO_ACTIVO) | ~Q(socio__estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_INACTIVO))
+        .select_related("socio__persona__genero", "categoria", "categoria_secundaria")
+    )
+
+
+def last_run_year(exclude_id=None):
+    runs = RecategorizacionEjecucion.objects.filter(estado__in=[Estado.REVISION_PENDIENTE, Estado.FINALIZADA])
+    if exclude_id is not None:
+        runs = runs.exclude(pk=exclude_id)
+    return runs.order_by("-anio").values_list("anio", flat=True).first()
+
+
+def format_datetime(value):
+    return timezone.localtime(value).strftime("%d/%m/%Y %H:%M")
+
+
+def format_dni(dni):
+    """Same format as the frontend: thousands separated by dots (30.000.148)."""
+    return f"{int(dni):,}".replace(",", ".") if dni and dni.isdigit() else dni
+
+
+def player_label(player):
+    person = player.socio.persona
+    birth_year = person.fecha_nacimiento.year if person.fecha_nacimiento else "s/f"
+    return f"{person.apellido}, {person.nombre} (DNI {format_dni(person.dni)}, {birth_year})"
+
+
+def category_label(category):
+    return category.nombre if category else "—"
+
+
+def _result_log_line(player, result):
+    if result.tipo == Tipo.EXITO:
+        return (
+            f"[ÉXITO] {player_label(player)}: "
+            f"{category_label(player.categoria)} -> {category_label(result.categoria_nueva)}"
+        )
+    if result.tipo == Tipo.PENDIENTE:
+        return f"[PENDIENTE] {player_label(player)}: {result.detalle}"
+    return f"[ERROR] {player_label(player)}: {result.detalle}"
+
+
+def mark_stale_runs_as_failed():
+    RecategorizacionEjecucion.objects.filter(
+        estado=Estado.EN_CURSO,
+        fecha_inicio__lt=timezone.now() - STALE_RUN_TIMEOUT,
+    ).update(estado=Estado.FALLIDA, fecha_fin=timezone.now())
+
+
+def start_recategorization(user, executed_by):
+    from django_q.tasks import async_task
+
+    mark_stale_runs_as_failed()
+    if RecategorizacionEjecucion.objects.filter(estado__in=[Estado.EN_CURSO, Estado.REVISION_PENDIENTE]).exists():
+        raise RecategorizationInProgress()
+    if not categories_status()["actualizadas"]:
+        raise CategoriesOutdated(
+            f'Primero ejecutá "Actualizar categorías al nuevo año" para {get_anio_actual()} '
+            "y después ejecutá la recategorización."
+        )
+    try:
+        with transaction.atomic():
+            execution = RecategorizacionEjecucion.objects.create(usuario=user, ejecutado_por=executed_by)
+            transaction.on_commit(
+                lambda: async_task(RECATEGORIZATION_TASK, execution.pk, hook=RECATEGORIZATION_HOOK)
+            )
+    except IntegrityError as error:
+        raise RecategorizationInProgress() from error
+    return execution
+
+
+def recategorization_task_hook(task):
+    """Called by django-q once the task is stored; marks the run as failed if the worker could not finish it."""
+    if task.success or not task.args:
+        return
+    with transaction.atomic():
+        execution = (
+            RecategorizacionEjecucion.objects.select_for_update()
+            .filter(pk=task.args[0], estado=Estado.EN_CURSO)
+            .first()
+        )
+        if execution is None:
+            return
+        execution.estado = Estado.FALLIDA
+        execution.fecha_fin = timezone.now()
+        execution.registro += f"\nLa tarea no se pudo completar: {str(task.result)[:500]}\n"
+        execution.save(update_fields=["estado", "fecha_fin", "registro"])
+
+
+def run_recategorization(execution_id):
+    execution = RecategorizacionEjecucion.objects.get(pk=execution_id)
+    try:
+        _process_execution(execution)
+    except Exception as error:
+        execution.estado = Estado.FALLIDA
+        execution.fecha_fin = timezone.now()
+        execution.registro += f"\nLa ejecución falló: {error}\n"
+        execution.save(update_fields=["estado", "fecha_fin", "registro"])
+        raise
+
+
+@transaction.atomic
+def _process_execution(execution):
+    previous_year = last_run_year(exclude_id=execution.pk)
+    ladders = build_category_ladders()
+    log_lines = [
+        f"Recategorización {execution.anio} iniciada el {format_datetime(execution.fecha_inicio)} "
+        f"por {execution.ejecutado_por}.",
+        f"Última ejecución previa: {previous_year or 'sin registros'}.",
+        "",
+    ]
+    results = []
+    players_to_update = []
+
+    for player in players_to_recategorize().order_by("socio__persona__fecha_nacimiento", "jugador_id"):
+        try:
+            result = classify_player(player, ladders, execution.anio, previous_year)
+        except Exception as error:
+            result = _error(Motivo.ERROR_INESPERADO, str(error)[:255])
+
+        results.append(RecategorizacionResultado(
+            ejecucion=execution,
+            jugador=player,
+            tipo=result.tipo,
+            motivo=result.motivo,
+            detalle=result.detalle[:255],
+            categoria_anterior=player.categoria,
+            categoria_secundaria_anterior=player.categoria_secundaria,
+            categoria_nueva=result.categoria_nueva,
+            categoria_secundaria_nueva=player.categoria_secundaria if result.categoria_nueva is not None else None,
+            categoria_sugerida=result.categoria_sugerida,
+            quitar_secundaria_sugerido=result.quitar_secundaria_sugerido,
+        ))
+        log_lines.append(_result_log_line(player, result))
+
+        if result.categoria_nueva is not None and result.categoria_nueva != player.categoria:
+            player.categoria = result.categoria_nueva
+            players_to_update.append(player)
+
+    RecategorizacionResultado.objects.bulk_create(results)
+    Jugador.objects.bulk_update(players_to_update, ["categoria"])
+
+    totals = {tipo: sum(1 for result in results if result.tipo == tipo) for tipo in Tipo.values}
+    execution.exitosos = totals[Tipo.EXITO]
+    execution.pendientes = totals[Tipo.PENDIENTE]
+    execution.errores = totals[Tipo.ERROR]
+    execution.estado = Estado.REVISION_PENDIENTE if execution.pendientes or execution.errores else Estado.FINALIZADA
+    execution.fecha_fin = timezone.now()
+    log_lines += [
+        "",
+        f"Resultado: {execution.exitosos} exitosos | {execution.pendientes} pendientes | {execution.errores} errores.",
+    ]
+    execution.registro = "\n".join(log_lines) + "\n"
+    execution.save()
+
+
+def _user_label(user):
+    if user is None:
+        return "Sistema"
+    return user.get_full_name().strip() or user.username
+
+
+def _append_decision_log(execution, line):
+    if DECISION_LOG_HEADER not in execution.registro:
+        execution.registro += f"\n{DECISION_LOG_HEADER}\n"
+    execution.registro += line + "\n"
+
+
+def _finish_if_reviewed(execution):
+    unresolved = execution.resultados.filter(tipo__in=[Tipo.PENDIENTE, Tipo.ERROR], decision="").exists()
+    if execution.estado == Estado.REVISION_PENDIENTE and not unresolved:
+        execution.estado = Estado.FINALIZADA
+        execution.registro += f"Revisión manual completada el {format_datetime(timezone.now())}.\n"
+
+
+def _apply_decision(execution, result, decision, user, categoria=None, categoria_secundaria=None):
+    if execution.estado not in (Estado.REVISION_PENDIENTE, Estado.FINALIZADA):
+        raise RecategorizationDecisionError("La ejecución todavía no admite revisiones.")
+    if decision in (Decision.ACEPTADA, Decision.MANTENIDA) and (result.tipo != Tipo.PENDIENTE or result.decision):
+        raise RecategorizationDecisionError("El jugador ya fue revisado o no requiere revisión.")
+
+    player = result.jugador
+    if decision == Decision.MANTENIDA and not can_keep_categories(player, execution.anio):
+        raise RecategorizationDecisionError("Por su edad, el jugador no puede mantener sus categorías actuales.")
+    if decision == Decision.ACEPTADA:
+        if result.categoria_sugerida is None and not result.quitar_secundaria_sugerido:
+            raise RecategorizationDecisionError("El resultado no tiene una sugerencia para aceptar.")
+        if result.categoria_sugerida is not None:
+            player.categoria = result.categoria_sugerida
+        if result.quitar_secundaria_sugerido or player.categoria_secundaria_id == player.categoria_id:
+            player.categoria_secundaria = None
+    elif decision == Decision.EDITADA:
+        player.categoria = categoria
+        player.categoria_secundaria = categoria_secundaria
+    if decision != Decision.MANTENIDA:
+        player.save(update_fields=["categoria", "categoria_secundaria"])
+
+    result.decision = decision
+    result.categoria_nueva = player.categoria
+    result.categoria_secundaria_nueva = player.categoria_secundaria
+    result.usuario_decision = user
+    result.fecha_decision = timezone.now()
+    result.save(update_fields=[
+        "decision", "categoria_nueva", "categoria_secundaria_nueva", "usuario_decision", "fecha_decision",
+    ])
+    _append_decision_log(
+        execution,
+        f"[{result.get_decision_display().upper()}] {player_label(player)} por {_user_label(user)} "
+        f"el {format_datetime(result.fecha_decision)}: principal {category_label(player.categoria)} | "
+        f"secundaria {category_label(player.categoria_secundaria)}",
+    )
+
+
+def _result_for_decision(result_id):
+    return (
+        RecategorizacionResultado.objects
+        .select_for_update(of=("self",))
+        .select_related("jugador__socio__persona__genero", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .get(pk=result_id)
+    )
+
+
+@transaction.atomic
+def decide_result(result_id, decision, user, categoria=None, categoria_secundaria=None):
+    execution_id = RecategorizacionResultado.objects.values_list("ejecucion_id", flat=True).get(pk=result_id)
+    execution = RecategorizacionEjecucion.objects.select_for_update().get(pk=execution_id)
+    result = _result_for_decision(result_id)
+    _apply_decision(execution, result, decision, user, categoria, categoria_secundaria)
+    _finish_if_reviewed(execution)
+    execution.save(update_fields=["estado", "registro"])
+    return result
+
+
+@transaction.atomic
+def accept_all_suggestions(execution_id, user):
+    execution = RecategorizacionEjecucion.objects.select_for_update().get(pk=execution_id)
+    pending = (
+        execution.resultados
+        .select_for_update(of=("self",))
+        .select_related("jugador__socio__persona__genero", "jugador__categoria", "jugador__categoria_secundaria", "categoria_sugerida")
+        .filter(Q(categoria_sugerida__isnull=False) | Q(quitar_secundaria_sugerido=True), tipo=Tipo.PENDIENTE, decision="")
+        .order_by("resultado_id")
+    )
+    accepted = 0
+    for result in pending:
+        _apply_decision(execution, result, Decision.ACEPTADA, user)
+        accepted += 1
+    _finish_if_reviewed(execution)
+    execution.save(update_fields=["estado", "registro"])
+    return accepted
+
 
 def pasr_de_anio_vigente_a_categoria():
     current_year = date.today().year
-    categorias = Categoria.objects.exclude(anio_vigente=current_year)
+    categorias = Categoria.objects.exclude(anio_vigente=current_year).order_by("edad_maxima", "edad_minima", "categoria_id")
+    changes = []
     for categoria in categorias:
+        changes.append((categoria, categoria.nombre, categoria.anio_vigente))
         categoria.anio_vigente = current_year
-        
-        # Renombrar automáticamente las categorías Infantiles (solo las que son un año numérico)
+
         if categoria.nombre.isdigit() and len(categoria.nombre) == 4:
             categoria.nombre = str(categoria.anio_vigente - categoria.edad_maxima)
-            
-        categoria.save()
 
-    # Después de cambiar el año y renombrar las categorías,
-    # debemos recategorizar a todos los jugadores para que se ubiquen en sus nuevas categorías
-    # correspondientes a su nueva edad.
-    recategorizar_jugadores()
+        categoria.save()
+    return changes
+
+
+def _age_limits(category):
+    return category.edad_minima > 0, 0 < category.edad_maxima < NO_AGE_LIMIT
+
+
+def _age_limit_label(category):
+    has_min, has_max = _age_limits(category)
+    if has_min and has_max:
+        return f"de {category.edad_minima} a {category.edad_maxima} años"
+    if has_min:
+        return f"desde {category.edad_minima} años"
+    if has_max:
+        return f"hasta {category.edad_maxima} años"
+    return ""
+
+
+def _birth_years_label(category, year):
+    has_min, has_max = _age_limits(category)
+    oldest = year - category.edad_maxima
+    youngest = year - category.edad_minima
+    if has_min and has_max:
+        return f"entre {oldest} y {youngest}"
+    if has_min:
+        return f"hasta {youngest}"
+    return f"desde {oldest}"
+
+
+def _category_change_line(category, previous_name, previous_year):
+    ages = _age_limit_label(category)
+    if category.nombre != previous_name:
+        return f"[NOMBRE] {previous_name} -> {category.nombre}" + (f" ({ages})" if ages else "")
+    if not ages:
+        return f"[AÑO] {category.nombre}: {previous_year} -> {category.anio_vigente}, sin límite de edad"
+    born = "nacidas" if category.genero == Categoria.GENERO_FEMENINO else "nacidos"
+    before = _birth_years_label(category, previous_year)
+    after = _birth_years_label(category, category.anio_vigente)
+    return f"[AÑOS] {category.nombre}: {born} {before} -> {after} ({ages})"
+
+
+def category_update_log(changes, executed_by, started):
+    current_year = get_anio_actual()
+    lines = [
+        f"Actualización de categorías al año {current_year} ejecutada el {format_datetime(started)} por {executed_by}.",
+        "",
+    ]
+    if not changes:
+        lines.append(f"Las categorías ya estaban en {current_year}: no hubo cambios.")
+        return "\n".join(lines) + "\n"
+
+    for gender, label in CATEGORY_GENDER_LABELS.items():
+        group = [change for change in changes if change[0].genero == gender]
+        if group:
+            lines.append(label)
+            lines += [f"  {_category_change_line(*change)}" for change in group]
+            lines.append("")
+
+    renamed = sum(1 for category, previous_name, _ in changes if category.nombre != previous_name)
+    updated = "1 categoría actualizada" if len(changes) == 1 else f"{len(changes)} categorías actualizadas"
+    lines.append(f"Resultado: {updated} ({renamed} {'cambió' if renamed == 1 else 'cambiaron'} de nombre).")
+    return "\n".join(lines) + "\n"
+
+
+def categories_status():
+    current_year = get_anio_actual()
+    oldest_year = Categoria.objects.aggregate(oldest=Min("anio_vigente"))["oldest"]
+    return {
+        "anio_actual": current_year,
+        "anio_categorias": oldest_year,
+        "actualizadas": ActualizacionCategoriasEjecucion.objects.filter(anio=current_year).exists(),
+    }
+
+
+def record_task_history(func, success, started, args=None, result=None):
+    """Store a synchronous run in django-q's task table so it shows up in the execution history."""
+    from django_q.models import Task
+
+    Task.objects.create(
+        id=uuid4().hex,
+        name=f"manual-{uuid4().hex[:8]}",
+        func=func,
+        args=args,
+        result=result,
+        started=started,
+        stopped=timezone.now(),
+        success=success,
+    )
+
+
+def update_categories_year(user, executed_by):
+    started = timezone.now()
+    try:
+        with transaction.atomic():
+            changes = pasr_de_anio_vigente_a_categoria()
+            update = ActualizacionCategoriasEjecucion.objects.create(
+                usuario=user,
+                ejecutado_por=executed_by,
+                categorias_actualizadas=len(changes),
+                registro=category_update_log(changes, executed_by, started),
+            )
+    except Exception as error:
+        record_task_history(CATEGORY_UPDATE_TASK, False, started, result=str(error))
+        raise
+    record_task_history(CATEGORY_UPDATE_TASK, True, started, args=(update.pk,), result=update.registro)
+    return update

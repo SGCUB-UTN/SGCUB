@@ -12,7 +12,28 @@ export const GENERO_BADGE_CLASSES = {
   F: 'bg-pink-50 text-pink-700 border border-pink-200',
 }
 
+// Valores de `Categoria.tipo` en el backend (TipoChoices)
+export const TIPO_OPTIONS = [
+  { value: 'juvenil', label: 'Juvenil' },
+  { value: 'mayor', label: 'Mayor' },
+]
+
+export const getTipoLabel = (tipo) =>
+  TIPO_OPTIONS.find((option) => option.value === tipo)?.label ?? '—'
+
 const NO_AGE_LIMIT = 99
 
 export const formatEdadMaxima = (edadMaxima) =>
   edadMaxima == null || edadMaxima === NO_AGE_LIMIT ? '—' : `${edadMaxima} años`
+
+export const formatRangoEdad = (categoria) => {
+  const { edad_minima: edadMinima, edad_maxima: edadMaxima } = categoria
+  if (!edadMinima) return formatEdadMaxima(edadMaxima)
+  return edadMaxima === NO_AGE_LIMIT ? `${edadMinima}+ años` : `${edadMinima} a ${edadMaxima} años`
+}
+
+// Misma regla que `Categoria.accepts_age`: edad que cumple en el año vigente dentro del rango de la categoría
+export const categoriaAdmiteEdad = (categoria, anioNacimiento) => {
+  const edad = categoria.anio_vigente - anioNacimiento
+  return (categoria.edad_minima ?? 0) <= edad && edad <= categoria.edad_maxima
+}
