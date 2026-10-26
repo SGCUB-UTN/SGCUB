@@ -43,7 +43,7 @@ export function FinancialStatement({ socio, finances }) {
   const cuotas = useMemo(() => account?.cuotas ?? [], [account])
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState(null)
   const [modalManualAbierto, setModalManualAbierto] = useState(false)
-  const [ingresoARevertir, setIngresoARevertir] = useState(null)
+  const [operacionManual, setOperacionManual] = useState('IngresoManual')
 
   const movimientosOrdenados = useMemo(
     () => [...(movimientos ?? [])].sort((a, b) => b.movimiento_cuenta_id - a.movimiento_cuenta_id),
@@ -60,38 +60,11 @@ export function FinancialStatement({ socio, finances }) {
     })
   }
 
-  const summary = useMemo(() => {
-    const manualList = movimientos ?? []
-    const excedenteIds = new Set(
-      manualList
-        .filter((m) => m.es_excedente ?? (m.origen_manual === 'IngresoManual' && (m.concepto || '').startsWith('Excedente de transferencia / Saldo a favor')))
-        .map((m) => m.movimiento_cuenta_id),
-    )
-    const computedCredit = manualList.reduce((acc, m) => {
-      const amount = Number(m.monto ?? 0)
-      if (excedenteIds.has(m.movimiento_cuenta_id)) return acc + amount
-      if (m.origen_manual === 'NotaCredito' && m.movimiento_revertido != null && !m.medio_de_pago) return acc + amount
-      if (m.origen_manual === 'NotaCredito' && excedenteIds.has(m.movimiento_revertido)) return acc - amount
-      if (m.origen_manual === 'Egreso' && (m.concepto || '').startsWith('Devolución de saldo / Excedente')) return acc - amount
-      return acc
-    }, 0)
-    const appliedInCuotas = cuotas.reduce((acc, cuota) => {
-      const items = cuota.items ?? []
-      return acc + items
-        .filter((item) => item.es_descuento && (item.motivo || '').startsWith('Saldo a favor aplicado'))
-        .reduce((sum, item) => sum + Number(item.monto ?? 0), 0)
-    }, 0)
-    const creditBalance = account?.saldo_a_favor != null
-      ? Number(account.saldo_a_favor)
-      : Math.max(0, computedCredit - appliedInCuotas)
-
-    return {
-      pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
-      debt: Number(account?.total_adeudado ?? 0),
-      creditBalance,
-      activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
-    }
-  }, [account, cuotas, becas, movimientos])
+  const summary = useMemo(() => ({
+    pendingCount: cuotas.filter((cuota) => !isPaid(cuota)).length,
+    debt: Number(account?.total_adeudado ?? 0),
+    activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
+  }), [account, cuotas, becas])
 
   if (loading) {
     return <div className="py-16 flex flex-col items-center gap-3 text-on-surface-variant"><span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span><p>Cargando estado de cuenta...</p></div>
@@ -111,10 +84,9 @@ export function FinancialStatement({ socio, finances }) {
     <section className="flex flex-col gap-6" aria-label={title}>
       <TabHeader title={title} description="Detalle de cuotas, pagos, otros movimientos y beneficios del socio." divider={false} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-6">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
         <StatCard label="Saldo adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
-        <StatCard label="Saldo a favor" value={formatAmount(summary.creditBalance)} icon="account_balance_wallet" tone={summary.creditBalance > 0 ? 'positive' : 'neutral'} onClick={() => scrollToSection('movimientos-manuales-title')} />
         <StatCard label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" tone="neutral" onClick={() => scrollToSection('beneficios-title')} />
       </div>
 
@@ -125,7 +97,7 @@ export function FinancialStatement({ socio, finances }) {
             <SecondaryButton
               icon="add_card"
               onClick={() => {
-                setIngresoARevertir(null)
+                setOperacionManual('IngresoManual')
                 setModalManualAbierto(true)
               }}
             >
@@ -210,7 +182,7 @@ export function FinancialStatement({ socio, finances }) {
         ) : (
           movimientos !== null && (
             <p className="text-base text-on-surface-variant py-6 text-center border border-dashed border-outline-variant/40 rounded-xl">
-              Sin otros movimientos registrados (ingresos por excedentes, donaciones, egresos o notas de crédito).
+              Sin otros movimientos registrados (ingresos manuales o egresos de caja).
             </p>
           )
         )}
@@ -224,9 +196,9 @@ export function FinancialStatement({ socio, finances }) {
         opened={Boolean(movimientoSeleccionado)}
         onClose={() => setMovimientoSeleccionado(null)}
         onSelectMovimiento={setMovimientoSeleccionado}
-        onIssueCreditNote={(mov) => {
+        onIssueCreditNote={() => {
           setMovimientoSeleccionado(null)
-          setIngresoARevertir(mov)
+          setOperacionManual('Egreso')
           setModalManualAbierto(true)
         }}
       />
@@ -234,10 +206,10 @@ export function FinancialStatement({ socio, finances }) {
       <MovimientoManualModal
         opened={modalManualAbierto}
         initialSocio={socio}
-        initialReversedMovement={ingresoARevertir}
+        initialOperation={operacionManual}
         onClose={() => {
           setModalManualAbierto(false)
-          setIngresoARevertir(null)
+          setOperacionManual('IngresoManual')
         }}
         onSuccess={reloadFinances}
       />
