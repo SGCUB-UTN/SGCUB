@@ -181,7 +181,8 @@ function Cuotas() {
       />
 
       <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
-        <div className={SECTION_CLASS}>
+        <SectionHeading id="period-kpis-title" icon="checklist_rtl" title="Etapa del mes" />
+        <div className="px-4 sm:px-5 py-3">
           <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
         </div>
 

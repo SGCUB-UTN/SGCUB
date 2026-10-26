@@ -68,9 +68,7 @@ export default function BillingPhaseTracker({ phases, isLoading, error }) {
   const steps = withCurrentStep(phases ?? [])
   return (
     <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-      <h2 id="billing-phase-title" className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant shrink-0 lg:w-36">
-        Fase del mes
-      </h2>
+      
       {isLoading && steps.length === 0 && <PhaseSkeleton />}
       {!isLoading && error && steps.length === 0 && (
         <p className="text-sm text-error">No se pudo cargar la fase del período.</p>
