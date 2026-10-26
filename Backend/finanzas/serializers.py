@@ -520,15 +520,26 @@ class MovimientoCuentaSerializer(serializers.ModelSerializer):
 
 
 class ConceptoMovimientoSerializer(serializers.ModelSerializer):
+    en_uso = serializers.SerializerMethodField()
+
     class Meta:
         model = ConceptoMovimiento
-        fields = ["concepto_movimiento_id", "nombre", "origen"]
-        read_only_fields = ["concepto_movimiento_id"]
+        fields = ["concepto_movimiento_id", "nombre", "origen", "en_uso"]
+        read_only_fields = ["concepto_movimiento_id", "en_uso"]
         validators = []
+
+    def get_en_uso(self, obj) -> bool:
+        return MovimientoCuenta.objects.filter(origen_manual=obj.origen, concepto__iexact=obj.nombre).exists()
 
     def validate_origen(self, value):
         if value not in MANUAL_MOVEMENT_ORIGINS:
             raise serializers.ValidationError("Solo los ingresos manuales y los egresos tienen conceptos.")
+        return value
+
+    def validate_nombre(self, value):
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Este campo es obligatorio.")
         return value
 
 
