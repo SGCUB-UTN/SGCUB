@@ -1,12 +1,9 @@
-import { useState } from 'react'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
 import DownloadComprobanteButtom from './DownloadComprobanteButtom'
 import DesgloseComprobante from './DesgloseComprobante'
-import MovimientoManualDetailModal from './MovimientoManualDetailModal'
 
-function ComprobantePago({ socio, detalle, medios, montoTotal, montoCuotas, excedente = 0, observacion, numero, fecha: fechaEmision, onBack }) {
-  const [activeCreditNote, setActiveCreditNote] = useState(null)
+function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, numero, fecha: fechaEmision, onBack }) {
   const fecha = fechaEmision ? formatDate(fechaEmision) : new Date().toLocaleDateString('es-AR')
 
   return (
@@ -25,26 +22,14 @@ function ComprobantePago({ socio, detalle, medios, montoTotal, montoCuotas, exce
       </div>
 
       {detalle
-        ? <DesgloseComprobante detalle={detalle} onOpenCreditNote={(nc) => setActiveCreditNote({ ...nc, socio })} />
+        ? <DesgloseComprobante detalle={detalle} />
         : <p className="p-4 bg-surface-container-low rounded-lg text-on-surface-variant">El pago quedó registrado, pero no se pudo cargar el desglose. Podés consultarlo desde el listado de comprobantes.</p>}
 
       <section className="border border-outline-variant/30 rounded-xl overflow-hidden">
         <div className="px-4 py-3 bg-surface-container-low border-b border-outline-variant/30"><h3 className="font-bold text-on-surface">Detalle del pago</h3></div>
         <div className="divide-y divide-outline-variant/20">
           {medios.map((medio, index) => <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-4 py-3"><span className="text-on-surface-variant">{medio.medio}</span><strong className="text-on-surface">{formatAmount(medio.monto)}</strong></div>)}
-          {excedente > 0 && montoCuotas != null && (
-            <>
-              <div className="flex justify-between gap-4 px-4 py-2.5 bg-surface-container-lowest text-sm">
-                <span className="text-on-surface-variant">Aplicado a cuotas</span>
-                <strong className="text-on-surface">{formatAmount(montoCuotas)}</strong>
-              </div>
-              <div className="flex justify-between gap-4 px-4 py-2.5 bg-emerald-50/70 text-sm">
-                <span className="text-emerald-800 font-medium">Acreditado como saldo a favor (próxima cuota)</span>
-                <strong className="text-emerald-700">+ {formatAmount(excedente)}</strong>
-              </div>
-            </>
-          )}
-          <div className="flex justify-between gap-4 px-4 py-3 bg-surface-container-low"><strong className="text-on-surface">Monto total abonado</strong><strong className="text-lg text-primary">{formatAmount(montoTotal)}</strong></div>
+          <div className="flex justify-between gap-4 px-4 py-3 bg-surface-container-low"><strong className="text-on-surface">Monto total</strong><strong className="text-lg text-primary">{formatAmount(montoTotal)}</strong></div>
         </div>
       </section>
 
@@ -53,14 +38,6 @@ function ComprobantePago({ socio, detalle, medios, montoTotal, montoCuotas, exce
         <DownloadComprobanteButtom comprobanteId={detalle?.comprobante_id} />
         <SecondaryButton icon="arrow_back" onClick={onBack}>Volver al estado de cuenta</SecondaryButton>
       </div>
-
-      {activeCreditNote && (
-        <MovimientoManualDetailModal
-          movimiento={activeCreditNote}
-          opened={Boolean(activeCreditNote)}
-          onClose={() => setActiveCreditNote(null)}
-        />
-      )}
     </div>
   )
 }
