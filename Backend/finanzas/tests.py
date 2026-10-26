@@ -36,6 +36,7 @@ from .models import (
 	CuentaCorriente,
 	Cuota,
 	DetalleImputacion,
+	EjecucionTareaCuota,
 	EstadoBecaChoices,
 	EstadoItemCuotaChoices,
 	EstadoPagoChoices,
@@ -47,8 +48,10 @@ from .models import (
 	MedioDePagoChoices,
 	MedioPago,
 	MovimientoCuenta,
+	OrigenEjecucionChoices,
 	Pago,
 	SecuenciaComprobante,
+	TipoTareaCuotaChoices,
 )
 from .pdf_utils import format_amount
 from .receipts import render_receipt_pdf
@@ -59,13 +62,13 @@ from .services import (
 	cuota_state,
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
-	generate_scheduled_cuotas,
 	grant_scholarship,
 	next_receipt_number,
 	pending_amounts,
 	register_payment,
 	sync_cuota_charge,
 )
+from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
 from .views import _build_financial_report
 
 
@@ -2877,8 +2880,8 @@ class TareasProgramadasTests(TestCase):
 
 	def test_tareas_registradas_en_django_q(self):
 		esperadas = {
-			self.migracion.MONTHLY_GENERATION: ("finanzas.services.generate_scheduled_cuotas", Schedule.DAILY, None, 1),
-			self.migracion.DAILY_SURCHARGES: ("finanzas.services.apply_surcharges", Schedule.DAILY, None, 2),
+			self.migracion.MONTHLY_GENERATION: ("finanzas.tasks.generate_scheduled_cuotas", Schedule.DAILY, None, 1),
+			self.migracion.DAILY_SURCHARGES: ("finanzas.tasks.apply_scheduled_surcharges", Schedule.DAILY, None, 2),
 		}
 		for nombre, (funcion, tipo, dia, hora) in esperadas.items():
 			with self.subTest(nombre=nombre):
@@ -3899,3 +3902,117 @@ class BecaItemsBackfillMigrationTests(TransactionTestCase):
 		self.assertEqual(ItemCuota.objects.get(pk=second.pk).vencimiento, 2)
 		self.assertEqual(Beca.objects.get(pk=expired.pk).estado, "Finalizada")
 		self.assertEqual(Beca.objects.get(pk=current.pk).estado, "Aplicada")
+
+
+class EjecucionTareasCuotaTests(APITestCase):
+	def setUp(self):
+		ConfiguracionFinanciera.objects.update_or_create(pk=1, defaults={"valor_recargo_1": "200.00", "valor_recargo_2": "300.00"})
+
+	def ejecuciones(self, tipo):
+		return list(EjecucionTareaCuota.objects.filter(tipo=tipo).order_by("pk"))
+
+	def cuota_impaga(self, dni):
+		return crear_cuota_con_cargo(
+			account_for(crear_socio(dni)), "2026-10", "1000.00", venc1=date(2026, 10, 10), venc2=date(2026, 10, 20),
+		)
+
+	def test_generacion_registra_la_poblacion_y_las_cuotas_creadas(self):
+		crear_socio("70000001")
+		crear_socio("70000002", con_jugador=True)
+		crear_socio("70000003", con_jugador=True, jugador_inactivo=True)
+		crear_socio("70000004", socio_inactivo=True)
+
+		run_cuota_generation(today=date(2026, 10, 1))
+
+		[ejecucion] = self.ejecuciones(TipoTareaCuotaChoices.GENERACION)
+		self.assertEqual(ejecucion.periodo, "2026-10")
+		self.assertTrue(ejecucion.exitosa)
+		self.assertEqual(ejecucion.origen, OrigenEjecucionChoices.AUTOMATICA)
+		self.assertEqual(
+			ejecucion.resumen,
+			"En el sistema existen 1 socio, 1 jugador y 1 jugador de baja parcial. Todos con la cuota correctamente generada.",
+		)
+		self.assertEqual(ejecucion.metricas["cuotas_creadas"], 9)
+		self.assertIn("Período 2026-10: 3 cuotas creadas.", ejecucion.registro)
+		self.assertIn("Resultado: todos los socios activos tienen la cuota del período.", ejecucion.registro)
+		self.assertIsNotNone(ejecucion.fecha_fin)
+
+	def test_generacion_programada_solo_registra_el_dia_de_generacion(self):
+		crear_socio("70000011")
+		ConfiguracionFinanciera.objects.filter(pk=1).update(dia_generacion=5)
+
+		generate_scheduled_cuotas(today=date(2026, 10, 4))
+		self.assertFalse(EjecucionTareaCuota.objects.exists())
+
+		generate_scheduled_cuotas(today=date(2026, 10, 5))
+		self.assertEqual(len(self.ejecuciones(TipoTareaCuotaChoices.GENERACION)), 1)
+
+	def test_recargo_se_ejecuta_el_dia_siguiente_a_cada_vencimiento(self):
+		cuota = self.cuota_impaga("70000021")
+
+		apply_scheduled_surcharges(date(2026, 10, 10))
+		self.assertFalse(EjecucionTareaCuota.objects.exists())
+
+		apply_scheduled_surcharges(date(2026, 10, 11))
+		apply_scheduled_surcharges(date(2026, 10, 12))
+
+		[primero] = self.ejecuciones(TipoTareaCuotaChoices.RECARGO_1)
+		self.assertEqual(
+			primero.resumen,
+			"En este mes, existe 1 cuota impaga, se le aplicó correctamente el recargo por primer vencimiento.",
+		)
+		self.assertIn("cuota 2026-10 — $ 200,00", primero.registro)
+		self.assertEqual(cuota.items.filter(concepto="Mora").count(), 1)
+		self.assertEqual(self.ejecuciones(TipoTareaCuotaChoices.RECARGO_2), [])
+
+		apply_scheduled_surcharges(date(2026, 10, 21))
+
+		[segundo] = self.ejecuciones(TipoTareaCuotaChoices.RECARGO_2)
+		self.assertTrue(segundo.exitosa)
+		self.assertIn("segundo vencimiento", segundo.resumen)
+		self.assertEqual(cuota.items.filter(concepto="Mora").count(), 2)
+
+	def test_recargos_atrasados_se_registran_en_la_siguiente_ejecucion(self):
+		self.cuota_impaga("70000031")
+		self.cuota_impaga("70000032")
+
+		apply_scheduled_surcharges(date(2026, 10, 25))
+
+		[primero] = self.ejecuciones(TipoTareaCuotaChoices.RECARGO_1)
+		[segundo] = self.ejecuciones(TipoTareaCuotaChoices.RECARGO_2)
+		self.assertEqual(primero.metricas["cuotas_impagas"], 2)
+		self.assertEqual(segundo.metricas["recargos_aplicados"], 2)
+		self.assertIn("existen 2 cuotas impagas", primero.resumen)
+
+	def test_sin_cuotas_impagas_lo_informa(self):
+		apply_scheduled_surcharges(date(2026, 10, 11))
+
+		[ejecucion] = self.ejecuciones(TipoTareaCuotaChoices.RECARGO_1)
+		self.assertEqual(
+			ejecucion.resumen,
+			"En este mes no hay cuotas impagas al primer vencimiento; no correspondió aplicar recargos.",
+		)
+
+	def test_ejecucion_manual_registra_origen_y_usuario(self):
+		usuario = get_user_model().objects.create_user(username="tesorero")
+		crear_socio("70000041")
+
+		run_cuota_generation(today=date(2026, 10, 1), origin=OrigenEjecucionChoices.MANUAL, user=usuario)
+		run_manual_surcharges(today=date(2026, 10, 11), user=usuario)
+
+		generacion = EjecucionTareaCuota.objects.get(tipo=TipoTareaCuotaChoices.GENERACION)
+		recargo = EjecucionTareaCuota.objects.get(tipo=TipoTareaCuotaChoices.RECARGO_1)
+		for ejecucion in (generacion, recargo):
+			with self.subTest(tipo=ejecucion.tipo):
+				self.assertEqual(ejecucion.origen, OrigenEjecucionChoices.MANUAL)
+				self.assertEqual(ejecucion.usuario, usuario)
+				self.assertIn("Origen: Manual · Usuario: tesorero", ejecucion.registro)
+
+	def test_endpoint_manual_de_generacion_registra_la_ejecucion(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		crear_socio("70000051")
+
+		response = self.client.post(reverse("generar-cuotas-mensuales"))
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(EjecucionTareaCuota.objects.get().origen, OrigenEjecucionChoices.MANUAL)
