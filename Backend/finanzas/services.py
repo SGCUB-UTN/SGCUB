@@ -59,24 +59,6 @@ class ComprobanteInvalidoError(Exception):
     pass
 
 
-CREDIT_SURPLUS_PREFIX = "Excedente de transferencia / Saldo a favor"
-CREDIT_REFUND_PREFIX = "Devolución de saldo / Excedente"
-CREDIT_APPLIED_PREFIX = "Saldo a favor aplicado"
-CREDIT_NOTE_CUOTA_PREFIX = "Nota de crédito NC-X"
-SYSTEM_CREDIT_AUTHORIZER = "Sistema (Saldo a favor)"
-CREDIT_NOTE_AUTHORIZER = "Nota de Crédito"
-
-
-def is_surplus_movement(movement):
-    return (
-        movement is not None
-        and movement.origen_manual == TipoMovimientoOrigenChoices.INGRESO_MANUAL
-        and movement.tipo_movimiento == TipoMovimientoChoices.ABONO
-        and movement.pago_id is None
-        and (movement.concepto or "").startswith(CREDIT_SURPLUS_PREFIX)
-    )
-
-
 def reversed_amount_for(movement):
     if movement is None:
         return Decimal("0.00")
@@ -115,82 +97,12 @@ def create_manual_movement(
 
         available_to_reverse = remaining_reversible_amount(reversed_movement)
         if available_to_reverse <= Decimal("0.00"):
-            raise PagoInvalidoError("El movimiento o cuota indicado ya fue revertido o ajustado en su totalidad.")
+            raise PagoInvalidoError("El movimiento indicado ya fue revertido en su totalidad.")
 
-        is_cuota_origin = reversed_movement.cuota_id is not None
-        is_manual_income = (
-            reversed_movement.origen_manual == TipoMovimientoOrigenChoices.INGRESO_MANUAL
-            and reversed_movement.tipo_movimiento == TipoMovimientoChoices.ABONO
-            and reversed_movement.pago_id is None
-        )
-        is_surplus = is_surplus_movement(reversed_movement)
-
-        if origin == TipoMovimientoOrigenChoices.NOTA_CREDITO:
-            if is_surplus:
-                raise PagoInvalidoError(
-                    "No se puede emitir una nota de crédito sobre un excedente / saldo a favor. "
-                    "El saldo a favor se descuenta en la próxima cuota o se reintegra mediante un egreso por devolución."
-                )
-            if not (is_cuota_origin or is_manual_income):
-                raise PagoInvalidoError(
-                    "Solo se pueden emitir notas de crédito sobre cuotas emitidas o sobre ingresos de otros conceptos (indumentaria, etc.)."
-                )
-            if amount > available_to_reverse:
-                raise PagoInvalidoError(
-                    f"El monto de la nota de crédito no puede superar el saldo disponible del movimiento o cuota original ({available_to_reverse})."
-                )
-
-            if is_cuota_origin:
-                cuota = lock_cuota(reversed_movement.cuota_id)
-                pending = pending_amounts([cuota])[cuota.pk]
-                discount_for_cuota = min(amount, max(pending, Decimal("0.00")))
-                surplus_from_cuota = amount - discount_for_cuota
-                receipt_num = next_receipt_number()
-                movement = MovimientoCuenta.objects.create(
-                    cuenta_corriente=account,
-                    movimiento_revertido=reversed_movement,
-                    tipo_movimiento=movement_type,
-                    fecha=timezone.now(),
-                    monto=amount,
-                    concepto=concept,
-                    medio_de_pago=None,
-                    origen_manual=origin,
-                    numero_comprobante=receipt_num,
-                    usuario=user,
-                )
-                if discount_for_cuota > Decimal("0.00"):
-                    ItemCuota.objects.create(
-                        cuota=cuota,
-                        concepto=ConceptoItemChoices.DESCUENTO_UNICO,
-                        es_descuento=True,
-                        fecha_aplicacion=timezone.localdate(),
-                        monto=discount_for_cuota,
-                        motivo=f"{CREDIT_NOTE_CUOTA_PREFIX} #{receipt_num:08d} · {concept}"[:200],
-                        autorizado_por=CREDIT_NOTE_AUTHORIZER,
-                    )
-                    sync_cuota_charge(cuota)
-                if surplus_from_cuota > Decimal("0.00"):
-                    account.refresh_from_db(fields=["saldo"])
-                    account.saldo += surplus_from_cuota
-                    account.save(update_fields=["saldo"])
-                return movement
-
-        elif origin == TipoMovimientoOrigenChoices.EGRESO:
-            is_cuota_nc_surplus = (
-                reversed_movement.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
-                and reversed_movement.movimiento_revertido_id is not None
+        if amount > available_to_reverse:
+            raise PagoInvalidoError(
+                f"El monto no puede superar el saldo disponible del movimiento original ({available_to_reverse})."
             )
-            if not (is_surplus or is_cuota_nc_surplus):
-                raise PagoInvalidoError(
-                    "La devolución de saldo / excedente solo puede asociarse a un movimiento de excedente o saldo a favor."
-                )
-            available_credit = credit_balance(account)
-            if amount > available_credit:
-                raise PagoInvalidoError(
-                    f"El monto a devolver supera el saldo a favor disponible ({available_credit})."
-                )
-            if amount > available_to_reverse:
-                raise PagoInvalidoError("El monto no puede superar el saldo disponible del movimiento original.")
 
         if payment_method is None:
             payment_method = reversed_movement.medio_de_pago
@@ -249,78 +161,6 @@ def lock_cuota_charge(cuota):
     return account, movement
 
 
-def credit_balance(account):
-    manuales = list(
-        account.movimientos.filter(origen_manual__isnull=False)
-        .select_related("movimiento_revertido")
-    )
-    excedente_ids = {m.pk for m in manuales if is_surplus_movement(m)}
-    ingresos = sum(
-        (m.monto for m in manuales if m.pk in excedente_ids),
-        Decimal("0.00"),
-    )
-    cuota_nc_ids = set()
-    for m in manuales:
-        if (
-            m.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
-            and m.movimiento_revertido is not None
-            and m.movimiento_revertido.cuota_id is not None
-        ):
-            cuota_nc_ids.add(m.pk)
-            receipt_code = f"{CREDIT_NOTE_CUOTA_PREFIX} #{(m.numero_comprobante or m.pk):08d}"
-            discounted_in_cuota = (
-                ItemCuota.objects.filter(
-                    cuota_id=m.movimiento_revertido.cuota_id,
-                    es_descuento=True,
-                    motivo__startswith=receipt_code,
-                ).aggregate(total=Sum("monto"))["total"]
-                or Decimal("0.00")
-            )
-            ingresos += max(Decimal("0.00"), m.monto - discounted_in_cuota)
-
-    notas_credito = sum(
-        (
-            m.monto
-            for m in manuales
-            if m.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
-            and m.movimiento_revertido_id in excedente_ids
-        ),
-        Decimal("0.00"),
-    )
-    devoluciones = sum(
-        (
-            m.monto
-            for m in manuales
-            if m.origen_manual == TipoMovimientoOrigenChoices.EGRESO
-            and (
-                m.movimiento_revertido_id in (excedente_ids | cuota_nc_ids)
-                or (m.concepto or "").startswith(CREDIT_REFUND_PREFIX)
-            )
-        ),
-        Decimal("0.00"),
-    )
-    aplicados_en_cuotas = (
-        Pago.objects.filter(
-            movimiento__cuenta_corriente=account,
-            estado_pago=EstadoPagoChoices.ACREDITADO,
-            observacion__startswith="Pago con saldo a favor",
-        ).aggregate(total=Sum("comprobante__monto_total"))["total"]
-        or Decimal("0.00")
-    ) + (
-        ItemCuota.objects.filter(
-            cuota__movimiento__cuenta_corriente=account,
-            es_descuento=True,
-        )
-        .filter(
-            Q(autorizado_por=SYSTEM_CREDIT_AUTHORIZER)
-            | Q(motivo__startswith=CREDIT_APPLIED_PREFIX)
-        )
-        .aggregate(total=Sum("monto"))["total"]
-        or Decimal("0.00")
-    )
-    return max(Decimal("0.00"), ingresos - notas_credito - devoluciones - aplicados_en_cuotas)
-
-
 @transaction.atomic
 def create_cuota(socio, period, first_due_date=None, second_due_date=None, configuration=None, today=None):
     configuration = configuration or ConfiguracionFinanciera.load()
@@ -334,8 +174,6 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     account = lock_account(socio)
     if account.cuotas.filter(periodo=period).exists():
         raise CuotaDuplicadaError(f"El socio ya tiene una cuota para el período {period}.")
-
-    available_credit = credit_balance(account)
 
     cuota = Cuota.objects.create(
         periodo=period,
@@ -357,41 +195,14 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     )
     account.saldo -= amount
     account.save(update_fields=["saldo"])
-
-    credit_to_apply = (
-        min(available_credit, max(amount, Decimal("0.00")))
-        if available_credit > Decimal("0.00")
-        else Decimal("0.00")
-    )
-    if credit_to_apply > Decimal("0.00"):
-        surplus_mov = (
-            account.movimientos.filter(origen_manual__isnull=False, medio_de_pago__isnull=False)
-            .order_by("-pk")
-            .first()
-        )
-        payment_method = surplus_mov.medio_de_pago if surplus_mov else MedioDePagoChoices.TRANSFERENCIA
-        payment, receipt, payment_movement = create_payment(
-            account=account,
-            payment_methods=[{"medio_de_pago": payment_method, "monto": credit_to_apply}],
-            total=credit_to_apply,
-            note="Pago con saldo a favor",
-            user=None,
-            concept=f"Pago cuota {period} con saldo a favor",
-        )
-        apply_payment(payment_movement, [cuota], credit_to_apply)
+    if amount <= 0:
+        refresh_cuota_state(cuota, amount)
+    elif today > cuota.fecha_venc1:
+        # A cuota created with due dates already past gets its surcharges and state now,
+        # instead of waiting for the daily task.
+        apply_cuota_surcharges(cuota.pk, today, configuration)
         cuota.refresh_from_db()
-        pending_after = pending_amounts([cuota])[cuota.pk]
-        if pending_after > 0 and today > cuota.fecha_venc1:
-            apply_cuota_surcharges(cuota.pk, today, configuration)
-            cuota.refresh_from_db()
-    else:
-        if amount <= 0:
-            refresh_cuota_state(cuota, amount)
-        elif today > cuota.fecha_venc1:
-            # A cuota created with due dates already past gets its surcharges and state now,
-            # instead of waiting for the daily task.
-            apply_cuota_surcharges(cuota.pk, today, configuration)
-            cuota.refresh_from_db()
+    return cuota
     return cuota
 
 
@@ -614,48 +425,6 @@ def detail_lines(totals):
     ]
 
 
-def cuota_credit_notes_summary(movement_destino):
-    if movement_destino is None:
-        return [], Decimal("0.00"), None
-    prefetched = getattr(movement_destino, "_prefetched_objects_cache", {})
-    if "reversiones" in prefetched:
-        credit_notes = [
-            rev
-            for rev in movement_destino.reversiones.all()
-            if rev.origen_manual == TipoMovimientoOrigenChoices.NOTA_CREDITO
-        ]
-    else:
-        credit_notes = list(
-            movement_destino.reversiones.filter(
-                origen_manual=TipoMovimientoOrigenChoices.NOTA_CREDITO,
-            ).order_by("pk")
-        )
-    notes_data = [
-        {
-            "movimiento_cuenta_id": nc.pk,
-            "numero_comprobante": nc.numero_comprobante or nc.pk,
-            "monto": nc.monto,
-            "concepto": nc.concepto,
-            "fecha": nc.fecha,
-            "origen_manual": nc.origen_manual,
-            "tipo_movimiento": nc.tipo_movimiento,
-            "movimiento_revertido": nc.movimiento_revertido_id,
-        }
-        for nc in credit_notes
-    ]
-    total_nc = sum((nc.monto for nc in credit_notes), Decimal("0.00"))
-    combined = None
-    if notes_data:
-        combined = {
-            "movimiento_cuenta_id": notes_data[-1]["movimiento_cuenta_id"],
-            "numero_comprobante": ", #".join(str(n["numero_comprobante"]) for n in notes_data),
-            "monto": total_nc,
-            "concepto": " · ".join(n["concepto"] for n in notes_data if n["concepto"]),
-            "fecha": notes_data[-1]["fecha"],
-        }
-    return notes_data, total_nc, combined
-
-
 def receipt_detail(receipt):
     payment = receipt.pago
     movement = getattr(payment, "movimiento", None)
@@ -663,7 +432,7 @@ def receipt_detail(receipt):
     imputations = (
         Imputacion.objects.filter(movimiento_origen=movement)
         .select_related("movimiento_destino__cuota")
-        .prefetch_related("detalles", "movimiento_destino__reversiones")
+        .prefetch_related("detalles")
         .order_by("movimiento_destino__cuota__periodo", "pk")
         if movement else []
     )
@@ -675,17 +444,11 @@ def receipt_detail(receipt):
             totals[detail.concepto] = totals.get(detail.concepto, Decimal("0.00")) + detail.monto
             breakdown[detail.concepto] = breakdown.get(detail.concepto, Decimal("0.00")) + detail.monto
         cuota = imputation.movimiento_destino.cuota
-        notes_data, total_nc, combined_nc = cuota_credit_notes_summary(imputation.movimiento_destino)
         periods.append({
             "cuota_id": cuota.pk,
-            "movimiento_cuota_id": imputation.movimiento_destino_id,
             "periodo": cuota.periodo,
             "monto_aplicado": imputation.monto_aplicado,
-            "monto_nota_credito": total_nc,
-            "monto_neto": max(Decimal("0.00"), imputation.monto_aplicado - total_nc),
             "detalle": detail_lines(totals),
-            "nota_credito": combined_nc,
-            "notas_credito": notes_data,
         })
 
     return {
@@ -905,74 +668,7 @@ def correct_payment(payment_id, cuota_ids, payment_methods, total, reason, user=
     return original, original_receipt, replacement, receipt
 
 
-@transaction.atomic
-def amend_paid_receipt(
-    payment_id,
-    cuota_ids,
-    payment_methods,
-    total,
-    reason,
-    user=None,
-    update_payment=True,
-    surplus_data=None,
-    credit_notes_data=None,
-):
-    original = Pago.objects.select_for_update().get(pk=payment_id)
-    if original.estado_pago != EstadoPagoChoices.ACREDITADO:
-        raise PagoInvalidoError("Solo se pueden corregir pagos acreditados.")
-    original_receipt = Comprobante.objects.select_for_update().filter(pago=original).first()
-    original_movement = MovimientoCuenta.objects.select_for_update().filter(pago=original).first()
-    if original_receipt is None or original_movement is None:
-        raise PagoInvalidoError("El pago original no tiene comprobante o movimiento de cuenta.")
 
-    socio_id = original_movement.cuenta_corriente.socio_id
-    replacement, receipt = None, None
-    if update_payment:
-        original, original_receipt, replacement, receipt = correct_payment(
-            payment_id=payment_id,
-            cuota_ids=cuota_ids,
-            payment_methods=payment_methods,
-            total=total,
-            reason=reason,
-            user=user,
-        )
-
-    created_surplus = None
-    if surplus_data and surplus_data.get("monto") and surplus_data["monto"] > Decimal("0.00"):
-        target_num = receipt.numero if receipt is not None else original_receipt.numero
-        default_concept = f"{CREDIT_SURPLUS_PREFIX} · Generado al editar comprobante #{target_num}"
-        created_surplus = create_manual_movement(
-            socio_id=socio_id,
-            movement_type=TipoMovimientoChoices.ABONO,
-            origin=TipoMovimientoOrigenChoices.INGRESO_MANUAL,
-            concept=(surplus_data.get("concepto") or default_concept)[:200],
-            amount=surplus_data["monto"],
-            payment_method=surplus_data.get("medio_de_pago") or payment_methods[-1]["medio_de_pago"],
-            reversed_movement_id=None,
-            user=user,
-        )
-
-    created_credit_notes = []
-    for nc_item in credit_notes_data or []:
-        cuota_movement = MovimientoCuenta.objects.filter(
-            cuenta_corriente_id=original_movement.cuenta_corriente_id,
-            cuota_id=nc_item["cuota_id"],
-        ).first()
-        if cuota_movement is None:
-            raise PagoInvalidoError("La cuota indicada para la nota de crédito no pertenece al socio.")
-        created_nc = create_manual_movement(
-            socio_id=socio_id,
-            movement_type=TipoMovimientoChoices.CARGO,
-            origin=TipoMovimientoOrigenChoices.NOTA_CREDITO,
-            concept=(nc_item.get("concepto") or "Modificación de ítem de cuota")[:200],
-            amount=nc_item["monto"],
-            payment_method=None,
-            reversed_movement_id=cuota_movement.pk,
-            user=user,
-        )
-        created_credit_notes.append(created_nc)
-
-    return original, original_receipt, replacement, receipt, created_surplus, created_credit_notes
 
 
 BENEFIT_SCHOLARSHIP = "Beca"
