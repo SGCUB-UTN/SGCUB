@@ -32,6 +32,7 @@ from .generators import GeneradorItemsCuota
 from .models import (
 	Beca,
 	Comprobante,
+	ConceptoMovimiento,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -630,6 +631,85 @@ class MediosDePagoEnPagosTests(APITestCase):
 		self.client.patch(reverse("medio-pago-detail", args=[medio.pk]), {"nombre": "Transferencia bancaria"}, format="json")
 
 		self.assertIn(b"Transferencia bancaria", render_receipt_pdf(Comprobante.objects.get()))
+
+
+class ConceptosMovimientoTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="caja"))
+
+	def crear(self, nombre, origen="IngresoManual"):
+		return self.client.post(reverse("concepto-movimiento-list"), {"nombre": nombre, "origen": origen}, format="json")
+
+	def test_lista_los_conceptos_iniciales_filtrados_por_origen(self):
+		response = self.client.get(reverse("concepto-movimiento-list"), {"origen": "IngresoManual"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			[concepto["nombre"] for concepto in response.data],
+			["Venta de indumentaria", "Donación", "Otro ingreso"],
+		)
+
+	def test_alta_de_concepto_nuevo(self):
+		response = self.crear("  Rifa anual  ")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.data["nombre"], "Rifa anual")
+		self.assertTrue(ConceptoMovimiento.objects.filter(nombre="Rifa anual", origen="IngresoManual").exists())
+
+	def test_alta_repetida_devuelve_el_concepto_existente(self):
+		existente = ConceptoMovimiento.objects.get(nombre="Donación", origen="IngresoManual")
+
+		# Sin acento y en mayúsculas debe devolver el mismo existente
+		response = self.crear("DONACION")
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["concepto_movimiento_id"], existente.pk)
+		self.assertEqual(ConceptoMovimiento.objects.filter(origen="IngresoManual").count(), 3)
+
+	def test_el_mismo_nombre_puede_existir_en_otro_origen(self):
+		response = self.crear("Donación", origen="Egreso")
+
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def test_rechaza_nota_de_credito_y_nombre_vacio(self):
+		self.assertEqual(self.crear("Ajuste", origen="NotaCredito").status_code, 400)
+		self.assertEqual(self.crear("   ").status_code, 400)
+
+	def test_eliminar_concepto_no_utilizado(self):
+		nuevo = self.crear("Rifa fin de año").data["concepto_movimiento_id"]
+
+		response = self.client.delete(reverse("concepto-movimiento-detail", args=[nuevo]))
+
+		self.assertEqual(response.status_code, 204)
+		self.assertFalse(ConceptoMovimiento.objects.filter(pk=nuevo).exists())
+
+	def test_no_se_pueden_eliminar_conceptos_protegidos(self):
+		otro = ConceptoMovimiento.objects.get(nombre="Otro ingreso")
+
+		response = self.client.delete(reverse("concepto-movimiento-detail", args=[otro.pk]))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(ConceptoMovimiento.objects.filter(pk=otro.pk).exists())
+
+	def test_no_se_puede_eliminar_un_concepto_utilizado_en_movimientos(self):
+		socio = crear_socio("49000000")
+		cuenta = account_for(socio)
+		MovimientoCuenta.objects.create(
+			cuenta_corriente=cuenta,
+			tipo_movimiento="Abono",
+			origen_manual="IngresoManual",
+			concepto="Venta de indumentaria",
+			monto=Decimal("500.00"),
+			fecha=timezone.now(),
+		)
+		concepto = ConceptoMovimiento.objects.get(nombre="Venta de indumentaria")
+
+		response = self.client.delete(reverse("concepto-movimiento-detail", args=[concepto.pk]))
+
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(ConceptoMovimiento.objects.filter(pk=concepto.pk).exists())
+
+
 class MovimientosManualesTests(APITestCase):
 	def setUp(self):
 		self.usuario = get_user_model().objects.create_user(username="caja")

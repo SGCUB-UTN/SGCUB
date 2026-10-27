@@ -12,11 +12,13 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from configuracion.services import Seccion, record_catalog_update, record_change
 from padron.models import Socio
+from padron.search import normalize_text
 
 from .models import (
 	Beca,
 	Comprobante,
 	ConceptoItemChoices,
+	ConceptoMovimiento,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -48,6 +50,7 @@ from .serializers import (
 	BeneficioSerializer,
 	AnulacionSerializer,
 	CUOTA_ITEM_PREFETCHES,
+	ConceptoMovimientoSerializer,
 	ConfiguracionFinancieraSerializer,
 	MedioPagoAceptadoSerializer,
 	VersionConfiguracionFinancieraSerializer,
@@ -503,6 +506,59 @@ def movimiento_cuenta_manual(request):
 	except PagoInvalidoError as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(MovimientoCuentaSerializer(movement).data, status=status.HTTP_201_CREATED)
+
+
+PROTECTED_CONCEPTS = ("Otro ingreso", "Otro egreso")
+
+
+def _find_matching_concept(name, origin):
+	normalized = normalize_text(name)
+	for concept in ConceptoMovimiento.objects.filter(origen=origin):
+		if normalize_text(concept.nombre) == normalized:
+			return concept
+	return None
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], request=ConceptoMovimientoSerializer, responses=ConceptoMovimientoSerializer)
+@api_view(["GET", "POST"])
+def concepto_movimiento_list_create(request):
+	if request.method == "GET":
+		concepts = ConceptoMovimiento.objects.all()
+		origin = request.query_params.get("origen")
+		if origin:
+			concepts = concepts.filter(origen=origin)
+		return Response(ConceptoMovimientoSerializer(concepts, many=True).data)
+
+	serializer = ConceptoMovimientoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	data = serializer.validated_data
+	existing = _find_matching_concept(data["nombre"], data["origen"])
+	if existing:
+		return Response(ConceptoMovimientoSerializer(existing).data, status=status.HTTP_200_OK)
+
+	concept = ConceptoMovimiento.objects.create(nombre=data["nombre"], origen=data["origen"])
+	record_change(Seccion.FINANZAS, f"Concepto de movimiento {concept.nombre}", "", "Alta", request_user(request))
+	return Response(ConceptoMovimientoSerializer(concept).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/MovimientoCuenta"], responses={204: None})
+@api_view(["DELETE"])
+def concepto_movimiento_detail(request, pk):
+	concept = get_object_or_404(ConceptoMovimiento, pk=pk)
+	if concept.nombre in PROTECTED_CONCEPTS:
+		return Response(
+			{"detail": "Este concepto es del sistema y no puede eliminarse."},
+			status=status.HTTP_400_BAD_REQUEST,
+		)
+	if MovimientoCuenta.objects.filter(origen_manual=concept.origen, concepto__iexact=concept.nombre).exists():
+		return Response(
+			{"detail": "El concepto ya fue utilizado en movimientos de cuenta corriente y no puede eliminarse."},
+			status=status.HTTP_400_BAD_REQUEST,
+		)
+	concept.delete()
+	record_change(Seccion.FINANZAS, f"Concepto de movimiento {concept.nombre}", "Existente", "Eliminado", request_user(request))
+	return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Finanzas/MovimientoCuenta"], responses=MovimientoCuentaSerializer)

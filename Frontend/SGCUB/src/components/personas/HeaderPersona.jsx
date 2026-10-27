@@ -104,7 +104,7 @@ export function PayButton({ onClick, children = 'Registrar pago' }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-on-primary-container rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none"
+      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none"
     >
       <span className="material-symbols-outlined text-[20px]">payments</span>
       <span>{children}</span>

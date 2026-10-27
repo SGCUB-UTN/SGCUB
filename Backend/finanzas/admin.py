@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
 	Beca,
 	Comprobante,
+	ConceptoMovimiento,
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
@@ -25,3 +26,4 @@ admin.site.register(ItemPago)
 admin.site.register(ConfiguracionFinanciera)
 admin.site.register(Beca)
 admin.site.register(EjecucionTareaCuota)
+admin.site.register(ConceptoMovimiento)

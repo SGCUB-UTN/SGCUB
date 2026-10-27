@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
+import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import { formatDate, getErrorMessage } from '../personas/format'
 import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
 import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
@@ -373,12 +374,157 @@ function PaymentMethodsSection({ medios, onCreate, onUpdate, onDelete }) {
   )
 }
 
+const PROTECTED_CONCEPTS = ['Otro ingreso', 'Otro egreso']
+
+function MovementConceptsSection() {
+  const { concepts, isLoading, error: loadError, createConcept, deleteConcept } = useConceptosMovimiento()
+  const [selectedOrigin, setSelectedOrigin] = useState('IngresoManual')
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  const filtered = concepts.filter((c) => c.origen === selectedOrigin)
+
+  const add = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await createConcept(name.trim(), selectedOrigin)
+      setName('')
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'No se pudo agregar el concepto.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (concept) => {
+    setBusyId(concept.concepto_movimiento_id)
+    setError('')
+    try {
+      await deleteConcept(concept.concepto_movimiento_id)
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, 'No se pudo eliminar el concepto.'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <SettingsSection
+      icon="swap_horiz"
+      title="Conceptos de otros movimientos"
+      flush
+    >
+      <div className="px-6 pt-4 pb-2 border-b border-outline-variant/30 flex items-center justify-between gap-3">
+        <p className="text-sm text-on-surface-variant">
+          Conceptos disponibles al registrar ingresos manuales o egresos de caja.
+        </p>
+        <div className="flex gap-1.5" role="group" aria-label="Origen de concepto">
+          {[
+            { value: 'IngresoManual', label: 'Ingresos' },
+            { value: 'Egreso', label: 'Egresos' },
+          ].map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => { setSelectedOrigin(tab.value); setError('') }}
+              className={`px-3 py-1 text-xs font-semibold rounded-sm border transition-colors cursor-pointer ${
+                selectedOrigin === tab.value
+                  ? 'bg-primary text-on-primary border-primary'
+                  : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant/50 hover:bg-surface-container-low'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={TABLE_CLASSES.wrapper}>
+        <table className={TABLE_CLASSES.table}>
+          <thead className={TABLE_CLASSES.head}>
+            <tr>
+              <th className={TABLE_CLASSES.headCell}>Concepto</th>
+              <th className={TABLE_CLASSES.headCell}>Tipo</th>
+              <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
+              <tr><td colSpan={3} className="px-6 py-4 text-sm text-on-surface-variant">Cargando conceptos...</td></tr>
+            )}
+            {!isLoading && filtered.length === 0 && (
+              <tr><td colSpan={3} className="px-6 py-4 text-sm text-on-surface-variant">No hay conceptos cargados.</td></tr>
+            )}
+            {!isLoading && filtered.map((c) => {
+              const isProtected = PROTECTED_CONCEPTS.includes(c.nombre)
+              const busy = busyId === c.concepto_movimiento_id
+              return (
+                <tr key={c.concepto_movimiento_id} className={TABLE_CLASSES.row}>
+                  <td className={TABLE_CLASSES.cell}>
+                    <span className="font-medium text-on-surface">{c.nombre}</span>
+                  </td>
+                  <td className={TABLE_CLASSES.cell}>
+                    <span className="text-xs text-on-surface-variant">
+                      {c.origen === 'IngresoManual' ? 'Ingreso manual' : 'Egreso'}
+                    </span>
+                  </td>
+                  <td className={TABLE_CLASSES.actionsCell}>
+                    <div className="flex justify-end gap-1">
+                      <IconButton
+                        icon="delete"
+                        label={
+                          isProtected
+                            ? 'Concepto del sistema (no se puede borrar)'
+                            : c.en_uso
+                              ? 'Ya se usó en movimientos registrados'
+                              : 'Eliminar concepto'
+                        }
+                        disabled={busy || isProtected || c.en_uso}
+                        onClick={() => remove(c)}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot className="border-t border-outline-variant/30 bg-surface-container-low/40">
+            <tr>
+              <td colSpan={3} className={TABLE_CLASSES.cell}>
+                <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    className={compactInputClass(Boolean(error), 'sm:max-w-xs')}
+                    placeholder={selectedOrigin === 'IngresoManual' ? 'Ej: Rifa anual' : 'Ej: Pago de arbitraje'}
+                    value={name}
+                    onChange={(event) => { setName(event.target.value); setError('') }}
+                    aria-label="Nuevo concepto"
+                  />
+                  <button type="submit" className={SMALL_BUTTON_CLASSES.secondary} disabled={saving || !name.trim()}>
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                    Agregar concepto
+                  </button>
+                </form>
+                <CellError message={error || (loadError ? 'No se pudieron cargar los conceptos.' : '')} />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </SettingsSection>
+  )
+}
+
 export default function FinancialSettings({ config, onShowHistory, onReverted }) {
   return (
     <div className="flex flex-col">
       <FeesSection config={config} onShowHistory={onShowHistory} onReverted={onReverted} />
       <CalendarSection config={config} />
       <PaymentMethodsSection medios={config.medios} onCreate={config.createMedio} onUpdate={config.updateMedio} onDelete={config.deleteMedio} />
+      <MovementConceptsSection />
     </div>
   )
 }

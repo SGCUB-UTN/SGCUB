@@ -95,7 +95,7 @@ export default function ChangePassword() {
 
         <div className="pt-1">
           <button
-            className="w-full h-11 bg-primary hover:bg-on-primary-container active:scale-[0.99] text-on-primary font-headline-sm text-headline-sm rounded-lg flex items-center justify-center gap-2 shadow-md transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-80"
+            className="w-full h-11 bg-primary hover:bg-primary/90 active:scale-[0.99] text-on-primary font-headline-sm text-headline-sm rounded-lg flex items-center justify-center gap-2 shadow-md transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-80"
             type="submit"
             disabled={isSubmitting}
           >
