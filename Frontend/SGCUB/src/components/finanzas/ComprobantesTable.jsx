@@ -30,7 +30,7 @@ const SCOPES = [
   {
     id: 'manuales',
     titulo: 'Otros movimientos',
-    detalle: 'Ingresos manuales, egresos de caja y notas de crédito.',
+    detalle: 'Ingresos manuales y egresos de caja.',
   },
 ]
 
