@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import { FLUSH_TABLE_CLASS, INSET_PADDING_X_CLASS } from '../shared/flushTable'
+import SectionHeading from '../shared/SectionHeading'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TableSearchInput from '../shared/TableSearchInput'
@@ -97,11 +98,13 @@ export default function PersonaDocumentsTable({ title, documents, getTypeName, o
   return (
     <div className={`min-w-0 ${FLUSH_TABLE_CLASS} ${className}`}>
       {title && (
-        <div className={`${INSET_PADDING_X_CLASS} py-4 border-b border-outline-variant/20 flex items-center gap-2`}>
-          <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">history</span>
-          <h3 className="text-lg font-semibold text-on-surface">{title}</h3>
-          <span className="ml-auto text-sm text-on-surface-variant">{rows.length} documentos</span>
-        </div>
+        <SectionHeading
+          as="h3"
+          icon="history"
+          title={title}
+          className={`${INSET_PADDING_X_CLASS} border-b`}
+          actions={<span className="text-sm text-on-surface-variant">{rows.length} documentos</span>}
+        />
       )}
       <div className={`${INSET_PADDING_X_CLASS} py-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5`}>
         <TableSearchInput

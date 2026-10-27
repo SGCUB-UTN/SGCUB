@@ -166,7 +166,7 @@ function SummaryRow({ label, value, className = 'text-on-surface' }) {
   )
 }
 
-function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, className }) {
+function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, className }) {
   const paid = isPaid(cuota)
   const pending = Number(cuota.saldo_pendiente ?? 0)
   const payable = !paid && pending > 0
@@ -187,7 +187,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, className }) {
           )}
         </div>
       </div>
-      {(onPay || onAssignBenefit) && (
+      {(onPay || onAssignBenefit || extraActions) && (
         <div className="flex flex-col gap-2 [&>button]:justify-center">
           {onPay && payable && (
             <PrimaryButton icon="payments" onClick={() => onPay(cuota)}>
@@ -199,6 +199,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, className }) {
               Agregar descuento
             </SecondaryButton>
           )}
+          {extraActions}
         </div>
       )}
     </div>
@@ -242,7 +243,7 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
   )
 }
 
-function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, flat = false }) {
+function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState({ loading: false, error: null, data: null })
@@ -267,7 +268,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, f
           </div>
           <div className={layout.side}>
             <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={openReceipt} className={layout.receipts} />
-            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} className={layout.summary} />
+            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
           </div>
         </div>
 

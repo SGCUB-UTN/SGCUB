@@ -11,9 +11,9 @@ import TableSearchInput from '../shared/TableSearchInput'
 import { matchesSearch } from '../shared/search'
 import { formatDni } from '../personas/format'
 import { CUOTA_STATE_ORDER, cuotaStateBadgeClass, cuotaStateLabel } from '../finanzas/cuotaStates'
+import { SecondaryButton } from '../personas/tabs/parts'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
-import RowActionsMenu from './RowActionsMenu'
 import {
   CUOTA_TYPES,
   cuotaTypeBadgeClass,
@@ -25,7 +25,7 @@ import {
 } from './cuotaPeriod'
 
 const ALL = 'all'
-const COLUMN_COUNT = 5
+const COLUMN_COUNT = 4
 const HEADER_CLASS = 'py-3 px-4'
 
 const TYPE_FILTERS = [
@@ -46,7 +46,7 @@ const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border border-outline-variant/50 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 const UPCOMING_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border border-outline-variant/50 text-sm font-semibold text-on-surface-variant opacity-60 cursor-not-allowed'
-const PAY_BUTTON_CLASS = 'inline-flex items-center gap-1 h-9 px-3 rounded bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
+const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 
 const Icon = ({ name, size = 18 }) => (
@@ -127,7 +127,7 @@ function BulkActionsBar({ rows, onExport, onClear }) {
   )
 }
 
-function CuotaDetailRow({ row, onPay, onAssignBenefit, onChanged }) {
+function CuotaDetailRow({ row, onPay, onAssignBenefit, onEdit, onDelete, onChanged }) {
   const [detail, setDetail] = useState({ loading: true, error: false, cuota: null })
 
   useEffect(() => {
@@ -155,6 +155,15 @@ function CuotaDetailRow({ row, onPay, onAssignBenefit, onChanged }) {
       onPay={() => onPay(row)}
       onAssignBenefit={() => onAssignBenefit(row)}
       onChanged={onChanged}
+      extraActions={(
+        <>
+          <SecondaryButton icon="edit_calendar" onClick={() => onEdit(row)}>Editar vencimientos</SecondaryButton>
+          <button type="button" onClick={() => onDelete(row)} className={DELETE_BUTTON_CLASS}>
+            <Icon name="delete" size={20} />
+            Eliminar cuota
+          </button>
+        </>
+      )}
       flat
     />
   )
@@ -273,19 +282,7 @@ export default function UnpaidCuotasTable({
             </th>
             <th className="py-3 px-0 w-8" scope="col"><span className="sr-only">Detalle</span></th>
             <SortableHeader className={HEADER_CLASS} etiqueta="Socio / Jugador" columna="name" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Saldo" columna="pending" orden={sort} onOrdenar={sortAndReset} />
-            <th className={`${HEADER_CLASS} sm:pr-5 text-right`} scope="col">Acción</th>
-          </>
-        )}
-        footer={filtered.length > 0 && (
-          <>
-            <td className="py-3 pl-4 sm:pl-5 pr-2" />
-            <td className="py-3 px-0" />
-            <td className="py-3 px-4 font-semibold">
-              Total {type === ALL && !search.trim() ? 'del período' : 'filtrado'} ({formatCount(filtered.length)})
-            </td>
-            <td className="py-3 px-4 text-right font-semibold whitespace-nowrap">{formatMoney(sumBy(filtered, 'pending'))}</td>
-            <td className="py-3 px-4 sm:pr-5" />
+            <SortableHeader className={`${HEADER_CLASS} sm:pr-5 text-right`} etiqueta="Saldo" columna="pending" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
       >
@@ -337,21 +334,7 @@ export default function UnpaidCuotasTable({
                     N° {row.numero_socio ?? '—'} · DNI {formatDni(row.dni)}
                   </div>
                 </td>
-                <td className="py-3 px-4 text-right whitespace-nowrap font-semibold">{formatMoney(row.pending)}</td>
-                <td className="py-3 px-4 sm:pr-5" onClick={stopRowToggle}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button type="button" onClick={() => onPay(row)} className={PAY_BUTTON_CLASS} aria-label={`Cobrar la cuota de ${name}`}>
-                      <Icon name="payments" />
-                      Cobrar
-                    </button>
-                    <RowActionsMenu
-                      label={name}
-                      onAssignBenefit={() => onAssignBenefit(row)}
-                      onEdit={() => onEdit(row)}
-                      onDelete={() => onDelete(row)}
-                    />
-                  </div>
-                </td>
+                <td className="py-3 px-4 sm:pr-5 text-right whitespace-nowrap font-semibold">{formatMoney(row.pending)}</td>
               </tr>
               {expanded && (
                 <CuotaDetailRow
@@ -359,6 +342,8 @@ export default function UnpaidCuotasTable({
                   row={row}
                   onPay={onPay}
                   onAssignBenefit={onAssignBenefit}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
                   onChanged={onChanged}
                 />
               )}
