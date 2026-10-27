@@ -22,10 +22,12 @@ from .models import (
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
+	EjecucionTareaCuota,
 	Imputacion,
 	ItemPago,
 	ItemCuota,
 	MovimientoCuenta,
+	OrigenEjecucionChoices,
 	Pago,
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
@@ -60,6 +62,8 @@ from .serializers import (
 	CuotaCreateSerializer,
 	CuotaSerializer,
 	CuotaUpdateSerializer,
+	EjecucionTareaCuotaDetalleSerializer,
+	EjecucionTareaCuotaSerializer,
 	RegistroPagoSerializer,
 	ImputacionSerializer,
 	ItemPagoSerializer,
@@ -78,14 +82,12 @@ from .services import (
 	PagoInvalidoError,
 	SocioInactivoError,
 	affected_cuotas,
-	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
 	correct_payment,
 	create_cuota,
 	delete_cuota,
 	ensure_cuota_without_payments,
-	generar_cuotas_mensuales,
 	grant_scholarship,
 	parse_period,
 	pending_amounts,
@@ -97,6 +99,8 @@ from .services import (
 	update_discount,
 	update_scholarship,
 )
+from .period_summary import period_summary, requested_period, unpaid_cuotas
+from .tasks import run_cuota_generation, run_manual_surcharges
 
 
 def _cuota_con_pagos(error):
@@ -136,13 +140,14 @@ def cuota_list_create(request):
 @extend_schema(tags=["Finanzas/Cuota"])
 @api_view(["POST"])
 def generar_cuotas_mensuales_manual(request):
-	return Response(generar_cuotas_mensuales(), status=status.HTTP_200_OK)
+	result = run_cuota_generation(origin=OrigenEjecucionChoices.MANUAL, user=request.user)
+	return Response(result, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Finanzas/Cuota"])
 @api_view(["POST"])
 def aplicar_recargos_manual(request):
-	return Response(apply_surcharges(), status=status.HTTP_200_OK)
+	return Response(run_manual_surcharges(user=request.user), status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Finanzas/Cuota"], request=CuotaUpdateSerializer, responses=CuotaSerializer)
@@ -938,3 +943,45 @@ def resumen_financiero_pdf(request):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+def _period_or_error(request):
+	try:
+		return requested_period(request.query_params.get("periodo", "").strip()), None
+	except ValueError as error:
+		return None, Response({"periodo": [str(error)]}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(tags=["Finanzas/Cuota"], summary="Fases e indicadores de las cuotas de un período")
+@api_view(["GET"])
+def cuota_periodo_resumen(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	return Response(period_summary(period))
+
+
+@extend_schema(tags=["Finanzas/Cuota"], summary="Cuotas impagas de un período")
+@api_view(["GET"])
+def cuota_periodo_impagas(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	return Response({"period": period, "results": unpaid_cuotas(period)})
+
+
+@extend_schema(tags=["Finanzas/Cuota"], responses=EjecucionTareaCuotaSerializer(many=True), summary="Ejecuciones de las tareas de cuotas de un período")
+@api_view(["GET"])
+def cuota_ejecucion_list(request):
+	period, error = _period_or_error(request)
+	if error:
+		return error
+	runs = EjecucionTareaCuota.objects.filter(periodo=period).select_related("usuario")
+	return Response(EjecucionTareaCuotaSerializer(runs, many=True).data)
+
+
+@extend_schema(tags=["Finanzas/Cuota"], responses=EjecucionTareaCuotaDetalleSerializer, summary="Registro de una ejecución de tarea de cuotas")
+@api_view(["GET"])
+def cuota_ejecucion_detail(request, pk):
+	run = get_object_or_404(EjecucionTareaCuota.objects.select_related("usuario"), pk=pk)
+	return Response(EjecucionTareaCuotaDetalleSerializer(run).data)

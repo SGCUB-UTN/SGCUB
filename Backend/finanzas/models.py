@@ -628,3 +628,46 @@ class ExclusionBeca(models.Model):
 
     def __str__(self):
         return f"Exclusión de beca {self.beca_id} - {self.periodo}"
+
+
+class TipoTareaCuotaChoices(models.TextChoices):
+    GENERACION = "Generacion", "Generación de cuotas"
+    RECARGO_1 = "Recargo1", "Recargo por 1° vencimiento"
+    RECARGO_2 = "Recargo2", "Recargo por 2° vencimiento"
+
+
+class OrigenEjecucionChoices(models.TextChoices):
+    AUTOMATICA = "Automatica", "Automática"
+    MANUAL = "Manual", "Manual"
+
+
+class EjecucionTareaCuota(models.Model):
+    ejecucion_id = models.AutoField(primary_key=True)
+    tipo = models.CharField(max_length=20, choices=TipoTareaCuotaChoices.choices)
+    periodo = models.CharField(max_length=7)
+    fecha_inicio = models.DateTimeField(default=timezone.now)
+    fecha_fin = models.DateTimeField(null=True, blank=True)
+    origen = models.CharField(
+        max_length=20,
+        choices=OrigenEjecucionChoices.choices,
+        default=OrigenEjecucionChoices.AUTOMATICA,
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="ejecuciones_tareas_cuota",
+        null=True,
+        blank=True,
+    )
+    exitosa = models.BooleanField(default=True)
+    resumen = models.CharField(max_length=300, blank=True)
+    metricas = models.JSONField(default=dict, blank=True)
+    registro = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "ejecucion_tarea_cuota"
+        ordering = ["-fecha_inicio", "-ejecucion_id"]
+        indexes = [models.Index(fields=["periodo", "tipo"], name="ejecucion_tarea_periodo_tipo")]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.periodo}"

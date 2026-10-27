@@ -134,7 +134,7 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
 
   return (
     <DataTable
-      className="border border-outline-variant/30 rounded-lg bg-surface-container-lowest shadow-sm"
+      className="border-y border-outline-variant/30"
       tableClassName="min-w-[560px]"
       headers={(
         <>

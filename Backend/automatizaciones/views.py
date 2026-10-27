@@ -72,6 +72,8 @@ CHANGE_KEYS_BY_FUNC = {
     "finanzas.services.generar_cuotas_mensuales": ("cuotas_creadas",),
     "finanzas.services.generate_scheduled_cuotas": ("cuotas_creadas",),
     "finanzas.services.apply_surcharges": ("recargos_primer_vencimiento", "recargos_segundo_vencimiento"),
+    "finanzas.tasks.generate_scheduled_cuotas": ("cuotas_creadas",),
+    "finanzas.tasks.apply_scheduled_surcharges": ("recargos_primer_vencimiento", "recargos_segundo_vencimiento"),
     "finanzas.services.finish_expired_scholarships": ("becas_finalizadas",),
 }
 

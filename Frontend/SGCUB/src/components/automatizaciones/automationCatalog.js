@@ -5,7 +5,7 @@ export const RECATEGORIZATION_REVIEW_PATH = '/automatizaciones/recategorizacion'
 export const AREA_ORDER = ['Padrón', 'Finanzas', 'Sistema']
 
 const AUTOMATION_CATALOG = {
-  'finanzas.services.generate_scheduled_cuotas': {
+  'finanzas.tasks.generate_scheduled_cuotas': {
     title: 'Generar las cuotas del mes',
     description: 'Se ejecuta todos los días y, el día de generación definido en Configuración, asegura que cada socio activo tenga creadas las cuotas del mes actual y los próximos dos meses, con sus becas y descuentos.',
     whenOff: 'Si la apagás, no se van a crear las cuotas nuevas y los socios no van a tener las cuotas próximas para pagar.',
@@ -13,9 +13,9 @@ const AUTOMATION_CATALOG = {
     area: 'Finanzas',
     changesLabel: ['cuota creada', 'cuotas creadas'],
   },
-  'finanzas.services.apply_surcharges': {
+  'finanzas.tasks.apply_scheduled_surcharges': {
     title: 'Aplicar recargos por mora',
-    description: 'Suma el recargo a las cuotas vencidas que todavía no se pagaron.',
+    description: 'Se ejecuta todos los días y, al día siguiente de cada vencimiento del mes, suma el recargo a las cuotas vencidas que todavía no se pagaron. Cada aplicación queda registrada en la página de Cuotas.',
     whenOff: 'Si la apagás, las cuotas vencidas no van a recibir el recargo por mora.',
     icon: 'payments',
     area: 'Finanzas',
@@ -46,7 +46,9 @@ const AUTOMATION_CATALOG = {
 }
 
 // Executions recorded before the generation became a daily check keep their description
-AUTOMATION_CATALOG['finanzas.services.generar_cuotas_mensuales'] = AUTOMATION_CATALOG['finanzas.services.generate_scheduled_cuotas']
+AUTOMATION_CATALOG['finanzas.services.generar_cuotas_mensuales'] = AUTOMATION_CATALOG['finanzas.tasks.generate_scheduled_cuotas']
+AUTOMATION_CATALOG['finanzas.services.generate_scheduled_cuotas'] = AUTOMATION_CATALOG['finanzas.tasks.generate_scheduled_cuotas']
+AUTOMATION_CATALOG['finanzas.services.apply_surcharges'] = AUTOMATION_CATALOG['finanzas.tasks.apply_scheduled_surcharges']
 
 export const describeChanges = (execution) => {
   if (execution.changes == null) return '—'

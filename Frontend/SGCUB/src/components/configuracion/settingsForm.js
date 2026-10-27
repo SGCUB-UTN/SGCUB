@@ -5,7 +5,7 @@ const BUTTON_BASE = 'inline-flex items-center justify-center gap-2 rounded-lg px
 export const BUTTON_CLASSES = {
   primary: `${BUTTON_BASE} bg-primary text-on-primary shadow-sm hover:bg-primary/90`,
   secondary: `${BUTTON_BASE} border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low`,
-  danger: `${BUTTON_BASE} bg-red-700 text-white shadow-sm hover:bg-red-800`,
+  danger: `${BUTTON_BASE} bg-red-700 hover:bg-red-800 dark:bg-[#e03131] dark:hover:bg-[#c92a2a] text-white shadow-sm`,
 }
 
 // Small buttons and links used inside the setting sections

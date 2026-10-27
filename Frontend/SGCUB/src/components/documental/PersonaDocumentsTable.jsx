@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
+import { FLUSH_TABLE_CLASS, INSET_PADDING_X_CLASS } from '../shared/flushTable'
+import SectionHeading from '../shared/SectionHeading'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TableSearchInput from '../shared/TableSearchInput'
@@ -64,7 +66,7 @@ function ActionButton({ icon, label, className, onClick }) {
   )
 }
 
-export default function PersonaDocumentsTable({ title, documents, getTypeName, onEdit, onDelete, isHistory = false }) {
+export default function PersonaDocumentsTable({ title, documents, getTypeName, onEdit, onDelete, isHistory = false, className = '' }) {
   const [search, setSearch] = useState('')
   const [docType, setDocType] = useState(ALL)
   const [status, setStatus] = useState(ALL)
@@ -94,15 +96,17 @@ export default function PersonaDocumentsTable({ title, documents, getTypeName, o
   const { ordenadas: sortedRows, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
 
   return (
-    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
+    <div className={`min-w-0 ${FLUSH_TABLE_CLASS} ${className}`}>
       {title && (
-        <div className="px-6 py-4 border-b border-outline-variant/20 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">history</span>
-          <h3 className="text-lg font-semibold text-on-surface">{title}</h3>
-          <span className="ml-auto text-sm text-on-surface-variant">{rows.length} documentos</span>
-        </div>
+        <SectionHeading
+          as="h3"
+          icon="history"
+          title={title}
+          className={`${INSET_PADDING_X_CLASS} border-b`}
+          actions={<span className="text-sm text-on-surface-variant">{rows.length} documentos</span>}
+        />
       )}
-      <div className="p-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+      <div className={`${INSET_PADDING_X_CLASS} py-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5`}>
         <TableSearchInput
           value={search}
           onChange={setSearch}

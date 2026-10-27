@@ -5,6 +5,7 @@ import { collectErrorMessages } from '../format'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
 import PersonaDocumentsTable from '../../documental/PersonaDocumentsTable'
+import { FLUSH_END_CLASS } from '../../shared/flushTable'
 
 const getEmptyUploadForm = () => ({
   tipo_documento: '',
@@ -181,10 +182,11 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   if (loading) return <div className="text-base text-on-surface-variant">Cargando documentación...</div>
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <TabHeader
         title="Documentación Requerida"
         description="Control de habilitaciones institucionales, certificados médicos laborales y títulos habilitantes reglamentarios."
+        divider={false}
         actions={(
           <>
             <SecondaryButton icon="folder_zip" onClick={handleDownloadZip}>Descargar ZIP</SecondaryButton>
@@ -205,6 +207,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
           getTypeName={getNombreTipo}
           onEdit={handleEditClick}
           onDelete={handleDeleteClick}
+          className={documentosHistoricos.length > 0 ? '' : FLUSH_END_CLASS}
         />
       )}
 
@@ -215,6 +218,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
           getTypeName={getNombreTipo}
           onDelete={handleDeleteClick}
           isHistory
+          className={`mt-6 ${FLUSH_END_CLASS}`}
         />
       )}
 

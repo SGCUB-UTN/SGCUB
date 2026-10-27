@@ -7,6 +7,31 @@ export const getCuotas = async () => {
   return response.data
 }
 
+export const getCuota = async (cuotaId) => {
+  const response = await api.get(`${cuotasEndpoint}${cuotaId}/`)
+  return response.data
+}
+
+export const getCuotaPeriodSummary = async (period) => {
+  const response = await api.get(`${cuotasEndpoint}periodo/`, { params: { periodo: period } })
+  return response.data
+}
+
+export const getUnpaidCuotas = async (period) => {
+  const response = await api.get(`${cuotasEndpoint}periodo/impagas/`, { params: { periodo: period } })
+  return response.data.results
+}
+
+export const getCuotaTaskRuns = async (period) => {
+  const response = await api.get(`${cuotasEndpoint}ejecuciones/`, { params: { periodo: period } })
+  return response.data
+}
+
+export const getCuotaTaskRun = async (runId) => {
+  const response = await api.get(`${cuotasEndpoint}ejecuciones/${runId}/`)
+  return response.data
+}
+
 export const postCuota = async (cuota) => {
   const response = await api.post(cuotasEndpoint, cuota)
   return response.data

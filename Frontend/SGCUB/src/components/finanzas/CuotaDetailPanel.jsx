@@ -10,6 +10,25 @@ import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 
 const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm'
 
+const LAYOUTS = {
+  cards: {
+    grid: 'grid grid-cols-1 lg:grid-cols-3 gap-4',
+    main: 'lg:col-span-2 min-w-0',
+    side: 'flex flex-col gap-4 min-w-0',
+    concepts: `${CARD_CLASS} p-4`,
+    receipts: `${CARD_CLASS} p-4`,
+    summary: `${CARD_CLASS} p-4`,
+  },
+  flat: {
+    grid: 'grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-outline-variant/30',
+    main: 'lg:col-span-2 min-w-0 pb-4 lg:pb-0 lg:pr-6',
+    side: 'flex flex-col divide-y divide-outline-variant/30 min-w-0 pt-4 lg:pt-0 lg:pl-6',
+    concepts: '',
+    receipts: 'pb-4',
+    summary: 'pt-4',
+  },
+}
+
 const CARD_TITLE_CLASS = `${SUMMARY_GROUP_CLASS} mb-0`
 
 const ICON_BUTTON_CLASS = 'w-9 h-9 shrink-0 inline-flex items-center justify-center rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
@@ -93,13 +112,13 @@ function DueDatesBar({ cuota }) {
   )
 }
 
-function ConceptsCard({ cuota, onRemove }) {
+function ConceptsCard({ cuota, onRemove, className }) {
   const items = cuota.items ?? []
   const charges = items.filter((item) => !isAdjustment(item))
   const adjustments = items.filter(isAdjustment)
 
   return (
-    <div className={`${CARD_CLASS} flex flex-col gap-3 p-4 h-full`} role="region" aria-label="Detalle de conceptos">
+    <div className={`${className} flex flex-col gap-3 h-full`} role="region" aria-label="Detalle de conceptos">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <h4 className={CARD_TITLE_CLASS}>Detalle de conceptos</h4>
         <DueDatesBar cuota={cuota} />
@@ -147,12 +166,12 @@ function SummaryRow({ label, value, className = 'text-on-surface' }) {
   )
 }
 
-function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
+function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, className }) {
   const paid = isPaid(cuota)
   const pending = Number(cuota.saldo_pendiente ?? 0)
   const payable = !paid && pending > 0
   return (
-    <div className={`${CARD_CLASS} flex flex-col gap-3 p-4`} role="region" aria-label="Resumen de pago">
+    <div className={`${className} flex flex-col gap-3`} role="region" aria-label="Resumen de pago">
       <h4 className={CARD_TITLE_CLASS}>Resumen de pago</h4>
       <div className="flex flex-col gap-1.5 text-base">
         <SummaryRow label="Total cuota" value={formatAmount(Number(cuota.monto_total ?? 0))} />
@@ -168,7 +187,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
           )}
         </div>
       </div>
-      {(onPay || onAssignBenefit) && (
+      {(onPay || onAssignBenefit || extraActions) && (
         <div className="flex flex-col gap-2 [&>button]:justify-center">
           {onPay && payable && (
             <PrimaryButton icon="payments" onClick={() => onPay(cuota)}>
@@ -180,13 +199,14 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit }) {
               Agregar descuento
             </SecondaryButton>
           )}
+          {extraActions}
         </div>
       )}
     </div>
   )
 }
 
-function ReceiptsCard({ cuotaId, onOpen }) {
+function ReceiptsCard({ cuotaId, onOpen, className }) {
   const [receipts, setReceipts] = useState({ loading: true, error: '', items: [] })
 
   useEffect(() => {
@@ -198,7 +218,7 @@ function ReceiptsCard({ cuotaId, onOpen }) {
   }, [cuotaId])
 
   return (
-    <div className={`${CARD_CLASS} flex flex-col gap-2 p-4 min-w-0`} role="region" aria-label="Comprobantes asociados">
+    <div className={`${className} flex flex-col gap-2 min-w-0`} role="region" aria-label="Comprobantes asociados">
       <h4 className={CARD_TITLE_CLASS}>Comprobantes asociados</h4>
       {receipts.loading && (
         <p className="flex items-center gap-2 text-base text-on-surface-variant" role="status">
@@ -223,7 +243,8 @@ function ReceiptsCard({ cuotaId, onOpen }) {
   )
 }
 
-function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged }) {
+function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
+  const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState({ loading: false, error: null, data: null })
   const [removing, setRemoving] = useState(null)
@@ -241,13 +262,13 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged })
   return (
     <tr className="bg-surface-container-low/60">
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 min-w-0">
-            <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemoving : undefined} />
+        <div className={layout.grid}>
+          <div className={layout.main}>
+            <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemoving : undefined} className={layout.concepts} />
           </div>
-          <div className="flex flex-col gap-4 min-w-0">
-            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={openReceipt} />
-            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} />
+          <div className={layout.side}>
+            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={openReceipt} className={layout.receipts} />
+            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
           </div>
         </div>
 

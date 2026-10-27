@@ -1,16 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
-import { deleteCuota, getCuotas, patchCuota, postCuota } from '../api/cuotas'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { deleteCuota, getCuota, patchCuota, postCuota } from '../api/cuotas'
 import { getSocios } from '../api/socios'
 import AddCuotaModal from '../components/cuota/AddCuotaModal'
-import CuotaTable from '../components/cuota/CuotaTable'
+import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
 import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
 import EditCuotaModal from '../components/cuota/EditCuotaModal'
+import PeriodKpis from '../components/cuota/PeriodKpis'
+import PeriodSelector from '../components/cuota/PeriodSelector'
+import SectionHeading from '../components/shared/SectionHeading'
+import TaskRunList from '../components/cuota/TaskRunList'
+import TaskRunLogModal from '../components/cuota/TaskRunLogModal'
+import UnpaidCuotasTable from '../components/cuota/UnpaidCuotasTable'
+import { isValidPeriod } from '../components/cuota/cuotaPeriod'
 import PageHeader from '../components/shared/PageHeader'
-import StatCard from '../components/shared/StatCard'
+import { currentPeriod } from '../components/shared/periodFormat'
 import useAssignBenefit from '../hooks/useAssignBenefit'
+import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import { collectErrorMessages, formatDni } from '../components/personas/format'
-import { CUOTA_STATES, countByState, isOverdue } from '../components/finanzas/cuotaStates'
 
 const FORMULARIO_INICIAL = {
   socio_id: '',
@@ -19,15 +27,19 @@ const FORMULARIO_INICIAL = {
   fecha_venc2: '',
 }
 
+const SECTION_CLASS = 'p-4 sm:p-5'
+const UPCOMING_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold opacity-50 cursor-not-allowed'
+
 const esSocioActivo = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase() === 'activo'
 
 function Cuotas() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedPeriod = searchParams.get('periodo')
+  const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
+  const { summary, unpaid, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
-  const [cuotas, setCuotas] = useState([])
   const [socios, setSocios] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
   const [modalAgregar, setModalAgregar] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
   const [modalEliminar, setModalEliminar] = useState(false)
@@ -35,27 +47,10 @@ function Cuotas() {
   const [guardando, setGuardando] = useState(false)
   const [errorFormulario, setErrorFormulario] = useState('')
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
+  const [logRun, setLogRun] = useState(null)
+  const [actionError, setActionError] = useState('')
 
-  const cargarDatos = async () => {
-    try {
-      setIsLoading(true)
-      setError('')
-      const [respuestaCuotas, respuestaSocios] = await Promise.all([
-        getCuotas(),
-        getSocios(),
-      ])
-      setCuotas(respuestaCuotas ?? [])
-      setSocios(respuestaSocios ?? [])
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'No se pudieron cargar las cuotas.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    cargarDatos()
-  }, [])
+  const changePeriod = (value) => setSearchParams({ periodo: value })
 
   const sociosOptions = useMemo(() => socios
     .filter(esSocioActivo)
@@ -64,34 +59,39 @@ function Cuotas() {
       label: `${socio.apellido}, ${socio.nombre} - DNI ${formatDni(socio.dni)}`,
     })), [socios])
 
-  const resumen = useMemo(() => {
-    const total = cuotas.length
-    const vencidas = cuotas.filter(isOverdue).length
-    const pagas = countByState(cuotas, CUOTA_STATES.PAGA)
-
-    return {
-      total: total.toLocaleString('es-AR'),
-      vencidas: vencidas.toLocaleString('es-AR'),
-      pagas: pagas.toLocaleString('es-AR'),
-    }
-  }, [cuotas])
-
   const abrirAgregar = () => {
-    setFormulario(FORMULARIO_INICIAL)
+    setFormulario({ ...FORMULARIO_INICIAL, periodo: period })
     setErrorFormulario('')
     setModalAgregar(true)
+    if (socios.length === 0) {
+      getSocios()
+        .then((respuesta) => setSocios(respuesta ?? []))
+        .catch(() => setErrorFormulario('No se pudieron cargar los socios.'))
+    }
   }
 
-  const abrirEditar = (cuota) => {
-    setCuotaSeleccionada(cuota)
-    setFormulario({
-      socio_id: cuota.socio?.socio_id ?? '',
-      periodo: cuota.periodo ?? '',
-      fecha_venc1: cuota.fecha_venc1 ?? '',
-      fecha_venc2: cuota.fecha_venc2 ?? '',
-    })
+  const abrirEditar = async (row) => {
+    setActionError('')
+    try {
+      const cuota = await getCuota(row.cuota_id)
+      setCuotaSeleccionada(cuota)
+      setFormulario({
+        socio_id: cuota.socio?.socio_id ?? '',
+        periodo: cuota.periodo ?? '',
+        fecha_venc1: cuota.fecha_venc1 ?? '',
+        fecha_venc2: cuota.fecha_venc2 ?? '',
+      })
+      setErrorFormulario('')
+      setModalEditar(true)
+    } catch {
+      setActionError('No se pudo abrir la cuota para editarla.')
+    }
+  }
+
+  const abrirEliminar = (row) => {
+    setCuotaSeleccionada(row)
     setErrorFormulario('')
-    setModalEditar(true)
+    setModalEliminar(true)
   }
 
   const cerrarModal = () => {
@@ -130,7 +130,7 @@ function Cuotas() {
       }
 
       cerrarModal()
-      await cargarDatos()
+      reload()
     } catch (requestError) {
       const data = requestError.response?.data
       const message = data && typeof data === 'object'
@@ -151,7 +151,7 @@ function Cuotas() {
     try {
       await deleteCuota(cuotaSeleccionada.cuota_id)
       cerrarModal()
-      await cargarDatos()
+      reload()
     } catch (requestError) {
       setErrorFormulario(requestError.response?.data?.detail || 'No se pudo eliminar la cuota.')
     } finally {
@@ -164,30 +164,65 @@ function Cuotas() {
       <PageHeader
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Cuotas' }]}
         title="Cuotas"
+        actions={(
+          <div className="flex flex-wrap items-center gap-2.5">
+            <PeriodSelector value={period} options={summary.data?.periods} onChange={changePeriod} />
+            <button type="button" aria-disabled="true" title="Disponible próximamente" className={UPCOMING_BUTTON_CLASS}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">notifications</span>
+              Notificar
+            </button>
+          </div>
+        )}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-        <StatCard label="Total cuotas" value={resumen.total} icon="receipt" tone="neutral" />
-        <StatCard label="Cuotas vencidas" value={resumen.vencidas} icon="warning" tone="warning" />
-        <StatCard label="Cuotas pagas" value={resumen.pagas} icon="task_alt" tone="positive" />
+      <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
+        <div role="region" aria-labelledby="billing-phase-title">
+          <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" />
+          <div className="px-4 sm:px-5 py-3">
+            <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
+          </div>
+        </div>
+
+        <div role="region" aria-labelledby="period-kpis-title">
+          <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" />
+          <div className={SECTION_CLASS}>
+            <PeriodKpis
+              summary={summary.data}
+              unpaid={unpaid.data}
+              isLoading={summary.isLoading || unpaid.isLoading}
+              error={summary.error || unpaid.error}
+            />
+          </div>
+        </div>
+
+        <div role="region" aria-labelledby="task-runs-title">
+          <SectionHeading id="task-runs-title" icon="history" title="Historial de automatizaciones" />
+          <div className={SECTION_CLASS}>
+            <TaskRunList runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
+          </div>
+        </div>
+
+        <div role="region" aria-labelledby="unpaid-cuotas-title">
+          <SectionHeading id="unpaid-cuotas-title" icon="pending_actions" title="Cuotas impagas al día de la fecha" />
+          {actionError && (
+            <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
+          )}
+          <UnpaidCuotasTable
+            key={period}
+            rows={unpaid.data ?? []}
+            isLoading={unpaid.isLoading}
+            error={unpaid.error}
+            period={period}
+            onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
+            onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
+            onEdit={abrirEditar}
+            onDelete={abrirEliminar}
+            onChanged={reload}
+          />
+        </div>
       </div>
 
-      <section aria-label="Cuotas">
-        <CuotaTable
-          data={cuotas}
-          isLoading={isLoading}
-          error={error}
-          onAdd={abrirAgregar}
-          onEdit={abrirEditar}
-          onDelete={(cuota) => {
-            setCuotaSeleccionada(cuota)
-            setModalEliminar(true)
-          }}
-          onPay={(cuota) => openPayment({ socioId: cuota.socio.socio_id, cuotaIds: [cuota.cuota_id], onSuccess: cargarDatos })}
-          onAssignBenefit={(cuota) => openBenefit({ socioId: cuota.socio.socio_id, cuotaId: cuota.cuota_id, onSuccess: cargarDatos })}
-          onChanged={cargarDatos}
-        />
-      </section>
+      <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 
       <AddCuotaModal
         opened={modalAgregar}

@@ -418,7 +418,7 @@ def revert_configuration_version(version, user=None, responsable=""):
     )
 
 
-def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS):
+def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, created=None):
     today = today or timezone.localdate()
     fecha = fecha or today
     if not isinstance(fecha, date):
@@ -478,17 +478,10 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS):
             result["cuotas_creadas"] += 1
             result["items_sociales"] += concepts.count(ConceptoItemChoices.CUOTA_SOCIAL)
             result["items_deportivos"] += concepts.count(ConceptoItemChoices.CUOTA_DEPORTIVA)
+            if created is not None:
+                created.append((period, socio, cuota))
 
     return result
-
-
-def generate_scheduled_cuotas(today=None):
-    """Runs every day: generates the month's cuotas only on the day set in the configuration in force."""
-    today = today or timezone.localdate()
-    generation_day = ConfiguracionFinanciera.load(today).dia_generacion
-    if today.day != generation_day:
-        return {"periodo": today.strftime(PERIOD_FORMAT), "cuotas_creadas": 0, "dia_generacion": generation_day}
-    return generar_cuotas_mensuales(today, today=today)
 
 
 def pending_amounts(cuotas, ignored_origin=None):
@@ -943,7 +936,7 @@ def stale_state_filter(today):
     )
 
 
-def apply_surcharges(today=None):
+def apply_surcharges(today=None, applied=None):
     today = today or timezone.localdate()
     previous_states = dict(
         Cuota.objects.filter(movimiento__isnull=False)
@@ -965,6 +958,8 @@ def apply_surcharges(today=None):
             key = "recargos_primer_vencimiento" if number == 1 else "recargos_segundo_vencimiento"
             result[key] += 1
             result["monto_total"] += item.monto
+            if applied is not None:
+                applied.append((number, item))
     current_states = Cuota.objects.filter(pk__in=previous_states).values_list("pk", "estado_cuota")
     result["estados_actualizados"] = sum(1 for pk, state in current_states if previous_states[pk] != state)
     return result
