@@ -1,4 +1,5 @@
 import DataTable from '../shared/DataTable'
+import { FLUSH_TABLE_CLASS } from '../shared/flushTable'
 import { formatDni, formatPhone } from '../personas/format'
 
 function LegalGuardianBadge({ isLegalGuardian }) {
@@ -31,10 +32,10 @@ function RowAction({ icon, label, className, onClick }) {
 }
 
 // Family links / emergency contacts of a jugador or docente. The actions column only shows the actions whose handler is given.
-function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsableLegal = true }) {
+function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsableLegal = true, className = '' }) {
   return (
     <DataTable
-      className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
+      className={`${FLUSH_TABLE_CLASS} ${className}`}
       headers={(
         <>
           <th className="py-3 px-4" scope="col">Nombre y apellido</th>

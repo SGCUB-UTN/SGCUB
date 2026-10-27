@@ -1,23 +1,13 @@
 import { CUOTA_STATES, isOverdue } from '../finanzas/cuotaStates'
+import { KpiColumn, KpiGrid } from '../shared/Kpi'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney } from './cuotaPeriod'
-
-const COLUMN_CLASS = 'min-w-0 flex flex-col xl:px-6 xl:first:pl-0 xl:last:pr-0'
-const LABEL_CLASS = 'text-sm font-semibold uppercase tracking-wider text-on-surface-variant'
-const VALUE_CLASS = 'mt-1 text-2xl font-bold tabular-nums leading-tight'
-const CAPTION_CLASS = 'mt-1 text-sm text-on-surface-variant'
 
 const plural = (count, singular, pluralForm) => `${formatCount(count)} ${count === 1 ? singular : pluralForm}`
 
 const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
 
-function KpiColumn({ label, value, tone = 'text-on-surface', caption }) {
-  return (
-    <div className={COLUMN_CLASS}>
-      <h3 className={LABEL_CLASS}>{label}</h3>
-      <p className={`${VALUE_CLASS} ${tone}`} title={formatMoney(value)}>{formatWholeMoney(value)}</p>
-      <p className={CAPTION_CLASS}>{caption}</p>
-    </div>
-  )
+function AmountKpi({ value, ...props }) {
+  return <KpiColumn value={formatWholeMoney(value)} title={formatMoney(value)} {...props} />
 }
 
 function KpiSkeleton() {
@@ -48,29 +38,29 @@ export default function PeriodKpis({ summary, unpaid, isLoading, error }) {
   const overdue = unpaid.filter(isOverdue).length
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 xl:gap-0 xl:divide-x xl:divide-outline-variant/40">
-      <KpiColumn
+    <KpiGrid columns={4}>
+      <AmountKpi
         label="Monto facturado"
         value={totals.billed}
         caption={plural(totals.generated, 'cuota emitida', 'cuotas emitidas')}
       />
-      <KpiColumn
+      <AmountKpi
         label={rate == null ? 'Recaudado' : `Recaudado (${formatPercentage(rate)})`}
         value={totals.collected}
         tone="text-emerald-700"
         caption={plural(totals.generated - totals.unpaid, 'cuota cobrada', 'cuotas cobradas')}
       />
-      <KpiColumn
+      <AmountKpi
         label="Pendiente de cobro"
         value={pending}
         caption={plural(upcoming, 'cuota a vencer', 'cuotas a vencer')}
       />
-      <KpiColumn
+      <AmountKpi
         label="Interés por vencimiento"
         value={surcharges}
         tone={surcharges > 0 ? 'text-error' : 'text-on-surface'}
         caption={plural(overdue, 'cuota impaga', 'cuotas impagas')}
       />
-    </div>
+    </KpiGrid>
   )
 }

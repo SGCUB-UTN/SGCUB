@@ -3,6 +3,7 @@ import { formatDni, formatPhone } from '../format'
 import { SecondaryButton, Field, TabHeader, EmptyState } from './parts'
 import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
+import { FLUSH_END_CLASS } from '../../shared/flushTable'
 
 function formatearDomicilioContacto(person) {
   if (!person?.domicilio_calle && !person?.domicilio_numero) return ''
@@ -177,10 +178,11 @@ export default function FamilyTab({
     : `Personas vinculadas al ${etiquetaTitular} para notificaciones y contacto de emergencia`
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <TabHeader
         title="Vínculos familiares y contactos de emergencia"
         description={description}
+        divider={false}
         actions={onAdd && (
           <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar familiar / contacto</SecondaryButton>
         )}
@@ -199,6 +201,7 @@ export default function FamilyTab({
           onEdit={onEdit ? setContactToEdit : undefined}
           onDelete={onDelete ? setContactToDelete : undefined}
           mostrarResponsableLegal={mostrarResponsableLegal}
+          className={FLUSH_END_CLASS}
         />
       )}
 
