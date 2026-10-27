@@ -28,7 +28,6 @@ const FORMULARIO_INICIAL = {
 }
 
 const SECTION_CLASS = 'p-4 sm:p-5'
-const SECONDARY_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded border border-outline-variant/50 text-on-surface text-sm font-semibold hover:bg-surface-container-low transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 const UPCOMING_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold opacity-50 cursor-not-allowed'
 
 const esSocioActivo = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase() === 'activo'
@@ -177,9 +176,11 @@ function Cuotas() {
       />
 
       <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
-        <SectionHeading id="period-kpis-title" icon="checklist_rtl" title="Etapa del mes" />
-        <div className="px-4 sm:px-5 py-3">
-          <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
+        <div role="region" aria-labelledby="billing-phase-title">
+          <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" />
+          <div className="px-4 sm:px-5 py-3">
+            <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
+          </div>
         </div>
 
         <div role="region" aria-labelledby="period-kpis-title">
@@ -216,6 +217,7 @@ function Cuotas() {
             onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
             onEdit={abrirEditar}
             onDelete={abrirEliminar}
+            onChanged={reload}
           />
         </div>
       </div>
