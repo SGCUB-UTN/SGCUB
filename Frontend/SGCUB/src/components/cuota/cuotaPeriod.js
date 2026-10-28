@@ -1,3 +1,4 @@
+import { getGeneroLabel } from '../categorias/categoriaFormat'
 import { cuotaStateLabel } from '../finanzas/cuotaStates'
 
 export const CUOTA_TYPES = {
@@ -79,6 +80,8 @@ const CSV_COLUMNS = [
   ['DNI', (row) => row.dni],
   ['Email', (row) => row.email],
   ['Tipo', (row) => cuotaTypeLabel(row.type)],
+  ['Categoría', (row) => row.categoria ?? ''],
+  ['Género', (row) => (row.categoria_genero ? getGeneroLabel(row.categoria_genero) : '')],
   ['Estado', (row) => cuotaStateLabel(row.estado_cuota)],
   ['Período', (row) => row.periodo],
   ['Cuota', (row) => csvAmount(row.cuota_amount)],
@@ -93,7 +96,7 @@ const csvCell = (value) => {
   return /[";\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
-export function downloadUnpaidCsv(rows, period) {
+export function downloadCuotasCsv(rows, period) {
   const lines = [
     CSV_COLUMNS.map(([header]) => csvCell(header)).join(';'),
     ...rows.map((row) => CSV_COLUMNS.map(([, value]) => csvCell(value(row))).join(';')),
@@ -101,7 +104,7 @@ export function downloadUnpaidCsv(rows, period) {
   const url = URL.createObjectURL(new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `cuotas-impagas-${period}.csv`
+  link.download = `cuotas-${period}.csv`
   document.body.appendChild(link)
   link.click()
   link.remove()

@@ -12,10 +12,10 @@ import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import SectionHeading from '../components/shared/SectionHeading'
 import TaskRunLogModal from '../components/cuota/TaskRunLogModal'
-import UnpaidCuotasTable from '../components/cuota/UnpaidCuotasTable'
+import PeriodCuotasTable from '../components/cuota/PeriodCuotasTable'
 import { isValidPeriod } from '../components/cuota/cuotaPeriod'
 import PageHeader from '../components/shared/PageHeader'
-import { currentPeriod } from '../components/shared/periodFormat'
+import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -53,8 +53,6 @@ function Cuotas() {
   const [actionError, setActionError] = useState('')
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
-
-  const unpaidRows = useMemo(() => cuotas.data?.filter((row) => !row.paid) ?? null, [cuotas.data])
 
   const sociosOptions = useMemo(() => socios
     .filter(esSocioActivo)
@@ -201,14 +199,14 @@ function Cuotas() {
 
         <AutomationStatus runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
 
-        <div role="region" aria-labelledby="unpaid-cuotas-title">
-          <SectionHeading id="unpaid-cuotas-title" icon="pending_actions" title="Cuotas impagas al día de la fecha" />
+        <div role="region" aria-labelledby="period-cuotas-title">
+          <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} />
           {actionError && (
             <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
           )}
-          <UnpaidCuotasTable
+          <PeriodCuotasTable
             key={period}
-            rows={unpaidRows ?? []}
+            rows={cuotas.data ?? []}
             isLoading={cuotas.isLoading}
             error={cuotas.error}
             period={period}
