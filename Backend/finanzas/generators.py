@@ -35,13 +35,16 @@ class GeneradorItemsCuota:
         self.application_date = application_date
         self.configuration = configuration or ConfiguracionFinanciera.load(application_date)
 
-    def build_items(self):
+    def build_items(self, include_registration=False):
         if not self._is_member_active():
             return []
 
         items = [self._item(ConceptoItemChoices.CUOTA_SOCIAL, self.configuration.monto_cuota_social)]
         if self._is_player_active():
             items.append(self._item(ConceptoItemChoices.CUOTA_DEPORTIVA, self.configuration.monto_cuota_deportiva))
+            registration_period = self.application_date.replace(day=1) >= self.socio.fecha_alta.replace(day=1)
+            if include_registration and registration_period and self.configuration.monto_inscripcion > 0:
+                items.append(self._item(ConceptoItemChoices.INSCRIPCION, self.configuration.monto_inscripcion))
         items.extend(self._benefit_items(items))
         return items
 

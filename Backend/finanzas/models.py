@@ -19,6 +19,7 @@ OVERDUE_CUOTA_STATES = (EstadoCuotaChoices.VENCIDA_1, EstadoCuotaChoices.VENCIDA
 class ConceptoItemChoices(models.TextChoices):
     CUOTA_SOCIAL = "CuotaSocial", "Cuota Social"
     CUOTA_DEPORTIVA = "CuotaDeportiva", "Cuota Deportiva"
+    INSCRIPCION = "Inscripcion", "Inscripción"
     MORA = "Mora", "Recargo por mora"
     CONDONACION_MORA = "CondonacionMora", "Condonación de recargo por mora"
     DESCUENTO_UNICO = "DescuentoUnico", "Descuento único"
@@ -459,8 +460,7 @@ class ConfiguracionFinanciera(models.Model):
 
     configuracion_financiera_id = models.AutoField(primary_key=True)
     periodo_vigencia = models.CharField(max_length=7, default=INITIAL_CONFIGURATION_PERIOD)
-    # Not charged yet: the registration fee will be developed later
-    monto_inscripcion = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    monto_inscripcion = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1000.00"))
     monto_cuota_social = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1000.00"))
     monto_cuota_deportiva = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1500.00"))
     dia_vencimiento_1 = models.PositiveSmallIntegerField(default=10)

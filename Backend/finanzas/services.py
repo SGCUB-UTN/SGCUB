@@ -173,19 +173,28 @@ def lock_cuota_charge(cuota):
     return account, movement
 
 
+def has_registration_fee(socio_id):
+    return ItemCuota.all_objects.filter(
+        cuota__movimiento__cuenta_corriente__socio_id=socio_id,
+        concepto=ConceptoItemChoices.INSCRIPCION,
+    ).exists()
+
+
 @transaction.atomic
 def create_cuota(socio, period, first_due_date=None, second_due_date=None, configuration=None, today=None):
     today = today or timezone.localdate()
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
     configuration = configuration or ConfiguracionFinanciera.load(period)
-    items = GeneradorItemsCuota(socio, first_day, configuration).build_items()
-    if not items:
-        raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
-
     account = lock_account(socio)
     if account.cuotas.filter(periodo=period).exists():
         raise CuotaDuplicadaError(f"El socio ya tiene una cuota para el período {period}.")
+
+    items = GeneradorItemsCuota(socio, first_day, configuration).build_items(
+        include_registration=not has_registration_fee(socio.pk),
+    )
+    if not items:
+        raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
 
     cuota = Cuota.objects.create(
         periodo=period,
@@ -246,18 +255,30 @@ def _ensure_player_cuota_for_period(socio, period, today):
     if is_locked(cuota):
         return cuota
 
-    generated_items = GeneradorItemsCuota(socio, parse_period(period)).build_items()
+    generated_items = GeneradorItemsCuota(socio, parse_period(period)).build_items(
+        include_registration=not has_registration_fee(socio.pk),
+    )
     sports_item = next(
         (item for item in generated_items if item.concepto == ConceptoItemChoices.CUOTA_DEPORTIVA),
         None,
     )
-    if sports_item is None or cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA).exists():
+    registration_item = next(
+        (item for item in generated_items if item.concepto == ConceptoItemChoices.INSCRIPCION),
+        None,
+    )
+    items_to_add = []
+    if sports_item is not None and not cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA).exists():
+        items_to_add.append(sports_item)
+    if registration_item is not None and not cuota.items.filter(concepto=ConceptoItemChoices.INSCRIPCION).exists():
+        items_to_add.append(registration_item)
+    if not items_to_add:
         return cuota
 
-    sports_item.cuota = cuota
-    sports_item.save()
+    for item in items_to_add:
+        item.cuota = cuota
+        item.save()
     sync_cuota_charge(cuota)
-    refresh_cuota_scholarships(cuota, socio.pk, "Beca recalculada por el alta de la cuota deportiva")
+    refresh_cuota_scholarships(cuota, socio.pk, "Beca recalculada por actualización de conceptos de cuota")
     return cuota
 
 
@@ -334,6 +355,7 @@ def affected_cuotas(period):
 CONFIGURATION_AMOUNTS = (
     (ConceptoItemChoices.CUOTA_SOCIAL, "monto_cuota_social"),
     (ConceptoItemChoices.CUOTA_DEPORTIVA, "monto_cuota_deportiva"),
+    (ConceptoItemChoices.INSCRIPCION, "monto_inscripcion"),
 )
 
 

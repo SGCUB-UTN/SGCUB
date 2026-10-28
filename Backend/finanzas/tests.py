@@ -61,6 +61,7 @@ from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
 	create_cuota,
+	create_or_update_player_current_cuota,
 	cuota_state,
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
@@ -149,6 +150,23 @@ class GeneradorItemsCuotaTests(TestCase):
 
 		self.assertEqual(self.conceptos(socio), ["CuotaSocial", "CuotaDeportiva"])
 
+	def test_primera_cuota_de_jugador_incluye_inscripcion(self):
+		socio = crear_socio("20000005", con_jugador=True)
+		items = GeneradorItemsCuota(socio, date(2026, 10, 1)).build_items(include_registration=True)
+
+		inscripcion = next(item for item in items if item.concepto == "Inscripcion")
+		self.assertEqual(inscripcion.monto, Decimal("1000.00"))
+
+	def test_periodo_de_inscripcion_se_define_por_fecha_alta_del_socio(self):
+		socio = crear_socio("20000006", con_jugador=True)
+		socio.fecha_alta = date(2026, 11, 5)
+
+		items_octubre = GeneradorItemsCuota(socio, date(2026, 10, 1)).build_items(include_registration=True)
+		items_noviembre = GeneradorItemsCuota(socio, date(2026, 11, 1)).build_items(include_registration=True)
+
+		self.assertNotIn("Inscripcion", [item.concepto for item in items_octubre])
+		self.assertIn("Inscripcion", [item.concepto for item in items_noviembre])
+
 	def test_jugador_dado_de_baja_solo_genera_item_social(self):
 		socio = crear_socio("20000003", con_jugador=True, jugador_inactivo=True)
 
@@ -190,6 +208,7 @@ class ConfiguracionFinancieraTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(Decimal(response.data["monto_cuota_social"]), Decimal("1000.00"))
 		self.assertEqual(Decimal(response.data["monto_cuota_deportiva"]), Decimal("1500.00"))
+		self.assertEqual(Decimal(response.data["monto_inscripcion"]), Decimal("1000.00"))
 		self.assertEqual(response.data["dia_vencimiento_1"], 10)
 		self.assertEqual(response.data["dia_vencimiento_2"], 20)
 		self.assertEqual(Decimal(response.data["valor_recargo_1"]), Decimal("0.00"))
@@ -211,7 +230,7 @@ class ConfiguracionFinancieraTests(APITestCase):
 		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio, periodo=self.periodo)
 		self.assertEqual(cuota.fecha_venc1, inicio.replace(day=5))
 		self.assertEqual(cuota.fecha_venc2, inicio.replace(day=15))
-		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("4000.00"))
 
 	def test_la_nueva_version_no_afecta_los_periodos_anteriores(self):
 		self.actualizar(monto_cuota_social="1200.00")
@@ -387,16 +406,33 @@ class ActualizacionCuotasPorConfiguracionTests(APITestCase):
 		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 1)
 		cuota.refresh_from_db()
 		cuota.movimiento.refresh_from_db()
-		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
-		self.assertEqual(cuota.movimiento.cuenta_corriente.saldo, Decimal("-3000.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("4000.00"))
+		self.assertEqual(cuota.movimiento.cuenta_corriente.saldo, Decimal("-4000.00"))
 		self.assertEqual(
 			sorted(cuota.items.values_list("concepto", "monto")),
-			[("CuotaDeportiva", Decimal("1800.00")), ("CuotaSocial", Decimal("1200.00"))],
+			[
+				("CuotaDeportiva", Decimal("1800.00")),
+				("CuotaSocial", Decimal("1200.00")),
+				("Inscripcion", Decimal("1000.00")),
+			],
 		)
 		anulado = ItemCuota.all_objects.anulados().get(cuota=cuota, concepto="CuotaSocial")
 		self.assertEqual(anulado.monto, Decimal("1000.00"))
 		self.assertEqual(anulado.usuario_anulacion, self.usuario)
 		self.assertIn(self.periodo, anulado.motivo_anulacion)
+
+	def test_actualiza_el_importe_de_inscripcion_en_la_cuota_impaga(self):
+		cuota = self.cuota("60000006", con_jugador=True)
+
+		response = self.nueva_version(monto_inscripcion="1200.00")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		cuota.refresh_from_db()
+		self.assertEqual(
+			cuota.items.get(concepto="Inscripcion").monto,
+			Decimal("1200.00"),
+		)
+		self.assertEqual(cuota.movimiento.monto, Decimal("3700.00"))
 
 	def test_actualiza_las_cuotas_parcialmente_pagas(self):
 		cuota = self.cuota("60000002")
@@ -974,13 +1010,39 @@ class GeneracionCuotasMensualesTests(TestCase):
 		esperados = {
 			socio_activo: ["CuotaSocial"],
 			jugador_de_baja: ["CuotaSocial"],
-			jugador_activo: ["CuotaSocial", "CuotaDeportiva"],
 		}
 		for socio, conceptos in esperados.items():
 			for periodo in ("2026-10", "2026-11", "2026-12"):
 				cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio, periodo=periodo)
 				self.assertEqual(sorted(cuota.items.values_list("concepto", flat=True)), sorted(conceptos))
+		cuotas_jugador = {
+			periodo: sorted(Cuota.objects.get(
+				movimiento__cuenta_corriente__socio=jugador_activo,
+				periodo=periodo,
+			).items.values_list("concepto", flat=True))
+			for periodo in ("2026-10", "2026-11", "2026-12")
+		}
+		self.assertEqual(cuotas_jugador["2026-10"], ["CuotaDeportiva", "CuotaSocial", "Inscripcion"])
+		self.assertEqual(cuotas_jugador["2026-11"], ["CuotaDeportiva", "CuotaSocial"])
+		self.assertEqual(cuotas_jugador["2026-12"], ["CuotaDeportiva", "CuotaSocial"])
 		self.assertFalse(Cuota.objects.filter(movimiento__cuenta_corriente__socio=socio_de_baja).exists())
+
+	def test_cuota_existente_recibe_inscripcion_al_dar_alta_como_jugador(self):
+		socio = crear_socio("10000005")
+		cuota = create_cuota(socio, "2026-10")
+		Jugador.objects.create(
+			socio=socio,
+			categoria=Categoria.objects.create(nombre="Categoria 10000005", anio_vigente=2026, edad_maxima=18),
+			estado=EstadoDeportivo.objects.get_or_create(nombre="Activo")[0],
+		)
+		socio.refresh_from_db()
+
+		create_or_update_player_current_cuota(socio.pk)
+
+		cuota.refresh_from_db()
+		self.assertTrue(cuota.items.filter(concepto="Inscripcion", monto=Decimal("1000.00")).exists())
+		self.assertTrue(cuota.items.filter(concepto="CuotaDeportiva").exists())
+		self.assertEqual(cuota.movimiento.monto, Decimal("3500.00"))
 
 	def test_jugador_activo_generacion_repetida_no_duplica(self):
 		socio = crear_socio("10000011", con_jugador=True)
@@ -995,10 +1057,10 @@ class GeneracionCuotasMensualesTests(TestCase):
 		self.assertEqual(segundo_resultado["cuotas_creadas"], 0)
 		self.assertEqual(segundo_resultado["cuotas_existentes"], 3)
 		self.assertEqual(cuenta.cuotas.count(), 3)
-		self.assertEqual(cuota.items.count(), 2)
+		self.assertEqual(cuota.items.count(), 3)
 		self.assertEqual(cuota.movimiento.tipo_movimiento, "Cargo")
-		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(cuenta.saldo, Decimal("-7500.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("3500.00"))
+		self.assertEqual(cuenta.saldo, Decimal("-8500.00"))
 
 	def test_generar_periodo_pasado_crea_cuotas_vencidas_con_recargo(self):
 		configuracion = ConfiguracionFinanciera.load()
@@ -1061,10 +1123,10 @@ class CuotaEndpointTests(APITestCase):
 		self.assertEqual(response.data["socio"]["socio_id"], self.socio.pk)
 		self.assertEqual(response.data["fecha_venc1"], "2026-10-10")
 		self.assertEqual(response.data["fecha_venc2"], "2026-10-20")
-		self.assertEqual(Decimal(str(response.data["monto_total"])), Decimal("2500.00"))
+		self.assertEqual(Decimal(str(response.data["monto_total"])), Decimal("3500.00"))
 		cuota = Cuota.objects.get(pk=response.data["cuota_id"])
-		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("3500.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-3500.00"))
 
 	def test_no_permite_dos_cuotas_del_mismo_periodo(self):
 		self.crear()
@@ -1136,14 +1198,14 @@ class CuotaEndpointTests(APITestCase):
 		)
 		sync_cuota_charge(cuota)
 
-		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("2000.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2000.00"))
+		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("3000.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-3000.00"))
 
 		item.delete()
 		sync_cuota_charge(cuota)
 
-		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
+		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("3500.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-3500.00"))
 
 	def test_estado_de_cuenta_lista_cuotas_por_movimientos(self):
 		self.crear()
@@ -1611,14 +1673,14 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertIsNone(response.data["beca"])
 		self.assertEqual(response.data["item"]["concepto"], "DescuentoUnico")
 		self.assertEqual(response.data["item"]["motivo"], "Hermanos en el club")
-		self.assertEqual(self.cargo(), Decimal("2000.00"))
-		self.assertEqual(self.saldo(), Decimal("-2000.00"))
+		self.assertEqual(self.cargo(), Decimal("3000.00"))
+		self.assertEqual(self.saldo(), Decimal("-3000.00"))
 
 	def test_descuento_porcentual_sobre_el_total(self):
 		response = self.asignar(modalidad="Porcentaje", valor="10")
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("250.00"))
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("350.00"))
 
 	def test_validaciones_del_formulario(self):
 		casos = [
@@ -1636,11 +1698,11 @@ class BeneficioCuotaTests(APITestCase):
 				self.assertEqual(response.status_code, 400)
 				if campo:
 					self.assertIn(campo, response.data)
-		self.assertEqual(self.cargo(), Decimal("2500.00"))
+		self.assertEqual(self.cargo(), Decimal("3500.00"))
 		self.assertFalse(Beca.objects.exists())
 
 	def test_los_descuentos_no_pueden_superar_el_total_de_la_cuota(self):
-		self.asignar(valor="2000.00")
+		self.asignar(valor="3000.00")
 
 		response = self.asignar(valor="1000.00")
 
@@ -1660,9 +1722,9 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertTrue(response.data["aplicado_a_cuota"])
 		item = self.cuota.items.get(concepto="Beca")
 		self.assertTrue(item.es_descuento)
-		self.assertEqual(item.monto, Decimal("1250.00"))
+		self.assertEqual(item.monto, Decimal("1750.00"))
 		self.assertEqual(item.motivo, "Hermanos en el club")
-		self.assertEqual(self.cargo(), Decimal("1250.00"))
+		self.assertEqual(self.cargo(), Decimal("1750.00"))
 
 	def test_beca_fuera_de_la_vigencia_no_modifica_la_cuota(self):
 		response = self.asignar(tipo="Beca", fecha_aplicacion="2026-11-01", fecha_fin="2026-12-31")
@@ -1670,7 +1732,7 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertFalse(response.data["aplicado_a_cuota"])
 		self.assertTrue(Beca.objects.exists())
-		self.assertEqual(self.cargo(), Decimal("2500.00"))
+		self.assertEqual(self.cargo(), Decimal("3500.00"))
 
 	def pay(self, amount):
 		response = self.client.post(
@@ -1703,15 +1765,15 @@ class BeneficioCuotaTests(APITestCase):
 		response = self.asignar(valor="500.00")
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(self.cargo(), Decimal("2000.00"))
-		self.assertEqual(self.pending_without_fees(), Decimal("1900.00"))
+		self.assertEqual(self.cargo(), Decimal("3000.00"))
+		self.assertEqual(self.pending_without_fees(), Decimal("2900.00"))
 		self.assertNotEqual(self.state(), EstadoCuotaChoices.PAGA)
 
 	def test_discount_can_cover_the_whole_remaining_amount(self):
 		self.pay("1000.00")
 
-		too_much = self.asignar(valor="1500.01")
-		exact = self.asignar(valor="1500.00")
+		too_much = self.asignar(valor="2500.01")
+		exact = self.asignar(valor="2500.00")
 
 		self.assertEqual(too_much.status_code, 400)
 		self.assertEqual(exact.status_code, 201, exact.data)
@@ -1725,15 +1787,15 @@ class BeneficioCuotaTests(APITestCase):
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertTrue(response.data["aplicado_a_cuota"])
-		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("500.00"))
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("1500.00"))
 		self.assertEqual(Beca.objects.get().porcentaje, Decimal("100.00"))
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
 
 	def test_unpaid_late_fees_are_left_out_of_the_discountable_amount(self):
 		self.add_late_fee("300.00")
 
-		too_much = self.asignar(valor="2500.01")
-		response = self.asignar(valor="2500.00")
+		too_much = self.asignar(valor="3500.01")
+		response = self.asignar(valor="3500.00")
 
 		self.assertEqual(too_much.status_code, 400)
 		self.assertEqual(response.status_code, 201, response.data)
@@ -1745,14 +1807,14 @@ class BeneficioCuotaTests(APITestCase):
 		self.add_late_fee("300.00")
 		self.pay("1000.00")
 
-		self.assertEqual(self.pending_without_fees(), Decimal("1800.00"))
-		response = self.asignar(valor="1800.00")
+		self.assertEqual(self.pending_without_fees(), Decimal("2800.00"))
+		response = self.asignar(valor="2800.00")
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
 
 	def test_paid_cuota_only_accepts_a_scholarship_for_next_periods(self):
-		self.pay("2500.00")
+		self.pay("3500.00")
 
 		descuento = self.asignar(valor="100.00")
 		beca = self.asignar(tipo="Beca", fecha_fin="2026-12-31")
@@ -1760,7 +1822,7 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual(descuento.status_code, 400)
 		self.assertEqual(beca.status_code, 201, beca.data)
 		self.assertFalse(beca.data["aplicado_a_cuota"])
-		self.assertEqual(self.cargo(), Decimal("2500.00"))
+		self.assertEqual(self.cargo(), Decimal("3500.00"))
 
 	def test_listado_de_becas_por_socio(self):
 		self.asignar(tipo="Beca", fecha_fin="2026-12-31")
@@ -1929,7 +1991,7 @@ class CuotaSettledStateTests(APITestCase):
 
 		self.assertNotEqual(self.state(), EstadoCuotaChoices.PAGA)
 
-		self.add_discount_item("1500.00")
+		self.add_discount_item("2500.00")
 
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
 
@@ -1947,7 +2009,7 @@ class CuotaSettledStateTests(APITestCase):
 				self.assertEqual(response.status_code, 400)
 				self.assertIn("paga", response.data["detail"])
 		self.assertTrue(Cuota.objects.filter(pk=self.cuota.pk).exists())
-		self.assertEqual(self.cuota.items.count(), 3)
+		self.assertEqual(self.cuota.items.count(), 4)
 
 
 class ItemCuotaLabelTests(APITestCase):
@@ -1973,6 +2035,7 @@ class ItemCuotaLabelTests(APITestCase):
 		self.assertEqual(labels, {
 			"CuotaSocial": "Cuota Social",
 			"CuotaDeportiva": "Cuota Deportiva",
+			"Inscripcion": "Inscripción",
 			"DescuentoUnico": "Descuento único",
 		})
 
@@ -2006,12 +2069,12 @@ class BecasEnGeneracionDeCuotasTests(TestCase):
 		cuota = self.cuota("2026-11")
 		item = cuota.items.get(concepto="Beca")
 		self.assertTrue(item.es_descuento)
-		self.assertEqual(item.monto, Decimal("1250.00"))
+		self.assertEqual(item.monto, Decimal("1750.00"))
 		self.assertEqual(item.motivo, "Rendimiento deportivo")
-		self.assertEqual(cuota.movimiento.monto, Decimal("1250.00"))
+		self.assertEqual(cuota.movimiento.monto, Decimal("1750.00"))
 		self.assertEqual(self.cuota("2026-12").movimiento.monto, Decimal("1250.00"))
 		self.assertEqual(self.cuota("2027-01").movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-5000.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-5500.00"))
 
 	def test_beca_finalizada_deja_de_aplicarse_y_conserva_el_historial(self):
 		self.beca(date(2026, 10, 1), date(2026, 11, 30), monto=Decimal("500.00"))
@@ -2052,7 +2115,7 @@ class BecasEnGeneracionDeCuotasTests(TestCase):
 		generar_cuotas_mensuales(date(2026, 11, 1), today=date(2026, 11, 1))
 
 		cuota = self.cuota("2026-11")
-		self.assertEqual(self.descuentos(cuota), [Decimal("2000.00"), Decimal("500.00")])
+		self.assertEqual(self.descuentos(cuota), [Decimal("2800.00"), Decimal("700.00")])
 		self.assertEqual(cuota.movimiento.monto, Decimal("0.00"))
 
 	def test_becas_de_otro_socio_no_se_aplican(self):
@@ -2181,9 +2244,13 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 
 		self.assertEqual(
 			[(periodo["periodo"], Decimal(str(periodo["monto_aplicado"]))) for periodo in detalle["periodos"]],
-			[("2026-10", Decimal("2500.00")), ("2026-11", Decimal("500.00"))],
+			[("2026-10", Decimal("3000.00"))],
 		)
-		self.assertEqual(self.desglose(detalle), [("CuotaSocial", Decimal("1500.00")), ("CuotaDeportiva", Decimal("1500.00"))])
+		self.assertEqual(self.desglose(detalle), [
+			("CuotaSocial", Decimal("1000.00")),
+			("CuotaDeportiva", Decimal("1500.00")),
+			("Inscripcion", Decimal("500.00")),
+		])
 
 	def test_correccion_recalcula_el_desglose_sin_el_pago_original(self):
 		original = self.pagar("1000.00")
@@ -2222,7 +2289,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertIn("número de socio", response.data["detail"])
 		self.assertFalse(Pago.objects.exists())
 		self.assertFalse(Imputacion.objects.exists())
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-3500.00"))
 
 
 class ComprobanteListTests(ComprobanteTestBase):
@@ -2904,19 +2971,19 @@ class CuotaVencimientosManualesTests(APITestCase):
 	def test_alta_con_primer_vencimiento_pasado_queda_vencida_con_primer_recargo(self):
 		response = self.create(-2, 4)
 
-		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "2700.00")
+		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "3700.00")
 		self.assertEqual(Cuota.objects.get(pk=response.data["cuota_id"]).recargos_aplicados, 1)
 
 	def test_alta_con_ambos_vencimientos_pasados_aplica_los_dos_recargos(self):
 		response = self.create(-10, -3)
 
-		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_2, "2950.00")
+		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_2, "4050.00")
 		self.assertEqual(Cuota.objects.get(pk=response.data["cuota_id"]).recargos_aplicados, 2)
 
 	def test_alta_con_vencimientos_futuros_queda_en_fecha_sin_recargos(self):
 		response = self.create(3, 10)
 
-		self.assert_cuota(response, EstadoCuotaChoices.EN_FECHA, "2500.00")
+		self.assert_cuota(response, EstadoCuotaChoices.EN_FECHA, "3500.00")
 		self.assertFalse(ItemCuota.objects.filter(cuota_id=response.data["cuota_id"], concepto="Mora").exists())
 
 	def test_editar_vencimientos_a_fechas_pasadas_la_marca_vencida(self):
@@ -2924,14 +2991,14 @@ class CuotaVencimientosManualesTests(APITestCase):
 
 		response = self.edit(cuota_id, -2, 4)
 
-		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "2700.00")
+		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "3700.00")
 
 	def test_editar_vencimientos_a_fechas_futuras_la_vuelve_en_fecha_y_quita_el_recargo(self):
 		cuota_id = self.create(-2, 4).data["cuota_id"]
 
 		response = self.edit(cuota_id, 5, 15)
 
-		self.assert_cuota(response, EstadoCuotaChoices.EN_FECHA, "2500.00")
+		self.assert_cuota(response, EstadoCuotaChoices.EN_FECHA, "3500.00")
 		self.assertFalse(ItemCuota.objects.filter(cuota_id=cuota_id, concepto="Mora").exists())
 		self.assertEqual(Cuota.objects.get(pk=cuota_id).recargos_aplicados, 0)
 
@@ -2940,7 +3007,7 @@ class CuotaVencimientosManualesTests(APITestCase):
 
 		response = self.edit(cuota_id, -10, 4)
 
-		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "2700.00")
+		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_1, "3700.00")
 		self.assertEqual(ItemCuota.objects.filter(cuota_id=cuota_id, concepto="Mora").count(), 1)
 		self.assertEqual(Cuota.objects.get(pk=cuota_id).recargos_aplicados, 1)
 
@@ -2949,7 +3016,7 @@ class CuotaVencimientosManualesTests(APITestCase):
 
 		response = self.edit(cuota_id, -10, -3)
 
-		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_2, "2950.00")
+		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_2, "4050.00")
 		self.assertEqual(ItemCuota.objects.filter(cuota_id=cuota_id, concepto="Mora").count(), 2)
 
 
@@ -3337,7 +3404,11 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(len(cuotas), 3)
 		for cuota in cuotas:
 			conceptos = set(cuota.items.values_list("concepto", flat=True))
-			self.assertEqual(conceptos, {"CuotaSocial", "CuotaDeportiva"})
+			self.assertEqual(
+				conceptos,
+				{"CuotaSocial", "CuotaDeportiva", "Inscripcion"} if cuota == cuotas[0]
+				else {"CuotaSocial", "CuotaDeportiva"},
+			)
 
 	def create_player_for_existing_socio(self, socio):
 		categoria = Categoria.objects.create(
@@ -3378,9 +3449,10 @@ class CurrentAccountOpeningTests(APITestCase):
 		account = CuentaCorriente.objects.get(socio=socio)
 		cuotas = list(Cuota.objects.filter(movimiento__cuenta_corriente=account).order_by("periodo"))
 		self.assertEqual(len(cuotas), 3)
-		for cuota in cuotas:
+		for index, cuota in enumerate(cuotas):
 			self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
-			self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
+			expected_amount = Decimal("3500.00") if index == 0 else Decimal("2500.00")
+			self.assertEqual(cuota.movimiento.monto, expected_amount)
 
 	def test_new_player_adds_sports_charge_to_existing_unpaid_current_cuota(self):
 		persona = Persona.objects.create(
@@ -3401,8 +3473,9 @@ class CurrentAccountOpeningTests(APITestCase):
 		account = CuentaCorriente.objects.get(socio=socio)
 		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), 3)
 		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
-		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(account.saldo, Decimal("-7500.00"))
+		self.assertEqual(cuota.items.filter(concepto="Inscripcion", monto=Decimal("1000.00")).count(), 1)
+		self.assertEqual(cuota.movimiento.monto, Decimal("3500.00"))
+		self.assertEqual(account.saldo, Decimal("-8500.00"))
 
 	def test_new_player_does_not_change_paid_current_cuota(self):
 		persona = Persona.objects.create(
@@ -3424,7 +3497,7 @@ class CurrentAccountOpeningTests(APITestCase):
 		cuota.refresh_from_db()
 		self.assertFalse(cuota.items.filter(concepto="CuotaDeportiva").exists())
 		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=socio).saldo, Decimal("-6000.00"))
+		self.assertEqual(CuentaCorriente.objects.get(socio=socio).saldo, Decimal("-7000.00"))
 
 	def test_saving_an_existing_socio_does_not_open_another_account(self):
 		socio = crear_socio("40111224")
@@ -3825,7 +3898,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200, response.data)
 		self.assertEqual(response.data["estado"], EstadoItemCuotaChoices.ANULADO)
-		self.assertEqual(self.charge(), Decimal("2500.00"))
+		self.assertEqual(self.charge(), Decimal("3500.00"))
 		cuota = self.account_cuota()
 		self.assertNotIn(discount.pk, [item["item_cuota_id"] for item in cuota["items"]])
 		annulled = cuota["items_anulados"][0]
@@ -3840,7 +3913,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 		response = self.annul(fee)
 
 		self.assertEqual(response.status_code, 200, response.data)
-		self.assertEqual(self.charge(), Decimal("2500.00"))
+		self.assertEqual(self.charge(), Decimal("3500.00"))
 		self.assertFalse(self.cuota.items.filter(concepto="Mora").exists())
 
 	def test_late_fee_of_a_partially_paid_cuota_is_waived_for_what_is_left(self):
@@ -3852,7 +3925,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 		self.assertEqual(response.status_code, 200, response.data)
 		waiver = self.cuota.items.get(concepto="CondonacionMora")
 		self.assertEqual((waiver.monto, waiver.vencimiento, waiver.autorizado_por), (Decimal("200.00"), 2, "Tesorería"))
-		self.assertEqual(Decimal(str(self.account_cuota()["saldo_pendiente"])), Decimal("2500.00"))
+		self.assertEqual(Decimal(str(self.account_cuota()["saldo_pendiente"])), Decimal("3500.00"))
 		self.assertEqual(self.annul(fee).status_code, 400)
 
 	def test_benefits_cannot_be_removed_from_cuotas_with_payments(self):
@@ -3862,11 +3935,11 @@ class CuotaItemAnnulmentTests(APITestCase):
 		response = self.annul(discount)
 
 		self.assertEqual(response.status_code, 400)
-		self.assertEqual(self.charge(), Decimal("2000.00"))
+		self.assertEqual(self.charge(), Decimal("3000.00"))
 
 	def test_items_of_a_paid_cuota_cannot_be_removed(self):
 		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
-		self.pay("2000.00")
+		self.pay("3000.00")
 
 		self.assertEqual(self.annul(discount).status_code, 400)
 
@@ -3874,7 +3947,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 		response = self.annul(self.cuota.items.get(concepto="CuotaSocial"))
 
 		self.assertEqual(response.status_code, 400)
-		self.assertEqual(self.charge(), Decimal("2500.00"))
+		self.assertEqual(self.charge(), Decimal("3500.00"))
 
 	def test_requires_reason_and_authorizer(self):
 		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
@@ -3884,7 +3957,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 				response = self.annul(discount, **{field: ""})
 				self.assertEqual(response.status_code, 400)
 				self.assertIn(field, response.data)
-		self.assertEqual(self.charge(), Decimal("2000.00"))
+		self.assertEqual(self.charge(), Decimal("3000.00"))
 
 	def test_annulled_item_cannot_be_annulled_again(self):
 		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
@@ -3904,15 +3977,15 @@ class CuotaItemAnnulmentTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200, response.data)
 		self.assertEqual(Decimal(response.data["monto"]), Decimal("800.00"))
-		self.assertEqual(self.charge(), Decimal("1700.00"))
+		self.assertEqual(self.charge(), Decimal("2700.00"))
 		previous = ItemCuota.all_objects.get(pk=discount.pk)
 		self.assertEqual((previous.estado, previous.motivo_anulacion), (EstadoItemCuotaChoices.ANULADO, "Descuento modificado"))
 
 	def test_edited_discount_is_validated_against_the_cuota_without_the_previous_one(self):
 		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
 
-		too_much = self.edit_discount(discount, valor="2500.01")
-		whole = self.edit_discount(discount, valor="2500.00")
+		too_much = self.edit_discount(discount, valor="3500.01")
+		whole = self.edit_discount(discount, valor="3500.00")
 
 		self.assertEqual(too_much.status_code, 400)
 		self.assertEqual(whole.status_code, 200, whole.data)
@@ -3923,7 +3996,7 @@ class CuotaItemAnnulmentTests(APITestCase):
 		self.pay("100.00")
 
 		self.assertEqual(self.edit_discount(discount).status_code, 400)
-		self.assertEqual(self.charge(), Decimal("2000.00"))
+		self.assertEqual(self.charge(), Decimal("3000.00"))
 
 	def test_only_discounts_can_be_edited(self):
 		fee = self.add_item("Mora", "300.00", due_number=1)
@@ -4145,9 +4218,9 @@ class PeriodoCuotasTests(APITestCase):
 		self.assertEqual(set(filas), {self.jugador.pk, self.baja_parcial.pk})
 		self.assertEqual(filas[self.jugador.pk]["type"], "Jugador")
 		self.assertEqual(filas[self.baja_parcial.pk]["type"], "BajaParcial")
-		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("2500.00"))
+		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("3500.00"))
 		self.assertEqual(filas[self.jugador.pk]["surcharges"], Decimal("0.00"))
-		self.assertEqual(filas[self.jugador.pk]["pending"], Decimal("2500.00"))
+		self.assertEqual(filas[self.jugador.pk]["pending"], Decimal("3500.00"))
 
 	def test_fases_segun_la_fecha_y_las_ejecuciones(self):
 		fases = {fase["key"]: fase["status"] for fase in period_summary("2026-10", today=date(2026, 10, 5))["phases"]}
