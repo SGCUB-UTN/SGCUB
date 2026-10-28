@@ -6,6 +6,7 @@ import AddCuotaModal from '../components/cuota/AddCuotaModal'
 import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
 import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
 import EditCuotaModal from '../components/cuota/EditCuotaModal'
+import GenerateCuotasModal from '../components/cuota/GenerateCuotasModal'
 import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import SectionHeading from '../components/shared/SectionHeading'
@@ -28,7 +29,7 @@ const FORMULARIO_INICIAL = {
 }
 
 const SECTION_CLASS = 'p-4 sm:p-5'
-const UPCOMING_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold opacity-50 cursor-not-allowed'
+const GENERATE_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
 const esSocioActivo = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase() === 'activo'
 
@@ -48,6 +49,7 @@ function Cuotas() {
   const [errorFormulario, setErrorFormulario] = useState('')
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [logRun, setLogRun] = useState(null)
+  const [generateOpen, setGenerateOpen] = useState(false)
   const [actionError, setActionError] = useState('')
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
@@ -168,10 +170,10 @@ function Cuotas() {
         title="Cuotas"
         actions={(
           <div className="flex flex-wrap items-center gap-2.5">
-            <PeriodSelector value={period} options={summary.data?.periods} onChange={changePeriod} />
-            <button type="button" aria-disabled="true" title="Disponible próximamente" className={UPCOMING_BUTTON_CLASS}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">notifications</span>
-              Notificar
+            <PeriodSelector value={period} onChange={changePeriod} />
+            <button type="button" onClick={() => setGenerateOpen(true)} className={GENERATE_BUTTON_CLASS}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">request_quote</span>
+              Generar cuotas
             </button>
           </div>
         )}
@@ -225,6 +227,8 @@ function Cuotas() {
       </div>
 
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
+
+      <GenerateCuotasModal opened={generateOpen} onClose={() => setGenerateOpen(false)} onGenerated={reload} />
 
       <AddCuotaModal
         opened={modalAgregar}

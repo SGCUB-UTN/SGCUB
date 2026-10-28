@@ -37,7 +37,12 @@ export const postCuota = async (cuota) => {
   return response.data
 }
 
-export const patchCuota = async (cuotaId, cuota) => {
+export const generateMonthlyCuotas = async () => {
+  const response = await api.post(`${cuotasEndpoint}generar-mensual/`)
+  return response.data
+}
+
+export const patchCuota =async (cuotaId, cuota) => {
   const response = await api.patch(`${cuotasEndpoint}${cuotaId}/`, cuota)
   return response.data
 }
