@@ -434,7 +434,15 @@ export default function PeriodCuotasTable({
 
       <TablePagination id="period-cuotas-rows-per-page" {...paginationProps} />
 
-      <NotifyCuotasModal opened={notifyOpen} rows={selectedRows} onClose={() => setNotifyOpen(false)} />
+      {notifyOpen && (
+        <NotifyCuotasModal
+          opened
+          rows={selectedRows}
+          period={period}
+          onClose={() => setNotifyOpen(false)}
+          onSent={() => setSelectedIds(new Set())}
+        />
+      )}
     </div>
   )
 }
