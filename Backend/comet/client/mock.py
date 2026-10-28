@@ -26,12 +26,21 @@ class MockCometClient(BaseCometClient):
 
     def listar_jugadores(self, filtros=None):
         logger.info("COMET[mock] listar_jugadores(%s)", filtros)
-        return [
+        """return [
             {
                 "id": self._id("mock"),
                 "documento": "20000000",
                 "nombres": "Falopa",
                 "apellidos": "Papaap",
+                "modo": "mock",
+            },
+        ]"""
+        return [
+            {
+                "id": self._id("mock"),
+                "documento": "20000000",
+                "nombres": "Prueba",
+                "apellidos": "Prueba",
                 "modo": "mock",
             },
         ]
