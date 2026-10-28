@@ -40,7 +40,7 @@ export default function Principal() {
         actions={(
           <>
             <PrimaryButton icon="payments" onClick={() => openPayment()}>Registrar pago</PrimaryButton>
-            <SecondaryButton icon="add_card" onClick={() => setMovimientoManualAbierto(true)}>Otros movimientos</SecondaryButton>
+            <SecondaryButton icon="swap_horiz" onClick={() => setMovimientoManualAbierto(true)}>Registrar movimiento</SecondaryButton>
           </>
         )}
       />

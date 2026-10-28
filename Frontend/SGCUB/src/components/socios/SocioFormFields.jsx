@@ -126,7 +126,7 @@ export function SeccionDatosPersonales({ campoDni, bindInput, errores, generos, 
 
 const OPCION_NUEVA = '__nueva__'
 
-function SelectConAlta({ id, label, labelNuevo, requerido = false, opcional = false, error, bind, opciones, opcionVacia, textoAgregar, placeholderNuevo, onCrear, disabled = false }) {
+export function SelectConAlta({ id, label, labelNuevo, requerido = false, opcional = false, error, bind, opciones, opcionVacia, textoAgregar, placeholderNuevo, onCrear, disabled = false }) {
   const [agregando, setAgregando] = useState(false)
   const [nombreNuevo, setNombreNuevo] = useState('')
   const [guardando, setGuardando] = useState(false)

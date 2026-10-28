@@ -31,7 +31,7 @@ export default function TurnOffAutomationModal({ automation, isUpdating, onConfi
               type="button"
               onClick={onConfirm}
               disabled={isUpdating}
-              className={`${BUTTON_CLASS} bg-red-700 text-white hover:bg-red-800`}
+              className={`${BUTTON_CLASS} bg-red-700 hover:bg-red-800 dark:bg-[#e03131] dark:hover:bg-[#c92a2a] text-white`}
             >
               <span className={`material-symbols-outlined text-[20px] ${isUpdating ? 'animate-spin' : ''}`} aria-hidden="true">
                 {isUpdating ? 'progress_activity' : 'pause_circle'}

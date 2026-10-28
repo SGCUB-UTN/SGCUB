@@ -205,6 +205,25 @@ class MedioPago(models.Model):
         return cls.objects.filter(codigo=code).values_list("nombre", flat=True).first() or code
 
 
+MANUAL_MOVEMENT_ORIGINS = (TipoMovimientoOrigenChoices.INGRESO_MANUAL, TipoMovimientoOrigenChoices.EGRESO)
+
+
+class ConceptoMovimiento(models.Model):
+    concepto_movimiento_id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100)
+    origen = models.CharField(max_length=40, choices=TipoMovimientoOrigenChoices.choices)
+
+    class Meta:
+        db_table = "concepto_movimiento"
+        ordering = ["concepto_movimiento_id"]
+        constraints = [
+            models.UniqueConstraint(fields=["nombre", "origen"], name="concepto_movimiento_unico_por_origen"),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.origen})"
+
+
 class ItemPago(models.Model):
     id_item_pago = models.AutoField(primary_key=True)
     # Code of a MedioPago: kept as text so historical payments survive a method being removed

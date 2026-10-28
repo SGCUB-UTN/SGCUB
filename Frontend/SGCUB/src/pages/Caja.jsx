@@ -11,7 +11,8 @@ import AmendPagoModal from '../components/finanzas/AmendPagoModal'
 import MovimientoManualDetailModal from '../components/finanzas/MovimientoManualDetailModal'
 import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
 import PageHeader from '../components/shared/PageHeader'
-import { PrimaryButton } from '../components/personas/tabs/parts'
+import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
+
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import { ErrorFile, LoadingFile } from '../components/personas/FileStatus'
 import { isActiveStatus } from '../components/personas/format'
@@ -103,12 +104,12 @@ function Caja() {
         title="Caja y cobros"
         actions={(
           <div className="flex flex-wrap gap-2">
-            <PrimaryButton icon="add_card" onClick={() => abrirModalMovimientoManual(null)}>
-              Otros movimientos
-            </PrimaryButton>
             <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: recargarCaja })}>
               Registrar pago
             </PrimaryButton>
+            <SecondaryButton icon="swap_horiz" onClick={() => abrirModalMovimientoManual(null)}>
+              Registrar movimiento
+            </SecondaryButton>
           </div>
         )}
       />
