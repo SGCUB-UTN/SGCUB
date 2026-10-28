@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { deleteCuota, getCuota, patchCuota, postCuota } from '../api/cuotas'
 import { getSocios } from '../api/socios'
 import AddCuotaModal from '../components/cuota/AddCuotaModal'
+import AutomationStatus from '../components/cuota/AutomationStatus'
 import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
 import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
 import EditCuotaModal from '../components/cuota/EditCuotaModal'
@@ -10,7 +11,6 @@ import GenerateCuotasModal from '../components/cuota/GenerateCuotasModal'
 import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import SectionHeading from '../components/shared/SectionHeading'
-import TaskRunList from '../components/cuota/TaskRunList'
 import TaskRunLogModal from '../components/cuota/TaskRunLogModal'
 import UnpaidCuotasTable from '../components/cuota/UnpaidCuotasTable'
 import { isValidPeriod } from '../components/cuota/cuotaPeriod'
@@ -199,12 +199,7 @@ function Cuotas() {
           </div>
         </div>
 
-        <div role="region" aria-labelledby="task-runs-title">
-          <SectionHeading id="task-runs-title" icon="history" title="Historial de automatizaciones" />
-          <div className={SECTION_CLASS}>
-            <TaskRunList runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
-          </div>
-        </div>
+        <AutomationStatus runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
 
         <div role="region" aria-labelledby="unpaid-cuotas-title">
           <SectionHeading id="unpaid-cuotas-title" icon="pending_actions" title="Cuotas impagas al día de la fecha" />
