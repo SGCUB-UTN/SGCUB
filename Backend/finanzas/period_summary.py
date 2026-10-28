@@ -35,6 +35,7 @@ def period_cuotas(period):
         .select_related(
             "movimiento__cuenta_corriente__socio__persona",
             "movimiento__cuenta_corriente__socio__jugador__estado",
+            "movimiento__cuenta_corriente__socio__jugador__categoria",
         )
         .prefetch_related("items")
         .order_by("pk")
@@ -124,6 +125,7 @@ def billing_phases(period, cuotas, pending, today):
             "date": due,
             "run_date": due + timedelta(days=1),
             "executed_at": run.fecha_inicio if run else None,
+            "applied_count": sum(1 for cuota in cuotas if cuota.recargos_aplicados >= number),
             "status": surcharge_status(number, due, cuotas, pending, run, today),
         })
     return phases
@@ -153,13 +155,11 @@ def period_summary(period, today=None):
     }
 
 
-def unpaid_cuotas(period):
+def period_cuota_rows(period):
     cuotas = period_cuotas(period)
     pending = pending_amounts(cuotas)
     rows = []
     for cuota in cuotas:
-        if pending[cuota.pk] <= 0:
-            continue
         socio = cuota_socio(cuota)
         person = socio.persona
         player = getattr(socio, "jugador", None)
@@ -179,8 +179,10 @@ def unpaid_cuotas(period):
             "dni": person.dni,
             "email": person.email or "",
             "type": cuota_type(cuota),
+            "categoria": player.categoria.nombre if player else None,
             "cuota_amount": net_amount(items) - surcharges,
             "surcharges": surcharges,
             "pending": pending[cuota.pk],
+            "paid": pending[cuota.pk] <= 0,
         })
     return rows

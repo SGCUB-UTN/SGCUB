@@ -36,7 +36,7 @@ function Cuotas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
   const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
-  const { summary, unpaid, runs, reload } = useCuotaPeriod(period)
+  const { summary, cuotas, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
   const [socios, setSocios] = useState([])
@@ -51,6 +51,8 @@ function Cuotas() {
   const [actionError, setActionError] = useState('')
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
+
+  const unpaidRows = useMemo(() => cuotas.data?.filter((row) => !row.paid) ?? null, [cuotas.data])
 
   const sociosOptions = useMemo(() => socios
     .filter(esSocioActivo)
@@ -188,9 +190,9 @@ function Cuotas() {
           <div className={SECTION_CLASS}>
             <PeriodKpis
               summary={summary.data}
-              unpaid={unpaid.data}
-              isLoading={summary.isLoading || unpaid.isLoading}
-              error={summary.error || unpaid.error}
+              unpaid={unpaidRows}
+              isLoading={summary.isLoading || cuotas.isLoading}
+              error={summary.error || cuotas.error}
             />
           </div>
         </div>
@@ -209,9 +211,9 @@ function Cuotas() {
           )}
           <UnpaidCuotasTable
             key={period}
-            rows={unpaid.data ?? []}
-            isLoading={unpaid.isLoading}
-            error={unpaid.error}
+            rows={unpaidRows ?? []}
+            isLoading={cuotas.isLoading}
+            error={cuotas.error}
             period={period}
             onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
             onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}

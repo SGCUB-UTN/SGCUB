@@ -96,7 +96,7 @@ from .services import (
 	update_discount,
 	update_scholarship,
 )
-from .period_summary import period_summary, requested_period, unpaid_cuotas
+from .period_summary import period_cuota_rows, period_summary, requested_period
 from .tasks import run_cuota_generation, run_manual_surcharges
 
 
@@ -905,13 +905,13 @@ def cuota_periodo_resumen(request):
 	return Response(period_summary(period))
 
 
-@extend_schema(tags=["Finanzas/Cuota"], summary="Cuotas impagas de un período")
+@extend_schema(tags=["Finanzas/Cuota"], summary="Cuotas de un período")
 @api_view(["GET"])
-def cuota_periodo_impagas(request):
+def cuota_periodo_cuotas(request):
 	period, error = _period_or_error(request)
 	if error:
 		return error
-	return Response({"period": period, "results": unpaid_cuotas(period)})
+	return Response({"period": period, "results": period_cuota_rows(period)})
 
 
 @extend_schema(tags=["Finanzas/Cuota"], responses=EjecucionTareaCuotaSerializer(many=True), summary="Ejecuciones de las tareas de cuotas de un período")

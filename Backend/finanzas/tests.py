@@ -4057,12 +4057,17 @@ class PeriodoCuotasTests(APITestCase):
 		self.assertEqual(data["totals"]["billed"], Decimal("4500.00"))
 		self.assertEqual(data["totals"]["collection_rate"], Decimal("22.2"))
 
-	def test_listado_de_impagas_del_periodo(self):
-		response = self.get("cuota-periodo-impagas")
+	def test_period_cuotas_list(self):
+		response = self.get("cuota-periodo-cuotas")
 
 		self.assertEqual(response.status_code, 200, response.data)
 		filas = {fila["socio_id"]: fila for fila in response.data["results"]}
-		self.assertEqual(set(filas), {self.jugador.pk, self.baja_parcial.pk})
+		self.assertEqual(set(filas), {self.socio.pk, self.jugador.pk, self.baja_parcial.pk})
+		self.assertTrue(filas[self.socio.pk]["paid"])
+		self.assertEqual(filas[self.socio.pk]["pending"], Decimal("0.00"))
+		self.assertIsNone(filas[self.socio.pk]["categoria"])
+		self.assertFalse(filas[self.jugador.pk]["paid"])
+		self.assertEqual(filas[self.jugador.pk]["categoria"], self.jugador.jugador.categoria.nombre)
 		self.assertEqual(filas[self.jugador.pk]["type"], "Jugador")
 		self.assertEqual(filas[self.baja_parcial.pk]["type"], "BajaParcial")
 		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("2500.00"))
@@ -4082,7 +4087,9 @@ class PeriodoCuotasTests(APITestCase):
 		self.assertEqual(fases["first_due"]["status"], "done")
 		self.assertEqual(fases["first_due"]["run_date"], date(2026, 10, 11))
 		self.assertIsNotNone(fases["first_due"]["executed_at"])
+		self.assertEqual(fases["first_due"]["applied_count"], 2)
 		self.assertEqual(fases["second_due"]["status"], "pending")
+		self.assertEqual(fases["second_due"]["applied_count"], 0)
 
 	def test_ejecuciones_del_periodo_y_su_registro(self):
 		apply_scheduled_surcharges(date(2026, 10, 15))

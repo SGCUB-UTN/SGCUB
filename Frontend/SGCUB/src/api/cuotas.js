@@ -17,8 +17,8 @@ export const getCuotaPeriodSummary = async (period) => {
   return response.data
 }
 
-export const getUnpaidCuotas = async (period) => {
-  const response = await api.get(`${cuotasEndpoint}periodo/impagas/`, { params: { periodo: period } })
+export const getPeriodCuotas = async (period) => {
+  const response = await api.get(`${cuotasEndpoint}periodo/cuotas/`, { params: { periodo: period } })
   return response.data.results
 }
 
