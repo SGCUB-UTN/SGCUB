@@ -527,6 +527,35 @@ def pending_amounts(cuotas, ignored_origin=None):
     return pending
 
 
+def registration_pending_amounts(cuotas):
+    cuota_ids = [cuota.pk for cuota in cuotas]
+    allocated = dict(
+        DetalleImputacion.objects.filter(
+            imputacion__movimiento_destino__cuota__in=cuota_ids,
+            imputacion__movimiento_origen__reversion__isnull=True,
+            concepto=ConceptoItemChoices.INSCRIPCION,
+        )
+        .values("imputacion__movimiento_destino__cuota")
+        .annotate(total=Sum("monto"))
+        .values_list("imputacion__movimiento_destino__cuota", "total")
+    )
+    pending = {}
+    for cuota in cuotas:
+        registration = sum(
+            (
+                item.monto
+                for item in cuota.items.all()
+                if item.concepto == ConceptoItemChoices.INSCRIPCION and not item.es_descuento
+            ),
+            Decimal("0.00"),
+        )
+        pending[cuota.pk] = max(
+            Decimal("0.00"),
+            registration - allocated.get(cuota.pk, Decimal("0.00")),
+        )
+    return pending
+
+
 def cuota_state(cuota, pending, today):
     if pending <= 0:
         return EstadoCuotaChoices.PAGA
@@ -588,7 +617,12 @@ def apply_payment(payment_movement, cuotas, amount):
 
 
 RECEIPT_TYPE = "X"
-DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+DISCOUNT_CONCEPTS = (
+    ConceptoItemChoices.CONDONACION_MORA,
+    ConceptoItemChoices.CONDONACION_INSCRIPCION,
+    ConceptoItemChoices.BECA,
+    ConceptoItemChoices.DESCUENTO_UNICO,
+)
 
 
 def detail_lines(totals):
@@ -760,16 +794,57 @@ def waive_late_fees(cuotas, reason, authorized_by):
         sync_cuota_charge(cuota)
 
 
+def waive_registration_fees(cuotas, authorized_by):
+    for cuota in by_period(cuotas):
+        registration_amount = sum(
+            (item.monto for item in cuota.items.filter(
+                concepto=ConceptoItemChoices.INSCRIPCION,
+                es_descuento=False,
+            )),
+            Decimal("0.00"),
+        )
+        unpaid_registration = max(
+            Decimal("0.00"),
+            registration_amount - active_allocations(cuota).get(ConceptoItemChoices.INSCRIPCION, Decimal("0.00")),
+        )
+        if unpaid_registration <= 0:
+            raise PagoInvalidoError(f"La cuota {cuota.periodo} no tiene inscripción pendiente para eximir.")
+        ItemCuota.objects.create(
+            cuota=cuota,
+            concepto=ConceptoItemChoices.CONDONACION_INSCRIPCION,
+            es_descuento=True,
+            fecha_aplicacion=timezone.localdate(),
+            monto=unpaid_registration,
+            motivo="Inscripción eximida al registrar el pago",
+            autorizado_por=authorized_by,
+        )
+        sync_cuota_charge(cuota)
+
+
 @transaction.atomic
-def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None):
+def register_payment(
+    socio_id,
+    cuota_ids,
+    payment_methods,
+    total,
+    note="",
+    user=None,
+    late_fee_waiver=None,
+    registration_fee_waiver=None,
+):
     account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_order(account, cuotas)
+    if registration_fee_waiver:
+        waived = [cuota for cuota in cuotas if cuota.pk in set(registration_fee_waiver)]
+        waive_registration_fees(waived, user_name(user))
     if late_fee_waiver:
         waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]
         waive_late_fees(waived, late_fee_waiver["motivo"], late_fee_waiver["autorizado_por"])
+    if registration_fee_waiver or late_fee_waiver:
         account.refresh_from_db(fields=["saldo"])
         cuotas = lock_account_cuotas(account, cuota_ids)
+        cuotas = [cuota for cuota in cuotas if pending_amounts([cuota])[cuota.pk] > 0]
     validate_payment_amount(pending_amounts(cuotas), total, "No se pueden pagar cuotas ya saldadas.")
     validate_every_cuota_receives_payment(cuotas, total)
 
@@ -1103,7 +1178,15 @@ def is_linked_scholarship(item):
 def scholarship_amounts(items, scholarships):
     base = discount_base(items)
     available = base - sum(
-        (item.monto for item in items if item.es_descuento and item.concepto != ConceptoItemChoices.CONDONACION_MORA),
+        (
+            item.monto
+            for item in items
+            if item.es_descuento
+            and item.concepto not in (
+                ConceptoItemChoices.CONDONACION_MORA,
+                ConceptoItemChoices.CONDONACION_INSCRIPCION,
+            )
+        ),
         Decimal("0.00"),
     )
     amounts = {}

@@ -23,21 +23,33 @@ const emptyPaymentRow = (monto = '') => ({ medio: '', monto, edited: false })
 
 const isRowComplete = (row) => Boolean(row.medio) && Number(row.monto) > 0
 
-const cuotaDue = (cuota) => roundCents(Number(cuota.saldo_pendiente || 0))
+const registrationAmount = (cuota) => roundCents((cuota.items ?? [])
+  .filter((item) => item.concepto === 'Inscripcion' && !item.es_descuento)
+  .reduce((total, item) => total + Number(item.monto || 0), 0))
 
-const allocate = (cuotas, amount) => {
+const pendingRegistrationAmount = (cuota) => roundCents(Number(
+  cuota.monto_inscripcion_pendiente ?? registrationAmount(cuota),
+))
+
+const cuotaDue = (cuota, exemptRegistration = false) => roundCents(Math.max(
+  0,
+  Number(cuota.saldo_pendiente || 0) - (exemptRegistration ? pendingRegistrationAmount(cuota) : 0),
+))
+
+const allocate = (cuotas, amount, exemptRegistration = false) => {
   let remaining = amount
   return cuotas.map((cuota) => {
-    const due = cuotaDue(cuota)
+    const registrationWaived = exemptRegistration ? pendingRegistrationAmount(cuota) : 0
+    const due = cuotaDue(cuota, exemptRegistration)
     const applied = roundCents(Math.min(Math.max(remaining, 0), due))
     remaining = roundCents(remaining - applied)
-    return { cuota, due, applied }
+    return { cuota, due, applied, registrationWaived }
   })
 }
 
-const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
+const firstCuotasTotal = (cuotas, count, exemptRegistration = false) => roundCents(cuotas
   .slice(0, count)
-  .reduce((total, cuota) => total + cuotaDue(cuota), 0))
+  .reduce((total, cuota) => total + cuotaDue(cuota, exemptRegistration), 0))
 
 function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false, action = null }) {
   return (
@@ -72,6 +84,13 @@ function CuotaBreakdownRow({ line, onRemoveItem, onAssignBenefit }) {
             {items.filter((item) => !isAdjustment(item)).map((item) => (
               <BreakdownLine key={item.item_cuota_id} label={itemLabel(item)} value={formatAmount(Number(item.monto || 0))} tone="text-on-surface" />
             ))}
+            {line.registrationWaived > 0 && (
+              <BreakdownLine
+                label="Inscripción eximida"
+                value={`− ${formatAmount(line.registrationWaived)}`}
+                tone="text-emerald-700"
+              />
+            )}
             {items.filter(isAdjustment).map((item) => {
               const tone = itemTone(item)
               const blocker = onRemoveItem ? removalBlocker(cuota, item) : null
@@ -313,6 +332,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
   const [removal, setRemoval] = useState(null)
+  const [exemptRegistration, setExemptRegistration] = useState(false)
   const [paymentRows, setPaymentRows] = useState(() => [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))])
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
@@ -322,8 +342,14 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const { paymentMethods, methodLabel } = useMediosPago()
 
   const enteredTotal = roundCents(paymentRows.reduce((total, row) => total + Number(row.monto || 0), 0))
-  const lines = allocate(pendingCuotas, enteredTotal)
+  const lines = allocate(pendingCuotas, enteredTotal, exemptRegistration)
   const coveredLines = lines.filter((line) => line.applied > 0)
+  const lastCoveredIndex = lines.reduce((last, line, index) => (line.applied > 0 ? index : last), -1)
+  const paymentLines = lines.slice(0, lastCoveredIndex + 1)
+  const paymentCuotaIds = new Set(paymentLines.map((line) => line.cuota.cuota_id))
+  const displayedLines = lines.map((line) => (
+    paymentCuotaIds.has(line.cuota.cuota_id) ? line : { ...line, registrationWaived: 0 }
+  ))
   const debtTotal = roundCents(lines.filter((line) => !isFuture(line.cuota, period)).reduce((total, line) => total + line.due, 0))
   const pendingTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
   const billedLines = lines.filter((line) => !isFuture(line.cuota, period) || line.applied > 0)
@@ -335,11 +361,18 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
   const [syncedCuenta, setSyncedCuenta] = useState(cuenta)
   if (cuenta !== syncedCuenta) {
     setSyncedCuenta(cuenta)
-    const suggested = amountInput(firstCuotasTotal(pendingCuotas, suggestedCount))
+    const suggested = amountInput(firstCuotasTotal(pendingCuotas, suggestedCount, exemptRegistration))
     setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
   }
 
   const toggleExpand = (cuotaId) => setExpandedIds((ids) => toggleId(ids, cuotaId))
+
+  const toggleRegistrationExemption = (event) => {
+    const next = event.target.checked
+    setExemptRegistration(next)
+    const suggested = amountInput(firstCuotasTotal(pendingCuotas, suggestedCount, next))
+    setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
+  }
 
   const updateRow = (index, changes) => {
     setPaymentRows((rows) => rows.map((row, position) => (position === index ? { ...row, ...changes } : row)))
@@ -369,10 +402,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
     try {
       const response = await registrarPago({
         socio_id: socio.socio_id,
-        cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
+        cuota_ids: paymentLines.map((line) => line.cuota.cuota_id),
         monto_total: enteredTotal,
         medios: paymentRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion,
+        eximir_inscripcion: exemptRegistration
+          ? paymentLines.filter((line) => line.registrationWaived > 0).map((line) => line.cuota.cuota_id)
+          : [],
       })
       const detalle = await getComprobante(response.comprobante?.comprobante_id).catch(() => null)
       setReceipt({
@@ -408,6 +444,22 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
     <form onSubmit={confirmPayment} className="flex flex-col" noValidate>
       <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
+          {pendingCuotas.some((cuota) => pendingRegistrationAmount(cuota) > 0) && (
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-outline-variant/40 bg-surface-container-lowest text-on-surface">
+              <input
+                type="checkbox"
+                checked={exemptRegistration}
+                onChange={toggleRegistrationExemption}
+                className="mt-1 h-4 w-4 accent-primary"
+              />
+              <span className="flex flex-col">
+                <span className="text-base font-semibold">Eximir monto de inscripción</span>
+                <span className="text-sm text-on-surface-variant">
+                  Se condonará el detalle de inscripción de las cuotas incluidas en este pago.
+                </span>
+              </span>
+            </label>
+          )}
           <FormSection
             icon="receipt_long"
             title="Cuotas a saldar"
@@ -415,7 +467,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, on
           >
             {pendingCuotas.length ? (
               <CuotasTable
-                lines={lines}
+                lines={displayedLines}
                 debtTotal={debtTotal}
                 period={period}
                 showFuture={showFuture}

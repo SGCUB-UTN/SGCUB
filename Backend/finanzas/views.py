@@ -91,6 +91,7 @@ from .services import (
 	grant_scholarship,
 	parse_period,
 	pending_amounts,
+	registration_pending_amounts,
 	register_payment,
 	create_manual_movement,
 	remove_cuota_item,
@@ -119,7 +120,10 @@ def _cuotas_queryset():
 def cuota_list_create(request):
 	if request.method == "GET":
 		cuotas = list(_cuotas_queryset().order_by("pk"))
-		return Response(CuotaSerializer(cuotas, many=True, context={"pending": pending_amounts(cuotas)}).data)
+		return Response(CuotaSerializer(cuotas, many=True, context={
+			"pending": pending_amounts(cuotas),
+			"registration_pending": registration_pending_amounts(cuotas),
+		}).data)
 
 	serializer = CuotaCreateSerializer(data=request.data)
 	if not serializer.is_valid():
@@ -290,6 +294,7 @@ def registrar_pago(request):
 			data["observacion"],
 			request.user if request.user.is_authenticated else None,
 			data["condonacion_mora"],
+			data["eximir_inscripcion"],
 		)
 	except CuentaCorriente.DoesNotExist:
 		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)

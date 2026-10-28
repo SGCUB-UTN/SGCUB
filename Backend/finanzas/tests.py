@@ -1553,6 +1553,56 @@ class CondonacionMoraTests(PagoTestBase):
 		self.assertIn("motivo", response.data["condonacion_mora"])
 
 
+class CondonacionInscripcionTests(PagoTestBase):
+	def setUp(self):
+		super().setUp()
+		ItemCuota.objects.create(
+			cuota=self.agosto,
+			concepto="Inscripcion",
+			fecha_aplicacion=date(2026, 8, 1),
+			monto=Decimal("500.00"),
+		)
+		sync_cuota_charge(self.agosto)
+
+	def test_exime_inscripcion_y_cobra_el_resto_de_la_cuota(self):
+		response = self.pagar([self.agosto], "1000.00", eximir_inscripcion=[self.agosto.pk])
+
+		self.assertEqual(response.status_code, 201, response.data)
+		waiver = self.agosto.items.get(concepto="CondonacionInscripcion")
+		self.assertTrue(waiver.es_descuento)
+		self.assertEqual(waiver.monto, Decimal("500.00"))
+		self.assertEqual(waiver.autorizado_por, "tesorero")
+		self.assertEqual(waiver.motivo, "Inscripción eximida al registrar el pago")
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.agosto.movimiento.monto, Decimal("1000.00"))
+		self.cuenta.refresh_from_db()
+		self.assertEqual(self.cuenta.saldo, Decimal("-1000.00"))
+		self.assertEqual(
+			dict(DetalleImputacion.objects.filter(imputacion__movimiento_destino__cuota=self.agosto).values_list("concepto", "monto")),
+			{"CuotaSocial": Decimal("1000.00"), "Inscripcion": Decimal("500.00"), "CondonacionInscripcion": Decimal("-500.00")},
+		)
+
+	def test_no_se_puede_eximir_una_cuota_sin_inscripcion(self):
+		response = self.pagar([self.agosto], "1000.00", eximir_inscripcion=[self.agosto.pk])
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("no tiene inscripción pendiente", response.data["detail"])
+		self.assertFalse(Pago.objects.exists())
+
+	def test_estado_cuenta_expone_inscripcion_pendiente_tras_pago_parcial(self):
+		self.pagar([self.agosto], "1200.00")
+
+		response = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
+
+		self.assertEqual(response.status_code, 200)
+		cuota = next(cuota for cuota in response.data["cuotas"] if cuota["cuota_id"] == self.agosto.pk)
+		self.assertEqual(
+			Decimal(str(cuota["monto_inscripcion_pendiente"])),
+			Decimal("300.00"),
+		)
+
+
 class EstadoCuentaPendienteTests(PagoTestBase):
 	def test_estado_de_cuenta_refleja_pagos_parciales(self):
 		self.pagar([self.agosto], "400.00")

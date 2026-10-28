@@ -4,6 +4,8 @@ export const LATE_FEE_CONCEPT = 'Mora'
 
 export const LATE_FEE_WAIVER_CONCEPT = 'CondonacionMora'
 
+export const REGISTRATION_WAIVER_CONCEPT = 'CondonacionInscripcion'
+
 export const SCHOLARSHIP_CONCEPT = 'Beca'
 
 export const DISCOUNT_CONCEPT = 'DescuentoUnico'

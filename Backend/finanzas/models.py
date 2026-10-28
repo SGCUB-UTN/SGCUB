@@ -20,6 +20,7 @@ class ConceptoItemChoices(models.TextChoices):
     CUOTA_SOCIAL = "CuotaSocial", "Cuota Social"
     CUOTA_DEPORTIVA = "CuotaDeportiva", "Cuota Deportiva"
     INSCRIPCION = "Inscripcion", "Inscripción"
+    CONDONACION_INSCRIPCION = "CondonacionInscripcion", "Condonación de inscripción"
     MORA = "Mora", "Recargo por mora"
     CONDONACION_MORA = "CondonacionMora", "Condonación de recargo por mora"
     DESCUENTO_UNICO = "DescuentoUnico", "Descuento único"

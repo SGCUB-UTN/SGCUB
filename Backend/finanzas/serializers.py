@@ -38,6 +38,7 @@ from .services import (
     net_amount,
     parse_period,
     pending_amounts,
+    registration_pending_amounts,
     receipt_detail,
     remaining_reversible_amount,
     reversed_amount_for,
@@ -174,6 +175,12 @@ class RegistroPagoSerializer(serializers.Serializer):
     medios = MedioPagoSerializer(many=True, allow_empty=False)
     observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     condonacion_mora = CondonacionMoraSerializer(required=False, allow_null=True, default=None)
+    eximir_inscripcion = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
 
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
@@ -191,6 +198,12 @@ class RegistroPagoSerializer(serializers.Serializer):
             raise serializers.ValidationError({
                 "condonacion_mora": "Solo se puede condonar el recargo de las cuotas que se están pagando."
             })
+        if len(attrs["eximir_inscripcion"]) != len(set(attrs["eximir_inscripcion"])):
+            raise serializers.ValidationError({"eximir_inscripcion": "No se deben repetir cuotas."})
+        if not set(attrs["eximir_inscripcion"]) <= set(attrs["cuota_ids"]):
+            raise serializers.ValidationError({
+                "eximir_inscripcion": "Solo se puede eximir la inscripción de las cuotas que se están pagando."
+            })
         return attrs
 
 
@@ -202,6 +215,7 @@ class CuotaSerializer(serializers.ModelSerializer):
     monto_pagado = serializers.SerializerMethodField()
     saldo_pendiente = serializers.SerializerMethodField()
     saldo_sin_recargo = serializers.SerializerMethodField()
+    monto_inscripcion_pendiente = serializers.SerializerMethodField()
 
     class Meta:
         model = Cuota
@@ -219,6 +233,7 @@ class CuotaSerializer(serializers.ModelSerializer):
             "monto_pagado",
             "saldo_pendiente",
             "saldo_sin_recargo",
+            "monto_inscripcion_pendiente",
         ]
         read_only_fields = fields
 
@@ -249,6 +264,12 @@ class CuotaSerializer(serializers.ModelSerializer):
 
     def get_saldo_sin_recargo(self, obj):
         return discountable_pending(obj, list(obj.items.all()), self._pending(obj))
+
+    def get_monto_inscripcion_pendiente(self, obj):
+        registration_pending = self.context.get("registration_pending")
+        if registration_pending is not None and obj.pk in registration_pending:
+            return registration_pending[obj.pk]
+        return registration_pending_amounts([obj])[obj.pk]
 
     def _pending(self, obj):
         pending = self.context.get("pending")
@@ -442,6 +463,12 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             cache[obj.pk] = pending_amounts(self._account_cuotas(obj))
         return cache[obj.pk]
 
+    def _account_registration_pending(self, obj):
+        cache = self.__dict__.setdefault("_registration_pending_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = registration_pending_amounts(self._account_cuotas(obj))
+        return cache[obj.pk]
+
     def get_socio(self, obj):
         return socio_data(obj.socio)
 
@@ -449,7 +476,10 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
         return CuotaSerializer(
             self._account_cuotas(obj),
             many=True,
-            context={"pending": self._account_pending(obj)},
+            context={
+                "pending": self._account_pending(obj),
+                "registration_pending": self._account_registration_pending(obj),
+            },
         ).data
 
     def _current_period(self):
