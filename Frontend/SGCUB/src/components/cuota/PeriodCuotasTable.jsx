@@ -13,6 +13,7 @@ import { formatDni } from '../personas/format'
 import { CUOTA_STATES, cuotaStateBadgeClass } from '../finanzas/cuotaStates'
 import { GENERO_BADGE_CLASSES } from '../categorias/categoriaFormat'
 import CategoryFilter from './CategoryFilter'
+import NotifyCuotasModal from './NotifyCuotasModal'
 import { ALL_CATEGORIES, NO_CATEGORY, categoryMatches, categoryOptions, findGender } from './cuotaCategories'
 import { SecondaryButton } from '../personas/tabs/parts'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
@@ -58,8 +59,8 @@ const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border border-outline-variant/50 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
-const UPCOMING_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border border-outline-variant/50 text-sm font-semibold text-on-surface-variant opacity-60 cursor-not-allowed'
+const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600/60'
+const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 const TAB_CLASS = 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container-low'
@@ -143,22 +144,21 @@ function BulkActionsBar({ rows, onExport, onClear }) {
     <div
       role="region"
       aria-label="Acciones sobre la selección"
-      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-primary/5 border-b border-primary/20"
+      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-sky-100 border-b border-sky-300 border-l-4 border-l-sky-600"
     >
-      <p className="text-sm text-on-surface">
-        <strong className="font-semibold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'cuota seleccionada' : 'cuotas seleccionadas'}
-        <span className="text-on-surface-variant"> · Saldo {formatMoney(sumBy(rows, 'pending'))}</span>
+      <p className="flex items-center gap-2 text-sm text-sky-900">
+        <span className="material-symbols-outlined text-sky-700" style={{ fontSize: 20 }} aria-hidden="true">check_box</span>
+        <span>
+          <strong className="font-bold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'cuota seleccionada' : 'cuotas seleccionadas'}
+          <span className="text-sky-800"> · Saldo <strong className="font-semibold">{formatMoney(sumBy(rows, 'pending'))}</strong></span>
+        </span>
       </p>
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-        <button type="button" aria-disabled="true" title="Disponible próximamente" className={UPCOMING_BUTTON_CLASS}>
-          <Icon name="mail" />
-          Enviar recordatorio
-        </button>
-        <button type="button" onClick={onExport} className={TOOL_BUTTON_CLASS}>
+        <button type="button" onClick={onExport} className={`${TOOL_BUTTON_CLASS} bg-surface-container-lowest border-sky-300 text-sky-900 hover:bg-sky-50`}>
           <Icon name="download" />
           Exportar CSV
         </button>
-        <button type="button" onClick={onClear} className={`${TOOL_BUTTON_CLASS} border-transparent text-on-surface-variant`}>
+        <button type="button" onClick={onClear} className={`${TOOL_BUTTON_CLASS} border-transparent text-sky-800 hover:bg-sky-200/60`}>
           <Icon name="close" />
           Quitar selección
         </button>
@@ -226,6 +226,7 @@ export default function PeriodCuotasTable({
   const [tab, setTab] = useState(ALL)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [expandedId, setExpandedId] = useState(null)
+  const [notifyOpen, setNotifyOpen] = useState(false)
 
   const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
@@ -310,7 +311,18 @@ export default function PeriodCuotasTable({
             onChange={withPageReset(setCategory)}
           />
         </div>
-        <div className="flex items-center justify-end xl:shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
+          <button
+            type="button"
+            onClick={() => setNotifyOpen(true)}
+            disabled={selectedRows.length === 0}
+            className={NOTIFY_BUTTON_CLASS}
+            title={selectedRows.length === 0 ? 'Seleccioná las cuotas de los socios a notificar' : 'Notifica por email a los socios de las cuotas seleccionadas'}
+          >
+            <Icon name="notifications" />
+            Notificar
+            {selectedRows.length > 0 && <span className="tabular-nums">({formatCount(selectedRows.length)})</span>}
+          </button>
           <button
             type="button"
             onClick={() => downloadCuotasCsv(sorted, period)}
@@ -324,6 +336,8 @@ export default function PeriodCuotasTable({
         </div>
       </div>
 
+      <CuotaTabs value={tab} counts={tabCounts} onChange={withPageReset(setTab)} />
+
       {selectedRows.length > 0 && (
         <BulkActionsBar
           rows={selectedRows}
@@ -331,8 +345,6 @@ export default function PeriodCuotasTable({
           onClear={() => setSelectedIds(new Set())}
         />
       )}
-
-      <CuotaTabs value={tab} counts={tabCounts} onChange={withPageReset(setTab)} />
 
       <div id={TABLE_PANEL_ID} role="tabpanel" aria-label={`Cuotas: ${activeTab.label}`}>
         <DataTable
@@ -421,6 +433,8 @@ export default function PeriodCuotasTable({
       </div>
 
       <TablePagination id="period-cuotas-rows-per-page" {...paginationProps} />
+
+      <NotifyCuotasModal opened={notifyOpen} rows={selectedRows} onClose={() => setNotifyOpen(false)} />
     </div>
   )
 }
