@@ -13,10 +13,10 @@ export function KpiGrid({ columns = 4, className = '', children }) {
 
 export function KpiColumn({ label, value, title, tone = 'text-on-surface', caption }) {
   return (
-    <div className="min-w-0 flex flex-col">
+    <div className="min-w-0 h-full flex flex-col">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">{label}</h3>
       <p className={`mt-1 text-2xl font-bold tabular-nums leading-tight ${tone}`} title={title}>{value}</p>
-      {caption && <p className="mt-1 text-sm text-on-surface-variant">{caption}</p>}
+      {caption && <p className="mt-auto pt-1 text-sm text-on-surface-variant">{caption}</p>}
     </div>
   )
 }

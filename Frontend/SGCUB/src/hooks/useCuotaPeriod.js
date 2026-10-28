@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getCuotaPeriodSummary, getCuotaTaskRuns, getUnpaidCuotas } from '../api/cuotas'
+import { getCuotaPeriodSummary, getCuotaTaskRuns, getPeriodCuotas } from '../api/cuotas'
 
 const LOADERS = {
   summary: getCuotaPeriodSummary,
-  unpaid: getUnpaidCuotas,
+  cuotas: getPeriodCuotas,
   runs: getCuotaTaskRuns,
 }
 
 const EMPTY = { data: null, error: null, period: null, key: null }
 
 function useCuotaPeriod(period) {
-  const [resources, setResources] = useState({ summary: EMPTY, unpaid: EMPTY, runs: EMPTY })
+  const [resources, setResources] = useState({ summary: EMPTY, cuotas: EMPTY, runs: EMPTY })
   const [version, setVersion] = useState(0)
   const requestKey = `${period}#${version}`
 
@@ -38,7 +38,7 @@ function useCuotaPeriod(period) {
 
   return {
     summary: view(resources.summary),
-    unpaid: view(resources.unpaid),
+    cuotas: view(resources.cuotas),
     runs: view(resources.runs),
     reload,
   }
