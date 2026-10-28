@@ -224,7 +224,6 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
         apply_cuota_surcharges(cuota.pk, today, configuration)
         cuota.refresh_from_db()
     return cuota
-    return cuota
 
 
 def create_first_cuota(socio, today=None):

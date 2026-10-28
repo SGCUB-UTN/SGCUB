@@ -1128,6 +1128,27 @@ class CuotaEndpointTests(APITestCase):
 		self.assertEqual(cuota.movimiento.monto, Decimal("3500.00"))
 		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-3500.00"))
 
+	def test_nueva_cuota_de_jugador_existente_no_repite_inscripcion(self):
+		primer_periodo = timezone.localdate().replace(day=1).strftime("%Y-%m")
+		primera_cuota = self.client.post(
+			reverse("cuota-list"),
+			{"socio_id": self.socio.pk, "periodo": primer_periodo},
+			format="json",
+		)
+		self.assertEqual(primera_cuota.status_code, 201, primera_cuota.data)
+		self.assertTrue(
+			Cuota.objects.get(pk=primera_cuota.data["cuota_id"])
+			.items.filter(concepto="Inscripcion", monto=Decimal("1000.00")).exists()
+		)
+
+		periodo_siguiente = next_period_start().strftime("%Y-%m")
+		response = self.crear(periodo=periodo_siguiente)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		cuota = Cuota.objects.get(pk=response.data["cuota_id"])
+		self.assertFalse(cuota.items.filter(concepto="Inscripcion").exists())
+		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
+
 	def test_no_permite_dos_cuotas_del_mismo_periodo(self):
 		self.crear()
 
@@ -3409,6 +3430,10 @@ class CurrentAccountOpeningTests(APITestCase):
 				{"CuotaSocial", "CuotaDeportiva", "Inscripcion"} if cuota == cuotas[0]
 				else {"CuotaSocial", "CuotaDeportiva"},
 			)
+		inscripcion = cuotas[0].items.get(concepto="Inscripcion")
+		self.assertEqual(inscripcion.monto, Decimal("1000.00"))
+		self.assertFalse(cuotas[1].items.filter(concepto="Inscripcion").exists())
+		self.assertFalse(cuotas[2].items.filter(concepto="Inscripcion").exists())
 
 	def create_player_for_existing_socio(self, socio):
 		categoria = Categoria.objects.create(
