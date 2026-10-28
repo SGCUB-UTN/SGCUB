@@ -1,4 +1,3 @@
-import { CUOTA_STATES } from '../finanzas/cuotaStates'
 import { KpiColumn, KpiGrid } from '../shared/Kpi'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney } from './cuotaPeriod'
 
@@ -102,7 +101,6 @@ export default function PeriodKpis({ summary, rows, isLoading, error }) {
   const surcharges = sumBy(rows, 'surcharges')
   const surchargedCount = rows.filter((row) => Number(row.surcharges) > 0).length
   const unpaid = rows.filter((row) => !row.paid)
-  const upcoming = unpaid.filter((row) => row.estado_cuota === CUOTA_STATES.EN_FECHA).length
 
   return (
     <KpiGrid columns={4}>

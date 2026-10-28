@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { deleteCuota, getCuota, patchCuota, postCuota } from '../api/cuotas'
-import { getSocios } from '../api/socios'
-import AddCuotaModal from '../components/cuota/AddCuotaModal'
+import { deleteCuota, getCuota, patchCuota } from '../api/cuotas'
 import AutomationStatus from '../components/cuota/AutomationStatus'
 import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
 import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
@@ -19,7 +17,7 @@ import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
-import { collectErrorMessages, formatDni } from '../components/personas/format'
+import { collectErrorMessages } from '../components/personas/format'
 
 const FORMULARIO_INICIAL = {
   socio_id: '',
@@ -31,8 +29,6 @@ const FORMULARIO_INICIAL = {
 const SECTION_CLASS = 'p-4 sm:p-5'
 const GENERATE_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
-const esSocioActivo = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCase() === 'activo'
-
 function Cuotas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
@@ -40,8 +36,6 @@ function Cuotas() {
   const { summary, cuotas, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
-  const [socios, setSocios] = useState([])
-  const [modalAgregar, setModalAgregar] = useState(false)
   const [modalEditar, setModalEditar] = useState(false)
   const [modalEliminar, setModalEliminar] = useState(false)
   const [cuotaSeleccionada, setCuotaSeleccionada] = useState(null)
@@ -53,24 +47,6 @@ function Cuotas() {
   const [actionError, setActionError] = useState('')
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
-
-  const sociosOptions = useMemo(() => socios
-    .filter(esSocioActivo)
-    .map((socio) => ({
-      value: String(socio.socio_id),
-      label: `${socio.apellido}, ${socio.nombre} - DNI ${formatDni(socio.dni)}`,
-    })), [socios])
-
-  const abrirAgregar = () => {
-    setFormulario({ ...FORMULARIO_INICIAL, periodo: period })
-    setErrorFormulario('')
-    setModalAgregar(true)
-    if (socios.length === 0) {
-      getSocios()
-        .then((respuesta) => setSocios(respuesta ?? []))
-        .catch(() => setErrorFormulario('No se pudieron cargar los socios.'))
-    }
-  }
 
   const abrirEditar = async (row) => {
     setActionError('')
@@ -97,7 +73,6 @@ function Cuotas() {
   }
 
   const cerrarModal = () => {
-    setModalAgregar(false)
     setModalEditar(false)
     setModalEliminar(false)
     setCuotaSeleccionada(null)
@@ -111,25 +86,13 @@ function Cuotas() {
     setErrorFormulario('')
 
     try {
-      if (modalEditar && cuotaSeleccionada) {
-        if (!formulario.fecha_venc1 || !formulario.fecha_venc2) {
-          throw new Error('Completá los campos obligatorios.')
-        }
-        await patchCuota(cuotaSeleccionada.cuota_id, {
-          fecha_venc1: formulario.fecha_venc1,
-          fecha_venc2: formulario.fecha_venc2,
-        })
-      } else {
-        if (!formulario.socio_id || !formulario.periodo) {
-          throw new Error('Completá los campos obligatorios.')
-        }
-        await postCuota({
-          socio_id: Number(formulario.socio_id),
-          periodo: formulario.periodo,
-          ...(formulario.fecha_venc1 && { fecha_venc1: formulario.fecha_venc1 }),
-          ...(formulario.fecha_venc2 && { fecha_venc2: formulario.fecha_venc2 }),
-        })
+      if (!formulario.fecha_venc1 || !formulario.fecha_venc2) {
+        throw new Error('Completá los campos obligatorios.')
       }
+      await patchCuota(cuotaSeleccionada.cuota_id, {
+        fecha_venc1: formulario.fecha_venc1,
+        fecha_venc2: formulario.fecha_venc2,
+      })
 
       cerrarModal()
       reload()
@@ -222,17 +185,6 @@ function Cuotas() {
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 
       <GenerateCuotasModal opened={generateOpen} onClose={() => setGenerateOpen(false)} onGenerated={reload} />
-
-      <AddCuotaModal
-        opened={modalAgregar}
-        onClose={() => !guardando && cerrarModal()}
-        onSubmit={guardarCuota}
-        formulario={formulario}
-        onChange={(campo, valor) => setFormulario((actual) => ({ ...actual, [campo]: valor }))}
-        loading={guardando}
-        error={errorFormulario}
-        sociosOptions={sociosOptions}
-      />
 
       <EditCuotaModal
         opened={modalEditar}
