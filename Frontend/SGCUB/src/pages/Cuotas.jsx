@@ -192,7 +192,7 @@ function Cuotas() {
           <div className={SECTION_CLASS}>
             <PeriodKpis
               summary={summary.data}
-              unpaid={unpaidRows}
+              rows={cuotas.data}
               isLoading={summary.isLoading || cuotas.isLoading}
               error={summary.error || cuotas.error}
             />
