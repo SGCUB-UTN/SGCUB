@@ -1,13 +1,14 @@
-from django.db import transaction
+from django.db import models as django_models, transaction
 from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
+from configuracion.services import Seccion, record_change
 from .search import normalize_text, normalized_field
 
-from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO
+from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
 from .serializers import (
     CargoDocenteSerializer,
     DocenteCategoriaSerializer,
@@ -25,10 +26,30 @@ from .serializers import (
     GeneroSerializer,
     LocalidadSerializer,
     BarrioSerializer,
+    ObraSocialSerializer,
+    TalleIndumentariaSerializer,
+    TipoRelacionFamiliarSerializer,
     player_contacts_error,
 )
 
 PERSONA_SEARCH_LIMIT = 10
+
+
+def request_user(request):
+    return request.user if getattr(request, "user", None) and request.user.is_authenticated else None
+
+
+def talle_sort_key(nombre):
+    name = (nombre or "").strip().upper()
+    if name.isdigit():
+        return (0, int(name), "")
+    letter_ranks = {
+        "XXXS": 1, "XXS": 2, "XS": 3, "S": 4, "M": 5, "L": 6,
+        "XL": 7, "XXL": 8, "2XL": 8, "XXXL": 9, "3XL": 9, "4XL": 10,
+    }
+    if name in letter_ranks:
+        return (1, letter_ranks[name], "")
+    return (2, 0, name)
 
 
 @extend_schema(tags=["Padron / Genero"], request=GeneroSerializer, responses=GeneroSerializer)
@@ -48,7 +69,40 @@ def localidad_list(request):
     serializer = LocalidadSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     locality = serializer.save()
+    record_change(Seccion.PERSONAS, f"Localidad {locality.nombre}", "", "Alta", request_user(request))
     return Response(LocalidadSerializer(locality).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Localidad"], request=LocalidadSerializer, responses=LocalidadSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def localidad_detail(request, pk):
+    localidad = get_object_or_404(Localidad, pk=pk)
+
+    if request.method == "GET":
+        return Response(LocalidadSerializer(localidad).data)
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = localidad.nombre
+        old_cp = localidad.codigo_postal
+        serializer = LocalidadSerializer(localidad, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        localidad = serializer.save()
+        before_str = f"{old_name}" + (f" (CP {old_cp})" if old_cp else "")
+        after_str = f"{localidad.nombre}" + (f" (CP {localidad.codigo_postal})" if localidad.codigo_postal else "")
+        if before_str != after_str:
+            record_change(Seccion.PERSONAS, f"Localidad {old_name}", before_str, after_str, request_user(request))
+        return Response(LocalidadSerializer(localidad).data)
+
+    if request.method == "DELETE":
+        if localidad.domicilios.exists() or localidad.barrios.exists():
+            return Response(
+                {"detail": "No se puede eliminar la localidad porque tiene barrios o domicilios asociados."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = localidad.nombre
+        localidad.delete()
+        record_change(Seccion.PERSONAS, f"Localidad {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Padron / Barrio"], request=BarrioSerializer, responses=BarrioSerializer)
@@ -64,7 +118,40 @@ def barrio_list_create(request):
     serializer = BarrioSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     neighborhood = serializer.save()
+    record_change(Seccion.PERSONAS, f"Barrio {neighborhood.nombre}", "", f"Alta ({neighborhood.localidad.nombre})", request_user(request))
     return Response(BarrioSerializer(neighborhood).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Barrio"], request=BarrioSerializer, responses=BarrioSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def barrio_detail(request, pk):
+    barrio = get_object_or_404(Barrio, pk=pk)
+
+    if request.method == "GET":
+        return Response(BarrioSerializer(barrio).data)
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = barrio.nombre
+        old_loc = barrio.localidad.nombre
+        serializer = BarrioSerializer(barrio, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        barrio = serializer.save()
+        before_str = f"{old_name} ({old_loc})"
+        after_str = f"{barrio.nombre} ({barrio.localidad.nombre})"
+        if before_str != after_str:
+            record_change(Seccion.PERSONAS, f"Barrio {old_name}", before_str, after_str, request_user(request))
+        return Response(BarrioSerializer(barrio).data)
+
+    if request.method == "DELETE":
+        if barrio.domicilios.exists():
+            return Response(
+                {"detail": "No se puede eliminar el barrio porque tiene domicilios asociados."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = f"{barrio.nombre} ({barrio.localidad.nombre})"
+        barrio.delete()
+        record_change(Seccion.PERSONAS, f"Barrio {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Padron / EstadoAdministrativo"], request=EstadoAdministrativoSerializer, responses=EstadoAdministrativoSerializer)
@@ -425,11 +512,208 @@ def docente_detail(request, pk):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@extend_schema(tags=["Padron / Docente"], responses=CargoDocenteSerializer)
-@api_view(["GET"])
+@extend_schema(tags=["Padron / Docente"], request=CargoDocenteSerializer, responses=CargoDocenteSerializer)
+@api_view(["GET", "POST"])
 def cargo_docente_list(request):
-    positions = CargoDocente.objects.order_by("nombre")
-    return Response(CargoDocenteSerializer(positions, many=True).data)
+    if request.method == "GET":
+        positions = CargoDocente.objects.order_by("nombre")
+        return Response(CargoDocenteSerializer(positions, many=True).data)
+
+    serializer = CargoDocenteSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    cargo = serializer.save()
+    record_change(Seccion.PERSONAS, f"Cargo docente {cargo.nombre}", "", "Alta", request_user(request))
+    return Response(CargoDocenteSerializer(cargo).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Docente"], request=CargoDocenteSerializer, responses=CargoDocenteSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def cargo_docente_detail(request, pk):
+    cargo = get_object_or_404(CargoDocente, pk=pk)
+
+    if request.method == "GET":
+        return Response(CargoDocenteSerializer(cargo).data)
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = cargo.nombre
+        serializer = CargoDocenteSerializer(cargo, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        cargo = serializer.save()
+        if old_name != cargo.nombre:
+            record_change(Seccion.PERSONAS, f"Cargo docente {old_name}", old_name, cargo.nombre, request_user(request))
+        return Response(CargoDocenteSerializer(cargo).data)
+
+    if request.method == "DELETE":
+        if cargo.asignaciones.exists():
+            return Response(
+                {"detail": "No se puede eliminar el cargo porque está asignado a docentes."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = cargo.nombre
+        cargo.delete()
+        record_change(Seccion.PERSONAS, f"Cargo docente {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["Padron / VinculoFamiliar"], request=TipoRelacionFamiliarSerializer, responses=TipoRelacionFamiliarSerializer)
+@api_view(["GET", "POST"])
+def tipo_relacion_familiar_list_create(request):
+    if request.method == "GET":
+        relaciones = TipoRelacionFamiliar.objects.annotate(
+            is_otro=django_models.Case(
+                django_models.When(nombre__iexact="Otro", then=django_models.Value(1)),
+                default=django_models.Value(0),
+                output_field=django_models.IntegerField(),
+            )
+        ).order_by("is_otro", "nombre")
+        return Response(TipoRelacionFamiliarSerializer(relaciones, many=True).data)
+
+    serializer = TipoRelacionFamiliarSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    relacion = serializer.save()
+    record_change(Seccion.PERSONAS, f"Vínculo familiar {relacion.nombre}", "", "Alta", request_user(request))
+    return Response(TipoRelacionFamiliarSerializer(relacion).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / VinculoFamiliar"], request=TipoRelacionFamiliarSerializer, responses=TipoRelacionFamiliarSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def tipo_relacion_familiar_detail(request, pk):
+    relacion = get_object_or_404(TipoRelacionFamiliar, pk=pk)
+
+    if request.method == "GET":
+        return Response(TipoRelacionFamiliarSerializer(relacion).data)
+
+    if relacion.nombre.strip().lower() == "otro":
+        return Response(
+            {"detail": "La relación 'Otro' es un valor fijo del sistema y no se puede modificar ni eliminar."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = relacion.nombre
+        serializer = TipoRelacionFamiliarSerializer(relacion, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        relacion = serializer.save()
+        if old_name != relacion.nombre:
+            VinculoFamiliar.objects.filter(relacion__iexact=old_name).update(relacion=relacion.nombre)
+            record_change(Seccion.PERSONAS, f"Vínculo familiar {old_name}", old_name, relacion.nombre, request_user(request))
+        return Response(TipoRelacionFamiliarSerializer(relacion).data)
+
+    if request.method == "DELETE":
+        if VinculoFamiliar.objects.filter(relacion__iexact=relacion.nombre).exists():
+            return Response(
+                {"detail": "No se puede eliminar la relación porque está en uso por vínculos familiares."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = relacion.nombre
+        relacion.delete()
+        record_change(Seccion.PERSONAS, f"Vínculo familiar {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def obra_social_sort_key(nombre):
+    norm = (nombre or "").strip().lower()
+    if norm == "sin obra social":
+        return (0, "")
+    return (1, norm)
+
+
+@extend_schema(tags=["Padron / Jugador"], request=ObraSocialSerializer, responses=ObraSocialSerializer)
+@api_view(["GET", "POST"])
+def obra_social_list_create(request):
+    if request.method == "GET":
+        obras = sorted(ObraSocial.objects.all(), key=lambda o: obra_social_sort_key(o.nombre))
+        return Response(ObraSocialSerializer(obras, many=True).data)
+
+    serializer = ObraSocialSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    obra = serializer.save()
+    record_change(Seccion.PERSONAS, f"Obra social {obra.nombre}", "", "Alta", request_user(request))
+    return Response(ObraSocialSerializer(obra).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Jugador"], request=ObraSocialSerializer, responses=ObraSocialSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def obra_social_detail(request, pk):
+    obra = get_object_or_404(ObraSocial, pk=pk)
+
+    if request.method == "GET":
+        return Response(ObraSocialSerializer(obra).data)
+
+    if obra.nombre.strip().lower() == "sin obra social":
+        return Response(
+            {"detail": "La opción 'Sin obra social' es un valor fijo del sistema y no se puede modificar ni eliminar."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = obra.nombre
+        serializer = ObraSocialSerializer(obra, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        obra = serializer.save()
+        if old_name != obra.nombre:
+            Jugador.objects.filter(obra_social__iexact=old_name).update(obra_social=obra.nombre)
+            record_change(Seccion.PERSONAS, f"Obra social {old_name}", old_name, obra.nombre, request_user(request))
+        return Response(ObraSocialSerializer(obra).data)
+
+    if request.method == "DELETE":
+        if Jugador.objects.filter(obra_social__iexact=obra.nombre).exists():
+            return Response(
+                {"detail": "No se puede eliminar la obra social porque está asignada a jugadores."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = obra.nombre
+        obra.delete()
+        record_change(Seccion.PERSONAS, f"Obra social {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=["Padron / Jugador"], request=TalleIndumentariaSerializer, responses=TalleIndumentariaSerializer)
+@api_view(["GET", "POST"])
+def talle_indumentaria_list_create(request):
+    if request.method == "GET":
+        talles = sorted(TalleIndumentaria.objects.all(), key=lambda t: talle_sort_key(t.nombre))
+        return Response(TalleIndumentariaSerializer(talles, many=True).data)
+
+    serializer = TalleIndumentariaSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    talle = serializer.save()
+    record_change(Seccion.PERSONAS, f"Talle {talle.nombre}", "", "Alta", request_user(request))
+    return Response(TalleIndumentariaSerializer(talle).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Jugador"], request=TalleIndumentariaSerializer, responses=TalleIndumentariaSerializer)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+def talle_indumentaria_detail(request, pk):
+    talle = get_object_or_404(TalleIndumentaria, pk=pk)
+
+    if request.method == "GET":
+        return Response(TalleIndumentariaSerializer(talle).data)
+
+    if request.method in ["PUT", "PATCH"]:
+        old_name = talle.nombre
+        old_desc = talle.descripcion
+        serializer = TalleIndumentariaSerializer(talle, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        talle = serializer.save()
+        if old_name != talle.nombre:
+            Jugador.objects.filter(tallaIndumentaria__iexact=old_name).update(tallaIndumentaria=talle.nombre)
+        before_str = f"{old_name}" + (f" ({old_desc})" if old_desc else "")
+        after_str = f"{talle.nombre}" + (f" ({talle.descripcion})" if talle.descripcion else "")
+        if before_str != after_str:
+            record_change(Seccion.PERSONAS, f"Talle {old_name}", before_str, after_str, request_user(request))
+        return Response(TalleIndumentariaSerializer(talle).data)
+
+    if request.method == "DELETE":
+        if Jugador.objects.filter(tallaIndumentaria__iexact=talle.nombre).exists():
+            return Response(
+                {"detail": "No se puede eliminar el talle porque está asignado a jugadores."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nombre = talle.nombre
+        talle.delete()
+        record_change(Seccion.PERSONAS, f"Talle {nombre}", "Existente", "Eliminado", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Padron / VinculoFamiliar"], request=VinculoFamiliarSerializer, responses=VinculoFamiliarSerializer)

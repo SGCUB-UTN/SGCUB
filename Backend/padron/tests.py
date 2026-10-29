@@ -9,7 +9,29 @@ from padron.serializers import SocioSerializer
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
-from .models import ActualizacionCategoriasEjecucion, CargoDocente, Categoria, VinculoFamiliar, Docente, DocenteCategoria, EstadoDeportivo, EstadoAdministrativo, Genero, Jugador, Localidad, Barrio, Persona, RecategorizacionEjecucion, RecategorizacionResultado, Socio, get_anio_actual
+from configuracion.models import HistorialConfiguracion
+from .models import (
+    ActualizacionCategoriasEjecucion,
+    Barrio,
+    CargoDocente,
+    Categoria,
+    Docente,
+    DocenteCategoria,
+    EstadoAdministrativo,
+    EstadoDeportivo,
+    Genero,
+    Jugador,
+    Localidad,
+    ObraSocial,
+    Persona,
+    RecategorizacionEjecucion,
+    RecategorizacionResultado,
+    Socio,
+    TalleIndumentaria,
+    TipoRelacionFamiliar,
+    VinculoFamiliar,
+    get_anio_actual,
+)
 from .services import (
     CategoriesOutdated,
     RecategorizationInProgress,
@@ -1400,6 +1422,191 @@ class PadronViewTests(APITestCase):
         )
         self.assertEqual(status.HTTP_400_BAD_REQUEST, docente_resp.status_code)
         self.assertIn("vinculos_familiares", docente_resp.data)
+
+    def test_cargo_docente_crud(self):
+        # Create
+        res = self.client.post("/api/padron/cargo-docente/", {"nombre": "Coordinador general"})
+        self.assertEqual(status.HTTP_201_CREATED, res.status_code)
+        cargo_id = res.data["cargo_id"]
+        self.assertEqual("Coordinador general", res.data["nombre"])
+        self.assertFalse(res.data["en_uso"])
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Cargo docente Coordinador general", valor_nuevo="Alta"
+            ).exists()
+        )
+
+        # Update
+        res = self.client.put(f"/api/padron/cargo-docente/{cargo_id}/", {"nombre": "Coordinador de juveniles"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Coordinador de juveniles", res.data["nombre"])
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Cargo docente Coordinador general", valor_nuevo="Coordinador de juveniles"
+            ).exists()
+        )
+
+        # Delete unused
+        res = self.client.delete(f"/api/padron/cargo-docente/{cargo_id}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Cargo docente Coordinador de juveniles", valor_nuevo="Eliminado"
+            ).exists()
+        )
+
+        # In-use cannot be deleted
+        docente = self.crear_docente_orm()
+        cargo_usado = self.cargo()
+        DocenteCategoria.objects.create(docente=docente, categoria=self.crear_categoria_orm(), cargo=cargo_usado)
+        res = self.client.delete(f"/api/padron/cargo-docente/{cargo_usado.pk}/")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res.status_code)
+
+    def test_localidad_and_barrio_crud(self):
+        # Localidad update & delete
+        loc = Localidad.objects.create(nombre="Quilmes Oeste", codigo_postal="1879")
+        res = self.client.put(f"/api/padron/localidad/{loc.pk}/", {"nombre": "Quilmes Centro", "codigo_postal": "1878"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Quilmes Centro", res.data["nombre"])
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Localidad Quilmes Oeste"
+            ).exists()
+        )
+
+        # Barrio create, update, delete
+        res = self.client.post("/api/padron/barrio/", {"nombre": "La Colonia", "localidad": loc.pk})
+        self.assertEqual(status.HTTP_201_CREATED, res.status_code)
+        barrio_id = res.data["barrio_id"]
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Barrio La Colonia", valor_nuevo__icontains="Alta"
+            ).exists()
+        )
+
+        # Loc cannot be deleted while having barrio
+        res = self.client.delete(f"/api/padron/localidad/{loc.pk}/")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res.status_code)
+
+        # Barrio update
+        res = self.client.patch(f"/api/padron/barrio/{barrio_id}/", {"nombre": "Barrio La Colonia"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Barrio La Colonia", res.data["nombre"])
+
+        # Barrio delete
+        res = self.client.delete(f"/api/padron/barrio/{barrio_id}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+
+        # Now Loc can be deleted
+        res = self.client.delete(f"/api/padron/localidad/{loc.pk}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+
+    def test_tipo_relacion_familiar_crud_and_otro_protection(self):
+        # Create
+        res = self.client.post("/api/padron/tipo-relacion-familiar/", {"nombre": "Padrino"})
+        self.assertEqual(status.HTTP_201_CREATED, res.status_code)
+        pk = res.data["tipo_relacion_id"]
+
+        # Update
+        res = self.client.patch(f"/api/padron/tipo-relacion-familiar/{pk}/", {"nombre": "Madrina o Padrino"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Madrina o Padrino", res.data["nombre"])
+
+        # Delete
+        res = self.client.delete(f"/api/padron/tipo-relacion-familiar/{pk}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+
+        # Check audit log
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Vínculo familiar Padrino"
+            ).exists()
+        )
+
+        # "Otro" protection: cannot edit or delete
+        otro, _ = TipoRelacionFamiliar.objects.get_or_create(nombre="Otro")
+        res_put = self.client.put(f"/api/padron/tipo-relacion-familiar/{otro.pk}/", {"nombre": "Modificado"})
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res_put.status_code)
+        self.assertIn("no se puede modificar ni eliminar", res_put.data.get("detail", ""))
+
+        res_del = self.client.delete(f"/api/padron/tipo-relacion-familiar/{otro.pk}/")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res_del.status_code)
+        self.assertIn("no se puede modificar ni eliminar", res_del.data.get("detail", ""))
+
+        # "Otro" always sorted last in list
+        TipoRelacionFamiliar.objects.get_or_create(nombre="Abuelo/a")
+        TipoRelacionFamiliar.objects.get_or_create(nombre="Tío/a")
+        res_list = self.client.get("/api/padron/tipo-relacion-familiar/")
+        self.assertEqual(status.HTTP_200_OK, res_list.status_code)
+        self.assertTrue(len(res_list.data) >= 2)
+        self.assertEqual("Otro", res_list.data[-1]["nombre"])
+
+    def test_obra_social_crud_and_sin_obra_social_protection(self):
+        # Create
+        res = self.client.post("/api/padron/obra-social/", {"nombre": "Sancor"})
+        self.assertEqual(status.HTTP_201_CREATED, res.status_code)
+        pk = res.data["obra_social_id"]
+
+        # Update
+        res = self.client.patch(f"/api/padron/obra-social/{pk}/", {"nombre": "Sancor Salud Premium"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Sancor Salud Premium", res.data["nombre"])
+
+        # Delete
+        res = self.client.delete(f"/api/padron/obra-social/{pk}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Obra social Sancor"
+            ).exists()
+        )
+
+        # "Sin obra social" protection: cannot edit or delete
+        sin_obra, _ = ObraSocial.objects.get_or_create(nombre="Sin obra social")
+        res_put = self.client.put(f"/api/padron/obra-social/{sin_obra.pk}/", {"nombre": "Modificada"})
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res_put.status_code)
+        self.assertIn("no se puede modificar ni eliminar", res_put.data.get("detail", ""))
+
+        res_del = self.client.delete(f"/api/padron/obra-social/{sin_obra.pk}/")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, res_del.status_code)
+        self.assertIn("no se puede modificar ni eliminar", res_del.data.get("detail", ""))
+
+        # "Sin obra social" always sorted first in list
+        ObraSocial.objects.get_or_create(nombre="OSDE")
+        ObraSocial.objects.get_or_create(nombre="Galeno")
+        res_list = self.client.get("/api/padron/obra-social/")
+        self.assertEqual(status.HTTP_200_OK, res_list.status_code)
+        self.assertTrue(len(res_list.data) >= 2)
+        self.assertEqual("Sin obra social", res_list.data[0]["nombre"])
+
+    def test_talle_indumentaria_crud_and_sorting(self):
+        res = self.client.post("/api/padron/talle-indumentaria/", {"nombre": "14", "descripcion": "Infantil talle 14"})
+        self.assertEqual(status.HTTP_201_CREATED, res.status_code)
+        pk = res.data["talle_id"]
+        self.assertEqual("14", res.data["nombre"])
+
+        res = self.client.patch(f"/api/padron/talle-indumentaria/{pk}/", {"descripcion": "Infantil 14 años"})
+        self.assertEqual(status.HTTP_200_OK, res.status_code)
+        self.assertEqual("Infantil 14 años", res.data["descripcion"])
+
+        res = self.client.delete(f"/api/padron/talle-indumentaria/{pk}/")
+        self.assertEqual(status.HTTP_204_NO_CONTENT, res.status_code)
+        self.assertTrue(
+            HistorialConfiguracion.objects.filter(
+                seccion="Personas", campo__icontains="Talle 14"
+            ).exists()
+        )
+
+        # Sorting: numbers ascending, sizes in garment order, others alphabetical
+        test_talles = ["12", "10", "14", "8", "M", "XS", "XL", "S", "L", "XXL", "Especial"]
+        for nombre in test_talles:
+            TalleIndumentaria.objects.get_or_create(nombre=nombre)
+
+        res_list = self.client.get("/api/padron/talle-indumentaria/")
+        self.assertEqual(status.HTTP_200_OK, res_list.status_code)
+        nombres = [t["nombre"] for t in res_list.data if t["nombre"] in test_talles]
+        expected_order = ["8", "10", "12", "14", "XS", "S", "M", "L", "XL", "XXL", "Especial"]
+        self.assertEqual(expected_order, nombres)
 
 
 class RecategorizationServiceTests(TestCase):

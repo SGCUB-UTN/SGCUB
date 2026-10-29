@@ -2,7 +2,7 @@ import re
 
 from rest_framework import serializers
 from django.db import transaction
-from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from
+from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
 from finanzas.services import create_or_update_player_current_cuota
 
 
@@ -112,13 +112,17 @@ def normalize_name(value):
 
 class LocalidadSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=100)
+    en_uso = serializers.SerializerMethodField()
 
     class Meta:
         model = Localidad
-        fields = "__all__"
+        fields = ["localidad_id", "nombre", "codigo_postal", "en_uso"]
 
     def validate_nombre(self, value):
         return normalize_name(value)
+
+    def get_en_uso(self, obj):
+        return obj.domicilios.exists() or obj.barrios.exists()
 
     def create(self, validated_data):
         existing = Localidad.objects.filter(nombre__iexact=validated_data["nombre"]).first()
@@ -127,20 +131,70 @@ class LocalidadSerializer(serializers.ModelSerializer):
 
 class BarrioSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=100)
+    en_uso = serializers.SerializerMethodField()
+    localidad_nombre = serializers.CharField(source="localidad.nombre", read_only=True)
 
     class Meta:
         model = Barrio
-        fields = ["barrio_id", "nombre", "localidad"]
+        fields = ["barrio_id", "nombre", "localidad", "localidad_nombre", "en_uso"]
         validators = []
 
     def validate_nombre(self, value):
         return normalize_name(value)
+
+    def get_en_uso(self, obj):
+        return obj.domicilios.exists()
 
     def create(self, validated_data):
         existing = Barrio.objects.filter(
             nombre__iexact=validated_data["nombre"], localidad=validated_data["localidad"]
         ).first()
         return existing or super().create(validated_data)
+
+
+class TipoRelacionFamiliarSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=50)
+    en_uso = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TipoRelacionFamiliar
+        fields = ["tipo_relacion_id", "nombre", "en_uso"]
+
+    def validate_nombre(self, value):
+        return normalize_name(value)
+
+    def get_en_uso(self, obj):
+        return VinculoFamiliar.objects.filter(relacion__iexact=obj.nombre).exists()
+
+
+class ObraSocialSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=100)
+    en_uso = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ObraSocial
+        fields = ["obra_social_id", "nombre", "en_uso"]
+
+    def validate_nombre(self, value):
+        return normalize_name(value)
+
+    def get_en_uso(self, obj):
+        return Jugador.objects.filter(obra_social__iexact=obj.nombre).exists()
+
+
+class TalleIndumentariaSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=20)
+    en_uso = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TalleIndumentaria
+        fields = ["talle_id", "nombre", "descripcion", "en_uso"]
+
+    def validate_nombre(self, value):
+        return value.strip().upper()
+
+    def get_en_uso(self, obj):
+        return Jugador.objects.filter(tallaIndumentaria__iexact=obj.nombre).exists()
 
 
 class DomicilioSerializer(serializers.ModelSerializer):
@@ -531,7 +585,7 @@ class JugadorSerializer(serializers.ModelSerializer):
     categoria = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all())
     categoria_secundaria = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all(), allow_null=True, required=False)
     obra_social = serializers.CharField(max_length=50)
-    tallaIndumentaria = serializers.ChoiceField(choices=SIZES_CHOICES)
+    tallaIndumentaria = serializers.CharField(max_length=20)
     estado = serializers.PrimaryKeyRelatedField(queryset=EstadoDeportivo.objects.all(), required=False)
     vinculos_familiares = VinculoFamiliarSerializer(many=True, required=False)
 
@@ -553,6 +607,14 @@ class JugadorSerializer(serializers.ModelSerializer):
             "estado",
             "vinculos_familiares",
         ]
+
+    def validate_tallaIndumentaria(self, value):
+        if not value:
+            raise serializers.ValidationError("Este campo no puede estar en blanco.")
+        valid_choices = [c[0] for c in SIZES_CHOICES]
+        if value not in valid_choices and not TalleIndumentaria.objects.filter(nombre__iexact=value).exists():
+            raise serializers.ValidationError(f"\"{value}\" no es una opción válida.")
+        return value
 
     def _birth_date(self, attrs):
         new_member_person = (attrs.get("nuevo_socio") or {}).get("persona", {})
@@ -741,9 +803,18 @@ class JugadorSerializerDetail(serializers.ModelSerializer):
 
 
 class CargoDocenteSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=100)
+    en_uso = serializers.SerializerMethodField()
+
     class Meta:
         model = CargoDocente
-        fields = ["cargo_id", "nombre"]
+        fields = ["cargo_id", "nombre", "en_uso"]
+
+    def validate_nombre(self, value):
+        return normalize_name(value)
+
+    def get_en_uso(self, obj):
+        return obj.asignaciones.exists()
 
 
 class AsignacionDocenteSerializer(serializers.Serializer):
