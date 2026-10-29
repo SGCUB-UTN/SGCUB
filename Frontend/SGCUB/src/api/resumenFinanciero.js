@@ -18,8 +18,9 @@ const errorDetailFrom = async (requestError) => {
   return requestError
 }
 
-export const getResumenFinanciero = async () => {
-  const response = await api.get(RESUMEN_ENDPOINT)
+// Monthly summary of `periodo` ('YYYY-MM', current month by default) plus the current debt overview
+export const getResumenFinanciero = async (periodo) => {
+  const response = await api.get(RESUMEN_ENDPOINT, { params: periodo ? { periodo } : undefined })
   return response.data
 }
 

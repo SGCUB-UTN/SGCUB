@@ -1,143 +1,226 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { downloadFinancialSummaryPdf } from '../api/resumenFinanciero'
-import { formatAmount, formatDni, getErrorMessage } from '../components/personas/format'
+import PeriodSelector from '../components/cuota/PeriodSelector'
+import { formatCount, formatMoney, formatPercentage, formatWholeMoney, isValidPeriod } from '../components/cuota/cuotaPeriod'
+import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
+import { formatDate, getErrorMessage } from '../components/personas/format'
+import CollectionEvolutionChart from '../components/resumen/CollectionEvolutionChart'
+import IncomeOriginChart from '../components/resumen/IncomeOriginChart'
 import DataTable from '../components/shared/DataTable'
+import { KpiColumn, KpiGrid } from '../components/shared/Kpi'
 import PageHeader from '../components/shared/PageHeader'
-import TableMessageRow from '../components/shared/TableMessageRow'
-import TablePagination from '../components/shared/TablePagination'
-import TableSearchInput from '../components/shared/TableSearchInput'
+import SectionHeading from '../components/shared/SectionHeading'
+import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
-import usePagination from '../hooks/usePagination'
-import useOrdenTabla from '../hooks/useOrdenTabla'
-import StatCard from '../components/shared/StatCard'
-import SortableHeader from '../components/shared/SortableHeader'
-import { overdueBreakdown } from '../components/finanzas/cuotaStates'
-import { matchesSearch } from '../components/shared/search'
 
-const SORT_VALUES = {
-  numero: (row) => (row.numero_socio ? Number(row.numero_socio) : null),
-  nombre: (row) => `${row.apellido ?? ''} ${row.nombre ?? ''}`.trim(),
-  vencidas: (row) => Number(row.cuotasVencidas ?? 0),
-}
-const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
+const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
+const BODY_CLASS = 'px-4 sm:px-5 py-4'
+const HEADING_CLASS = 'px-4 sm:px-5 border-b'
+const EXPORT_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded text-sm font-semibold text-on-surface bg-surface-container-lowest hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+const TOGGLE_BUTTON_CLASS = 'inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent'
 
-const financialTabPath = (row) => (row.jugador_id
-  ? `/padron/jugadores/${row.jugador_id}?tab=financiero`
-  : `/padron/socios/${row.socio_id}?tab=financiero`)
+const socioLabel = (socio) => `${socio.apellido}, ${socio.nombre}`
 
-function StatCardSkeleton() {
+function SectionDivider({ children }) {
   return (
-    <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs animate-pulse min-h-[82px]">
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="h-3.5 w-1/2 bg-surface-container-high rounded mb-1.5"></div>
-        <div className="h-6 w-3/4 bg-surface-container-high rounded"></div>
-      </div>
-      <div className="w-10 h-10 rounded-full bg-surface-container-high shrink-0"></div>
+    <div className="flex items-center gap-3 pt-2" role="presentation">
+      <span className="text-xs font-bold uppercase tracking-widest text-outline whitespace-nowrap">{children}</span>
+      <span className="h-px flex-1 bg-outline-variant/40" />
     </div>
   )
 }
 
-function CollectionCard({ label, amount, detail, icon, dotClass }) {
+function TotalLabel({ amount, negative = false }) {
   return (
-    <div className="bg-surface-container-lowest p-space-md rounded-xl border border-outline-variant/30 flex items-start justify-between shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex flex-col gap-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} aria-hidden="true" />
-          <span className="font-label-sm text-label-sm text-outline uppercase font-semibold tracking-wide truncate">{label}</span>
+    <span className="text-sm text-on-surface-variant">
+      Total:{' '}
+      <strong className={`text-base tabular-nums ${negative && Number(amount) > 0 ? 'text-error' : 'text-on-surface'}`}>
+        {negative && Number(amount) > 0 ? '−' : ''}{formatMoney(amount)}
+      </strong>
+    </span>
+  )
+}
+
+function ToggleButton({ expanded, count, controls, onToggle }) {
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={controls} disabled={!count} className={TOGGLE_BUTTON_CLASS}>
+      {expanded ? 'Ocultar' : `Desplegar (${count})`}
+      <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
+    </button>
+  )
+}
+
+function EffectivenessKpi({ rate }) {
+  const value = rate == null ? null : Number(rate)
+  return (
+    <div className="min-w-0 h-full flex flex-col">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Efectividad</h3>
+      <p className="mt-1 text-2xl font-bold tabular-nums leading-tight text-on-surface">{value == null ? '—' : formatPercentage(value)}</p>
+      <div
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={value ?? 0}
+        aria-label="Efectividad de la cobranza"
+        className="mt-auto pt-2"
+      >
+        <div className="h-2 rounded bg-primary-fixed overflow-hidden">
+          <div className="h-full rounded bg-primary" style={{ width: `${Math.min(value ?? 0, 100)}%` }} />
         </div>
-        <span className="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight">
-          {amount != null ? formatAmount(amount) : '—'}
-        </span>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">{detail}</p>
-      </div>
-      <div className="w-9 h-9 rounded-lg bg-surface-container-low text-primary flex items-center justify-center shrink-0 ml-3">
-        <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>
       </div>
     </div>
   )
 }
 
-const COLLECTION_METHODS = [
-  { key: 'transferencia_bancaria', label: 'Transferencia bancaria', icon: 'account_balance', dotClass: 'bg-primary', detail: 'Recaudado · acumulado histórico' },
-  { key: 'billetera_virtual', label: 'Billetera virtual', icon: 'wallet', dotClass: 'bg-secondary-container', detail: 'Recaudado · acumulado histórico' },
-  { key: 'pago_efectivo', label: 'Pago en efectivo', icon: 'payments', dotClass: 'bg-tertiary', detail: 'Recaudado · acumulado histórico' },
-]
-
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-
-function SummaryBlock({ id, title, subtitle, icon, controls, children }) {
+function CuotaKpis({ cuotas }) {
+  const debt = Number(cuotas.en_deuda)
+  const surcharges = Number(cuotas.recargos)
   return (
-    <section className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm overflow-hidden" aria-labelledby={id}>
-      <div className="p-5 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 id={id} className="text-2xl font-bold text-on-surface">{title}</h2>
-          <p className="text-base text-on-surface-variant">{subtitle}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {controls}
-          {icon && <span className="material-symbols-outlined text-primary text-2xl" aria-hidden="true">{icon}</span>}
-        </div>
-      </div>
-      <div className="p-5 flex flex-col gap-space-md">
-        {children}
-      </div>
-    </section>
+    <div className="flex flex-col">
+      <KpiGrid columns={3} className="pb-5">
+        <KpiColumn label="Facturado esperado" value={formatWholeMoney(cuotas.esperado)} title={formatMoney(cuotas.esperado)} caption="Lo que debía ingresar" />
+        <KpiColumn label="Cobranza real" value={formatWholeMoney(cuotas.cobrado)} title={formatMoney(cuotas.cobrado)} tone="text-emerald-700" caption="Lo que se cobró de esas cuotas" />
+        <KpiColumn label="En deuda" value={formatWholeMoney(debt)} title={formatMoney(debt)} tone={debt > 0 ? 'text-error' : 'text-on-surface'} caption="Falta cobrar" />
+      </KpiGrid>
+      <KpiGrid columns={3} className="pt-5 border-t border-outline-variant/40">
+        <EffectivenessKpi rate={cuotas.efectividad} />
+        <KpiColumn label="Volumen" value={`${formatCount(cuotas.pagas)} / ${formatCount(cuotas.generadas)}`} caption="Cuotas pagas / generadas" />
+        <KpiColumn label="Recargos" value={formatWholeMoney(surcharges)} title={formatMoney(surcharges)} tone={surcharges > 0 ? 'text-error' : 'text-on-surface'} caption="Aplicados por mora" />
+      </KpiGrid>
+    </div>
   )
 }
 
-// Debtor status filter options
-const DEBT_FILTERS = [
-  { value: 'all', label: 'Todos los estados' },
-  { value: 'en_fecha', label: 'Solo deuda en fecha' },
-  { value: 'vencida', label: 'Solo deuda vencida' },
-  { value: 'ambas', label: 'Deuda en fecha y vencida' },
-]
+function PaymentMethodRows({ methods }) {
+  if (!methods.medios.length) {
+    return <p className="text-sm text-on-surface-variant">No hay medios de pago configurados.</p>
+  }
+  return (
+    <ul className="flex flex-col gap-3">
+      {methods.medios.map((method) => (
+        <li key={method.codigo} className="grid grid-cols-[minmax(0,8rem)_1fr] sm:grid-cols-[10rem_1fr_auto] items-center gap-x-4 gap-y-1">
+          <span className="text-sm font-semibold text-on-surface truncate" title={method.nombre}>{method.nombre}</span>
+          <div
+            role="meter"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Number(method.porcentaje)}
+            aria-label={`${method.nombre}: ${formatPercentage(method.porcentaje)} de lo ingresado`}
+            className="h-3 rounded bg-surface-container-high overflow-hidden"
+          >
+            <div className="h-full rounded bg-primary" style={{ width: `${Number(method.porcentaje)}%` }} />
+          </div>
+          <span className="col-span-2 sm:col-span-1 text-sm text-right tabular-nums text-on-surface-variant whitespace-nowrap">
+            <strong className="text-on-surface">{formatPercentage(method.porcentaje)}</strong> · {formatMoney(method.monto)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
+function ExtraIncomeTable({ movements, onOpen }) {
+  return (
+    <DataTable
+      tableClassName="min-w-[680px]"
+      headers={(
+        <>
+          <th className="py-2.5 px-4" scope="col">Comprobante</th>
+          <th className="py-2.5 px-4" scope="col">Fecha</th>
+          <th className="py-2.5 px-4" scope="col">Socio</th>
+          <th className="py-2.5 px-4" scope="col">Concepto</th>
+          <th className="py-2.5 px-4 text-right" scope="col">Monto</th>
+        </>
+      )}
+    >
+      {movements.map((movement) => (
+        <tr
+          key={movement.comprobante_id}
+          tabIndex={0}
+          role="button"
+          onClick={() => onOpen(movement.comprobante_id)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onOpen(movement.comprobante_id)
+            }
+          }}
+          className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+        >
+          <td className="py-2.5 px-4 font-semibold text-primary whitespace-nowrap">{movement.codigo}</td>
+          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
+          <td className="py-2.5 px-4 text-on-surface">{socioLabel(movement.socio)}</td>
+          <td className="py-2.5 px-4 text-on-surface">{movement.concepto}</td>
+          <td className="py-2.5 px-4 text-right font-semibold tabular-nums text-emerald-700 whitespace-nowrap">+ {formatMoney(movement.monto)}</td>
+        </tr>
+      ))}
+    </DataTable>
+  )
+}
+
+function RefundsTable({ movements }) {
+  return (
+    <DataTable
+      tableClassName="min-w-[760px]"
+      headers={(
+        <>
+          <th className="py-2.5 px-4" scope="col">Comprobante</th>
+          <th className="py-2.5 px-4" scope="col">Fecha</th>
+          <th className="py-2.5 px-4" scope="col">Socio</th>
+          <th className="py-2.5 px-4" scope="col">Concepto</th>
+          <th className="py-2.5 px-4" scope="col">Medio</th>
+          <th className="py-2.5 px-4 text-right" scope="col">Monto</th>
+        </>
+      )}
+    >
+      {movements.map((movement) => (
+        <tr key={movement.devolucion_id}>
+          <td className="py-2.5 px-4 whitespace-nowrap">
+            <span className="block font-semibold text-on-surface">{movement.codigo}</span>
+            <span className="block text-xs text-on-surface-variant">{movement.tipo_nombre}</span>
+          </td>
+          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
+          <td className="py-2.5 px-4 text-on-surface">{socioLabel(movement.socio)}</td>
+          <td className="py-2.5 px-4 text-on-surface">
+            {movement.concepto}
+            {movement.comprobante_anulado && <span className="block text-xs text-on-surface-variant">Sobre {movement.comprobante_anulado}</span>}
+          </td>
+          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{movement.medio_de_pago}</td>
+          <td className="py-2.5 px-4 text-right font-semibold tabular-nums text-error whitespace-nowrap">− {formatMoney(movement.monto)}</td>
+        </tr>
+      ))}
+    </DataTable>
+  )
+}
+
+function LoadingPanel() {
+  return (
+    <div className={`${PANEL_CLASS} ${BODY_CLASS} flex items-center gap-2 text-on-surface-variant`} role="status">
+      <span className="material-symbols-outlined animate-spin text-[20px]" aria-hidden="true">progress_activity</span>
+      Cargando resumen financiero...
+    </div>
+  )
+}
 
 function ResumenFinanciero() {
-  const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [debtFilter, setDebtFilter] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedPeriod = searchParams.get('periodo')
+  const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
+  const { data, isLoading, error, reload } = useResumenFinanciero(period)
+  const [expanded, setExpanded] = useState({ incomes: false, refunds: false })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+  const [comprobanteId, setComprobanteId] = useState(null)
 
-  const {
-    isLoading,
-    errors,
-    resumen,
-    selectedPeriod,
-    setSelectedPeriod,
-    availablePeriods,
-    selectedPeriodLabel,
-    periodKpis,
-    debtorRows,
-  } = useResumenFinanciero()
-
-  // Apply search + debt-type filter
-  const filteredRows = useMemo(() => {
-    let rows = debtorRows
-
-    if (debtFilter === 'en_fecha') rows = rows.filter((r) => r.deudaEnFecha > 0)
-    else if (debtFilter === 'vencida') rows = rows.filter((r) => r.deudaVencida > 0)
-    else if (debtFilter === 'ambas') rows = rows.filter((r) => r.deudaEnFecha > 0 && r.deudaVencida > 0)
-
-    if (!search.trim()) return rows
-    return rows.filter((r) => matchesSearch(search, [r.nombre, r.apellido, r.dni, r.numero_socio]))
-  }, [debtorRows, search, debtFilter])
-
-  const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
-  const sortAndReset = withPageReset(sortBy)
+  const changePeriod = (value) => setSearchParams({ periodo: value })
+  const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }))
 
   const handleExport = async () => {
     setIsExporting(true)
     setExportError('')
     try {
-      await downloadFinancialSummaryPdf(selectedPeriod)
+      await downloadFinancialSummaryPdf(period)
     } catch (err) {
       setExportError(getErrorMessage(err, 'No se pudo generar el informe PDF.'))
     } finally {
@@ -145,240 +228,124 @@ function ResumenFinanciero() {
     }
   }
 
-  const dataError = errors.cuotas || errors.resumen
-
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
-
       <PageHeader
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Resumen financiero' }]}
-        title="Balance de cuotas y deuda de socios"
+        title="Resumen financiero"
         actions={(
-          <>
-            <button
-              type="button"
-              disabled={isLoading || isExporting}
-              onClick={handleExport}
-              className="inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded-lg text-on-surface bg-surface-container-low hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden="true">
-                {isExporting ? 'hourglass_top' : 'download'}
-              </span>
-              {isExporting ? 'Generando...' : 'Exportar informe contable'}
-              {!isExporting && selectedPeriod && (
-                <span className="text-on-surface-variant font-normal">· {selectedPeriodLabel}</span>
-              )}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <PeriodSelector value={period} onChange={changePeriod} />
+            <button type="button" disabled={isLoading || isExporting} onClick={handleExport} className={EXPORT_BUTTON_CLASS}>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{isExporting ? 'hourglass_top' : 'download'}</span>
+              {isExporting ? 'Generando...' : 'Exportar informe'}
             </button>
-          </>
+          </div>
         )}
       />
 
-      {exportError && (
-        <p className="text-sm text-error" role="alert">{exportError}</p>
+      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
+
+      <SectionDivider>Resumen mensual · {formatPeriod(period)}</SectionDivider>
+
+      {isLoading && <LoadingPanel />}
+      {error && (
+        <p className={`${PANEL_CLASS} ${BODY_CLASS} text-error`} role="alert">
+          {getErrorMessage(error, 'No se pudo cargar el resumen financiero.')}
+        </p>
       )}
 
-      <SummaryBlock
-        id="period-block-title"
-        title="Resumen del período"
-        subtitle="Métricas de las cuotas del período seleccionado."
-        controls={(
-          <label className="flex items-center gap-2 font-medium text-sm text-on-surface-variant">
-            Período:
-            <input
-              type="month"
-              aria-label="Seleccionar período"
-              className={`${FILTER_CLASS} h-9 px-3 font-normal`}
-              value={selectedPeriod ?? ''}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              disabled={isLoading}
-            />
-          </label>
-        )}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-space-md">
-          {isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-          ) : (
-            <>
-              <StatCard size="sm" tone="neutral" icon="receipt_long" label="Cuotas generadas" value={periodKpis.cuotasGeneradas} />
-              <StatCard size="sm" tone="positive" icon="check_circle" label="Cuotas pagas" value={periodKpis.cuotasPagas} />
-              <StatCard size="sm" tone="warning" icon="pending" label="Cuotas sin pagar" value={periodKpis.cuotasImpagas} />
-              <StatCard size="sm" tone="neutral" icon="payments" label="Total recaudado" value={formatAmount(periodKpis.totalRecaudadoPeriodo)} />
-            </>
-          )}
-        </div>
-      </SummaryBlock>
-
-      <SummaryBlock
-        id="general-block-title"
-        title="Situación general"
-        subtitle="Información historica · no depende del período seleccionado."
-        icon="monitoring"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-md">
-          {isLoading ? (
-            Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)
-          ) : (
-            <>
-              <StatCard size="sm" tone="warning" icon="person_alert" label="Socios con deuda" value={Number(resumen?.socios_en_mora ?? 0).toLocaleString('es-AR')} />
-              <StatCard size="sm" tone="warning" icon="pending_actions" label="Monto adeudado total" value={formatAmount(resumen?.monto_adeudado_total ?? 0)} />
-              <StatCard
-                size="sm"
-                tone="neutral"
-                icon="event_busy"
-                label="Cuotas vencidas a la fecha"
-                value={Number(resumen?.cuotas_vencidas ?? 0).toLocaleString('es-AR')}
-                caption={overdueBreakdown(resumen?.cuotas_vencidas_1, resumen?.cuotas_vencidas_2)}
-              />
-            </>
-          )}
-        </div>
-        {errors.resumen && <p className="text-sm text-error" role="alert">{getErrorMessage(errors.resumen, 'No se pudieron cargar las métricas financieras.')}</p>}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-          {COLLECTION_METHODS.map((method) => (
-            <CollectionCard
-              key={method.key}
-              label={method.label}
-              amount={resumen ? resumen[method.key] : null}
-              detail={method.detail}
-              icon={method.icon}
-              dotClass={method.dotClass}
-            />
-          ))}
-        </div>
-      </SummaryBlock>
-
-      <section
-        aria-labelledby="debtors-table-title"
-        className="rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden min-w-0"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-space-sm border-b border-outline-variant/30 px-4 py-4">
-          <div className="flex flex-wrap items-end gap-space-sm flex-1">
-            <div className="flex flex-col gap-1 min-w-[180px]">
-              <label className="font-label-sm text-label-sm text-outline uppercase font-semibold">
-                Estado de deuda
-              </label>
-              <div className="relative">
-                <select
-                  value={debtFilter}
-                  onChange={(e) => withPageReset(() => setDebtFilter(e.target.value))()}
-                  className="w-full h-10 pl-3 pr-8 bg-surface-container-low text-on-surface rounded-lg font-body-sm text-body-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                >
-                  {DEBT_FILTERS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-                <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-on-surface-variant pointer-events-none text-[18px]" aria-hidden="true">expand_more</span>
+      {data && (
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_7fr] gap-5">
+            <section className={PANEL_CLASS} aria-labelledby="income-origin-title">
+              <SectionHeading id="income-origin-title" icon="donut_large" title="Origen de los ingresos" className={HEADING_CLASS} />
+              <div className={BODY_CLASS}>
+                <IncomeOriginChart income={data.ingresos} />
               </div>
-            </div>
+            </section>
 
-            <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-              <label className="font-label-sm text-label-sm text-outline uppercase font-semibold">
-                Búsqueda rápida
-              </label>
-              <TableSearchInput
-                value={search}
-                onChange={withPageReset(setSearch)}
-                placeholder="Filtrar por nombre, DNI o N° de socio..."
-                label="Filtrar socios por nombre, DNI o número de socio"
-              />
-            </div>
+            <section className={PANEL_CLASS} aria-labelledby="cuota-kpis-title">
+              <SectionHeading id="cuota-kpis-title" icon="monitoring" title={`Análisis de cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
+              <div className={BODY_CLASS}>
+                <CuotaKpis cuotas={data.cuotas} />
+              </div>
+            </section>
           </div>
 
+          <section className={PANEL_CLASS} aria-labelledby="extra-income-title">
+            <SectionHeading
+              id="extra-income-title"
+              icon="point_of_sale"
+              title="Movimientos de ingresos extra (no incluye cuotas)"
+              className={expanded.incomes ? HEADING_CLASS : 'px-4 sm:px-5'}
+              actions={(
+                <>
+                  <TotalLabel amount={data.ingresos_extra.total} />
+                  <ToggleButton expanded={expanded.incomes} count={data.ingresos_extra.movimientos.length} controls="extra-income-list" onToggle={() => toggle('incomes')} />
+                </>
+              )}
+            />
+            {expanded.incomes && (
+              <div id="extra-income-list">
+                <ExtraIncomeTable movements={data.ingresos_extra.movimientos} onOpen={setComprobanteId} />
+              </div>
+            )}
+          </section>
+
+          <section className={PANEL_CLASS} aria-labelledby="payment-methods-title">
+            <SectionHeading
+              id="payment-methods-title"
+              icon="credit_card"
+              title="Análisis de ingresos por medio de pago"
+              className={HEADING_CLASS}
+              actions={<TotalLabel amount={data.medios_de_pago.total} />}
+            />
+            <div className={BODY_CLASS}>
+              <PaymentMethodRows methods={data.medios_de_pago} />
+            </div>
+          </section>
+
+          <section className={PANEL_CLASS} aria-labelledby="refunds-title">
+            <SectionHeading
+              id="refunds-title"
+              icon="currency_exchange"
+              title="Devoluciones y ajustes"
+              className={expanded.refunds ? HEADING_CLASS : 'px-4 sm:px-5'}
+              actions={(
+                <>
+                  <TotalLabel amount={data.devoluciones.total} negative />
+                  <ToggleButton expanded={expanded.refunds} count={data.devoluciones.movimientos.length} controls="refunds-list" onToggle={() => toggle('refunds')} />
+                </>
+              )}
+            />
+            {expanded.refunds && (
+              <div id="refunds-list">
+                <RefundsTable movements={data.devoluciones.movimientos} />
+                <p className="px-4 sm:px-5 py-3 border-t border-outline-variant/30 text-sm text-on-surface-variant">
+                  Las devoluciones no restan de los ingresos: el dinero devuelto nunca se registró como ingreso o salió de un comprobante anulado.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <SectionDivider>Contexto histórico</SectionDivider>
+
+          <section className={PANEL_CLASS} aria-labelledby="evolution-title">
+            <SectionHeading id="evolution-title" icon="trending_up" title="Evolución anual de cobranza (cuotas)" className={HEADING_CLASS} />
+            <div className={BODY_CLASS}>
+              <CollectionEvolutionChart evolution={data.evolucion} />
+            </div>
+          </section>
         </div>
+      )}
 
-        <DataTable
-          className="min-w-full"
-          tableClassName="min-w-[780px]"
-          headers={(
-            <>
-              <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
-              <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
-              <th className="py-3 px-4" scope="col">DNI</th>
-              <th className="py-3 px-4 text-right" scope="col">Deuda en fecha</th>
-              <th className="py-3 px-4 text-right" scope="col">Deuda vencida</th>
-              <SortableHeader className="py-3 px-4 text-center" etiqueta="Cuotas vencidas" columna="vencidas" orden={sort} onOrdenar={sortAndReset} />
-            </>
-          )}
-        >
-          <TableMessageRow
-            colSpan={6}
-            isLoading={isLoading}
-            isEmpty={visibleRows.length === 0}
-            error={dataError}
-            loadingText="Cargando resumen financiero..."
-            errorText={dataError ? getErrorMessage(dataError, 'No se pudieron cargar los datos financieros.') : ''}
-            emptyText="No hay socios con deuda que coincidan con los filtros aplicados."
-          />
-
-          {!isLoading && !dataError && visibleRows.map((row) => {
-            const hasVencida = row.deudaVencida > 0
-            return (
-              <tr
-                key={row.socio_id}
-                tabIndex={0}
-                aria-label={`Ver estado de cuenta de ${row.nombre} ${row.apellido}`}
-                onClick={() => navigate(financialTabPath(row))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    navigate(financialTabPath(row))
-                  }
-                }}
-                className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-              >
-                <td className="py-3 px-4 font-bold text-primary text-base pl-6">
-                  {row.numero_socio ? `#${row.numero_socio}` : '—'}
-                </td>
-
-                <td className="py-3 px-4">
-                  <span className="font-medium text-on-surface block text-base">
-                    {row.nombre} {row.apellido}
-                  </span>
-                </td>
-
-                <td className="py-3 px-4 text-on-surface-variant">{formatDni(row.dni)}</td>
-
-                <td className="py-3 px-4 text-right">
-                  {row.deudaEnFecha > 0 ? (
-                    <span className="font-semibold text-on-surface">{formatAmount(row.deudaEnFecha)}</span>
-                  ) : (
-                    <span className="text-on-surface-variant">—</span>
-                  )}
-                </td>
-
-                <td className="py-3 px-4 text-right">
-                  {row.deudaVencida > 0 ? (
-                    <span className={`font-mono font-bold ${hasVencida ? 'text-error' : 'text-on-surface'}`}>
-                      {formatAmount(row.deudaVencida)}
-                    </span>
-                  ) : (
-                    <span className="text-on-surface-variant">—</span>
-                  )}
-                </td>
-
-                <td className="py-3 px-4 text-center">
-                  {row.cuotasVencidas > 0 ? (
-                    <span className="inline-flex flex-col items-center gap-0.5">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded font-label-sm text-label-sm font-bold bg-error-container text-on-error-container">
-                        {row.cuotasVencidas} cuota{row.cuotasVencidas !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs text-on-surface-variant">{overdueBreakdown(row.cuotasVencidas1, row.cuotasVencidas2)}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded font-label-sm text-label-sm bg-surface-container text-on-surface-variant">
-                      —
-                    </span>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </DataTable>
-
-        <TablePagination id="resumen-financiero-rows-per-page" {...paginationProps} />
-      </section>
+      <ComprobanteDetailModal
+        comprobanteId={comprobanteId}
+        opened={Boolean(comprobanteId)}
+        onClose={() => setComprobanteId(null)}
+        onChanged={reload}
+      />
     </div>
   )
 }
