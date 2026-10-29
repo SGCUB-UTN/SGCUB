@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
+import { getObrasSociales, getTallesIndumentaria } from '../api/personasConfig'
+import { compareObrasSociales, compareTalles } from '../components/configuracion/PersonasSettings'
 import { putSocio } from '../api/socios'
 import { categoriaAdmiteEdad } from '../components/categorias/categoriaFormat'
 import ContactModal from '../components/jugadores/ContactModal'
@@ -130,7 +132,29 @@ function JugadorForm() {
   const [errorGuardado, setErrorGuardado] = useState('')
   const [agregandoContacto, setAgregandoContacto] = useState(false)
   const [personaEncontrada, setPersonaEncontrada] = useState(null)
+  const [obrasSocialesLista, setObrasSocialesLista] = useState(OBRAS_SOCIALES)
+  const [tallesLista, setTallesLista] = useState(TALLES)
   const busqueda = usePersonaSearchDNI({ habilitada: !editando })
+
+  useEffect(() => {
+    getObrasSociales()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const sorted = [...data].sort(compareObrasSociales)
+          setObrasSocialesLista(sorted.map((d) => d.nombre))
+        }
+      })
+      .catch(() => {})
+
+    getTallesIndumentaria()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data.map((t) => ({ valor: t.nombre, nombre: t.descripcion || t.nombre }))
+          setTallesLista(list.sort(compareTalles))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!editando) return undefined
@@ -614,7 +638,7 @@ function JugadorForm() {
                 <Campo id="obra_social" label="Obra social" requerido error={errores.obra_social}>
                   <SelectConFlecha {...bindInput('obra_social')} conError={Boolean(errores.obra_social)}>
                     <option value="" disabled>Seleccione obra social...</option>
-                    {OBRAS_SOCIALES.map((nombre) => (
+                    {obrasSocialesLista.map((nombre) => (
                       <option key={nombre} value={nombre}>{nombre}</option>
                     ))}
                     <option value={OBRA_SOCIAL_OTRA}>Otra...</option>
@@ -623,8 +647,8 @@ function JugadorForm() {
                 <Campo id="tallaIndumentaria" label="Talle de indumentaria" requerido error={errores.tallaIndumentaria}>
                   <SelectConFlecha {...bindInput('tallaIndumentaria')} conError={Boolean(errores.tallaIndumentaria)}>
                     <option value="" disabled>Seleccione talle...</option>
-                    {TALLES.map((talle) => (
-                      <option key={talle.valor} value={talle.valor}>{`${talle.valor} (${talle.nombre})`}</option>
+                    {tallesLista.map((talle) => (
+                      <option key={talle.valor} value={talle.valor}>{`${talle.valor}${talle.nombre && talle.nombre !== talle.valor ? ` (${talle.nombre})` : ''}`}</option>
                     ))}
                   </SelectConFlecha>
                 </Campo>
