@@ -7,6 +7,7 @@ from .models import (
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
+	Devolucion,
 	EjecucionTareaCuota,
 	Imputacion,
 	ItemPago,
@@ -29,3 +30,4 @@ admin.site.register(Beca)
 admin.site.register(EjecucionTareaCuota)
 admin.site.register(ConceptoMovimiento)
 admin.site.register(RegistroAuditoria)
+admin.site.register(Devolucion)

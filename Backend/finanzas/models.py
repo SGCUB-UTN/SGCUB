@@ -37,20 +37,25 @@ class EstadoComprobanteChoices(models.TextChoices):
     ANULADO = "Anulado", "Anulado"
 
 
-class MedioDePagoChoices(models.TextChoices):
-    EFECTIVO = "Efectivo", "Efectivo"
-    TRANSFERENCIA = "Transferencia", "Transferencia"
-    BILLETERA_VIRTUAL = "BilleteraVirtual", "Billetera Virtual"
-
-
 class TipoMovimientoChoices(models.TextChoices):
-    ABONO = "Abono", "Abono"
     CARGO = "Cargo", "Cargo"
+    ABONO = "Abono", "Abono"
+    INGRESO = "Ingreso", "Ingreso"
 
 
-class TipoMovimientoOrigenChoices(models.TextChoices):
-    INGRESO_MANUAL = "IngresoManual", "Ingreso manual"
-    EGRESO = "Egreso", "Egreso"
+class OrigenConceptoChoices(models.TextChoices):
+    INGRESO = "Ingreso", "Ingreso"
+    DEVOLUCION_MANUAL = "DevolucionManual", "Devolución manual"
+
+
+class TipoComprobanteChoices(models.TextChoices):
+    RECIBO = "Recibo", "Recibo"
+    NOTA_CREDITO = "NotaCredito", "Nota de crédito"
+    DEVOLUCION_MANUAL = "DevolucionManual", "Devolución manual"
+
+
+class TipoDevolucionChoices(models.TextChoices):
+    MANUAL = "Manual", "Devolución manual"
     NOTA_CREDITO = "NotaCredito", "Nota de crédito"
 
 
@@ -177,6 +182,15 @@ class Pago(models.Model):
     fecha = models.DateTimeField(default=timezone.now)
     observacion = models.CharField(max_length=200, blank=True)
     motivo_anulacion = models.TextField(blank=True)
+    fecha_anulacion = models.DateTimeField(null=True, blank=True)
+    responsable_anulacion = models.CharField(max_length=120, blank=True)
+    usuario_anulacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="pagos_anulados",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "pago"
@@ -205,13 +219,10 @@ class MedioPago(models.Model):
         return cls.objects.filter(codigo=code).values_list("nombre", flat=True).first() or code
 
 
-MANUAL_MOVEMENT_ORIGINS = (TipoMovimientoOrigenChoices.INGRESO_MANUAL, TipoMovimientoOrigenChoices.EGRESO)
-
-
 class ConceptoMovimiento(models.Model):
     concepto_movimiento_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
-    origen = models.CharField(max_length=40, choices=TipoMovimientoOrigenChoices.choices)
+    origen = models.CharField(max_length=40, choices=OrigenConceptoChoices.choices)
 
     class Meta:
         db_table = "concepto_movimiento"
@@ -257,13 +268,6 @@ class Comprobante(models.Model):
         choices=EstadoComprobanteChoices.choices,
         default=EstadoComprobanteChoices.VIGENTE,
     )
-    reemplazado_por = models.OneToOneField(
-        "self",
-        on_delete=models.PROTECT,
-        related_name="reemplaza_a",
-        null=True,
-        blank=True,
-    )
 
     class Meta:
         db_table = "comprobante"
@@ -273,14 +277,22 @@ class Comprobante(models.Model):
 
 
 class SecuenciaComprobante(models.Model):
+    """Last number issued of each receipt type: receipts, credit notes and manual refunds count apart."""
+
     secuencia_comprobante_id = models.AutoField(primary_key=True)
+    tipo = models.CharField(
+        max_length=20,
+        choices=TipoComprobanteChoices.choices,
+        default=TipoComprobanteChoices.RECIBO,
+        unique=True,
+    )
     ultimo_numero = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "secuencia_comprobante"
 
     def __str__(self):
-        return f"Último comprobante {self.ultimo_numero}"
+        return f"Último {self.get_tipo_display().lower()} {self.ultimo_numero}"
 
 
 class CuentaCorriente(models.Model):
@@ -290,7 +302,6 @@ class CuentaCorriente(models.Model):
         on_delete=models.PROTECT,
         related_name="cuenta_corriente",
     )
-    saldo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     estado_cuenta_corriente = models.CharField(
         max_length=40,
         choices=EstadoCuentaCorrienteChoices.choices,
@@ -309,6 +320,9 @@ class CuentaCorriente(models.Model):
 
 
 class MovimientoCuenta(models.Model):
+    """A cuota charge (Cargo), the payment of cuotas (Abono) or a manual income (Ingreso).
+    Payments and incomes hang from a Pago, which holds the payment methods and the receipt."""
+
     movimiento_cuenta_id = models.AutoField(primary_key=True)
     cuenta_corriente = models.ForeignKey(
         CuentaCorriente,
@@ -326,31 +340,6 @@ class MovimientoCuenta(models.Model):
         Cuota,
         on_delete=models.CASCADE,
         related_name="movimiento",
-        null=True,
-        blank=True,
-    )
-    movimiento_revertido = models.ForeignKey(
-        "self",
-        on_delete=models.PROTECT,
-        related_name="reversiones",
-        related_query_name="reversion",
-        null=True,
-        blank=True,
-    )
-    medio_de_pago = models.CharField(
-        max_length=40,
-        choices=MedioDePagoChoices.choices,
-        null=True,
-        blank=True,
-    )
-    origen_manual = models.CharField(
-        max_length=40,
-        choices=TipoMovimientoOrigenChoices.choices,
-        null=True,
-        blank=True,
-    )
-    numero_comprobante = models.PositiveIntegerField(
-        unique=True,
         null=True,
         blank=True,
     )
@@ -375,10 +364,8 @@ class MovimientoCuenta(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(cuota__isnull=False, pago__isnull=True, movimiento_revertido__isnull=True)
-                    | models.Q(cuota__isnull=True, pago__isnull=False, movimiento_revertido__isnull=True)
-                    | models.Q(cuota__isnull=True, pago__isnull=True, movimiento_revertido__isnull=False)
-                    | models.Q(cuota__isnull=True, pago__isnull=True, movimiento_revertido__isnull=True)
+                    models.Q(tipo_movimiento="Cargo", cuota__isnull=False, pago__isnull=True)
+                    | models.Q(tipo_movimiento__in=("Abono", "Ingreso"), cuota__isnull=True, pago__isnull=False)
                 ),
                 name="movimiento_cuenta_single_origin",
             ),
@@ -386,6 +373,59 @@ class MovimientoCuenta(models.Model):
 
     def __str__(self):
         return f"{self.tipo_movimiento} - {self.monto}"
+
+
+class Devolucion(models.Model):
+    """Money given back to a socio. A manual refund returns money that was never registered as income
+    (an overpaid transfer, for instance); a credit note returns money of an annulled receipt. Neither
+    changes the debt of the socio nor the income of the club."""
+
+    devolucion_id = models.AutoField(primary_key=True)
+    tipo = models.CharField(max_length=20, choices=TipoDevolucionChoices.choices)
+    numero = models.PositiveIntegerField()
+    cuenta_corriente = models.ForeignKey(
+        CuentaCorriente,
+        on_delete=models.PROTECT,
+        related_name="devoluciones",
+    )
+    comprobante_anulado = models.ForeignKey(
+        Comprobante,
+        on_delete=models.PROTECT,
+        related_name="notas_credito",
+        null=True,
+        blank=True,
+    )
+    concepto = models.CharField(max_length=200)
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    # Code of a MedioPago, like ItemPago.medio_de_pago
+    medio_de_pago = models.CharField(max_length=40)
+    fecha = models.DateTimeField(default=timezone.now)
+    responsable = models.CharField(max_length=120)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="devoluciones_registradas",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "devolucion"
+        ordering = ["-fecha", "-devolucion_id"]
+        constraints = [
+            models.UniqueConstraint(fields=["tipo", "numero"], name="devolucion_numero_unico_por_tipo"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(tipo="NotaCredito", comprobante_anulado__isnull=False)
+                    | models.Q(tipo="Manual", comprobante_anulado__isnull=True)
+                ),
+                name="devolucion_nota_credito_con_comprobante",
+            ),
+            models.CheckConstraint(condition=models.Q(monto__gt=0), name="devolucion_monto_positivo"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.numero} - {self.monto}"
 
 
 class Imputacion(models.Model):

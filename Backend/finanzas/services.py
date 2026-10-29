@@ -20,6 +20,7 @@ from .models import (
     CuentaCorriente,
     Cuota,
     DetalleImputacion,
+    Devolucion,
     EstadoBecaChoices,
     EstadoComprobanteChoices,
     EstadoCuotaChoices,
@@ -33,10 +34,11 @@ from .models import (
     MovimientoCuenta,
     Pago,
     SecuenciaComprobante,
+    TipoComprobanteChoices,
+    TipoDevolucionChoices,
     TipoMovimientoChoices,
-    TipoMovimientoOrigenChoices,
 )
-from .pdf_utils import format_receipt_number
+from .pdf_utils import format_amount, format_receipt_number
 
 
 class CuotaDuplicadaError(Exception):
@@ -63,73 +65,12 @@ class ComprobanteInvalidoError(Exception):
     pass
 
 
-def reversed_amount_for(movement):
-    if movement is None:
-        return Decimal("0.00")
-    prefetched = getattr(movement, "_prefetched_objects_cache", {})
-    if "reversiones" in prefetched:
-        return sum((rev.monto for rev in movement.reversiones.all()), Decimal("0.00"))
-    return movement.reversiones.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+class DevolucionInvalidaError(Exception):
+    pass
 
 
-def remaining_reversible_amount(movement):
-    if movement is None:
-        return Decimal("0.00")
-    return max(Decimal("0.00"), movement.monto - reversed_amount_for(movement))
-
-
-@transaction.atomic
-def create_manual_movement(
-    socio_id,
-    movement_type,
-    origin,
-    concept,
-    amount,
-    payment_method=None,
-    reversed_movement_id=None,
-    user=None,
-):
-    account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
-    reversed_movement = None
-    if reversed_movement_id:
-        reversed_movement = MovimientoCuenta.objects.select_for_update().filter(
-            pk=reversed_movement_id,
-            cuenta_corriente=account,
-        ).first()
-        if reversed_movement is None:
-            raise PagoInvalidoError("El movimiento a revertir no pertenece al socio indicado.")
-
-        available_to_reverse = remaining_reversible_amount(reversed_movement)
-        if available_to_reverse <= Decimal("0.00"):
-            raise PagoInvalidoError("El movimiento indicado ya fue revertido en su totalidad.")
-
-        if amount > available_to_reverse:
-            raise PagoInvalidoError(
-                f"El monto no puede superar el saldo disponible del movimiento original ({available_to_reverse})."
-            )
-
-        if payment_method is None:
-            payment_method = reversed_movement.medio_de_pago
-
-    movement = MovimientoCuenta.objects.create(
-        cuenta_corriente=account,
-        movimiento_revertido=reversed_movement,
-        tipo_movimiento=movement_type,
-        fecha=timezone.now(),
-        monto=amount,
-        concepto=concept,
-        medio_de_pago=payment_method,
-        origen_manual=origin,
-        numero_comprobante=next_receipt_number(),
-        usuario=user,
-    )
-    account.saldo += amount if movement_type == TipoMovimientoChoices.ABONO else -amount
-    account.save(update_fields=["saldo"])
-    return movement
-
-
-def next_receipt_number():
-    sequence, _ = SecuenciaComprobante.objects.select_for_update().get_or_create(pk=1)
+def next_receipt_number(kind=TipoComprobanteChoices.RECIBO):
+    sequence, _ = SecuenciaComprobante.objects.select_for_update().get_or_create(tipo=kind)
     sequence.ultimo_numero += 1
     sequence.save(update_fields=["ultimo_numero"])
     return sequence.ultimo_numero
@@ -209,8 +150,6 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
         monto=amount,
         concepto=f"Cuota {period}",
     )
-    account.saldo -= amount
-    account.save(update_fields=["saldo"])
     record_transaction(
         Accion.CUOTA_CREADA,
         f"Cuota {period} generada",
@@ -281,18 +220,18 @@ def create_or_update_player_current_cuota(socio_id):
     return results[0] if results else None
 
 
-def has_payments(cuota):
-    return Imputacion.objects.filter(movimiento_destino__cuota=cuota).exists()
+def active_imputations():
+    """Imputations of payments still credited: a reverted payment no longer pays its cuotas."""
+    return Imputacion.objects.filter(movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO)
 
 
 def is_locked(cuota):
-    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_payments(cuota)
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota)
 
 
 def applied_amount(cuota):
-    return Imputacion.objects.filter(
+    return active_imputations().filter(
         movimiento_destino__cuota=cuota,
-        movimiento_origen__reversion__isnull=True,
     ).aggregate(total=Sum("monto_aplicado"))["total"] or Decimal("0.00")
 
 
@@ -303,10 +242,8 @@ def ensure_cuota_without_payments(cuota):
 
 @transaction.atomic
 def sync_cuota_charge(cuota):
-    account, movement = lock_cuota_charge(cuota)
+    _, movement = lock_cuota_charge(cuota)
     amount = net_amount(ItemCuota.objects.filter(cuota=cuota))
-    account.saldo -= amount - movement.monto
-    account.save(update_fields=["saldo"])
     movement.monto = amount
     movement.save(update_fields=["monto"])
     refresh_cuota_state(cuota, amount - applied_amount(cuota))
@@ -316,8 +253,6 @@ def sync_cuota_charge(cuota):
 def delete_cuota(cuota, user=None):
     account, movement = lock_cuota_charge(cuota)
     ensure_cuota_without_payments(cuota)
-    account.saldo += movement.monto
-    account.save(update_fields=["saldo"])
     record_transaction(
         Accion.CUOTA_ELIMINADA,
         f"Cuota {cuota.periodo} eliminada",
@@ -512,13 +447,12 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
     return result
 
 
-def pending_amounts(cuotas, ignored_origin=None):
+def pending_amounts(cuotas):
     cuota_ids = [cuota.pk for cuota in cuotas]
-    imputations = Imputacion.objects.filter(movimiento_destino__cuota__in=cuota_ids)
-    imputed_cuota_ids = set(imputations.values_list("movimiento_destino__cuota", flat=True))
-    active = imputations.filter(movimiento_origen__reversion__isnull=True)
-    if ignored_origin is not None:
-        active = active.exclude(movimiento_origen=ignored_origin)
+    imputed_cuota_ids = set(
+        Imputacion.objects.filter(movimiento_destino__cuota__in=cuota_ids).values_list("movimiento_destino__cuota", flat=True)
+    )
+    active = active_imputations().filter(movimiento_destino__cuota__in=cuota_ids)
     applied = dict(
         active.values("movimiento_destino__cuota")
         .annotate(total=Sum("monto_aplicado"))
@@ -555,7 +489,7 @@ def active_allocations(cuota):
     allocated = {}
     details = DetalleImputacion.objects.filter(
         imputacion__movimiento_destino__cuota=cuota,
-        imputacion__movimiento_origen__reversion__isnull=True,
+        imputacion__movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO,
     ).values_list("concepto", "monto")
     for concept, amount in details:
         allocated[concept] = allocated.get(concept, Decimal("0.00")) + amount
@@ -595,6 +529,11 @@ def apply_payment(payment_movement, cuotas, amount):
 
 
 RECEIPT_TYPE = "X"
+REFUND_RECEIPT_TYPES = {TipoDevolucionChoices.MANUAL: "DEV-X", TipoDevolucionChoices.NOTA_CREDITO: "NC-X"}
+REFUND_SEQUENCES = {
+    TipoDevolucionChoices.MANUAL: TipoComprobanteChoices.DEVOLUCION_MANUAL,
+    TipoDevolucionChoices.NOTA_CREDITO: TipoComprobanteChoices.NOTA_CREDITO,
+}
 DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
 
 
@@ -606,16 +545,41 @@ def detail_lines(totals):
     ]
 
 
+def socio_detail(socio):
+    if socio is None:
+        return None
+    return {
+        "socio_id": socio.socio_id,
+        "numero_socio": socio.numero_socio,
+        "nombre": socio.persona.nombre,
+        "apellido": socio.persona.apellido,
+        "dni": socio.persona.dni,
+    }
+
+
+def receipt_code(receipt):
+    return format_receipt_number(RECEIPT_TYPE, receipt.numero)
+
+
+def refund_code(refund):
+    return format_receipt_number(REFUND_RECEIPT_TYPES[refund.tipo], refund.numero)
+
+
+def is_income(movement):
+    return movement is not None and movement.tipo_movimiento == TipoMovimientoChoices.INGRESO
+
+
 def receipt_detail(receipt):
     payment = receipt.pago
     movement = getattr(payment, "movimiento", None)
     socio = movement.cuenta_corriente.socio if movement else None
+    income = is_income(movement)
     imputations = (
         Imputacion.objects.filter(movimiento_origen=movement)
         .select_related("movimiento_destino__cuota")
         .prefetch_related("detalles")
         .order_by("movimiento_destino__cuota__periodo", "pk")
-        if movement else []
+        if movement and not income else []
     )
 
     periods, breakdown = [], {}
@@ -638,13 +602,9 @@ def receipt_detail(receipt):
         "fecha_emision": receipt.fecha_emision,
         "estado": receipt.estado,
         "monto_total": receipt.monto_total,
-        "socio": {
-            "socio_id": socio.socio_id,
-            "numero_socio": socio.numero_socio,
-            "nombre": socio.persona.nombre,
-            "apellido": socio.persona.apellido,
-            "dni": socio.persona.dni,
-        } if socio else None,
+        "es_ingreso": income,
+        "concepto": movement.concepto if income else "",
+        "socio": socio_detail(socio),
         "periodos": periods,
         "desglose": detail_lines(breakdown),
         "medios": [
@@ -657,6 +617,7 @@ def receipt_detail(receipt):
 def validate_receipt(receipt):
     detail = receipt_detail(receipt)
     socio = detail["socio"] or {}
+    content = ("concepto", detail["concepto"]) if detail["es_ingreso"] else ("períodos abonados", detail["periodos"])
     missing = [
         label for label, value in (
             ("fecha", detail["fecha_emision"]),
@@ -665,7 +626,7 @@ def validate_receipt(receipt):
             ("apellido del socio", socio.get("apellido")),
             ("DNI del socio", socio.get("dni")),
             ("número de socio", socio.get("numero_socio")),
-            ("períodos abonados", detail["periodos"]),
+            content,
             ("medios de pago", detail["medios"]),
         )
         if not value
@@ -674,7 +635,7 @@ def validate_receipt(receipt):
         raise ComprobanteInvalidoError(f"No se puede emitir el comprobante: falta {', '.join(missing)}.")
 
     total = detail["monto_total"]
-    if sum((line["monto"] for line in detail["desglose"]), Decimal("0.00")) != total:
+    if not detail["es_ingreso"] and sum((line["monto"] for line in detail["desglose"]), Decimal("0.00")) != total:
         raise ComprobanteInvalidoError("No se puede emitir el comprobante: el desglose no coincide con el total abonado.")
     if sum((method["monto"] for method in detail["medios"]), Decimal("0.00")) != total:
         raise ComprobanteInvalidoError("No se puede emitir el comprobante: los medios de pago no coinciden con el total abonado.")
@@ -699,7 +660,7 @@ def validate_payment_amount(pending, total, paid_message):
         raise PagoInvalidoError("El pago supera el saldo pendiente de las cuotas seleccionadas.")
 
 
-def create_payment(account, payment_methods, total, note, user, concept):
+def create_payment(account, payment_methods, total, note, user, concept, movement_type=TipoMovimientoChoices.ABONO):
     payment = Pago.objects.create(
         usuario=user,
         estado_pago=EstadoPagoChoices.ACREDITADO,
@@ -719,10 +680,11 @@ def create_payment(account, payment_methods, total, note, user, concept):
     movement = MovimientoCuenta.objects.create(
         cuenta_corriente=account,
         pago=payment,
-        tipo_movimiento=TipoMovimientoChoices.ABONO,
-        fecha=timezone.now(),
+        tipo_movimiento=movement_type,
+        fecha=payment.fecha,
         monto=total,
         concepto=concept[:200],
+        usuario=user,
     )
     return payment, receipt, movement
 
@@ -781,21 +743,22 @@ def payment_methods_detail(payment_methods):
 
 
 @transaction.atomic
-def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None):
-    account = CuentaCorriente.objects.select_for_update().get(socio_id=socio_id)
+def register_payment(
+    socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None, credit_note=None,
+):
+    """Registers a payment of cuotas. `credit_note` refunds, in the same operation, the excess of a
+    payment reverted to be charged again: {comprobante_id, monto, medio_de_pago, motivo, responsable}."""
+    account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_order(account, cuotas)
     if late_fee_waiver:
         waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]
         waive_late_fees(waived, late_fee_waiver["motivo"], late_fee_waiver["autorizado_por"], account.socio, user)
-        account.refresh_from_db(fields=["saldo"])
         cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_amount(pending_amounts(cuotas), total, "No se pueden pagar cuotas ya saldadas.")
     validate_every_cuota_receives_payment(cuotas, total)
 
     payment, receipt, movement = create_payment(account, payment_methods, total, note, user, "Pago de cuotas")
-    account.saldo += total
-    account.save(update_fields=["saldo"])
     imputations = apply_payment(movement, cuotas, total)
     validate_receipt(receipt)
     record_transaction(
@@ -804,7 +767,7 @@ def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=
         user,
         socio=account.socio,
         amount=total,
-        reference=format_receipt_number(RECEIPT_TYPE, receipt.numero),
+        reference=receipt_code(receipt),
         detail={
             "pago_id": payment.pk,
             "medios": payment_methods_detail(payment_methods),
@@ -814,71 +777,158 @@ def register_payment(socio_id, cuota_ids, payment_methods, total, note="", user=
             ],
         },
     )
+    if credit_note:
+        create_credit_note(
+            credit_note["comprobante_id"],
+            credit_note["monto"],
+            credit_note["medio_de_pago"],
+            credit_note["motivo"],
+            credit_note["responsable"],
+            user,
+            account,
+        )
     return payment, receipt
 
 
 @transaction.atomic
-def correct_payment(payment_id, cuota_ids, payment_methods, total, reason, user=None):
-    original = Pago.objects.select_for_update().get(pk=payment_id)
-    if original.estado_pago != EstadoPagoChoices.ACREDITADO:
-        raise PagoInvalidoError("Solo se pueden corregir pagos acreditados.")
-    original_receipt = Comprobante.objects.select_for_update().filter(pago=original).first()
-    original_movement = MovimientoCuenta.objects.select_for_update().filter(pago=original).first()
-    if original_receipt is None or original_movement is None:
-        raise PagoInvalidoError("El pago original no tiene comprobante o movimiento de cuenta para revertir.")
-
-    account = CuentaCorriente.objects.select_for_update().get(pk=original_movement.cuenta_corriente_id)
-    cuotas = lock_account_cuotas(account, cuota_ids)
-    validate_payment_amount(
-        pending_amounts(cuotas, ignored_origin=original_movement),
-        total,
-        "No se puede imputar la corrección a cuotas ya saldadas.",
-    )
-    previously_covered_ids = set(
-        Imputacion.objects.filter(movimiento_origen=original_movement)
-        .values_list("movimiento_destino__cuota", flat=True)
-    ) - {cuota.pk for cuota in cuotas}
-    previously_covered = list(
-        Cuota.objects.select_for_update(of=("self",))
-        .filter(pk__in=previously_covered_ids)
-        .select_related("movimiento")
-    )
-
-    replacement, receipt, movement = create_payment(
-        account,
-        payment_methods,
-        total,
-        f"Sustituye al pago #{original.pk}.",
-        user,
-        f"Pago corregido; sustituye al pago #{original.pk}.",
-    )
-    MovimientoCuenta.objects.create(
-        cuenta_corriente=account,
-        movimiento_revertido=original_movement,
-        tipo_movimiento=TipoMovimientoChoices.CARGO,
-        fecha=timezone.now(),
-        monto=original_movement.monto,
-        concepto=f"Reversión del pago #{original.pk}. Sustituido por #{replacement.pk}."[:200],
-    )
-    account.saldo += total - original_movement.monto
-    account.save(update_fields=["saldo"])
-
-    original.estado_pago = EstadoPagoChoices.ANULADO
-    original.motivo_anulacion = reason
-    original.save(update_fields=["estado_pago", "motivo_anulacion"])
-    original_receipt.estado = EstadoComprobanteChoices.ANULADO
-    original_receipt.reemplazado_por = receipt
-    original_receipt.save(update_fields=["estado", "reemplazado_por"])
-
-    apply_payment(movement, cuotas, total)
-    pending = pending_amounts(previously_covered)
-    for cuota in previously_covered:
-        refresh_cuota_state(cuota, pending[cuota.pk])
+def register_income(socio_id, concept, payment_methods, total, user=None):
+    """Money the club receives from a socio for something other than cuotas: it never touches the debt."""
+    account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
+    payment, receipt, _ = create_payment(account, payment_methods, total, "", user, concept, TipoMovimientoChoices.INGRESO)
     validate_receipt(receipt)
-    return original, original_receipt, replacement, receipt
+    record_transaction(
+        Accion.INGRESO_REGISTRADO,
+        f"Ingreso: {concept}",
+        user,
+        socio=account.socio,
+        amount=total,
+        reference=receipt_code(receipt),
+        detail={"pago_id": payment.pk, "medios": payment_methods_detail(payment_methods)},
+    )
+    return payment, receipt
 
 
+def latest_cuota_payment(account):
+    return (
+        Pago.objects.filter(
+            movimiento__cuenta_corriente=account,
+            movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO,
+            estado_pago=EstadoPagoChoices.ACREDITADO,
+        )
+        .order_by("-fecha", "-pk")
+        .first()
+    )
 
+
+@transaction.atomic
+def revert_payment(payment_id, reason, responsable, user=None, today=None):
+    """Annuls a payment and its receipt. A payment of cuotas gives the debt back (with the surcharges
+    whose due dates already passed) and only the latest one of the socio can be reverted; an income
+    can always be annulled."""
+    account_id = MovimientoCuenta.objects.values_list("cuenta_corriente_id", flat=True).get(pago_id=payment_id)
+    account = CuentaCorriente.objects.select_for_update().select_related("socio").get(pk=account_id)
+    payment = Pago.objects.select_for_update().get(pk=payment_id)
+    movement = MovimientoCuenta.objects.get(pago=payment)
+    if payment.estado_pago != EstadoPagoChoices.ACREDITADO:
+        raise PagoInvalidoError("El pago ya fue anulado.")
+    income = is_income(movement)
+    if not income and latest_cuota_payment(account).pk != payment.pk:
+        raise PagoInvalidoError("Solo se puede revertir el último pago de cuotas del socio.")
+
+    cuota_ids = list(Imputacion.objects.filter(movimiento_origen=movement).values_list("movimiento_destino__cuota", flat=True))
+    cuotas = by_period(
+        Cuota.objects.select_for_update(of=("self",)).filter(pk__in=cuota_ids).select_related("movimiento")
+    )
+    payment.estado_pago = EstadoPagoChoices.ANULADO
+    payment.motivo_anulacion = reason
+    payment.fecha_anulacion = timezone.now()
+    payment.responsable_anulacion = responsable[:120]
+    payment.usuario_anulacion = user
+    payment.save(update_fields=[
+        "estado_pago", "motivo_anulacion", "fecha_anulacion", "responsable_anulacion", "usuario_anulacion",
+    ])
+    receipt = Comprobante.objects.select_for_update().get(pago=payment)
+    receipt.estado = EstadoComprobanteChoices.ANULADO
+    receipt.save(update_fields=["estado"])
+
+    today = today or timezone.localdate()
+    pending = pending_amounts(cuotas)
+    for cuota in cuotas:
+        refresh_cuota_state(cuota, pending[cuota.pk], today)
+        apply_cuota_surcharges(cuota.pk, today, user=user)
+
+    record_transaction(
+        Accion.INGRESO_ANULADO if income else Accion.PAGO_REVERTIDO,
+        f"{'Ingreso ' + movement.concepto if income else 'Pago de cuotas ' + ', '.join(cuota.periodo for cuota in cuotas)} anulado: {reason}",
+        user,
+        responsable,
+        socio=account.socio,
+        amount=receipt.monto_total,
+        reference=receipt_code(receipt),
+        detail={"pago_id": payment.pk, "cuotas": [cuota.periodo for cuota in cuotas]},
+    )
+    return payment, receipt
+
+
+def refunded_amount(receipt):
+    return receipt.notas_credito.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+
+
+def create_refund(kind, account, concept, amount, payment_method, responsable, user, cancelled_receipt=None):
+    refund = Devolucion.objects.create(
+        tipo=kind,
+        numero=next_receipt_number(REFUND_SEQUENCES[kind]),
+        cuenta_corriente=account,
+        comprobante_anulado=cancelled_receipt,
+        concepto=concept[:200],
+        monto=amount,
+        medio_de_pago=payment_method,
+        responsable=responsable[:120],
+        usuario=user,
+    )
+    record_transaction(
+        Accion.NOTA_CREDITO_EMITIDA if kind == TipoDevolucionChoices.NOTA_CREDITO else Accion.DEVOLUCION_REGISTRADA,
+        f"{refund.get_tipo_display()}: {concept}",
+        user,
+        responsable,
+        socio=account.socio,
+        amount=amount,
+        reference=refund_code(refund),
+        detail={
+            "devolucion_id": refund.pk,
+            "medio_de_pago": payment_method,
+            "comprobante_anulado": receipt_code(cancelled_receipt) if cancelled_receipt else None,
+        },
+    )
+    return refund
+
+
+@transaction.atomic
+def create_credit_note(receipt_id, amount, payment_method, reason, responsable, user=None, account=None):
+    """Gives back money of an annulled receipt (all of it or the excess left after charging again)."""
+    receipt = Comprobante.objects.select_for_update(of=("self",)).select_related(
+        "pago__movimiento__cuenta_corriente__socio",
+    ).get(pk=receipt_id)
+    receipt_account = receipt.pago.movimiento.cuenta_corriente
+    if account is not None and receipt_account.pk != account.pk:
+        raise DevolucionInvalidaError("El comprobante anulado no pertenece a este socio.")
+    if receipt.estado != EstadoComprobanteChoices.ANULADO:
+        raise DevolucionInvalidaError("Solo se puede emitir una nota de crédito sobre un comprobante anulado.")
+    available = receipt.monto_total - refunded_amount(receipt)
+    if amount > available:
+        raise DevolucionInvalidaError(
+            f"El monto supera lo que queda por devolver del comprobante ({format_amount(available)})."
+        )
+    return create_refund(
+        TipoDevolucionChoices.NOTA_CREDITO, receipt_account, reason, amount, payment_method, responsable, user, receipt,
+    )
+
+
+@transaction.atomic
+def create_manual_refund(socio_id, concept, amount, payment_method, responsable, user=None):
+    """Records money given back that was never registered as income, such as an overpaid transfer."""
+    account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
+    return create_refund(TipoDevolucionChoices.MANUAL, account, concept, amount, payment_method, responsable, user)
 
 
 BENEFIT_SCHOLARSHIP = "Beca"

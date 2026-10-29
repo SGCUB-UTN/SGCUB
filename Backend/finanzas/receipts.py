@@ -1,6 +1,7 @@
 from io import BytesIO
 from xml.sax.saxutils import escape
 
+from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -9,46 +10,21 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from configuracion.services import club_details, club_name
 
-from .models import EstadoComprobanteChoices, MedioDePagoChoices, MedioPago, TipoMovimientoOrigenChoices
-from .pdf_utils import format_amount, format_receipt_number, table
-from .services import receipt_detail
+from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
+from .pdf_utils import format_amount, table
+from .services import RECEIPT_TYPE, receipt_code, receipt_detail, refund_code, socio_detail
 
-
-MANUAL_MOVEMENT_PDF_META = {
-    TipoMovimientoOrigenChoices.NOTA_CREDITO: {
-        "doc_title": "NOTA DE CRÉDITO X",
-        "code_prefix": "NC-X",
-        "filename_prefix": "nota-credito-X",
-        "total_label": "Total acreditado",
-    },
-    TipoMovimientoOrigenChoices.INGRESO_MANUAL: {
-        "doc_title": "RECIBO X",
-        "code_prefix": "X",
-        "filename_prefix": "comprobante-ingreso-X",
-        "total_label": "Total percibido",
-    },
-    TipoMovimientoOrigenChoices.EGRESO: {
-        "doc_title": "COMPROBANTE DE EGRESO X",
-        "code_prefix": "EGR-X",
-        "filename_prefix": "comprobante-egreso-X",
-        "total_label": "Total egresado",
-    },
-}
-
-
-def movement_number(movement):
-    return movement.numero_comprobante or movement.pk
+WIDTH = A4[0] - 40 * mm
+REFUND_TITLES = {TipoDevolucionChoices.MANUAL: "DEVOLUCIÓN X", TipoDevolucionChoices.NOTA_CREDITO: "NOTA DE CRÉDITO X"}
+REFUND_FILENAMES = {TipoDevolucionChoices.MANUAL: "devolucion", TipoDevolucionChoices.NOTA_CREDITO: "nota-credito"}
 
 
 def receipt_filename(receipt):
-    return f"comprobante-{receipt_detail(receipt)['tipo']}-{receipt.numero:08d}.pdf"
+    return f"comprobante-{RECEIPT_TYPE}-{receipt.numero:08d}.pdf"
 
 
-def manual_movement_filename(movement):
-    meta = MANUAL_MOVEMENT_PDF_META.get(movement.origen_manual, {
-        "filename_prefix": "comprobante-movimiento-X",
-    })
-    return f"{meta['filename_prefix']}-{movement_number(movement):08d}.pdf"
+def refund_filename(refund):
+    return f"{REFUND_FILENAMES[refund.tipo]}-{refund.numero:08d}.pdf"
 
 
 def render_period_label(period_str):
@@ -59,6 +35,7 @@ def render_period_label(period_str):
     except Exception:
         return period_str
 
+
 def build_periodos_rows(periodos):
     rows = []
     for p in periodos:
@@ -68,218 +45,133 @@ def build_periodos_rows(periodos):
     return rows
 
 
-def render_receipt_pdf(receipt):
-    detail = receipt_detail(receipt)
+def document_styles():
     styles = getSampleStyleSheet()
-    title = ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2)
-    subtitle = ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368"))
-    section = ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4)
-    cancelled = ParagraphStyle("Anulado", parent=styles["Heading2"], textColor=colors.HexColor("#b3261e"))
+    return {
+        "normal": styles["Normal"],
+        "title": ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2),
+        "subtitle": ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368")),
+        "section": ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4),
+        "cancelled": ParagraphStyle("Anulado", parent=styles["Heading2"], textColor=colors.HexColor("#b3261e")),
+    }
 
-    socio = detail["socio"] or {}
-    width = A4[0] - 40 * mm
+
+def concept_table(concept, amount, total_label, style):
+    return table(
+        [
+            ["Concepto", "Importe"],
+            [Paragraph(escape(concept or "—"), style), format_amount(amount)],
+            [total_label, format_amount(amount)],
+        ],
+        [WIDTH * 0.6, WIDTH * 0.4],
+        total_row=True,
+    )
+
+
+def methods_table(methods):
+    return table(
+        [["Medio", "Monto"]] + [[MedioPago.label(code), format_amount(amount)] for code, amount in methods],
+        [WIDTH * 0.6, WIDTH * 0.4],
+    )
+
+
+def render_document(title, code, issued, socio, notes, sections, footer):
+    """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
+    styles = document_styles()
+    socio = socio or {}
     story = [
-        Paragraph(escape(club_name()), subtitle),
-        *([Paragraph(escape(details), subtitle)] if (details := club_details()) else []),
-        Paragraph(f"RECIBO {detail['tipo']}", title),
-        Paragraph("Documento no válido como factura", subtitle),
+        Paragraph(escape(club_name()), styles["subtitle"]),
+        *([Paragraph(escape(details), styles["subtitle"])] if (details := club_details()) else []),
+        Paragraph(title, styles["title"]),
+        Paragraph("Documento no válido como factura", styles["subtitle"]),
         Spacer(1, 6 * mm),
-        table(
-            [
-                ["Comprobante N°", "Fecha de emisión"],
-                [
-                    format_receipt_number(detail["tipo"], detail["numero"]),
-                    detail["fecha_emision"].strftime("%d/%m/%Y"),
-                ],
-            ],
-            [width / 2, width / 2],
-        ),
+        table([["Comprobante N°", "Fecha de emisión"], [code, issued.strftime("%d/%m/%Y")]], [WIDTH / 2, WIDTH / 2]),
     ]
-
-    if detail["estado"] == EstadoComprobanteChoices.ANULADO:
-        replacement = receipt.reemplazado_por
-        note = "ANULADO"
-        if replacement is not None:
-            note += f" - Reemplazado por el comprobante {format_receipt_number(detail['tipo'], replacement.numero)}"
-        story += [Spacer(1, 4 * mm), Paragraph(note, cancelled)]
-
+    for note in notes:
+        story += [Spacer(1, 4 * mm), Paragraph(escape(note), styles["cancelled"])]
     story += [
-        Paragraph("Socio", section),
+        Paragraph("Socio", styles["section"]),
         table(
             [
                 ["Apellido y nombre", "DNI", "N° de socio"],
-                [
-                    f"{socio.get('apellido', '')}, {socio.get('nombre', '')}",
-                    socio.get("dni", ""),
-                    str(socio.get("numero_socio", "")),
-                ],
+                [f"{socio.get('apellido', '')}, {socio.get('nombre', '')}", socio.get("dni", ""), str(socio.get("numero_socio", ""))],
             ],
-            [width * 0.5, width * 0.25, width * 0.25],
+            [WIDTH * 0.5, WIDTH * 0.25, WIDTH * 0.25],
         ),
-        Paragraph("Períodos abonados", section),
-        table(
+    ]
+    for heading, content in sections:
+        story += [Paragraph(heading, styles["section"]), content(styles)]
+    story += [Spacer(1, 10 * mm), Paragraph(footer, styles["subtitle"])]
+
+    buffer = BytesIO()
+    SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=f"{title} {code}",
+        author=club_name(),
+        pageCompression=0,
+    ).build(story)
+    return buffer.getvalue()
+
+
+def receipt_notes(receipt):
+    if receipt.estado != EstadoComprobanteChoices.ANULADO:
+        return []
+    notes = ["ANULADO"]
+    for credit_note in receipt.notas_credito.order_by("pk"):
+        notes.append(f"Devuelto por nota de crédito {refund_code(credit_note)} ({format_amount(credit_note.monto)})")
+    return notes
+
+
+def render_receipt_pdf(receipt):
+    detail = receipt_detail(receipt)
+    if detail["es_ingreso"]:
+        content = ("Concepto", lambda styles: concept_table(detail["concepto"], detail["monto_total"], "Total abonado", styles["normal"]))
+    else:
+        content = ("Períodos abonados", lambda styles: table(
             [["Período / Concepto", "Importe"]]
             + build_periodos_rows(detail["periodos"])
             + [["Total abonado", format_amount(detail["monto_total"])]],
-            [width * 0.6, width * 0.4],
+            [WIDTH * 0.6, WIDTH * 0.4],
             total_row=True,
-        ),
-        Paragraph("Medios de pago", section),
-        table(
-            [["Medio", "Monto"]]
-            + [
-                [MedioPago.label(method["medio_de_pago"]), format_amount(method["monto"])]
-                for method in detail["medios"]
-            ],
-            [width * 0.6, width * 0.4],
-        ),
-        Spacer(1, 10 * mm),
-        Paragraph("Recibo de uso interno. Asociación civil exenta.", subtitle),
-    ]
-
-    buffer = BytesIO()
-    SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=20 * mm,
-        rightMargin=20 * mm,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm,
-        title=f"Recibo {format_receipt_number(detail['tipo'], detail['numero'])}",
-        author=club_name(),
-        pageCompression=0,
-    ).build(story)
-    return buffer.getvalue()
-
-
-def render_manual_movement_pdf(movement):
-    meta = MANUAL_MOVEMENT_PDF_META.get(movement.origen_manual, {
-        "doc_title": "COMPROBANTE DE MOVIMIENTO X",
-        "code_prefix": "X",
-        "total_label": "Importe total",
-    })
-    styles = getSampleStyleSheet()
-    title = ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2)
-    subtitle = ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368"))
-    section = ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4)
-    cancelled = ParagraphStyle("Revertido", parent=styles["Heading2"], textColor=colors.HexColor("#b3261e"))
-
-    socio = getattr(movement.cuenta_corriente, "socio", None)
-    persona = getattr(socio, "persona", None)
-    receipt_code = format_receipt_number(meta["code_prefix"], movement_number(movement))
-    width = A4[0] - 40 * mm
-
-    story = [
-        Paragraph(escape(club_name()), subtitle),
-        Paragraph(meta["doc_title"], title),
-        Paragraph("Documento no válido como factura", subtitle),
-        Spacer(1, 6 * mm),
-        table(
-            [
-                ["Comprobante N°", "Fecha de emisión"],
-                [
-                    receipt_code,
-                    movement.fecha.strftime("%d/%m/%Y"),
-                ],
-            ],
-            [width / 2, width / 2],
-        ),
-    ]
-
-    try:
-        reversiones = list(movement.reversiones.all())
-    except Exception:
-        reversiones = []
-
-    for reversion in reversiones:
-        if reversion.origen_manual == TipoMovimientoOrigenChoices.EGRESO:
-            note = (
-                f"DEVUELTO POR COMPROBANTE DE EGRESO "
-                f"{format_receipt_number('EGR-X', movement_number(reversion))} ({format_amount(reversion.monto)})"
-            )
-        else:
-            note = (
-                f"REVERTIDO POR NOTA DE CRÉDITO "
-                f"{format_receipt_number('NC-X', movement_number(reversion))} ({format_amount(reversion.monto)})"
-            )
-        story += [Spacer(1, 4 * mm), Paragraph(note, cancelled)]
-
-    story += [
-        Paragraph("Socio", section),
-        table(
-            [
-                ["Apellido y nombre", "DNI", "N° de socio"],
-                [
-                    f"{getattr(persona, 'apellido', '')}, {getattr(persona, 'nombre', '')}" if persona else "—",
-                    getattr(persona, "dni", "") if persona else "—",
-                    str(getattr(socio, "numero_socio", "")) if socio else "—",
-                ],
-            ],
-            [width * 0.5, width * 0.25, width * 0.25],
-        ),
-        Paragraph("Conceptos", section),
-        table(
-            [
-                ["Concepto / Detalle", "Importe"],
-                [Paragraph(movement.concepto or "—", styles["Normal"]), format_amount(movement.monto)],
-                [meta["total_label"], format_amount(movement.monto)],
-            ],
-            [width * 0.65, width * 0.35],
-            total_row=True,
-        ),
-    ]
-
-    if movement.movimiento_revertido_id and movement.movimiento_revertido is not None:
-        original = movement.movimiento_revertido
-        is_cuota_orig = original.cuota_id is not None
-        orig_code = (
-            f"Cuota {original.cuota.periodo}" if is_cuota_orig and getattr(original, "cuota", None)
-            else (original.concepto if is_cuota_orig else format_receipt_number("X", movement_number(original)))
-        )
-        story += [
-            Paragraph("Cuota original ajustada" if is_cuota_orig else "Ingreso original revertido", section),
-            table(
-                [
-                    ["Comprobante original", "Fecha original", "Concepto original", "Importe original"],
-                    [
-                        orig_code,
-                        original.fecha.strftime("%d/%m/%Y"),
-                        Paragraph(original.concepto or "—", styles["Normal"]),
-                        format_amount(original.monto),
-                    ],
-                ],
-                [width * 0.22, width * 0.18, width * 0.38, width * 0.22],
-            ),
-        ]
-
-    payment_label = (
-        MedioDePagoChoices(movement.medio_de_pago).label
-        if movement.medio_de_pago
-        else "Ajuste en cuenta corriente"
+        ))
+    methods = [(method["medio_de_pago"], method["monto"]) for method in detail["medios"]]
+    return render_document(
+        f"RECIBO {detail['tipo']}",
+        receipt_code(receipt),
+        detail["fecha_emision"],
+        detail["socio"],
+        receipt_notes(receipt),
+        [content, ("Medios de pago", lambda styles: methods_table(methods))],
+        "Recibo de uso interno. Asociación civil exenta.",
     )
-    story += [
-        Paragraph("Medio de operación", section),
-        table(
-            [
-                ["Medio", "Monto"],
-                [payment_label, format_amount(movement.monto)],
-            ],
-            [width * 0.6, width * 0.4],
-        ),
-        Spacer(1, 10 * mm),
-        Paragraph("Comprobante de uso interno. Asociación civil exenta.", subtitle),
-    ]
 
-    buffer = BytesIO()
-    SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=20 * mm,
-        rightMargin=20 * mm,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm,
-        title=f"{meta['doc_title']} {receipt_code}",
-        author=club_name(),
-        pageCompression=0,
-    ).build(story)
-    return buffer.getvalue()
+
+def render_refund_pdf(refund):
+    sections = [("Concepto", lambda styles: concept_table(refund.concepto, refund.monto, "Total devuelto", styles["normal"]))]
+    cancelled = refund.comprobante_anulado
+    if cancelled is not None:
+        sections.append(("Comprobante anulado", lambda styles: table(
+            [
+                ["Comprobante", "Fecha de emisión", "Importe"],
+                [receipt_code(cancelled), cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
+            ],
+            [WIDTH * 0.4, WIDTH * 0.3, WIDTH * 0.3],
+        )))
+    sections += [
+        ("Medio de devolución", lambda styles: methods_table([(refund.medio_de_pago, refund.monto)])),
+        ("Responsable", lambda styles: Paragraph(escape(refund.responsable), styles["normal"])),
+    ]
+    return render_document(
+        REFUND_TITLES[refund.tipo],
+        refund_code(refund),
+        timezone.localtime(refund.fecha).date(),
+        socio_detail(refund.cuenta_corriente.socio),
+        [],
+        sections,
+        "Comprobante de uso interno. Asociación civil exenta.",
+    )

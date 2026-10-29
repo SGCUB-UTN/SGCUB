@@ -9,7 +9,6 @@ from rest_framework import serializers
 from .generators import PERIOD_FORMAT
 from .models import (
     CONFIGURATION_FIELDS,
-    MANUAL_MOVEMENT_ORIGINS,
     Beca,
     Comprobante,
     ConceptoItemChoices,
@@ -17,6 +16,7 @@ from .models import (
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
+    Devolucion,
     EjecucionTareaCuota,
     ExclusionBeca,
     Imputacion,
@@ -25,11 +25,12 @@ from .models import (
     MovimientoCuenta,
     Pago,
     RegistroAuditoria,
+    TipoDevolucionChoices,
     TipoMovimientoChoices,
-    TipoMovimientoOrigenChoices,
     EstadoCuotaChoices,
-    MedioDePagoChoices,
+    EstadoPagoChoices,
     MedioPago,
+    OrigenConceptoChoices,
     ModalidadMontoChoices,
 )
 from .services import (
@@ -39,9 +40,11 @@ from .services import (
     net_amount,
     parse_period,
     pending_amounts,
+    latest_cuota_payment,
+    receipt_code,
     receipt_detail,
-    remaining_reversible_amount,
-    reversed_amount_for,
+    refund_code,
+    refunded_amount,
     surcharge_reason,
     user_name,
 )
@@ -49,7 +52,6 @@ from .services import (
 CUOTA_ITEM_PREFETCHES = (
     Prefetch("items", queryset=ItemCuota.objects.select_related("beca")),
     Prefetch("items", queryset=ItemCuota.all_objects.anulados().select_related("beca"), to_attr="items_anulados"),
-    Prefetch("movimiento__reversiones"),
 )
 
 
@@ -72,19 +74,29 @@ def cuota_account(cuota):
     return movement.cuenta_corriente if movement else None
 
 
+def validate_payment_method(value):
+    if not MedioPago.objects.filter(codigo=value, activo=True).exists():
+        raise serializers.ValidationError("El medio de pago no existe o no está habilitado.")
+    return value
+
+
+AMOUNT_FIELD = {"max_digits": 10, "decimal_places": 2, "min_value": Decimal("0.01")}
+
+
 class MedioPagoSerializer(serializers.Serializer):
-    medio_de_pago = serializers.CharField(max_length=40)
-    monto = serializers.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        min_value=Decimal("0.01"),
-    )
+    medio_de_pago = serializers.CharField(max_length=40, validators=[validate_payment_method])
+    monto = serializers.DecimalField(**AMOUNT_FIELD)
 
 
-    def validate_medio_de_pago(self, value):
-        if not MedioPago.objects.filter(codigo=value, activo=True).exists():
-            raise serializers.ValidationError("El medio de pago no existe o no está habilitado.")
-        return value
+def validate_methods_total(attrs):
+    total_medios = sum((medio["monto"] for medio in attrs["medios"]), Decimal("0.00"))
+    if total_medios != attrs["monto_total"]:
+        raise serializers.ValidationError({"medios": "La suma de los medios debe coincidir con el monto total."})
+    return attrs
+
+
+def payment_method_in_use(code):
+    return ItemPago.objects.filter(medio_de_pago=code).exists() or Devolucion.objects.filter(medio_de_pago=code).exists()
 
 
 def payment_method_code(name):
@@ -102,7 +114,7 @@ class MedioPagoAceptadoSerializer(serializers.ModelSerializer):
         read_only_fields = ["medio_pago_id", "codigo"]
 
     def get_en_uso(self, obj) -> bool:
-        return ItemPago.objects.filter(medio_de_pago=obj.codigo).exists()
+        return payment_method_in_use(obj.codigo)
 
     def validate_nombre(self, value):
         value = value.strip()
@@ -125,33 +137,6 @@ class MedioPagoAceptadoSerializer(serializers.ModelSerializer):
         return MedioPago.objects.create(codigo=payment_method_code(validated_data["nombre"]), **validated_data)
 
 
-class CorreccionPagoSerializer(serializers.Serializer):
-    motivo = serializers.CharField(max_length=500, allow_blank=False, trim_whitespace=True)
-    cuota_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1),
-        allow_empty=False,
-    )
-    monto_total = serializers.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        min_value=Decimal("0.01"),
-    )
-    medios = MedioPagoSerializer(many=True, allow_empty=False)
-
-    def validate_cuota_ids(self, value):
-        if len(value) != len(set(value)):
-            raise serializers.ValidationError("No se deben repetir cuotas.")
-        return value
-
-    def validate(self, attrs):
-        total_medios = sum((medio["monto"] for medio in attrs["medios"]), start=0)
-        if total_medios != attrs["monto_total"]:
-            raise serializers.ValidationError({
-                "medios": "La suma de los medios debe coincidir con el monto total."
-            })
-        return attrs
-
-
 class CondonacionMoraSerializer(serializers.Serializer):
     cuota_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
@@ -159,6 +144,42 @@ class CondonacionMoraSerializer(serializers.Serializer):
     )
     autorizado_por = serializers.CharField(max_length=120, trim_whitespace=True)
     motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+
+
+class NotaCreditoSerializer(serializers.Serializer):
+    monto = serializers.DecimalField(**AMOUNT_FIELD)
+    medio_de_pago = serializers.CharField(max_length=40, validators=[validate_payment_method])
+    motivo = serializers.CharField(max_length=200, trim_whitespace=True)
+    responsable = serializers.CharField(max_length=120, trim_whitespace=True)
+
+
+class NotaCreditoPagoSerializer(NotaCreditoSerializer):
+    """Credit note issued together with a new payment: refunds the excess of the reverted receipt."""
+
+    comprobante_id = serializers.IntegerField(min_value=1)
+
+
+class IngresoSerializer(serializers.Serializer):
+    socio_id = serializers.IntegerField(min_value=1)
+    concepto = serializers.CharField(max_length=200, trim_whitespace=True)
+    monto_total = serializers.DecimalField(**AMOUNT_FIELD)
+    medios = MedioPagoSerializer(many=True, allow_empty=False)
+
+    def validate(self, attrs):
+        return validate_methods_total(attrs)
+
+
+class ReversionPagoSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=500, trim_whitespace=True)
+    responsable = serializers.CharField(max_length=120, trim_whitespace=True)
+
+
+class DevolucionManualSerializer(serializers.Serializer):
+    socio_id = serializers.IntegerField(min_value=1)
+    concepto = serializers.CharField(max_length=200, trim_whitespace=True)
+    monto = serializers.DecimalField(**AMOUNT_FIELD)
+    medio_de_pago = serializers.CharField(max_length=40, validators=[validate_payment_method])
+    responsable = serializers.CharField(max_length=120, trim_whitespace=True)
 
 
 class RegistroPagoSerializer(serializers.Serializer):
@@ -175,6 +196,7 @@ class RegistroPagoSerializer(serializers.Serializer):
     medios = MedioPagoSerializer(many=True, allow_empty=False)
     observacion = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     condonacion_mora = CondonacionMoraSerializer(required=False, allow_null=True, default=None)
+    nota_credito = NotaCreditoPagoSerializer(required=False, allow_null=True, default=None)
 
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
@@ -182,11 +204,7 @@ class RegistroPagoSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        total_medios = sum((medio["monto"] for medio in attrs["medios"]), Decimal("0.00"))
-        if total_medios != attrs["monto_total"]:
-            raise serializers.ValidationError({
-                "medios": "La suma de los medios debe coincidir con el monto total."
-            })
+        validate_methods_total(attrs)
         waiver = attrs.get("condonacion_mora")
         if waiver and not set(waiver["cuota_ids"]) <= set(attrs["cuota_ids"]):
             raise serializers.ValidationError({
@@ -340,37 +358,57 @@ class ComprobanteSerializer(serializers.ModelSerializer):
         read_only_fields = ["comprobante_id"]
 
 
+def annulment_data(payment):
+    if payment.estado_pago != EstadoPagoChoices.ANULADO:
+        return None
+    return {
+        "fecha": payment.fecha_anulacion,
+        "motivo": payment.motivo_anulacion,
+        "responsable": payment.responsable_anulacion,
+        "usuario": user_display_name(payment.usuario_anulacion),
+    }
+
+
 class ComprobanteListSerializer(ComprobanteSerializer):
+    codigo = serializers.SerializerMethodField()
     socio = serializers.SerializerMethodField()
+    es_ingreso = serializers.SerializerMethodField()
+    concepto = serializers.SerializerMethodField()
+    monto_devuelto = serializers.SerializerMethodField()
+
+    class Meta(ComprobanteSerializer.Meta):
+        fields = [
+            "comprobante_id", "pago", "codigo", "fecha_emision", "numero", "monto_total", "estado",
+            "socio", "es_ingreso", "concepto", "monto_devuelto",
+        ]
+
+    def get_codigo(self, obj):
+        return receipt_code(obj)
 
     def get_socio(self, obj):
         movement = getattr(obj.pago, "movimiento", None)
         return socio_data(movement.cuenta_corriente.socio) if movement else None
 
+    def get_es_ingreso(self, obj):
+        movement = getattr(obj.pago, "movimiento", None)
+        return movement is not None and movement.tipo_movimiento == TipoMovimientoChoices.INGRESO
 
-class ComprobanteDetalleSerializer(ComprobanteSerializer):
+    def get_concepto(self, obj):
+        movement = getattr(obj.pago, "movimiento", None)
+        return movement.concepto if movement else ""
+
+    def get_monto_devuelto(self, obj):
+        annotated = getattr(obj, "monto_devuelto", None)
+        return annotated if annotated is not None else refunded_amount(obj)
+
+
+class ComprobanteDetalleSerializer(ComprobanteListSerializer):
     pago_detalle = serializers.SerializerMethodField()
-    reemplazado_por_numero = serializers.IntegerField(source="reemplazado_por.numero", read_only=True, default=None)
-    reemplaza_a_numero = serializers.SerializerMethodField()
+    anulacion = serializers.SerializerMethodField()
+    notas_credito = serializers.SerializerMethodField()
 
-    class Meta(ComprobanteSerializer.Meta):
-        fields = [
-            "comprobante_id",
-            "pago",
-            "fecha_emision",
-            "numero",
-            "monto_total",
-            "estado",
-            "reemplazado_por",
-            "reemplazado_por_numero",
-            "reemplaza_a_numero",
-            "pago_detalle",
-        ]
-        read_only_fields = ["comprobante_id"]
-
-    def get_reemplaza_a_numero(self, obj):
-        replaced = getattr(obj, "reemplaza_a", None)
-        return replaced.numero if replaced else None
+    class Meta(ComprobanteListSerializer.Meta):
+        fields = [*ComprobanteListSerializer.Meta.fields, "pago_detalle", "anulacion", "notas_credito"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -390,13 +428,50 @@ class ComprobanteDetalleSerializer(ComprobanteSerializer):
         detalle["socio"] = socio_data(movimiento.cuenta_corriente.socio) if movimiento else None
         return detalle
 
+    def get_anulacion(self, obj):
+        return annulment_data(obj.pago)
 
+    def get_notas_credito(self, obj):
+        return DevolucionSerializer(obj.notas_credito.order_by("pk"), many=True).data
+
+
+class DevolucionSerializer(serializers.ModelSerializer):
+    codigo = serializers.SerializerMethodField()
+    tipo_nombre = serializers.CharField(source="get_tipo_display", read_only=True)
+    medio_de_pago_nombre = serializers.SerializerMethodField()
+    socio = serializers.SerializerMethodField()
+    comprobante_anulado_codigo = serializers.SerializerMethodField()
+    usuario_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Devolucion
+        fields = [
+            "devolucion_id", "tipo", "tipo_nombre", "numero", "codigo", "fecha", "socio", "concepto", "monto",
+            "medio_de_pago", "medio_de_pago_nombre", "comprobante_anulado", "comprobante_anulado_codigo",
+            "responsable", "usuario", "usuario_nombre",
+        ]
+        read_only_fields = fields
+
+    def get_codigo(self, obj):
+        return refund_code(obj)
+
+    def get_medio_de_pago_nombre(self, obj):
+        return MedioPago.label(obj.medio_de_pago)
+
+    def get_socio(self, obj):
+        return socio_data(obj.cuenta_corriente.socio)
+
+    def get_comprobante_anulado_codigo(self, obj):
+        return receipt_code(obj.comprobante_anulado) if obj.comprobante_anulado_id else None
+
+    def get_usuario_nombre(self, obj):
+        return user_display_name(obj.usuario)
 
 
 class CuentaCorrienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = CuentaCorriente
-        fields = ["cuenta_corriente_id", "socio", "saldo", "estado_cuenta_corriente"]
+        fields = ["cuenta_corriente_id", "socio", "estado_cuenta_corriente"]
         read_only_fields = fields
 
 
@@ -408,14 +483,15 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     cuotas_impagas = serializers.SerializerMethodField()
     total_adeudado = serializers.SerializerMethodField()
     total_mora = serializers.SerializerMethodField()
+    pago_revertible_id = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCorriente
         fields = [
             "cuenta_corriente_id",
             "socio",
-            "saldo",
             "estado_cuenta_corriente",
+            "pago_revertible_id",
             "cuotas",
             "cuotas_generadas",
             "cuotas_pagas",
@@ -445,6 +521,10 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
     def get_socio(self, obj):
         return socio_data(obj.socio)
+
+    def get_pago_revertible_id(self, obj):
+        payment = latest_cuota_payment(obj)
+        return payment.pk if payment else None
 
     def get_cuotas(self, obj):
         return CuotaSerializer(
@@ -494,32 +574,33 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
 class MovimientoCuentaSerializer(serializers.ModelSerializer):
     tipo_movimiento_nombre = serializers.CharField(source="get_tipo_movimiento_display", read_only=True)
-    origen_manual_nombre = serializers.CharField(source="get_origen_manual_display", read_only=True)
-    medio_de_pago_nombre = serializers.CharField(source="get_medio_de_pago_display", read_only=True)
     socio = serializers.SerializerMethodField()
-    monto_revertido = serializers.SerializerMethodField()
-    saldo_reversible = serializers.SerializerMethodField()
+    comprobante = serializers.SerializerMethodField()
 
     class Meta:
         model = MovimientoCuenta
         fields = [
-            "movimiento_cuenta_id", "numero_comprobante", "cuenta_corriente", "socio", "pago", "cuota",
-            "movimiento_revertido", "monto_revertido", "saldo_reversible",
-            "tipo_movimiento", "tipo_movimiento_nombre",
-            "fecha", "monto", "concepto", "medio_de_pago", "medio_de_pago_nombre",
-            "origen_manual", "origen_manual_nombre", "usuario",
+            "movimiento_cuenta_id", "cuenta_corriente", "socio", "pago", "cuota", "comprobante",
+            "tipo_movimiento", "tipo_movimiento_nombre", "fecha", "monto", "concepto", "usuario",
         ]
-        read_only_fields = ["movimiento_cuenta_id", "numero_comprobante"]
+        read_only_fields = fields
 
     def get_socio(self, obj):
-        account = getattr(obj, "cuenta_corriente", None)
-        return socio_data(account.socio) if account and getattr(account, "socio", None) else None
+        return socio_data(obj.cuenta_corriente.socio)
 
-    def get_monto_revertido(self, obj):
-        return reversed_amount_for(obj)
+    def get_comprobante(self, obj):
+        receipt = getattr(obj.pago, "comprobante", None) if obj.pago_id else None
+        if receipt is None:
+            return None
+        return {"comprobante_id": receipt.pk, "codigo": receipt_code(receipt), "estado": receipt.estado}
 
-    def get_saldo_reversible(self, obj):
-        return remaining_reversible_amount(obj)
+
+def concept_in_use(concept):
+    if concept.origen == OrigenConceptoChoices.INGRESO:
+        return MovimientoCuenta.objects.filter(
+            tipo_movimiento=TipoMovimientoChoices.INGRESO, concepto__iexact=concept.nombre,
+        ).exists()
+    return Devolucion.objects.filter(tipo=TipoDevolucionChoices.MANUAL, concepto__iexact=concept.nombre).exists()
 
 
 class ConceptoMovimientoSerializer(serializers.ModelSerializer):
@@ -532,42 +613,13 @@ class ConceptoMovimientoSerializer(serializers.ModelSerializer):
         validators = []
 
     def get_en_uso(self, obj) -> bool:
-        return MovimientoCuenta.objects.filter(origen_manual=obj.origen, concepto__iexact=obj.nombre).exists()
-
-    def validate_origen(self, value):
-        if value not in MANUAL_MOVEMENT_ORIGINS:
-            raise serializers.ValidationError("Solo los ingresos manuales y los egresos tienen conceptos.")
-        return value
+        return concept_in_use(obj)
 
     def validate_nombre(self, value):
         value = " ".join(value.split())
         if not value:
             raise serializers.ValidationError("Este campo es obligatorio.")
         return value
-
-
-class MovimientoManualSerializer(serializers.Serializer):
-    socio_id = serializers.IntegerField(min_value=1)
-    tipo = serializers.ChoiceField(choices=TipoMovimientoChoices.choices)
-    origen = serializers.ChoiceField(choices=TipoMovimientoOrigenChoices.choices)
-    concepto = serializers.CharField(max_length=200, trim_whitespace=True)
-    monto = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
-    medio_de_pago = serializers.ChoiceField(
-        choices=MedioDePagoChoices.choices,
-        required=False,
-        allow_null=True,
-        default=None,
-    )
-    movimiento_revertido_id = serializers.IntegerField(required=False, min_value=1, allow_null=True, default=None)
-
-    def validate(self, attrs):
-        if attrs["tipo"] == TipoMovimientoChoices.CARGO and attrs["origen"] == TipoMovimientoOrigenChoices.INGRESO_MANUAL:
-            raise serializers.ValidationError({"origen": "Un cargo no puede ser un ingreso manual."})
-        if attrs["tipo"] == TipoMovimientoChoices.ABONO and attrs["origen"] == TipoMovimientoOrigenChoices.EGRESO:
-            raise serializers.ValidationError({"origen": "Un abono no puede ser un egreso."})
-        if attrs["origen"] == TipoMovimientoOrigenChoices.NOTA_CREDITO and attrs["tipo"] != TipoMovimientoChoices.CARGO:
-            raise serializers.ValidationError({"tipo": "Una nota de crédito debe ser un cargo."})
-        return attrs
 
 
 class ImputacionSerializer(serializers.ModelSerializer):

@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -22,6 +23,7 @@ from .models import (
 	ConfiguracionFinanciera,
 	CuentaCorriente,
 	Cuota,
+	Devolucion,
 	EjecucionTareaCuota,
 	Imputacion,
 	ItemPago,
@@ -32,19 +34,12 @@ from .models import (
 	RegistroAuditoria,
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
-	MedioDePagoChoices,
 	MedioPago,
-	TipoMovimientoChoices,
 )
 from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, parse_delinquency_params
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
 from .financial_summary_pdf import financial_summary_filename, render_financial_summary_pdf
-from .receipts import (
-	manual_movement_filename,
-	receipt_filename,
-	render_manual_movement_pdf,
-	render_receipt_pdf,
-)
+from .receipts import receipt_filename, refund_filename, render_receipt_pdf, render_refund_pdf
 from .serializers import (
 	BecaSerializer,
 	OtorgarBecaSerializer,
@@ -55,7 +50,6 @@ from .serializers import (
 	ConfiguracionFinancieraSerializer,
 	MedioPagoAceptadoSerializer,
 	VersionConfiguracionFinancieraSerializer,
-	CorreccionPagoSerializer,
 	EdicionDescuentoSerializer,
 	ComprobanteListSerializer,
 	ComprobanteSerializer,
@@ -70,34 +64,43 @@ from .serializers import (
 	ItemPagoSerializer,
 	ItemCuotaSerializer,
 	MovimientoCuentaSerializer,
-	MovimientoManualSerializer,
+	DevolucionManualSerializer,
+	DevolucionSerializer,
+	IngresoSerializer,
+	NotaCreditoSerializer,
+	ReversionPagoSerializer,
 	PagoSerializer,
 	RegistroAuditoriaSerializer,
 	CuentaCorrienteEstadoSerializer,
 	ComprobanteDetalleSerializer,
+	concept_in_use,
+	payment_method_in_use,
 )
 from .services import (
 	BeneficioInvalidoError,
 	ComprobanteInvalidoError,
 	CuotaConPagosError,
 	CuotaDuplicadaError,
+	DevolucionInvalidaError,
 	PagoInvalidoError,
 	SocioInactivoError,
 	affected_cuotas,
 	assign_benefit,
 	cancel_scholarship,
-	correct_payment,
+	create_credit_note,
 	create_cuota,
+	create_manual_refund,
 	delete_cuota,
 	ensure_cuota_without_payments,
 	grant_scholarship,
 	parse_period,
 	pending_amounts,
+	register_income,
 	register_payment,
-	create_manual_movement,
 	remove_cuota_item,
 	reschedule_cuota,
 	revert_configuration_version,
+	revert_payment,
 	update_discount,
 	update_scholarship,
 )
@@ -243,37 +246,22 @@ def pago_detail(request, pk):
 	return Response(PagoSerializer(pago).data)
 
 
-@extend_schema(tags=["Finanzas/Pago"], request=CorreccionPagoSerializer)
+@extend_schema(tags=["Finanzas/Pago"], request=ReversionPagoSerializer, responses=ComprobanteDetalleSerializer)
 @api_view(["POST"])
-def corregir_pago(request, pk):
-	serializer = CorreccionPagoSerializer(data=request.data)
+def revertir_pago(request, pk):
+	"""Annuls a payment of cuotas (only the latest of the socio) or an income. The debt goes back to
+	what it was, surcharges included, and the receipt is annulled."""
+	get_object_or_404(Pago, pk=pk)
+	serializer = ReversionPagoSerializer(data=request.data)
 	if not serializer.is_valid():
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 	data = serializer.validated_data
 	try:
-		pago_original, comprobante_original, pago, comprobante = correct_payment(
-			pk,
-			data["cuota_ids"],
-			data["medios"],
-			data["monto_total"],
-			data["motivo"],
-			request.user if request.user.is_authenticated else None,
-		)
-	except Pago.DoesNotExist:
-		return Response({"detail": "El pago no existe."}, status=status.HTTP_404_NOT_FOUND)
-	except (PagoInvalidoError, ComprobanteInvalidoError) as error:
+		_, comprobante = revert_payment(pk, data["motivo"], data["responsable"], _current_user(request))
+	except PagoInvalidoError as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
-
-	return Response({
-		"pago_original": PagoSerializer(pago_original).data,
-		"pago": PagoSerializer(pago).data,
-		"comprobante_original": ComprobanteSerializer(comprobante_original).data,
-		"comprobante": ComprobanteSerializer(comprobante).data,
-		"motivo": data["motivo"],
-		"usuario": request.user.get_username() if request.user.is_authenticated else None,
-		"fecha": timezone.localtime().isoformat(),
-	}, status=status.HTTP_201_CREATED)
+	return Response(ComprobanteDetalleSerializer(comprobante).data)
 
 
 @extend_schema(tags=["Finanzas/Pago"], request=RegistroPagoSerializer, responses=ComprobanteSerializer)
@@ -293,16 +281,38 @@ def registrar_pago(request):
 			data["observacion"],
 			request.user if request.user.is_authenticated else None,
 			data["condonacion_mora"],
+			data["nota_credito"],
 		)
 	except CuentaCorriente.DoesNotExist:
 		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
-	except (PagoInvalidoError, ComprobanteInvalidoError) as error:
+	except Comprobante.DoesNotExist:
+		return Response({"detail": "El comprobante anulado no existe."}, status=status.HTTP_404_NOT_FOUND)
+	except (PagoInvalidoError, ComprobanteInvalidoError, DevolucionInvalidaError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
 	return Response({
 		"pago": PagoSerializer(pago).data,
 		"comprobante": ComprobanteSerializer(comprobante).data,
 	}, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Ingreso"], request=IngresoSerializer, responses=ComprobanteDetalleSerializer)
+@api_view(["POST"])
+def registrar_ingreso(request):
+	serializer = IngresoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		_, comprobante = register_income(
+			data["socio_id"], data["concepto"], data["medios"], data["monto_total"], _current_user(request),
+		)
+	except CuentaCorriente.DoesNotExist:
+		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
+	except ComprobanteInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(ComprobanteDetalleSerializer(comprobante).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Finanzas/ItemPago"], responses=ItemPagoSerializer)
@@ -322,7 +332,7 @@ def item_pago_detail(request, pk):
 def comprobante_list(request):
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).order_by("pk")
+	).annotate(monto_devuelto=Coalesce(Sum("notas_credito__monto"), Decimal("0.00"))).order_by("pk")
 	cuota_id = request.query_params.get("cuota_id")
 	if cuota_id:
 		if not cuota_id.isdigit():
@@ -339,8 +349,7 @@ def comprobante_detail(request, pk):
 	comprobante = get_object_or_404(
 		Comprobante.objects.select_related(
 			"pago__movimiento__cuenta_corriente__socio__persona",
-			"reemplazado_por",
-			"reemplaza_a",
+			"pago__usuario_anulacion",
 		).prefetch_related("pago__items_pago"),
 		pk=pk,
 	)
@@ -351,14 +360,79 @@ def comprobante_detail(request, pk):
 @api_view(["GET"])
 def comprobante_pdf(request, pk):
 	comprobante = get_object_or_404(
-		Comprobante.objects.select_related(
-			"pago__movimiento__cuenta_corriente__socio__persona",
-			"reemplazado_por",
-		),
+		Comprobante.objects.select_related("pago__movimiento__cuenta_corriente__socio__persona"),
 		pk=pk,
 	)
 	response = HttpResponse(render_receipt_pdf(comprobante), content_type="application/pdf")
 	response["Content-Disposition"] = f'attachment; filename="{receipt_filename(comprobante)}"'
+	return response
+
+
+@extend_schema(tags=["Finanzas/Devolucion"], request=NotaCreditoSerializer, responses=DevolucionSerializer)
+@api_view(["POST"])
+def emitir_nota_credito(request, pk):
+	"""Refunds money of an annulled receipt, up to what is left to give back of it."""
+	get_object_or_404(Comprobante, pk=pk)
+	serializer = NotaCreditoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		nota = create_credit_note(
+			pk, data["monto"], data["medio_de_pago"], data["motivo"], data["responsable"], _current_user(request),
+		)
+	except DevolucionInvalidaError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(DevolucionSerializer(nota).data, status=status.HTTP_201_CREATED)
+
+
+def _refunds_queryset():
+	return Devolucion.objects.select_related(
+		"cuenta_corriente__socio__persona", "comprobante_anulado", "usuario",
+	)
+
+
+@extend_schema(tags=["Finanzas/Devolucion"], request=DevolucionManualSerializer, responses=DevolucionSerializer)
+@api_view(["GET", "POST"])
+def devolucion_list_create(request):
+	if request.method == "GET":
+		refunds = _refunds_queryset()
+		socio_id = request.query_params.get("socio_id")
+		if socio_id:
+			if not socio_id.isdigit():
+				return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+			refunds = refunds.filter(cuenta_corriente__socio_id=int(socio_id))
+		if request.query_params.get("tipo"):
+			refunds = refunds.filter(tipo=request.query_params["tipo"])
+		return Response(DevolucionSerializer(refunds, many=True).data)
+
+	serializer = DevolucionManualSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+	data = serializer.validated_data
+	try:
+		refund = create_manual_refund(
+			data["socio_id"], data["concepto"], data["monto"], data["medio_de_pago"], data["responsable"],
+			_current_user(request),
+		)
+	except CuentaCorriente.DoesNotExist:
+		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
+	return Response(DevolucionSerializer(refund).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Devolucion"], responses=DevolucionSerializer)
+@api_view(["GET"])
+def devolucion_detail(request, pk):
+	return Response(DevolucionSerializer(get_object_or_404(_refunds_queryset(), pk=pk)).data)
+
+
+@extend_schema(tags=["Finanzas/Devolucion"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def devolucion_pdf(request, pk):
+	refund = get_object_or_404(_refunds_queryset(), pk=pk)
+	response = HttpResponse(render_refund_pdf(refund), content_type="application/pdf")
+	response["Content-Disposition"] = f'attachment; filename="{refund_filename(refund)}"'
 	return response
 
 
@@ -387,28 +461,13 @@ def estado_cuenta_socio(request, socio_id):
 
 
 def _totales_por_medio_de_pago():
-	totales = {
+	"""Money received per payment method: payments of cuotas and incomes still credited."""
+	return {
 		item["medio_de_pago"]: item["total"]
 		for item in ItemPago.objects.filter(
 			pago__estado_pago=EstadoPagoChoices.ACREDITADO,
 		).values("medio_de_pago").annotate(total=Sum("monto"))
 	}
-	movimientos_manuales = (
-		MovimientoCuenta.objects.filter(origen_manual__isnull=False)
-		.select_related("movimiento_revertido")
-	)
-	for mov in movimientos_manuales:
-		medio = mov.medio_de_pago or (
-			mov.movimiento_revertido.medio_de_pago if mov.movimiento_revertido else None
-		)
-		if not medio:
-			continue
-		actual = totales.get(medio, Decimal("0.00"))
-		if mov.tipo_movimiento == TipoMovimientoChoices.ABONO:
-			totales[medio] = actual + mov.monto
-		else:
-			totales[medio] = actual - mov.monto
-	return totales
 
 
 @extend_schema(tags=["Finanzas/Resumen"])
@@ -428,15 +487,15 @@ def resumen_financiero(request):
 		"cuotas_vencidas_1": sum(fila["cuotas_vencidas_1"] for fila in filas_morosas),
 		"cuotas_vencidas_2": sum(fila["cuotas_vencidas_2"] for fila in filas_morosas),
 		"transferencia_bancaria": pagos_por_medio.get(
-			MedioDePagoChoices.TRANSFERENCIA,
+			"Transferencia",
 			Decimal("0.00"),
 		),
 		"billetera_virtual": pagos_por_medio.get(
-			MedioDePagoChoices.BILLETERA_VIRTUAL,
+			"BilleteraVirtual",
 			Decimal("0.00"),
 		),
 		"pago_efectivo": pagos_por_medio.get(
-			MedioDePagoChoices.EFECTIVO,
+			"Efectivo",
 			Decimal("0.00"),
 		),
 	})
@@ -475,43 +534,19 @@ def movimiento_cuenta_list(request):
 	movements = MovimientoCuenta.objects.select_related(
 		"cuenta_corriente__socio__persona",
 		"cuota",
-	).prefetch_related("cuota__items", "reversiones").order_by("pk")
+		"pago__comprobante",
+	).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
 			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
 		movements = movements.filter(cuenta_corriente__socio_id=int(socio_id))
-	if request.query_params.get("solo_manuales") == "true":
-		movements = movements.filter(origen_manual__isnull=False)
+	if request.query_params.get("tipo"):
+		movements = movements.filter(tipo_movimiento=request.query_params["tipo"])
 	return Response(MovimientoCuentaSerializer(movements, many=True).data)
 
 
-@extend_schema(tags=["Finanzas/MovimientoCuenta"], request=MovimientoManualSerializer, responses=MovimientoCuentaSerializer)
-@api_view(["POST"])
-def movimiento_cuenta_manual(request):
-	serializer = MovimientoManualSerializer(data=request.data)
-	if not serializer.is_valid():
-		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-	data = serializer.validated_data
-	try:
-		movement = create_manual_movement(
-			data["socio_id"],
-			data["tipo"],
-			data["origen"],
-			data["concepto"],
-			data["monto"],
-			data["medio_de_pago"],
-			data["movimiento_revertido_id"],
-			request.user if request.user.is_authenticated else None,
-		)
-	except CuentaCorriente.DoesNotExist:
-		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
-	except PagoInvalidoError as error:
-		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
-	return Response(MovimientoCuentaSerializer(movement).data, status=status.HTTP_201_CREATED)
-
-
-PROTECTED_CONCEPTS = ("Otro ingreso", "Otro egreso")
+PROTECTED_CONCEPTS = ("Otro ingreso", "Otra devolución")
 
 
 def _find_matching_concept(name, origin):
@@ -554,9 +589,9 @@ def concepto_movimiento_detail(request, pk):
 			{"detail": "Este concepto es del sistema y no puede eliminarse."},
 			status=status.HTTP_400_BAD_REQUEST,
 		)
-	if MovimientoCuenta.objects.filter(origen_manual=concept.origen, concepto__iexact=concept.nombre).exists():
+	if concept_in_use(concept):
 		return Response(
-			{"detail": "El concepto ya fue utilizado en movimientos de cuenta corriente y no puede eliminarse."},
+			{"detail": "El concepto ya fue utilizado en ingresos o devoluciones y no puede eliminarse."},
 			status=status.HTTP_400_BAD_REQUEST,
 		)
 	concept.delete()
@@ -568,22 +603,6 @@ def concepto_movimiento_detail(request, pk):
 @api_view(["GET"])
 def movimiento_cuenta_detail(request, pk):
 	return Response(MovimientoCuentaSerializer(get_object_or_404(MovimientoCuenta, pk=pk)).data)
-
-
-@extend_schema(tags=["Finanzas/MovimientoCuenta"], responses={(200, "application/pdf"): bytes})
-@api_view(["GET"])
-def movimiento_cuenta_pdf(request, pk):
-	movement = get_object_or_404(
-		MovimientoCuenta.objects.select_related(
-			"cuenta_corriente__socio__persona",
-			"movimiento_revertido__cuota",
-		).prefetch_related("reversiones"),
-		pk=pk,
-		origen_manual__isnull=False,
-	)
-	response = HttpResponse(render_manual_movement_pdf(movement), content_type="application/pdf")
-	response["Content-Disposition"] = f'attachment; filename="{manual_movement_filename(movement)}"'
-	return response
 
 
 @extend_schema(tags=["Finanzas/Auditoria"], responses=RegistroAuditoriaSerializer(many=True))
@@ -700,9 +719,9 @@ def medio_pago_list_create(request):
 def medio_pago_detail(request, pk):
 	medio = get_object_or_404(MedioPago, pk=pk)
 	if request.method == "DELETE":
-		if ItemPago.objects.filter(medio_de_pago=medio.codigo).exists():
+		if payment_method_in_use(medio.codigo):
 			return Response(
-				{"detail": "El medio de pago ya se usó en pagos registrados: deshabilitalo en lugar de eliminarlo."},
+				{"detail": "El medio de pago ya se usó en pagos o devoluciones: deshabilitalo en lugar de eliminarlo."},
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 		if medio.activo and not MedioPago.objects.filter(activo=True).exclude(pk=medio.pk).exists():
@@ -866,16 +885,6 @@ def _build_financial_report(period_date):
         ).aggregate(total=Sum("monto_total"))["total"]
         or Decimal("0.00")
     )
-    movimientos_periodo = MovimientoCuenta.objects.filter(
-        origen_manual__isnull=False,
-        fecha__year=period_date.year,
-        fecha__month=period_date.month,
-    ).select_related("movimiento_revertido")
-    for m in movimientos_periodo:
-        medio = m.medio_de_pago or (m.movimiento_revertido.medio_de_pago if m.movimiento_revertido else None)
-        if not medio:
-            continue
-        total_recaudado_periodo += m.monto if m.tipo_movimiento == TipoMovimientoChoices.ABONO else -m.monto
 
     reporte_mora = delinquency_report("activos")
     filas_mora = reporte_mora["filas"]
@@ -933,9 +942,9 @@ def _build_financial_report(period_date):
         "cuotas_vencidas": sum(f["cuotas_vencidas"] for f in filas_mora),
         "cuotas_vencidas_1": sum(f["cuotas_vencidas_1"] for f in filas_mora),
         "cuotas_vencidas_2": sum(f["cuotas_vencidas_2"] for f in filas_mora),
-        "transferencia_bancaria": pagos_por_medio.get(MedioDePagoChoices.TRANSFERENCIA, Decimal("0.00")),
-        "billetera_virtual": pagos_por_medio.get(MedioDePagoChoices.BILLETERA_VIRTUAL, Decimal("0.00")),
-        "pago_efectivo": pagos_por_medio.get(MedioDePagoChoices.EFECTIVO, Decimal("0.00")),
+        "transferencia_bancaria": pagos_por_medio.get("Transferencia", Decimal("0.00")),
+        "billetera_virtual": pagos_por_medio.get("BilleteraVirtual", Decimal("0.00")),
+        "pago_efectivo": pagos_por_medio.get("Efectivo", Decimal("0.00")),
         "deudores": debtors,
     }
 
