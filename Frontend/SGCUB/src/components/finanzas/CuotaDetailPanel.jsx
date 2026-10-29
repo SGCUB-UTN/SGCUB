@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { descargarComprobantePdf, getComprobante, getComprobantesByCuota } from '../../api/comprobantes'
+import { descargarComprobantePdf, getComprobantesByCuota } from '../../api/comprobantes'
 import { formatAmount, formatDate } from '../personas/format'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import ComprobanteDetailModal from './ComprobanteDetailModal'
@@ -245,19 +245,8 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
 
 function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
-  const [selected, setSelected] = useState(null)
-  const [detail, setDetail] = useState({ loading: false, error: null, data: null })
+  const [selectedId, setSelectedId] = useState(null)
   const [removing, setRemoving] = useState(null)
-
-  const openReceipt = async (comprobante) => {
-    setSelected(comprobante)
-    setDetail({ loading: true, error: null, data: null })
-    try {
-      setDetail({ loading: false, error: null, data: await getComprobante(comprobante.comprobante_id) })
-    } catch {
-      setDetail({ loading: false, error: 'No se pudo cargar el detalle.', data: null })
-    }
-  }
 
   return (
     <tr className="bg-surface-container-low/60">
@@ -267,18 +256,16 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
             <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemoving : undefined} className={layout.concepts} />
           </div>
           <div className={layout.side}>
-            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={openReceipt} className={layout.receipts} />
+            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)} className={layout.receipts} />
             <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
           </div>
         </div>
 
         <ComprobanteDetailModal
-          comprobante={selected}
-          detalle={detail.data}
-          loading={detail.loading}
-          error={detail.error}
-          opened={Boolean(selected)}
-          onClose={() => setSelected(null)}
+          comprobanteId={selectedId}
+          opened={Boolean(selectedId)}
+          onClose={() => setSelectedId(null)}
+          onChanged={onChanged}
         />
         <RemoveCuotaItemModal cuota={removing ? cuota : null} item={removing} onClose={() => setRemoving(null)} onRemoved={onChanged} />
       </td>

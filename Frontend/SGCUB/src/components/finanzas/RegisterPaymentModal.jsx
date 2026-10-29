@@ -23,7 +23,7 @@ function HeaderMessage({ icon, tone = 'text-on-surface-variant', spin = false, c
 // Always shows the payment form layout. Until a valid socio is loaded the form is empty and the
 // modal header holds the socio search (or the loading / error state); then the sections fill in.
 // Without `initialSocioId` the modal starts with the search.
-function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, onClose, onSuccess }) {
+function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, reversal = null, onClose, onSuccess }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [socioId, setSocioId] = useState(initialSocioId)
   const [load, setLoad] = useState(EMPTY_LOAD)
@@ -81,7 +81,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
           <button
             type="button"
             onClick={() => setSocioId(null)}
-            disabled={!socioId}
+            disabled={!socioId || Boolean(reversal)}
             className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:grayscale disabled:cursor-default disabled:hover:bg-transparent"
           >
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
@@ -105,6 +105,7 @@ function RegisterPaymentModal({ opened, initialSocioId = null, initialCuotaIds, 
           socio={load.socio}
           cuenta={load.cuenta}
           initialCuotaIds={initialCuotaIds}
+          reversal={reversal}
           onCancel={onClose}
           onSuccess={onSuccess}
           onAssignBenefit={assignBenefit}

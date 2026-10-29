@@ -6,10 +6,11 @@ const NO_CUOTAS = []
 
 // Mounted once in the main layout so any screen can open the payment modal
 function RegisterPaymentProvider({ children }) {
-  const [request, setRequest] = useState({ id: 0, opened: false, socioId: null, cuotaIds: NO_CUOTAS, onSuccess: null })
+  const [request, setRequest] = useState({ id: 0, opened: false, socioId: null, cuotaIds: NO_CUOTAS, reversal: null, onSuccess: null })
 
-  const openPayment = useCallback(({ socioId = null, cuotaIds = NO_CUOTAS, onSuccess = null } = {}) => {
-    setRequest((current) => ({ id: current.id + 1, opened: true, socioId, cuotaIds, onSuccess }))
+  // `reversal` charges again a reverted payment (see refunds.reversalOf)
+  const openPayment = useCallback(({ socioId = null, cuotaIds = NO_CUOTAS, reversal = null, onSuccess = null } = {}) => {
+    setRequest((current) => ({ id: current.id + 1, opened: true, socioId, cuotaIds, reversal, onSuccess }))
   }, [])
 
   // Keep the request data while closing so the modal doesn't flash empty during its exit animation
@@ -25,6 +26,7 @@ function RegisterPaymentProvider({ children }) {
         opened={request.opened}
         initialSocioId={request.socioId}
         initialCuotaIds={request.cuotaIds}
+        reversal={request.reversal}
         onClose={close}
         onSuccess={request.onSuccess ?? undefined}
       />

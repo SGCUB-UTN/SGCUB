@@ -11,6 +11,21 @@ function DesgloseComprobante({ detalle }) {
     return label.charAt(0).toUpperCase() + label.slice(1)
   }
 
+  // An income receipt is the same as a payment one, with the concept instead of the periods
+  if (detalle?.es_ingreso) {
+    return (
+      <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
+        <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">
+          <h3 className="font-semibold text-on-surface">Concepto</h3>
+        </div>
+        <div className="flex justify-between gap-3 p-3">
+          <strong className="text-on-surface text-sm break-words">{detalle.concepto}</strong>
+          <span className="font-semibold text-on-surface text-sm">{formatAmount(detalle.monto_total)}</span>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
       <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">

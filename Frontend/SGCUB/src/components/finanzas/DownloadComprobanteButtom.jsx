@@ -1,27 +1,27 @@
 import { useState } from 'react'
 import { descargarComprobantePdf } from '../../api/comprobantes'
-import { descargarMovimientoPdf } from '../../api/movimientos'
+import { descargarDevolucionPdf } from '../../api/devoluciones'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { SUBMIT_BUTTON_CLASS } from './formParts'
 
 function DownloadComprobanteButtom({
   comprobanteId,
-  movimientoId,
+  devolucionId,
   variant = 'secondary',
   fullWidth = false,
   label = 'Descargar PDF',
 }) {
   const [descargando, setDescargando] = useState(false)
   const [error, setError] = useState('')
-  const targetId = comprobanteId ?? movimientoId
+  const targetId = comprobanteId ?? devolucionId
 
   const descargar = async () => {
     if (!targetId) return
     setDescargando(true)
     setError('')
     try {
-      if (movimientoId) {
-        await descargarMovimientoPdf(movimientoId)
+      if (devolucionId) {
+        await descargarDevolucionPdf(devolucionId)
       } else {
         await descargarComprobantePdf(comprobanteId)
       }

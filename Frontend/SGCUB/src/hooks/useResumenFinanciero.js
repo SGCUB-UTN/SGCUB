@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getComprobantes } from '../api/comprobantes'
 import { getCuotas } from '../api/cuotas'
-import { getMovimientos } from '../api/movimientos'
 import { getResumenFinanciero } from '../api/resumenFinanciero'
 import { formatPeriod, periodOptions } from '../components/shared/periodFormat'
 import { CUOTA_STATES, countByState, cuotaState, isOverdue } from '../components/finanzas/cuotaStates'
@@ -16,7 +15,6 @@ export default function useResumenFinanciero() {
   const [resumen, setResumen] = useState(null)
   const [cuotas, setCuotas] = useState([])
   const [comprobantes, setComprobantes] = useState([])
-  const [movimientosManuales, setMovimientosManuales] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [errors, setErrors] = useState({})
   const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod)
@@ -25,11 +23,10 @@ export default function useResumenFinanciero() {
     let active = true
 
     const loadAll = async () => {
-      const [resumenResult, cuotasResult, comprobantesResult, movimientosResult] = await Promise.allSettled([
+      const [resumenResult, cuotasResult, comprobantesResult] = await Promise.allSettled([
         getResumenFinanciero(),
         getCuotas(),
         getComprobantes(),
-        getMovimientos(null, { soloManuales: true }),
       ])
 
       if (!active) return
@@ -50,10 +47,6 @@ export default function useResumenFinanciero() {
         setComprobantes(comprobantesResult.value)
       } else {
         setErrors((prev) => ({ ...prev, comprobantes: comprobantesResult.reason }))
-      }
-
-      if (movimientosResult.status === 'fulfilled') {
-        setMovimientosManuales(Array.isArray(movimientosResult.value) ? movimientosResult.value : [])
       }
 
       if (active) setIsLoading(false)
@@ -87,18 +80,7 @@ export default function useResumenFinanciero() {
         })
         .reduce((sum, c) => sum + Number(c.monto_total ?? 0), 0)
 
-      const totalManuales = movimientosManuales
-        .filter((m) => {
-          if (!m.fecha || !m.origen_manual) return false
-          const d = new Date(m.fecha)
-          return d.getFullYear() === year && d.getMonth() + 1 === month
-        })
-        .reduce(
-          (sum, m) => sum + (m.tipo_movimiento === 'Abono' ? Number(m.monto ?? 0) : -Number(m.monto ?? 0)),
-          0,
-        )
-
-      totalRecaudadoPeriodo = totalComprobantes + totalManuales
+      totalRecaudadoPeriodo = totalComprobantes
     }
 
     return {
@@ -107,7 +89,7 @@ export default function useResumenFinanciero() {
       cuotasImpagas: cuotasGeneradas - cuotasPagas,
       totalRecaudadoPeriodo,
     }
-  }, [cuotas, comprobantes, movimientosManuales, selectedPeriod])
+  }, [cuotas, comprobantes, selectedPeriod])
 
   const debtorRows = useMemo(() => {
     const bySocio = new Map()

@@ -20,34 +20,33 @@ const SCOPES = [
   {
     id: 'todos',
     titulo: 'Todos los movimientos',
-    detalle: 'Incluye cobros de cuotas y otros movimientos de caja.',
+    detalle: 'Recibos de cuotas e ingresos, notas de crédito y devoluciones.',
   },
   {
-    id: 'comprobantes',
-    titulo: 'Cobros de cuotas',
-    detalle: 'Comprobantes emitidos por pagos de cuotas societarias.',
+    id: 'recibos',
+    titulo: 'Recibos',
+    detalle: 'Pagos de cuotas e ingresos ajenos a cuotas.',
   },
   {
-    id: 'manuales',
-    titulo: 'Otros movimientos',
-    detalle: 'Ingresos manuales y egresos de caja.',
+    id: 'devoluciones',
+    titulo: 'Devoluciones',
+    detalle: 'Notas de crédito y devoluciones manuales. No restan de los ingresos.',
   },
 ]
 
-const TYPE_FILTER_OPTIONS = [
-  { value: 'CuotaVigente', label: 'Cobros de cuota (Vigentes)', group: 'comprobantes' },
-  { value: 'CuotaAnulada', label: 'Cobros de cuota (Anulados)', group: 'comprobantes' },
-  { value: 'IngresoManual', label: 'Ingresos manuales', group: 'manuales' },
-  { value: 'Egreso', label: 'Egresos de caja', group: 'manuales' },
-  { value: 'NotaCredito', label: 'Notas de crédito', group: 'manuales' },
-]
+const TYPES = {
+  CuotaVigente: { label: 'Cobro de cuotas', group: 'recibos', badge: 'bg-primary/10 text-primary border-primary/20' },
+  CuotaAnulada: { label: 'Cobro de cuotas anulado', group: 'recibos', badge: 'bg-error-container text-on-error-container border-error/20' },
+  IngresoVigente: { label: 'Ingreso', group: 'recibos', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  IngresoAnulado: { label: 'Ingreso anulado', group: 'recibos', badge: 'bg-error-container text-on-error-container border-error/20' },
+  NotaCredito: { label: 'Nota de crédito', group: 'devoluciones', badge: 'bg-amber-500/15 text-amber-800 border-amber-500/30' },
+  Manual: { label: 'Devolución manual', group: 'devoluciones', badge: 'bg-error/10 text-error border-error/20' },
+}
 
-const BADGE_STYLES = {
-  CuotaVigente: 'bg-primary/10 text-primary border-primary/20',
-  CuotaAnulada: 'bg-error-container text-on-error-container border-error/20',
-  IngresoManual: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
-  Egreso: 'bg-error/10 text-error border-error/20',
-  NotaCredito: 'bg-amber-500/15 text-amber-800 border-amber-500/30',
+const receiptType = (comprobante) => {
+  const annulled = comprobante.estado === 'Anulado'
+  if (comprobante.es_ingreso) return annulled ? 'IngresoAnulado' : 'IngresoVigente'
+  return annulled ? 'CuotaAnulada' : 'CuotaVigente'
 }
 
 const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : '')
@@ -63,120 +62,86 @@ const INITIAL_SORT = { columna: 'date', direccion: 'desc' }
 
 function ComprobantesTable({
   comprobantes = [],
-  movimientosManuales = [],
+  devoluciones = [],
   isLoading,
   error,
   onSelect,
-  onSelectMovimiento,
+  onSelectDevolucion,
 }) {
   const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState(ALL)
   const [month, setMonth] = useState(ALL)
 
-  const { movementById, creditNoteByReversedId } = useMemo(() => {
-    const byId = new Map()
-    const byReversed = new Map()
-    movimientosManuales.forEach((movement) => {
-      byId.set(movement.movimiento_cuenta_id, movement)
-      if (movement.movimiento_revertido) {
-        byReversed.set(movement.movimiento_revertido, movement)
-      }
-    })
-    return { movementById: byId, creditNoteByReversedId: byReversed }
-  }, [movimientosManuales])
-
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
-      const isAnulado = comprobante.estado === 'Anulado'
-      const filterCode = isAnulado ? 'CuotaAnulada' : 'CuotaVigente'
+      const type = receiptType(comprobante)
+      const refunded = Number(comprobante.monto_devuelto ?? 0)
       return {
         key: `comprobante-${comprobante.comprobante_id}`,
         kind: 'comprobante',
         raw: comprobante,
-        filterCode,
-        refCode: `#${comprobante.numero}`,
-        badgeLabel: isAnulado ? 'Comprobante anulado' : 'Comprobante de cuota',
-        badgeClass: BADGE_STYLES[filterCode],
+        filterCode: type,
+        refCode: comprobante.codigo,
+        badgeLabel: TYPES[type].label,
+        badgeClass: TYPES[type].badge,
         date: comprobante.fecha_emision,
-        sortDate: `${comprobante.fecha_emision || ''}-${String(comprobante.numero).padStart(8, '0')}`,
+        sortDate: `${comprobante.fecha_emision || ''}-R${String(comprobante.numero).padStart(8, '0')}`,
         sortNumber: comprobante.numero,
         socio: comprobante.socio,
         socioLabel: socioName(comprobante.socio),
-        concept: 'Cobro de cuota societaria',
-        subConcept: `Recibo X #${comprobante.numero} · Pago #${comprobante.pago}`,
+        concept: comprobante.es_ingreso ? comprobante.concepto : 'Cobro de cuotas',
+        subConcept: refunded > 0 ? `Devuelto con notas de crédito: ${formatAmount(refunded)}` : `Pago #${comprobante.pago}`,
         paymentMethod: 'Ver comprobante',
         amount: Number(comprobante.monto_total ?? 0),
         isPositive: true,
-        isAnulado,
+        isAnulado: comprobante.estado === 'Anulado',
       }
     })
 
-    const manualItems = movimientosManuales.map((movement) => {
-      const isAbono = movement.tipo_movimiento === 'Abono'
-      const filterCode = movement.origen_manual || (isAbono ? 'IngresoManual' : 'Egreso')
-      const receiptNumber = movement.numero_comprobante ?? movement.movimiento_cuenta_id
-      const codePrefix = filterCode === 'NotaCredito' ? 'NC-X' : filterCode === 'Egreso' ? 'EGR-X' : 'X'
-      const reversedOrigin = movement.movimiento_revertido
-        ? movementById.get(movement.movimiento_revertido)
-        : null
-      const reversedBy = creditNoteByReversedId.get(movement.movimiento_cuenta_id)
-      const subParts = []
-      if (movement.movimiento_revertido) {
-        const origNum = reversedOrigin?.numero_comprobante ?? movement.movimiento_revertido
-        subParts.push(`Revierte al comprobante X #${origNum}`)
-      }
-      if (reversedBy) {
-        const ncNum = reversedBy.numero_comprobante ?? reversedBy.movimiento_cuenta_id
-        subParts.push(`Revertido por Nota de crédito NC-X #${ncNum}`)
-      }
-      if (!subParts.length) {
-        subParts.push(`Comprobante ${codePrefix} #${receiptNumber}`)
-      }
+    const refundItems = devoluciones.map((devolucion) => ({
+      key: `devolucion-${devolucion.devolucion_id}`,
+      kind: 'devolucion',
+      raw: devolucion,
+      filterCode: devolucion.tipo,
+      refCode: devolucion.codigo,
+      badgeLabel: TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre,
+      badgeClass: TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
+      date: devolucion.fecha,
+      sortDate: `${String(devolucion.fecha ?? '').slice(0, 10)}-D${String(devolucion.numero).padStart(8, '0')}`,
+      sortNumber: devolucion.numero,
+      socio: devolucion.socio,
+      socioLabel: socioName(devolucion.socio),
+      concept: devolucion.concepto,
+      subConcept: devolucion.comprobante_anulado_codigo
+        ? `Sobre el comprobante anulado ${devolucion.comprobante_anulado_codigo} · Responsable: ${devolucion.responsable}`
+        : `Responsable: ${devolucion.responsable}`,
+      paymentMethod: devolucion.medio_de_pago_nombre,
+      amount: Number(devolucion.monto ?? 0),
+      isPositive: false,
+      isAnulado: false,
+    }))
 
-      const dateOnly = movement.fecha ? String(movement.fecha).slice(0, 10) : ''
-      return {
-        key: `movimiento-${movement.movimiento_cuenta_id}`,
-        kind: 'manual',
-        raw: movement,
-        filterCode,
-        refCode: `#${receiptNumber}`,
-        badgeLabel: movement.origen_manual_nombre || movement.origen_manual || 'Movimiento',
-        badgeClass: BADGE_STYLES[filterCode] || BADGE_STYLES.IngresoManual,
-        date: movement.fecha,
-        sortDate: `${dateOnly}-${String(receiptNumber).padStart(8, '0')}`,
-        sortNumber: receiptNumber,
-        socio: movement.socio,
-        socioLabel: socioName(movement.socio),
-        concept: movement.concepto || 'Movimiento manual',
-        subConcept: subParts.join(' · '),
-        paymentMethod: movement.medio_de_pago_nombre || movement.medio_de_pago || 'Ajuste en cuenta',
-        amount: Number(movement.monto ?? 0),
-        isPositive: isAbono,
-        isAnulado: false,
-      }
-    })
-
-    return [...receiptItems, ...manualItems]
-  }, [comprobantes, movimientosManuales, movementById, creditNoteByReversedId])
+    return [...receiptItems, ...refundItems]
+  }, [comprobantes, devoluciones])
 
   const availableMonths = useMemo(
     () => periodOptions(unifiedItems, (item) => periodOf(item.date)),
     [unifiedItems],
   )
 
-  const visibleTypeOptions = useMemo(() => {
-    if (scope === 'comprobantes') return TYPE_FILTER_OPTIONS.filter((opt) => opt.group === 'comprobantes')
-    if (scope === 'manuales') return TYPE_FILTER_OPTIONS.filter((opt) => opt.group === 'manuales')
-    return TYPE_FILTER_OPTIONS
-  }, [scope])
+  const visibleTypeOptions = useMemo(
+    () => Object.entries(TYPES)
+      .filter(([, type]) => scope === 'todos' || type.group === scope)
+      .map(([value, type]) => ({ value, label: type.label })),
+    [scope],
+  )
 
   const filtered = useMemo(() => {
     const text = search.trim()
     const textDigits = text.replace(/[.#]/g, '')
     return unifiedItems.filter((item) => {
-      if (scope === 'comprobantes' && item.kind !== 'comprobante') return false
-      if (scope === 'manuales' && item.kind !== 'manual') return false
+      if (scope !== 'todos' && TYPES[item.filterCode]?.group !== scope) return false
       if (typeFilter !== ALL && item.filterCode !== typeFilter) return false
       if (month !== ALL && periodOf(item.date) !== month) return false
       if (!text) return true
@@ -186,6 +151,7 @@ function ComprobantesTable({
         item.subConcept,
         item.badgeLabel,
         item.paymentMethod,
+        item.refCode,
       ])
         || (textDigits !== '' && [
           item.sortNumber,
@@ -211,7 +177,7 @@ function ComprobantesTable({
     if (item.kind === 'comprobante') {
       onSelect?.(item.raw)
     } else {
-      onSelectMovimiento?.(item.raw)
+      onSelectDevolucion?.(item.raw)
     }
   }
 
@@ -234,7 +200,7 @@ function ComprobantesTable({
               Movimientos y comprobantes de caja
             </h2>
             <p className="text-sm text-on-surface-variant">
-              Historial completo de comprobantes emitidos y otros movimientos registrados.
+              Recibos de cuotas e ingresos, notas de crédito y devoluciones manuales.
             </p>
           </div>
           <span className="material-symbols-outlined text-primary text-2xl" aria-hidden="true">receipt_long</span>
@@ -272,7 +238,7 @@ function ComprobantesTable({
         <TableSearchInput
           value={search}
           onChange={withPageReset(setSearch)}
-          placeholder="Buscar por N° de comprobante, socio, DNI, concepto o movimiento..."
+          placeholder="Buscar por comprobante, socio, DNI o concepto..."
           label="Filtrar movimientos y comprobantes"
         />
         <FilterSelect

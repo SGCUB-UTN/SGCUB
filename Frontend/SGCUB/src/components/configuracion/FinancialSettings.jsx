@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
+import { CONCEPT_ORIGINS, INCOME, isOtherConcept } from '../finanzas/conceptOrigins'
 import { formatDate, getErrorMessage } from '../personas/format'
 import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
 import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
@@ -374,17 +375,16 @@ function PaymentMethodsSection({ medios, onCreate, onUpdate, onDelete }) {
   )
 }
 
-const PROTECTED_CONCEPTS = ['Otro ingreso', 'Otro egreso']
-
 function MovementConceptsSection() {
   const { concepts, isLoading, error: loadError, createConcept, deleteConcept } = useConceptosMovimiento()
-  const [selectedOrigin, setSelectedOrigin] = useState('IngresoManual')
+  const [selectedOrigin, setSelectedOrigin] = useState(INCOME)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [saving, setSaving] = useState(false)
 
   const filtered = concepts.filter((c) => c.origen === selectedOrigin)
+  const origin = CONCEPT_ORIGINS.find((option) => option.value === selectedOrigin)
 
   const add = async (event) => {
     event.preventDefault()
@@ -420,13 +420,10 @@ function MovementConceptsSection() {
     >
       <div className="px-6 pt-4 pb-2 border-b border-outline-variant/30 flex items-center justify-between gap-3">
         <p className="text-sm text-on-surface-variant">
-          Conceptos disponibles al registrar ingresos manuales o egresos de caja.
+          Conceptos disponibles al registrar ingresos o devoluciones manuales.
         </p>
         <div className="flex gap-1.5" role="group" aria-label="Origen de concepto">
-          {[
-            { value: 'IngresoManual', label: 'Ingresos' },
-            { value: 'Egreso', label: 'Egresos' },
-          ].map((tab) => (
+          {CONCEPT_ORIGINS.map((tab) => (
             <button
               key={tab.value}
               type="button"
@@ -460,7 +457,7 @@ function MovementConceptsSection() {
               <tr><td colSpan={3} className="px-6 py-4 text-sm text-on-surface-variant">No hay conceptos cargados.</td></tr>
             )}
             {!isLoading && filtered.map((c) => {
-              const isProtected = PROTECTED_CONCEPTS.includes(c.nombre)
+              const isProtected = isOtherConcept(c.nombre)
               const busy = busyId === c.concepto_movimiento_id
               return (
                 <tr key={c.concepto_movimiento_id} className={TABLE_CLASSES.row}>
@@ -469,7 +466,7 @@ function MovementConceptsSection() {
                   </td>
                   <td className={TABLE_CLASSES.cell}>
                     <span className="text-xs text-on-surface-variant">
-                      {c.origen === 'IngresoManual' ? 'Ingreso manual' : 'Egreso'}
+                      {CONCEPT_ORIGINS.find((option) => option.value === c.origen)?.singular ?? c.origen}
                     </span>
                   </td>
                   <td className={TABLE_CLASSES.actionsCell}>
@@ -480,7 +477,7 @@ function MovementConceptsSection() {
                           isProtected
                             ? 'Concepto del sistema (no se puede borrar)'
                             : c.en_uso
-                              ? 'Ya se usó en movimientos registrados'
+                              ? 'Ya se usó en ingresos o devoluciones registrados'
                               : 'Eliminar concepto'
                         }
                         disabled={busy || isProtected || c.en_uso}
@@ -498,7 +495,7 @@ function MovementConceptsSection() {
                 <form onSubmit={add} className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     className={compactInputClass(Boolean(error), 'sm:max-w-xs')}
-                    placeholder={selectedOrigin === 'IngresoManual' ? 'Ej: Rifa anual' : 'Ej: Pago de arbitraje'}
+                    placeholder={origin?.placeholder}
                     value={name}
                     onChange={(event) => { setName(event.target.value); setError('') }}
                     aria-label="Nuevo concepto"

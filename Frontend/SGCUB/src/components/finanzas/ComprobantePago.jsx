@@ -3,7 +3,7 @@ import { SecondaryButton } from '../personas/tabs/parts'
 import DownloadComprobanteButtom from './DownloadComprobanteButtom'
 import DesgloseComprobante from './DesgloseComprobante'
 
-function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, numero, fecha: fechaEmision, onBack }) {
+function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, numero, fecha: fechaEmision, onBack, backLabel = 'Volver al estado de cuenta' }) {
   const fecha = fechaEmision ? formatDate(fechaEmision) : new Date().toLocaleDateString('es-AR')
 
   return (
@@ -36,7 +36,7 @@ function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, nume
       {observacion && <div className="p-4 bg-surface-container-low rounded-lg"><p className="text-sm text-on-surface-variant">Observación</p><p className="text-on-surface">{observacion}</p></div>}
       <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
         <DownloadComprobanteButtom comprobanteId={detalle?.comprobante_id} />
-        <SecondaryButton icon="arrow_back" onClick={onBack}>Volver al estado de cuenta</SecondaryButton>
+        <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>
       </div>
     </div>
   )
