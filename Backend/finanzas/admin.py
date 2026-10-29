@@ -13,6 +13,7 @@ from .models import (
 	ItemCuota,
 	MovimientoCuenta,
 	Pago,
+	RegistroAuditoria,
 )
 
 admin.site.register(Cuota)
@@ -27,3 +28,4 @@ admin.site.register(ConfiguracionFinanciera)
 admin.site.register(Beca)
 admin.site.register(EjecucionTareaCuota)
 admin.site.register(ConceptoMovimiento)
+admin.site.register(RegistroAuditoria)

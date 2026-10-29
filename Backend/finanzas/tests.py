@@ -30,6 +30,7 @@ from padron.models import (
 )
 from .generators import GeneradorItemsCuota
 from .models import (
+	AccionAuditoriaChoices,
 	Beca,
 	Comprobante,
 	ConceptoMovimiento,
@@ -51,6 +52,7 @@ from .models import (
 	MovimientoCuenta,
 	OrigenEjecucionChoices,
 	Pago,
+	RegistroAuditoria,
 	SecuenciaComprobante,
 	TipoTareaCuotaChoices,
 )
@@ -4197,3 +4199,66 @@ class PeriodoCuotasTests(APITestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("periodo", response.data)
+
+
+class FinancialAuditTests(PagoTestBase):
+	def entries(self, action):
+		return RegistroAuditoria.objects.filter(accion=action)
+
+	def test_payment_is_audited_with_session_user_receipt_and_methods(self):
+		response = self.pagar([self.agosto], "1000.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		entry = self.entries(AccionAuditoriaChoices.PAGO_REGISTRADO).get()
+		self.assertEqual(entry.usuario.username, "tesorero")
+		self.assertEqual(entry.socio, self.socio)
+		self.assertEqual(entry.monto, Decimal("1000.00"))
+		self.assertEqual(entry.referencia, f"X {Comprobante.objects.get().numero:08d}")
+		self.assertEqual(entry.detalle["medios"], [{"medio_de_pago": "Efectivo", "monto": "1000.00"}])
+
+	def test_late_fee_waiver_keeps_the_responsable_chosen_by_hand(self):
+		ItemCuota.objects.create(cuota=self.agosto, concepto="Mora", fecha_aplicacion=date(2026, 9, 11), monto=Decimal("200.00"))
+		sync_cuota_charge(self.agosto)
+
+		self.pagar([self.agosto], "1000.00", condonacion_mora={
+			"cuota_ids": [self.agosto.pk], "autorizado_por": "Presidente", "motivo": "Socio vitalicio",
+		})
+
+		entry = self.entries(AccionAuditoriaChoices.CONDONACION_MORA).get()
+		self.assertEqual(entry.responsable, "Presidente")
+		self.assertEqual(entry.usuario.username, "tesorero")
+		self.assertEqual(entry.monto, Decimal("200.00"))
+
+	def test_failed_operations_leave_no_trace(self):
+		self.pagar([self.agosto], "5000.00")
+
+		self.assertFalse(RegistroAuditoria.objects.exists())
+
+	def test_automatic_tasks_are_audited_as_system(self):
+		socio = crear_socio("49100001")
+		RegistroAuditoria.objects.all().delete()
+
+		generar_cuotas_mensuales(date(2026, 10, 1), today=date(2026, 10, 1), meses=1)
+
+		entry = self.entries(AccionAuditoriaChoices.CUOTA_CREADA).get(socio=socio)
+		self.assertIsNone(entry.usuario)
+		self.assertEqual(entry.referencia, "Cuota 2026-10")
+
+	def test_scholarship_and_discount_changes_are_audited(self):
+		grant_scholarship(self.socio.pk, "Porcentaje", Decimal("50"), date(2026, 8, 1), "Hermanos", "Presidente")
+
+		entry = self.entries(AccionAuditoriaChoices.BECA_OTORGADA).get()
+		self.assertEqual(entry.responsable, "Presidente")
+		self.assertIn("50%", entry.descripcion)
+
+	def test_audit_endpoint_filters_by_socio_and_action(self):
+		self.pagar([self.agosto], "1000.00")
+		otro = crear_socio("49100002")
+		RegistroAuditoria.objects.create(accion=AccionAuditoriaChoices.CUOTA_CREADA, descripcion="Otra", socio=otro)
+
+		response = self.client.get(reverse("registro-auditoria-list"), {"socio_id": self.socio.pk, "accion": "PagoRegistrado"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]["usuario_nombre"], "tesorero")
+		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)

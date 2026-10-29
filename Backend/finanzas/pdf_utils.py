@@ -5,6 +5,10 @@ BORDER = colors.HexColor("#c4c7c5")
 HEADER_BACKGROUND = colors.HexColor("#eef1f4")
 
 
+def format_receipt_number(receipt_type, number):
+    return f"{receipt_type} {number:08d}"
+
+
 def format_amount(value):
     formatted = f"{abs(value):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"{'-' if value < 0 else ''}$ {formatted}"

@@ -233,11 +233,23 @@ COMET_TIMEOUT = int(os.getenv("COMET_TIMEOUT", "30"))
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "audit": {"format": "%(asctime)s [AUDITORIA] %(message)s"},
+    },
     "handlers": {
         "console": {"class": "logging.StreamHandler"},
+        "audit_console": {"class": "logging.StreamHandler", "formatter": "audit"},
     },
     "root": {
         "handlers": ["console"],
         "level": "INFO",
+    },
+    "loggers": {
+        # Financial transactions; every entry is also stored in RegistroAuditoria
+        "finanzas.audit": {
+            "handlers": ["audit_console"],
+            "level": os.environ.get("AUDIT_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
     },
 }

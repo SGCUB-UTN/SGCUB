@@ -10,7 +10,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from configuracion.services import club_details, club_name
 
 from .models import EstadoComprobanteChoices, MedioDePagoChoices, MedioPago, TipoMovimientoOrigenChoices
-from .pdf_utils import format_amount, table
+from .pdf_utils import format_amount, format_receipt_number, table
 from .services import receipt_detail
 
 
@@ -34,10 +34,6 @@ MANUAL_MOVEMENT_PDF_META = {
         "total_label": "Total egresado",
     },
 }
-
-
-def format_receipt_number(receipt_type, number):
-    return f"{receipt_type} {number:08d}"
 
 
 def movement_number(movement):

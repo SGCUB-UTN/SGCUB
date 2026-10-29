@@ -29,6 +29,7 @@ from .models import (
 	MovimientoCuenta,
 	OrigenEjecucionChoices,
 	Pago,
+	RegistroAuditoria,
 	EstadoCuotaChoices,
 	EstadoPagoChoices,
 	MedioDePagoChoices,
@@ -71,6 +72,7 @@ from .serializers import (
 	MovimientoCuentaSerializer,
 	MovimientoManualSerializer,
 	PagoSerializer,
+	RegistroAuditoriaSerializer,
 	CuentaCorrienteEstadoSerializer,
 	ComprobanteDetalleSerializer,
 )
@@ -131,7 +133,7 @@ def cuota_list_create(request):
 		pk=data["socio_id"],
 	)
 	try:
-		cuota = create_cuota(socio, data["periodo"], data.get("fecha_venc1"), data.get("fecha_venc2"))
+		cuota = create_cuota(socio, data["periodo"], data.get("fecha_venc1"), data.get("fecha_venc2"), user=_current_user(request))
 	except (CuotaDuplicadaError, SocioInactivoError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(CuotaSerializer(_cuotas_queryset().get(pk=cuota.pk)).data, status=status.HTTP_201_CREATED)
@@ -159,7 +161,7 @@ def cuota_detail(request, pk):
 
 	try:
 		if request.method == "DELETE":
-			delete_cuota(cuota)
+			delete_cuota(cuota, _current_user(request))
 			return Response(status=status.HTTP_204_NO_CONTENT)
 		ensure_cuota_without_payments(cuota)
 	except CuotaConPagosError as error:
@@ -173,6 +175,7 @@ def cuota_detail(request, pk):
 			pk,
 			serializer.validated_data.get("fecha_venc1", cuota.fecha_venc1),
 			serializer.validated_data.get("fecha_venc2", cuota.fecha_venc2),
+			user=_current_user(request),
 		)
 	except CuotaConPagosError as error:
 		return _cuota_con_pagos(error)
@@ -581,6 +584,28 @@ def movimiento_cuenta_pdf(request, pk):
 	response = HttpResponse(render_manual_movement_pdf(movement), content_type="application/pdf")
 	response["Content-Disposition"] = f'attachment; filename="{manual_movement_filename(movement)}"'
 	return response
+
+
+@extend_schema(tags=["Finanzas/Auditoria"], responses=RegistroAuditoriaSerializer(many=True))
+@api_view(["GET"])
+def registro_auditoria_list(request):
+	"""Financial audit trail, newest first. Filters: socio_id, accion, desde and hasta (YYYY-MM-DD)."""
+	entries = RegistroAuditoria.objects.select_related("usuario", "socio__persona")
+	socio_id = request.query_params.get("socio_id")
+	if socio_id:
+		if not socio_id.isdigit():
+			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+		entries = entries.filter(socio_id=int(socio_id))
+	if request.query_params.get("accion"):
+		entries = entries.filter(accion=request.query_params["accion"])
+	for param, lookup in (("desde", "fecha__date__gte"), ("hasta", "fecha__date__lte")):
+		value = request.query_params.get(param)
+		if value:
+			try:
+				entries = entries.filter(**{lookup: datetime.strptime(value, "%Y-%m-%d").date()})
+			except ValueError:
+				return Response({"detail": "Las fechas deben tener el formato AAAA-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(RegistroAuditoriaSerializer(entries, many=True).data)
 
 
 @extend_schema(tags=["Finanzas/Imputacion"], responses=ImputacionSerializer)

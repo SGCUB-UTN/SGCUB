@@ -630,6 +630,62 @@ class ExclusionBeca(models.Model):
         return f"Exclusión de beca {self.beca_id} - {self.periodo}"
 
 
+class AccionAuditoriaChoices(models.TextChoices):
+    CUOTA_CREADA = "CuotaCreada", "Cuota creada"
+    CUOTA_REPROGRAMADA = "CuotaReprogramada", "Cuota reprogramada"
+    CUOTA_ELIMINADA = "CuotaEliminada", "Cuota eliminada"
+    RECARGO_APLICADO = "RecargoAplicado", "Recargo por mora aplicado"
+    CONDONACION_MORA = "CondonacionMora", "Recargo por mora condonado"
+    DESCUENTO_ASIGNADO = "DescuentoAsignado", "Descuento asignado"
+    DESCUENTO_MODIFICADO = "DescuentoModificado", "Descuento modificado"
+    ITEM_ANULADO = "ItemAnulado", "Concepto de cuota quitado"
+    BECA_OTORGADA = "BecaOtorgada", "Beca otorgada"
+    BECA_MODIFICADA = "BecaModificada", "Beca modificada"
+    BECA_CANCELADA = "BecaCancelada", "Beca cancelada"
+    CONFIGURACION_VERSIONADA = "ConfiguracionVersionada", "Nueva versión de la configuración financiera"
+    PAGO_REGISTRADO = "PagoRegistrado", "Pago de cuotas registrado"
+    PAGO_REVERTIDO = "PagoRevertido", "Pago de cuotas revertido"
+    INGRESO_REGISTRADO = "IngresoRegistrado", "Ingreso registrado"
+    INGRESO_ANULADO = "IngresoAnulado", "Ingreso anulado"
+    NOTA_CREDITO_EMITIDA = "NotaCreditoEmitida", "Nota de crédito emitida"
+    DEVOLUCION_REGISTRADA = "DevolucionRegistrada", "Devolución manual registrada"
+
+
+class RegistroAuditoria(models.Model):
+    """Append-only trace of every financial transaction: who did it (logged-in user and, when one is
+    chosen by hand, the responsable), on which socio, for how much and with which receipt."""
+
+    registro_auditoria_id = models.AutoField(primary_key=True)
+    fecha = models.DateTimeField(default=timezone.now, db_index=True)
+    accion = models.CharField(max_length=40, choices=AccionAuditoriaChoices.choices)
+    descripcion = models.CharField(max_length=300)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="registros_auditoria",
+        null=True,
+        blank=True,
+    )
+    responsable = models.CharField(max_length=120, blank=True)
+    socio = models.ForeignKey(
+        "padron.Socio",
+        on_delete=models.PROTECT,
+        related_name="registros_auditoria",
+        null=True,
+        blank=True,
+    )
+    monto = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    referencia = models.CharField(max_length=60, blank=True)
+    detalle = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "registro_auditoria"
+        ordering = ["-fecha", "-registro_auditoria_id"]
+
+    def __str__(self):
+        return f"{self.get_accion_display()} - {self.fecha:%d/%m/%Y %H:%M}"
+
+
 class TipoTareaCuotaChoices(models.TextChoices):
     GENERACION = "Generacion", "Generación de cuotas"
     RECARGO_1 = "Recargo1", "Recargo por 1° vencimiento"

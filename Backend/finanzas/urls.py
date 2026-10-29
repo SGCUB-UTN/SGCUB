@@ -44,6 +44,7 @@ from .views import (
     pago_detail,
     pago_list,
     registrar_pago,
+    registro_auditoria_list,
     resumen_financiero,
     resumen_financiero_pdf,
     socio_beca,
@@ -96,6 +97,7 @@ urlpatterns = [
     path("movimiento-cuenta/conceptos/<int:pk>/", concepto_movimiento_detail, name="concepto-movimiento-detail"),
     path("movimiento-cuenta/<int:pk>/", movimiento_cuenta_detail, name="movimiento-cuenta-detail"),
     path("movimiento-cuenta/<int:pk>/pdf/", movimiento_cuenta_pdf, name="movimiento-cuenta-pdf"),
+    path("auditoria/", registro_auditoria_list, name="registro-auditoria-list"),
     path("imputacion/", imputacion_list, name="imputacion-list"),
     path("imputacion/<int:pk>/", imputacion_detail, name="imputacion-detail"),
 ]

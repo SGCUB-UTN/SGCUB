@@ -24,6 +24,7 @@ from .models import (
     ItemCuota,
     MovimientoCuenta,
     Pago,
+    RegistroAuditoria,
     TipoMovimientoChoices,
     TipoMovimientoOrigenChoices,
     EstadoCuotaChoices,
@@ -578,6 +579,26 @@ class ImputacionSerializer(serializers.ModelSerializer):
 
 def user_display_name(user):
     return (user.get_full_name().strip() or user.username) if user else None
+
+
+class RegistroAuditoriaSerializer(serializers.ModelSerializer):
+    accion_nombre = serializers.CharField(source="get_accion_display", read_only=True)
+    usuario_nombre = serializers.SerializerMethodField()
+    socio = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RegistroAuditoria
+        fields = [
+            "registro_auditoria_id", "fecha", "accion", "accion_nombre", "descripcion",
+            "usuario", "usuario_nombre", "responsable", "socio", "monto", "referencia", "detalle",
+        ]
+        read_only_fields = fields
+
+    def get_usuario_nombre(self, obj):
+        return user_display_name(obj.usuario) or "Sistema"
+
+    def get_socio(self, obj):
+        return socio_data(obj.socio) if obj.socio_id else None
 
 
 class ConfiguracionFinancieraSerializer(serializers.ModelSerializer):
