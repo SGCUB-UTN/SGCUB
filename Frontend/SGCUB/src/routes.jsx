@@ -18,7 +18,6 @@ import SocioForm from './pages/SocioForm'
 import Categorias from './pages/Categorias'
 import Docentes from './pages/Docentes'
 import Cuotas from './pages/Cuotas'
-import EstadoCuenta from './pages/EstadoCuenta'
 import EnDesarrollo from './pages/EnDesarrollo'
 import ResumenFinanciero from './pages/ResumenFinanciero'
 import Caja from './pages/Caja'
@@ -139,10 +138,6 @@ export const router = createBrowserRouter([
               {
                 path: 'cuotas',
                 element: <Cuotas />,
-              },
-              {
-                path: 'estado-cuenta',
-                element: <EstadoCuenta />,
               },
             ],
           },

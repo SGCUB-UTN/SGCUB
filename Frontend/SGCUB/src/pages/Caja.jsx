@@ -87,8 +87,8 @@ function Caja() {
       {!carga.loading && socioId && (carga.error || !carga.socio || !carga.cuenta) && (
         <ErrorFile
           message={carga.error || 'No se encontró la cuenta corriente.'}
-          backTo="/finanzas/estado-cuenta"
-          backText="Volver a estado de cuenta"
+          backTo="/padron/socios"
+          backText="Volver a socios"
         />
       )}
       {!carga.loading && socioId && carga.socio && carga.cuenta && !isActiveStatus(carga.socio.estado_administrativo_nombre) && (
@@ -101,7 +101,7 @@ function Caja() {
           <PagoForm
             socio={carga.socio}
             cuenta={carga.cuenta}
-            onCancel={() => navigate(`/finanzas/estado-cuenta?socio=${socioId}`)}
+            onCancel={() => navigate(`/padron/socios/${socioId}?tab=financiero`)}
             onSuccess={recargarCaja}
           />
         </section>

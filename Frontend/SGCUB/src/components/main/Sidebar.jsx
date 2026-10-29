@@ -45,7 +45,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   const claseEstado = contrayendo ? 'app-sidebar--collapsing' : collapsed ? 'app-sidebar--collapsed' : '';
   const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
-  const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/finanzas/estado-cuenta', '/resumen-financiero', '/morosidad', '/caja']
+  const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
   const cometActive = pathname === '/comet' || pathname.startsWith('/comet/');
@@ -158,12 +158,6 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">receipt_long</span>
                     <span className="app-sidebar-label text-base">Cuotas</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/finanzas/estado-cuenta" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance_wallet</span>
-                    <span className="app-sidebar-label text-base">Estado de cuenta</span>
                   </span>
                 </NavLink>
 
