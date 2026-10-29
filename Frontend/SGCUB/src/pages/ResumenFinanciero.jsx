@@ -80,7 +80,7 @@ function CuotaKpis({ cuotas }) {
     <div className="flex flex-col">
       <KpiGrid columns={3} className="pb-5">
         <KpiColumn label="Facturado esperado" value={formatWholeMoney(cuotas.esperado)} title={formatMoney(cuotas.esperado)} caption="Lo que debía ingresar" />
-        <KpiColumn label="Cobranza real" value={formatWholeMoney(cuotas.cobrado)} title={formatMoney(cuotas.cobrado)} tone="text-emerald-700" caption="Lo que se cobró de esas cuotas" />
+        <KpiColumn label="Cobranza real" value={formatWholeMoney(cuotas.cobrado)} title={formatMoney(cuotas.cobrado)} tone="text-emerald-700" caption="Lo que se cobró" />
         <KpiColumn label="En deuda" value={formatWholeMoney(debt)} title={formatMoney(debt)} tone={debt > 0 ? 'text-error' : 'text-on-surface'} caption="Falta cobrar" />
       </KpiGrid>
       <KpiGrid columns={3} className="pt-5 border-t border-outline-variant/40">
@@ -257,7 +257,7 @@ function ResumenFinanciero() {
 
       {data && (
         <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-1 lg:grid-cols-[3fr_7fr] gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[fit-content(40%)_1fr] gap-5">
             <section className={PANEL_CLASS} aria-labelledby="income-origin-title">
               <SectionHeading id="income-origin-title" icon="donut_large" title="Origen de los ingresos" className={HEADING_CLASS} />
               <div className={BODY_CLASS}>
