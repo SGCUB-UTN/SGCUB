@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
-import { getObrasSociales, getTallesIndumentaria } from '../api/personasConfig'
+import { getObrasSociales, getTallesIndumentaria, postObraSocial } from '../api/personasConfig'
 import { compareObrasSociales, compareTalles } from '../components/configuracion/PersonasSettings'
 import { putSocio } from '../api/socios'
 import { categoriaAdmiteEdad } from '../components/categorias/categoriaFormat'
@@ -12,7 +12,7 @@ import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shar
 import { formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
 import PageHeader from '../components/shared/PageHeader'
 import { CAMPOS_OBLIGATORIOS, FORM_INICIAL, claseInput, enfocarCampo, socioAFormulario, validar } from '../components/socios/socioForm'
-import { Campo, InputConIcono, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConFlecha } from '../components/socios/SocioFormFields'
+import { Campo, InputConIcono, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConAlta, SelectConFlecha } from '../components/socios/SocioFormFields'
 import usePersonaSearchDNI, { campoBloqueadoPorSocio } from '../hooks/usePersonaSearchDNI'
 import useCategorias from '../hooks/useCategorias'
 import useEstados from '../hooks/useEstados'
@@ -20,9 +20,8 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 
-const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', obra_social_otra: '', tallaIndumentaria: '' }
+const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
 
-const OBRA_SOCIAL_OTRA = 'Otra'
 const OBRAS_SOCIALES = [
   'Sin obra social',
   'IOMA',
@@ -39,12 +38,6 @@ const OBRAS_SOCIALES = [
   'Unión Personal',
 ]
 
-const obraSocialAFormulario = (valor) => {
-  if (!valor) return { obra_social: '', obra_social_otra: '' }
-  if (OBRAS_SOCIALES.includes(valor)) return { obra_social: valor, obra_social_otra: '' }
-  return { obra_social: OBRA_SOCIAL_OTRA, obra_social_otra: valor }
-}
-
 const TALLES = [
   { valor: 'XS', nombre: 'Extra chica' },
   { valor: 'S', nombre: 'Chica' },
@@ -59,7 +52,7 @@ const jugadorAFormulario = (jugador) => ({
   categoria: String(jugador.categoria?.categoria_id ?? ''),
   categoria_secundaria: String(jugador.categoria_secundaria?.categoria_id ?? ''),
   estado: String(jugador.estado?.estado_id ?? ''),
-  ...obraSocialAFormulario(jugador.obra_social),
+  obra_social: jugador.obra_social ?? '',
   tallaIndumentaria: jugador.tallaIndumentaria ?? '',
 })
 
@@ -79,9 +72,6 @@ function validarDeportivo(formulario, editando) {
   if (!formulario.categoria) errores.categoria = 'Seleccione una categoría.'
   if (editando && !formulario.estado) errores.estado = 'Seleccione un estado deportivo.'
   if (!formulario.obra_social) errores.obra_social = 'Seleccione una obra social.'
-  else if (formulario.obra_social === OBRA_SOCIAL_OTRA && !formulario.obra_social_otra.trim()) {
-    errores.obra_social_otra = 'Ingrese el nombre de la obra social.'
-  }
   if (!formulario.tallaIndumentaria) errores.tallaIndumentaria = 'Seleccione un talle.'
   return errores
 }
@@ -165,12 +155,29 @@ function JugadorForm() {
         const formInicial = jugadorAFormulario(datos)
         setJugador(datos)
         setFormulario(formInicial)
+        if (datos.obra_social) {
+          setObrasSocialesLista((prev) => {
+            if (!prev.includes(datos.obra_social)) {
+              return [...prev, datos.obra_social].sort(compareObrasSociales)
+            }
+            return prev
+          })
+        }
       })
       .catch((requestError) => {
         if (activo) setErrorCarga(requestError.response?.data?.detail || 'No se pudo cargar el jugador.')
       })
     return () => { activo = false }
   }, [editando, id])
+
+  const handleCrearObraSocial = async (nombre) => {
+    const nueva = await postObraSocial({ nombre })
+    setObrasSocialesLista((prev) => {
+      const actualizadas = [...prev, nueva.nombre]
+      return [...new Set(actualizadas)].sort(compareObrasSociales)
+    })
+    return nueva.nombre
+  }
 
   const anioNacimiento = formularioEditado?.fecha_nacimiento ? Number(formularioEditado.fecha_nacimiento.slice(0, 4)) : null
   const generoLetra = LETRA_GENERO[generos.find((g) => String(g.genero_id) === formularioEditado?.genero)?.nombre]
@@ -338,7 +345,7 @@ function JugadorForm() {
     setErrores(nuevosErrores)
 
     const ordenCampos = [
-      ...CAMPOS_OBLIGATORIOS, 'genero_otro', 'categoria', 'estado', 'obra_social', 'obra_social_otra', 'tallaIndumentaria',
+      ...CAMPOS_OBLIGATORIOS, 'genero_otro', 'categoria', 'estado', 'obra_social', 'tallaIndumentaria',
       ...contactos.flatMap((fila) => [...CAMPOS_CONTACTO, 'email', ...CAMPOS_DOMICILIO_CONTACTO].map((campo) => idCampoContacto(fila, campo))),
       'vinculos_familiares',
     ]
@@ -355,7 +362,7 @@ function JugadorForm() {
       return
     }
 
-    const { categoria, categoria_secundaria, estado, obra_social, obra_social_otra, tallaIndumentaria, ...datosSocio } = formulario
+    const { categoria, categoria_secundaria, estado, obra_social, tallaIndumentaria, ...datosSocio } = formulario
     if (!datosSocio.estado_administrativo) delete datosSocio.estado_administrativo
     if (!esGeneroOtro) datosSocio.genero_otro = ''
 
@@ -363,7 +370,7 @@ function JugadorForm() {
       categoria,
       categoria_secundaria: categoria_secundaria || null,
       ...(editando ? { estado } : {}),
-      obra_social: obra_social === OBRA_SOCIAL_OTRA ? obra_social_otra.trim() : obra_social,
+      obra_social,
       tallaIndumentaria,
       ...(editando ? {} : { vinculos_familiares: contactos.map((fila) => filaAContacto(fila, formulario, mostrarResponsableLegal)) }),
     }
@@ -635,15 +642,19 @@ function JugadorForm() {
                   : null}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                <Campo id="obra_social" label="Obra social" requerido error={errores.obra_social}>
-                  <SelectConFlecha {...bindInput('obra_social')} conError={Boolean(errores.obra_social)}>
-                    <option value="" disabled>Seleccione obra social...</option>
-                    {obrasSocialesLista.map((nombre) => (
-                      <option key={nombre} value={nombre}>{nombre}</option>
-                    ))}
-                    <option value={OBRA_SOCIAL_OTRA}>Otra...</option>
-                  </SelectConFlecha>
-                </Campo>
+                <SelectConAlta
+                  id="obra_social"
+                  label="Obra social"
+                  labelNuevo="Obra social nueva"
+                  requerido
+                  error={errores.obra_social}
+                  bind={bindInput('obra_social')}
+                  opciones={obrasSocialesLista.map((nombre) => ({ value: nombre, label: nombre }))}
+                  opcionVacia={<option value="" disabled>Seleccione obra social...</option>}
+                  textoAgregar="+ Agregar obra social..."
+                  placeholderNuevo="Ej: OSDE"
+                  onCrear={handleCrearObraSocial}
+                />
                 <Campo id="tallaIndumentaria" label="Talle de indumentaria" requerido error={errores.tallaIndumentaria}>
                   <SelectConFlecha {...bindInput('tallaIndumentaria')} conError={Boolean(errores.tallaIndumentaria)}>
                     <option value="" disabled>Seleccione talle...</option>
@@ -652,18 +663,6 @@ function JugadorForm() {
                     ))}
                   </SelectConFlecha>
                 </Campo>
-                {formulario.obra_social === OBRA_SOCIAL_OTRA && (
-                  <Campo id="obra_social_otra" label="Especifique la obra social" requerido error={errores.obra_social_otra}>
-                    <InputConIcono
-                      {...bindInput('obra_social_otra')}
-                      type="text"
-                      maxLength={50}
-                      placeholder="Ej: OSPECON"
-                      icono="medical_services"
-                      conError={Boolean(errores.obra_social_otra)}
-                    />
-                  </Campo>
-                )}
               </div>
             </div>
 
