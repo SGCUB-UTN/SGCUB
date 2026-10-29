@@ -5,6 +5,7 @@ import Sidebar from '../components/main/Sidebar';
 import Header from '../components/main/Header';
 import AssignBenefitProvider from '../components/finanzas/AssignBenefitProvider';
 import RegisterPaymentProvider from '../components/finanzas/RegisterPaymentProvider';
+import RevertPaymentProvider from '../components/finanzas/RevertPaymentProvider';
 import './main-layout.css';
 
 export default function MainLayout() {
@@ -13,18 +14,20 @@ export default function MainLayout() {
   return (
     <AssignBenefitProvider>
       <RegisterPaymentProvider>
-        <div className={`main-layout ${sidebarCollapsed ? 'main-layout--collapsed' : ''}`}>
-          <Sidebar
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
-          />
-          <div className="main-layout-content">
-            <Header collapsed={sidebarCollapsed} />
-            <main className="main-layout-main">
-              <Outlet />
-            </main>
+        <RevertPaymentProvider>
+          <div className={`main-layout ${sidebarCollapsed ? 'main-layout--collapsed' : ''}`}>
+            <Sidebar
+              collapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            />
+            <div className="main-layout-content">
+              <Header collapsed={sidebarCollapsed} />
+              <main className="main-layout-main">
+                <Outlet />
+              </main>
+            </div>
           </div>
-        </div>
+        </RevertPaymentProvider>
       </RegisterPaymentProvider>
     </AssignBenefitProvider>
   );

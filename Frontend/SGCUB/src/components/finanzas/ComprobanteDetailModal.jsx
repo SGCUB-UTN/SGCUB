@@ -4,6 +4,7 @@ import { getComprobante } from '../../api/comprobantes'
 import { revertirPago } from '../../api/pagos'
 import useMediosPago from '../../hooks/useMediosPago'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
+import useRevertPayment from '../../hooks/useRevertPayment'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import AuthorizationModal from './AuthorizationModal'
 import DesgloseComprobante from './DesgloseComprobante'
@@ -13,10 +14,7 @@ import { availableToRefund, reversalOf } from './refunds'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
-const REVERT_DESCRIPTIONS = {
-  payment: 'El comprobante pasa a anulado y la deuda de las cuotas vuelve a como estaba, con los recargos de los vencimientos que ya pasaron. Después vas a poder volver a cobrarlo o devolver el dinero con una nota de crédito.',
-  income: 'El comprobante pasa a anulado y el ingreso deja de contarse. Si hay que devolver el dinero, emití una nota de crédito.',
-}
+const ANNUL_INCOME_DESCRIPTION = 'El comprobante pasa a anulado y el ingreso deja de contarse. Si hay que devolver el dinero, emití una nota de crédito.'
 
 function InfoRow({ label, children }) {
   return (
@@ -57,6 +55,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
   const [action, setAction] = useState(null)
   const [justReverted, setJustReverted] = useState(false)
   const { openPayment } = useRegisterPayment()
+  const { openReversal } = useRevertPayment()
   const { methodLabel } = useMediosPago()
 
   const load = useCallback(() => getComprobante(comprobanteId)
@@ -73,7 +72,17 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
   const isIncome = Boolean(detalle?.es_ingreso)
   const available = detalle ? availableToRefund(detalle) : 0
 
-  const revert = async ({ motivo, autorizado_por: responsable }) => {
+  // A payment of cuotas is reverted in its own flow, which stays open until the money is settled
+  const startReversal = () => {
+    if (isIncome) {
+      setAction('revert')
+      return
+    }
+    onClose()
+    openReversal({ comprobanteId: detalle.comprobante_id, onChanged })
+  }
+
+  const annulIncome = async ({ motivo, autorizado_por: responsable }) => {
     const updated = await revertirPago(detalle.pago, { motivo, responsable })
     setState({ loading: false, error: '', data: updated })
     setAction(null)
@@ -141,7 +150,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
               <InfoRow label="Fecha">{detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'}</InfoRow>
               <InfoRow label="Motivo">{detalle.anulacion.motivo || '—'}</InfoRow>
               <InfoRow label="Responsable">{detalle.anulacion.responsable || '—'}</InfoRow>
-              {detalle.anulacion.usuario && <InfoRow label="Registrado por">{detalle.anulacion.usuario}</InfoRow>}
             </section>
           )}
 
@@ -149,19 +157,15 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 
           {justReverted && (
             <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-              <p className="font-semibold text-on-surface">{isIncome ? 'Ingreso anulado.' : 'Pago revertido: la deuda volvió a como estaba.'}</p>
-              <p className="text-sm text-on-surface-variant">
-                {isIncome
-                  ? 'Si le devolvés el dinero al socio, emití una nota de crédito.'
-                  : 'Si el cobro estaba mal hecho, volvé a cobrarlo: el dinero ya recibido puede quedar como pago parcial de la siguiente cuota o devolverse con una nota de crédito. Si el pago era de otro socio, registralo en el socio correcto.'}
-              </p>
+              <p className="font-semibold text-on-surface">Ingreso anulado.</p>
+              <p className="text-sm text-on-surface-variant">Si le devolvés el dinero al socio, emití una nota de crédito.</p>
             </div>
           )}
 
           <div className="pt-3 border-t border-outline-variant/30 flex flex-wrap gap-2">
             <DownloadComprobanteButtom comprobanteId={detalle.comprobante_id} />
             {detalle.revertible && (
-              <button type="button" onClick={() => setAction('revert')} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
+              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
@@ -184,14 +188,14 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 
       <AuthorizationModal
         opened={action === 'revert'}
-        title={isIncome ? 'Anular ingreso' : 'Revertir pago'}
-        description={REVERT_DESCRIPTIONS[isIncome ? 'income' : 'payment']}
-        confirmLabel={isIncome ? 'Anular ingreso' : 'Revertir pago'}
+        title="Anular ingreso"
+        description={ANNUL_INCOME_DESCRIPTION}
+        confirmLabel="Anular ingreso"
         confirmIcon="undo"
         authorizerLabel="Responsable"
         authorizerError="Elegí el responsable."
-        errorMessage="No se pudo revertir el pago."
-        onConfirm={revert}
+        errorMessage="No se pudo anular el ingreso."
+        onConfirm={annulIncome}
         onClose={() => setAction(null)}
       />
       <NotaCreditoModal

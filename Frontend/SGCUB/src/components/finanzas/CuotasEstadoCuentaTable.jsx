@@ -30,15 +30,24 @@ const byPeriodDesc = (a, b) => String(b.periodo).localeCompare(String(a.periodo)
 
 const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?? 0) > 0
 
-const groupCuotas = (cuotas, period) => {
+// The latest paid cuotas are always shown: the ones of the latest payment (the only one that can be
+// reverted) or, without it, the paid cuota of the latest period. The rest of the paid ones fold away.
+const groupCuotas = (cuotas, period, revertibleIds) => {
   const sorted = [...cuotas].sort(byPeriodDesc)
   const visible = sorted.filter((cuota) => String(cuota.periodo) <= period || isPartiallyPaid(cuota) || isPaid(cuota))
+  const paid = visible.filter(isPaid)
+  const fromLatestPayment = paid.filter((cuota) => revertibleIds.includes(cuota.cuota_id))
+  const latestPaid = fromLatestPayment.length ? fromLatestPayment : paid.slice(0, 1)
   return {
     upToDate: visible.filter((cuota) => !isPaid(cuota) && !isOverdue(cuota)),
     overdue: visible.filter((cuota) => !isPaid(cuota) && isOverdue(cuota)),
-    paid: visible.filter(isPaid),
+    latestPaid,
+    latestTitle: fromLatestPayment.length ? 'Último pago' : 'Última cuota paga',
+    olderPaid: paid.filter((cuota) => !latestPaid.includes(cuota)),
   }
 }
+
+const NO_IDS = []
 
 function SectionRow({ title, count }) {
   return (
@@ -50,7 +59,25 @@ function SectionRow({ title, count }) {
   )
 }
 
-function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged }) {
+function PaidAction({ revertible, onRevert }) {
+  if (!revertible) return <span className="text-sm font-normal text-on-surface-variant">Pagada</span>
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onRevert()
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+    >
+      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
+      Revertir pago
+    </button>
+  )
+}
+
+function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged }) {
   const badge = rowBadge(cuota)
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -86,7 +113,11 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
           </div>
         </td>
         <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
-        <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
+        <td className="py-2 px-4 text-right font-semibold text-on-surface whitespace-nowrap">
+          {isPaid(cuota)
+            ? <PaidAction revertible={revertible} onRevert={onRevert} />
+            : formatAmount(Number(cuota.saldo_pendiente ?? 0))}
+        </td>
       </tr>
       {expanded && (
         <CuotaDetailPanel
@@ -102,11 +133,13 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
   )
 }
 
-function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) {
+// `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
+// `className` styles the table shell (e.g. edge to edge inside a section).
+function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
   const [showPaid, setShowPaid] = useState(false)
-  const groups = groupCuotas(cuotas, currentPeriod())
-  const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.paid, 10)
+  const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds)
+  const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
 
   const toggle = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
   const renderRow = (cuota) => (
@@ -114,9 +147,11 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
       key={cuota.cuota_id}
       cuota={cuota}
       expanded={expandedId === cuota.cuota_id}
+      revertible={revertibleIds.includes(cuota.cuota_id)}
       onToggle={toggle}
       onPay={onPay}
       onAssignBenefit={onAssignBenefit}
+      onRevert={onRevert}
       onChanged={onChanged}
     />
   )
@@ -125,14 +160,14 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
   return (
     <div className="flex flex-col gap-4">
       <DataTable
-        className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
+        className={className}
         tableClassName="min-w-[560px]"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
             <th className="py-3 px-4" scope="col">Período</th>
             <th className="py-3 px-4 text-right w-44" scope="col">Total</th>
-            <th className="py-3 px-4 text-right w-44" scope="col">Pendiente</th>
+            <th className="py-3 px-4 text-right w-48" scope="col">Pendiente</th>
           </>
         )}
       >
@@ -145,7 +180,9 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
         {groups.upToDate.map(renderRow)}
         {groups.overdue.length > 0 && <SectionRow title="Vencidas" count={groups.overdue.length} />}
         {groups.overdue.map(renderRow)}
-        {groups.paid.length > 0 && (
+        {groups.latestPaid.length > 0 && <SectionRow title={groups.latestTitle} count={groups.latestPaid.length} />}
+        {groups.latestPaid.map(renderRow)}
+        {groups.olderPaid.length > 0 && (
           <tr>
             <td colSpan={COLUMN_COUNT} className="py-1.5 px-3">
               <button
@@ -155,14 +192,14 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
               >
                 <span className={`material-symbols-outlined text-[18px] transition-transform ${showPaid ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-                {showPaid ? 'Ocultar cuotas pagas' : `Mostrar cuotas pagas (${groups.paid.length})`}
+                {showPaid ? 'Ocultar cuotas pagas anteriores' : `Mostrar más cuotas pagas (${groups.olderPaid.length})`}
               </button>
             </td>
           </tr>
         )}
         {showPaid && visiblePaid.map(renderRow)}
       </DataTable>
-      {showPaid && groups.paid.length > 10 && (
+      {showPaid && groups.olderPaid.length > 10 && (
         <TablePagination id="cuotas-pagas-rows-per-page" rowsPerPageOptions={[10, 25, 50]} {...paginationProps} />
       )}
     </div>

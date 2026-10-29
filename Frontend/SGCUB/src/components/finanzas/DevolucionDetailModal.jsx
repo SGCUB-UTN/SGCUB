@@ -40,7 +40,6 @@ function DevolucionDetailModal({ devolucion, opened, onClose }) {
           {isCreditNote && <Row label="Comprobante anulado">{devolucion.comprobante_anulado_codigo}</Row>}
           <Row label="Medio de devolución">{devolucion.medio_de_pago_nombre}</Row>
           <Row label="Responsable">{devolucion.responsable}</Row>
-          {devolucion.usuario_nombre && <Row label="Registrado por">{devolucion.usuario_nombre}</Row>}
           <div className="flex justify-between gap-3 px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low">
             <strong>Total devuelto</strong>
             <strong className="text-lg text-error">{formatAmount(devolucion.monto)}</strong>

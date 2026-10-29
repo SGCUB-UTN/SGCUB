@@ -30,13 +30,14 @@ function ResultsList({ results, onSelect, className }) {
 // Search box limited to active socios: inactive ones can't register payments.
 // `compact` drops the heading, uses the full width and floats the results over the content
 // below (used as the header of the empty payment form).
-function SocioPicker({ onSelect, compact = false, description = 'Buscá por nombre, apellido, DNI o número de socio.' }) {
+// `excludedId` leaves a socio out of the results (e.g. the one a payment was wrongly registered to)
+function SocioPicker({ onSelect, compact = false, excludedId = null, description = 'Buscá por nombre, apellido, DNI o número de socio.' }) {
   const { socios, isLoading, error } = useSocio()
   const [query, setQuery] = useState('')
 
   const activeSocios = useMemo(
-    () => socios.filter((socio) => isActiveStatus(socio.estado_administrativo_nombre)),
-    [socios],
+    () => socios.filter((socio) => isActiveStatus(socio.estado_administrativo_nombre) && socio.socio_id !== excludedId),
+    [socios, excludedId],
   )
 
   const results = useMemo(() => {
