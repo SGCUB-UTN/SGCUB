@@ -27,6 +27,7 @@ from .models import (
     RegistroAuditoria,
     TipoDevolucionChoices,
     TipoMovimientoChoices,
+    EstadoComprobanteChoices,
     EstadoCuotaChoices,
     EstadoPagoChoices,
     MedioPago,
@@ -406,9 +407,20 @@ class ComprobanteDetalleSerializer(ComprobanteListSerializer):
     pago_detalle = serializers.SerializerMethodField()
     anulacion = serializers.SerializerMethodField()
     notas_credito = serializers.SerializerMethodField()
+    revertible = serializers.SerializerMethodField()
 
     class Meta(ComprobanteListSerializer.Meta):
-        fields = [*ComprobanteListSerializer.Meta.fields, "pago_detalle", "anulacion", "notas_credito"]
+        fields = [*ComprobanteListSerializer.Meta.fields, "pago_detalle", "anulacion", "notas_credito", "revertible"]
+
+    def get_revertible(self, obj):
+        """An income in force can always be annulled; a payment of cuotas, only if it is the latest."""
+        if obj.estado != EstadoComprobanteChoices.VIGENTE:
+            return False
+        movement = obj.pago.movimiento
+        if movement.tipo_movimiento == TipoMovimientoChoices.INGRESO:
+            return True
+        latest = latest_cuota_payment(movement.cuenta_corriente)
+        return latest is not None and latest.pk == obj.pago_id
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -483,7 +495,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     cuotas_impagas = serializers.SerializerMethodField()
     total_adeudado = serializers.SerializerMethodField()
     total_mora = serializers.SerializerMethodField()
-    pago_revertible_id = serializers.SerializerMethodField()
+    comprobante_revertible_id = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCorriente
@@ -491,7 +503,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             "cuenta_corriente_id",
             "socio",
             "estado_cuenta_corriente",
-            "pago_revertible_id",
+            "comprobante_revertible_id",
             "cuotas",
             "cuotas_generadas",
             "cuotas_pagas",
@@ -522,9 +534,10 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     def get_socio(self, obj):
         return socio_data(obj.socio)
 
-    def get_pago_revertible_id(self, obj):
+    def get_comprobante_revertible_id(self, obj):
+        """Receipt of the only payment of cuotas that can be reverted: the latest one."""
         payment = latest_cuota_payment(obj)
-        return payment.pk if payment else None
+        return payment.comprobante.pk if payment else None
 
     def get_cuotas(self, obj):
         return CuotaSerializer(

@@ -2,7 +2,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import OuterRef, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -329,9 +329,20 @@ def item_pago_detail(request, pk):
 @extend_schema(tags=["Finanzas/Comprobante"], responses=ComprobanteListSerializer)
 @api_view(["GET"])
 def comprobante_list(request):
+	refunded = (
+		Devolucion.objects.filter(comprobante_anulado=OuterRef("pk"))
+		.values("comprobante_anulado")
+		.annotate(total=Sum("monto"))
+		.values("total")
+	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).annotate(monto_devuelto=Coalesce(Sum("notas_credito__monto"), Decimal("0.00"))).order_by("pk")
+	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+	socio_id = request.query_params.get("socio_id")
+	if socio_id:
+		if not socio_id.isdigit():
+			return Response({"detail": "El socio indicado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+		comprobantes = comprobantes.filter(pago__movimiento__cuenta_corriente__socio_id=int(socio_id))
 	cuota_id = request.query_params.get("cuota_id")
 	if cuota_id:
 		if not cuota_id.isdigit():

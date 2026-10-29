@@ -1401,7 +1401,30 @@ class ReversionPagoTests(PagoTestBase):
 		self.assertEqual(self.revertir(primero["pago_id"]).status_code, 400)
 		self.assertEqual(self.revertir(segundo["pago_id"]).status_code, 200)
 		self.assertEqual(self.revertir(primero["pago_id"]).status_code, 200)
-		self.assertEqual(self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["pago_revertible_id"], None)
+		self.assertEqual(self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["comprobante_revertible_id"], None)
+
+	def test_indica_que_comprobante_se_puede_revertir(self):
+		primero = self.pagar([self.agosto], "1000.00").data["comprobante"]
+		segundo = self.pagar([self.septiembre], "500.00").data["comprobante"]
+		_, ingreso = register_income(self.socio.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		revertible = {
+			comprobante_id: self.client.get(reverse("comprobante-detail", args=[comprobante_id])).data["revertible"]
+			for comprobante_id in (primero["comprobante_id"], segundo["comprobante_id"], ingreso.pk)
+		}
+
+		self.assertEqual(estado["comprobante_revertible_id"], segundo["comprobante_id"])
+		self.assertEqual(revertible, {primero["comprobante_id"]: False, segundo["comprobante_id"]: True, ingreso.pk: True})
+
+	def test_lista_los_comprobantes_del_socio(self):
+		self.pagar([self.agosto], "1000.00")
+		otro = crear_socio("56789099")
+		register_income(otro.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+
+		response = self.client.get(reverse("comprobante-list"), {"socio_id": self.socio.pk})
+
+		self.assertEqual([item["socio"]["socio_id"] for item in response.data], [self.socio.pk])
 
 	def test_un_ingreso_posterior_no_impide_revertir_el_pago(self):
 		pago = self.pagar([self.agosto], "1000.00").data["pago"]
