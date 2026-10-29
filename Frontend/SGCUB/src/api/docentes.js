@@ -36,3 +36,17 @@ export const getCargosDocente = async () => {
   const response = await api.get('padron/cargo-docente/')
   return response.data
 }
+
+export const postCargoDocente = async (cargo) => {
+  const response = await api.post('padron/cargo-docente/', cargo)
+  return response.data
+}
+
+export const patchCargoDocente = async (cargoId, cargo) => {
+  const response = await api.patch(`padron/cargo-docente/${cargoId}/`, cargo)
+  return response.data
+}
+
+export const deleteCargoDocente = async (cargoId) => {
+  await api.delete(`padron/cargo-docente/${cargoId}/`)
+}

@@ -4,6 +4,7 @@ import CommunicationSettings from '../components/configuracion/CommunicationSett
 import ConfigurationHistoryModal from '../components/configuracion/ConfigurationHistoryModal'
 import DocumentSettings from '../components/configuracion/DocumentSettings'
 import FinancialSettings from '../components/configuracion/FinancialSettings'
+import PersonasSettings from '../components/configuracion/PersonasSettings'
 import { formatVigencia } from '../components/configuracion/financialFields'
 import { generalChangeLabels } from '../components/configuracion/generalFields'
 import SaveChangesBar from '../components/configuracion/SaveChangesBar'
@@ -86,6 +87,12 @@ export default function Configuracion() {
                   onReverted={(version) => setNotice({ tone: 'success', message: revertedMessage(version) })}
                 />
               ),
+            },
+            {
+              id: 'personas',
+              label: 'Personas',
+              icon: 'groups',
+              content: <PersonasSettings />,
             },
             {
               id: 'documentacion',
