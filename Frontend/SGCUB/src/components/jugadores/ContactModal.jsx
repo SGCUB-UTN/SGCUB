@@ -5,6 +5,7 @@ import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { bindPhone } from '../socios/socioForm'
 import { formatDni, phoneDigits, phoneError } from '../personas/format'
+import { getTiposRelacionFamiliar } from '../../api/personasConfig'
 import { RELATIONS, sonMismoDomicilio, tieneDatosDomicilioParciales, tieneDomicilioRegistrado } from './contacts'
 
 const contactoVacio = {
@@ -80,7 +81,28 @@ export default function ContactModal({
   const [searching, setSearching] = useState(false)
   const [coincidencias, setCoincidencias] = useState([])
   const [personaSeleccionada, setPersonaSeleccionada] = useState(editando ? contact.persona ?? null : null)
-  const relaciones = [...new Set([...RELATIONS, ...(form.relacion ? [form.relacion] : [])])]
+  const [tiposRelacion, setTiposRelacion] = useState(RELATIONS)
+
+  useEffect(() => {
+    getTiposRelacionFamiliar()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setTiposRelacion(data.map((d) => d.nombre))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const relaciones = useMemo(() => {
+    const raw = [...new Set([...tiposRelacion, ...(form.relacion ? [form.relacion] : [])])]
+    return raw.sort((a, b) => {
+      const isOtroA = a.trim().toLowerCase() === 'otro'
+      const isOtroB = b.trim().toLowerCase() === 'otro'
+      if (isOtroA && !isOtroB) return 1
+      if (!isOtroA && isOtroB) return -1
+      return a.localeCompare(b, 'es')
+    })
+  }, [tiposRelacion, form.relacion])
   const [error, setError] = useState('')
   const ultimaBusqueda = useRef(0)
 

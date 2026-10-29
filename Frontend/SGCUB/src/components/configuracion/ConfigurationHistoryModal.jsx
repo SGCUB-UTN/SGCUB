@@ -7,6 +7,7 @@ import { Notice } from './settingsParts'
 const HISTORY_SECTIONS = [
   { value: '', label: 'Todas' },
   { value: 'Finanzas', label: 'Finanzas y facturación' },
+  { value: 'Personas', label: 'Personas' },
   { value: 'Documentacion', label: 'Documentación' },
   { value: 'Comunicaciones', label: 'Comunicaciones' },
   { value: 'Club', label: 'Datos del club' },

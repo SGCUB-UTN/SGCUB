@@ -9,6 +9,7 @@ LOGO_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "svg"]
 class SeccionConfiguracionChoices(models.TextChoices):
     CLUB = "Club", "Datos del club"
     FINANZAS = "Finanzas", "Finanzas y facturación"
+    PERSONAS = "Personas", "Personas"
     DOCUMENTACION = "Documentacion", "Documentación"
     COMUNICACIONES = "Comunicaciones", "Comunicaciones"
 

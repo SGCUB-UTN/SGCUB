@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from 'react'
 import useBarrios from '../../hooks/useBarrios'
+import { getTiposRelacionFamiliar } from '../../api/personasConfig'
 import { bindPhone, claseInput } from '../socios/socioForm'
 import { Campo, InputConIcono, SelectConFlecha } from '../socios/SocioFormFields'
 import { idCampoContacto, RELATIONS, tieneDatosDomicilioParciales } from './contacts'
@@ -16,6 +18,28 @@ export default function FilaContacto({
   onRemove,
 }) {
   const { barrios } = useBarrios(fila.mismo_domicilio ? null : fila.domicilio_localidad)
+  const [tiposRelacion, setTiposRelacion] = useState(RELATIONS)
+
+  useEffect(() => {
+    getTiposRelacionFamiliar()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setTiposRelacion(data.map((d) => d.nombre))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const opcionesRelacion = useMemo(() => {
+    const raw = [...new Set([...tiposRelacion, ...(fila.relacion ? [fila.relacion] : [])])]
+    return raw.sort((a, b) => {
+      const isOtroA = a.trim().toLowerCase() === 'otro'
+      const isOtroB = b.trim().toLowerCase() === 'otro'
+      if (isOtroA && !isOtroB) return 1
+      if (!isOtroA && isOtroB) return -1
+      return a.localeCompare(b, 'es')
+    })
+  }, [tiposRelacion, fila.relacion])
 
   const bind = (campo) => ({
     id: idCampoContacto(fila, campo),
@@ -79,7 +103,7 @@ export default function FilaContacto({
         <Campo id={idCampoContacto(fila, 'relacion')} label="Relación" requerido error={error('relacion')}>
           <SelectConFlecha {...bind('relacion')} conError={Boolean(error('relacion'))}>
             <option value="" disabled>Seleccionar...</option>
-            {[...new Set([...RELATIONS, ...(fila.relacion ? [fila.relacion] : [])])].map((relacion) => (
+            {opcionesRelacion.map((relacion) => (
               <option key={relacion} value={relacion}>{relacion}</option>
             ))}
           </SelectConFlecha>

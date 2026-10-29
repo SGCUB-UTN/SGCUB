@@ -157,8 +157,9 @@ export function SelectConAlta({ id, label, labelNuevo, requerido = false, opcion
     try {
       seleccionar(await onCrear(nombre))
       cancelar()
-    } catch {
-      setErrorNuevo('No se pudo agregar.')
+    } catch (err) {
+      const msg = err?.response?.data?.nombre?.[0] || err?.response?.data?.detail || err?.message || 'No se pudo agregar.'
+      setErrorNuevo(msg)
     } finally {
       setGuardando(false)
     }

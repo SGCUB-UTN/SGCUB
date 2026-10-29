@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     cargo_docente_list,
+    cargo_docente_detail,
     categoria_detail,
     categoria_list_create,
     docente_categoria_detail,
@@ -22,9 +23,15 @@ from .views import (
     estado_administrativo_detail,
     genero_list,
     localidad_list,
+    localidad_detail,
     barrio_list_create,
-    docente_categoria_list,
-    docente_categoria_detail,
+    barrio_detail,
+    tipo_relacion_familiar_list_create,
+    tipo_relacion_familiar_detail,
+    obra_social_list_create,
+    obra_social_detail,
+    talle_indumentaria_list_create,
+    talle_indumentaria_detail,
 )
 
 urlpatterns = [
@@ -41,13 +48,22 @@ urlpatterns = [
     path("docente/", docente_list_create, name="docente-list"),
     path("docente/<int:pk>/", docente_detail, name="docente-detail"),
     path("cargo-docente/", cargo_docente_list, name="cargo-docente-list"),
+    path("cargo-docente/<int:pk>/", cargo_docente_detail, name="cargo-docente-detail"),
     path("vinculo-familiar/", vinculo_familiar_list_create, name="vinculo-familiar-list"),
     path("vinculo-familiar/<int:pk>/", vinculo_familiar_detail, name="vinculo-familiar-detail"),
     path("estado-socio/", estado_administrativo_list_create, name="estado-socio-list"),
     path("estado-socio/<int:pk>/", estado_administrativo_detail, name="estado-socio-detail"),
     path("genero/", genero_list, name="genero-list"),
     path("localidad/", localidad_list, name="localidad-list"),
+    path("localidad/<int:pk>/", localidad_detail, name="localidad-detail"),
     path("barrio/", barrio_list_create, name="barrio-list"),
+    path("barrio/<int:pk>/", barrio_detail, name="barrio-detail"),
+    path("tipo-relacion-familiar/", tipo_relacion_familiar_list_create, name="tipo-relacion-familiar-list"),
+    path("tipo-relacion-familiar/<int:pk>/", tipo_relacion_familiar_detail, name="tipo-relacion-familiar-detail"),
+    path("obra-social/", obra_social_list_create, name="obra-social-list"),
+    path("obra-social/<int:pk>/", obra_social_detail, name="obra-social-detail"),
+    path("talle-indumentaria/", talle_indumentaria_list_create, name="talle-indumentaria-list"),
+    path("talle-indumentaria/<int:pk>/", talle_indumentaria_detail, name="talle-indumentaria-detail"),
     path("docente-categoria/", docente_categoria_list, name="docente-categoria-list"),
     path("docente-categoria/<int:pk>/", docente_categoria_detail, name="docente-categoria-detail"),
 ]

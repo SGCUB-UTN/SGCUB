@@ -44,6 +44,31 @@ class Barrio(models.Model):
         return self.nombre
 
 
+class ObraSocial(models.Model):
+    obra_social_id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        db_table = "obra_social"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+class TalleIndumentaria(models.Model):
+    talle_id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=20, unique=True)
+    descripcion = models.CharField(max_length=100, blank=True, default="")
+
+    class Meta:
+        db_table = "talle_indumentaria"
+        ordering = ["talle_id"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Domicilio(models.Model):
     domicilio_id = models.AutoField(primary_key=True)
     calle = models.CharField(max_length=100)
@@ -307,7 +332,7 @@ class Jugador(models.Model):
     jugador_id = models.AutoField(primary_key=True)
     obra_social = models.CharField(max_length=50, default="", blank=True)
     tallaIndumentaria = models.CharField(
-        max_length=3, 
+        max_length=20, 
         choices=SIZES_CHOICES, 
         default="", 
         blank=True
@@ -419,6 +444,19 @@ class Docente(SequentialNumberMixin, models.Model):
 
     def __str__(self):
         return f"Docente {self.legajo}"
+
+
+class TipoRelacionFamiliar(models.Model):
+    tipo_relacion_id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+        db_table = "tipo_relacion_familiar"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
 
 class VinculoFamiliar(models.Model):
     vinculo_familiar_id = models.AutoField(primary_key=True)
