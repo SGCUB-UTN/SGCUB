@@ -59,6 +59,15 @@ class TipoDevolucionChoices(models.TextChoices):
     NOTA_CREDITO = "NotaCredito", "Nota de crédito"
 
 
+class DesenlaceReversionChoices(models.TextChoices):
+    """What happens with the money of a reverted payment of cuotas. Only kept in the audit trail."""
+
+    OTRO_SOCIO = "OtroSocio", "Registrar el pago a otro socio"
+    COBRAR_NUEVAMENTE = "CobrarNuevamente", "Registrar el pago nuevamente"
+    NOTA_CREDITO_TOTAL = "NotaCreditoTotal", "Nota de crédito por el total"
+    NUNCA_INGRESO = "NuncaIngreso", "El pago nunca ingresó"
+
+
 class ModalidadMontoChoices(models.TextChoices):
     MONTO_FIJO = "MontoFijo", "Monto fijo"
     PORCENTAJE = "Porcentaje", "Porcentaje"

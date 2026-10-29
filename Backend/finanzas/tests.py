@@ -1364,9 +1364,9 @@ class EstadoCuentaPendienteTests(PagoTestBase):
 
 
 class ReversionPagoTests(PagoTestBase):
-	def revertir(self, pago_id, motivo="Se omitió un descuento", responsable="Tesorera"):
+	def revertir(self, pago_id, motivo="Se omitió un descuento", responsable="Tesorera", **extra):
 		return self.client.post(
-			reverse("revertir-pago", args=[pago_id]), {"motivo": motivo, "responsable": responsable}, format="json",
+			reverse("revertir-pago", args=[pago_id]), {"motivo": motivo, "responsable": responsable, **extra}, format="json",
 		)
 
 	def pendiente(self, cuota):
@@ -1458,6 +1458,47 @@ class ReversionPagoTests(PagoTestBase):
 	def test_pago_inexistente_devuelve_404(self):
 		self.assertEqual(self.revertir(999999).status_code, 404)
 
+	def test_informa_las_cuotas_del_ultimo_pago(self):
+		self.pagar([self.agosto], "1000.00")
+		self.pagar([self.septiembre], "1000.00")
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+
+		self.assertEqual(estado["cuotas_revertibles"], [self.septiembre.pk])
+
+	def test_registra_en_la_auditoria_que_se_hara_con_el_dinero(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		self.assertEqual(self.revertir(pago["pago_id"], desenlace="NuncaIngreso").status_code, 200)
+
+		registro = RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.PAGO_REVERTIDO)
+		self.assertEqual(registro.detalle["desenlace"], "NuncaIngreso")
+		self.assertFalse(Devolucion.objects.exists())
+
+	def test_nota_de_credito_por_el_total_en_la_misma_operacion(self):
+		datos = self.pagar([self.agosto], "1000.00").data
+
+		response = self.revertir(datos["pago"]["pago_id"], desenlace="NotaCreditoTotal", medio_de_pago="Transferencia")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		nota = Devolucion.objects.get()
+		self.assertEqual(nota.tipo, "NotaCredito")
+		self.assertEqual(nota.comprobante_anulado_id, datos["comprobante"]["comprobante_id"])
+		self.assertEqual(nota.monto, Decimal("1000.00"))
+		self.assertEqual(nota.medio_de_pago, "Transferencia")
+		self.assertEqual(nota.responsable, "Tesorera")
+		self.assertEqual(len(response.data["notas_credito"]), 1)
+
+	def test_el_medio_de_devolucion_solo_va_con_la_nota_de_credito_por_el_total(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		sin_medio = self.revertir(pago["pago_id"], desenlace="NotaCreditoTotal")
+		medio_de_mas = self.revertir(pago["pago_id"], desenlace="CobrarNuevamente", medio_de_pago="Efectivo")
+
+		self.assertEqual(sin_medio.status_code, 400)
+		self.assertEqual(medio_de_mas.status_code, 400)
+		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, "Acreditado")
+
 
 class NotaCreditoTests(PagoTestBase):
 	def setUp(self):
@@ -1519,6 +1560,27 @@ class NotaCreditoTests(PagoTestBase):
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(self.aplicado(self.septiembre), Decimal("200.00"))
 		self.assertFalse(Devolucion.objects.exists())
+
+	def test_el_pago_registrado_en_otro_socio_puede_devolver_el_excedente(self):
+		self.revertir()
+		otro = crear_socio("56789098")
+		cuota_otro = crear_cuota_con_cargo(account_for(otro), "2026-08", "700.00")
+
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": otro.pk,
+			"cuota_ids": [cuota_otro.pk],
+			"monto_total": "700.00",
+			"medios": [{"medio_de_pago": "Efectivo", "monto": "700.00"}],
+			"nota_credito": {
+				"comprobante_id": self.comprobante_id, "monto": "300.00", "medio_de_pago": "Efectivo",
+				"motivo": "Excedente del pago cargado a otro socio", "responsable": "Tesorera",
+			},
+		}, format="json")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		nota = Devolucion.objects.get()
+		self.assertEqual(nota.cuenta_corriente.socio_id, self.socio.pk)
+		self.assertEqual(nota.monto, Decimal("300.00"))
 
 	def test_una_nota_de_credito_invalida_cancela_tambien_el_nuevo_pago(self):
 		self.revertir()

@@ -257,8 +257,15 @@ def revertir_pago(request, pk):
 
 	data = serializer.validated_data
 	try:
-		_, comprobante = revert_payment(pk, data["motivo"], data["responsable"], _current_user(request))
-	except PagoInvalidoError as error:
+		_, comprobante = revert_payment(
+			pk,
+			data["motivo"],
+			data["responsable"],
+			_current_user(request),
+			outcome=data.get("desenlace", ""),
+			refund_method=data.get("medio_de_pago"),
+		)
+	except (PagoInvalidoError, DevolucionInvalidaError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(ComprobanteDetalleSerializer(comprobante).data)
 

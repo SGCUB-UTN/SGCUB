@@ -747,7 +747,8 @@ def register_payment(
     socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None, credit_note=None,
 ):
     """Registers a payment of cuotas. `credit_note` refunds, in the same operation, the excess of a
-    payment reverted to be charged again: {comprobante_id, monto, medio_de_pago, motivo, responsable}."""
+    payment reverted to be charged again: {comprobante_id, monto, medio_de_pago, motivo, responsable}.
+    The reverted payment may belong to another socio (it was registered on the wrong one)."""
     account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
     validate_payment_order(account, cuotas)
@@ -785,7 +786,6 @@ def register_payment(
             credit_note["motivo"],
             credit_note["responsable"],
             user,
-            account,
         )
     return payment, receipt
 
@@ -821,10 +821,11 @@ def latest_cuota_payment(account):
 
 
 @transaction.atomic
-def revert_payment(payment_id, reason, responsable, user=None, today=None):
+def revert_payment(payment_id, reason, responsable, user=None, today=None, outcome="", refund_method=None):
     """Annuls a payment and its receipt. A payment of cuotas gives the debt back (with the surcharges
     whose due dates already passed) and only the latest one of the socio can be reverted; an income
-    can always be annulled."""
+    can always be annulled. `outcome` (DesenlaceReversionChoices) is what will be done with the money;
+    with `refund_method` all of it is given back with a credit note in the same operation."""
     account_id = MovimientoCuenta.objects.values_list("cuenta_corriente_id", flat=True).get(pago_id=payment_id)
     account = CuentaCorriente.objects.select_for_update().select_related("socio").get(pk=account_id)
     payment = Pago.objects.select_for_update().get(pk=payment_id)
@@ -865,9 +866,22 @@ def revert_payment(payment_id, reason, responsable, user=None, today=None):
         socio=account.socio,
         amount=receipt.monto_total,
         reference=receipt_code(receipt),
-        detail={"pago_id": payment.pk, "cuotas": [cuota.periodo for cuota in cuotas]},
+        detail={"pago_id": payment.pk, "cuotas": [cuota.periodo for cuota in cuotas], "desenlace": outcome or None},
     )
+    if refund_method:
+        create_credit_note(receipt.pk, receipt.monto_total, refund_method, reason, responsable, user)
     return payment, receipt
+
+
+def latest_payment_cuota_ids(payment):
+    """Cuotas paid by `payment`: the ones whose payment can be reverted when it is the latest."""
+    if payment is None:
+        return []
+    return list(
+        Imputacion.objects.filter(movimiento_origen__pago=payment)
+        .order_by("movimiento_destino__cuota_id")
+        .values_list("movimiento_destino__cuota_id", flat=True)
+    )
 
 
 def refunded_amount(receipt):
@@ -904,14 +918,13 @@ def create_refund(kind, account, concept, amount, payment_method, responsable, u
 
 
 @transaction.atomic
-def create_credit_note(receipt_id, amount, payment_method, reason, responsable, user=None, account=None):
-    """Gives back money of an annulled receipt (all of it or the excess left after charging again)."""
+def create_credit_note(receipt_id, amount, payment_method, reason, responsable, user=None):
+    """Gives back money of an annulled receipt (all of it or the excess left after charging again).
+    The note belongs to the account of the receipt, the one the money came in through."""
     receipt = Comprobante.objects.select_for_update(of=("self",)).select_related(
         "pago__movimiento__cuenta_corriente__socio",
     ).get(pk=receipt_id)
     receipt_account = receipt.pago.movimiento.cuenta_corriente
-    if account is not None and receipt_account.pk != account.pk:
-        raise DevolucionInvalidaError("El comprobante anulado no pertenece a este socio.")
     if receipt.estado != EstadoComprobanteChoices.ANULADO:
         raise DevolucionInvalidaError("Solo se puede emitir una nota de crédito sobre un comprobante anulado.")
     available = receipt.monto_total - refunded_amount(receipt)
