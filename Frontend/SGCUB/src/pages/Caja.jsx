@@ -97,14 +97,12 @@ function Caja() {
         </p>
       )}
       {!carga.loading && socioId && carga.socio && carga.cuenta && isActiveStatus(carga.socio.estado_administrativo_nombre) && (
-        <section className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-5 shadow-sm">
-          <PagoForm
-            socio={carga.socio}
-            cuenta={carga.cuenta}
-            onCancel={() => navigate(`/padron/socios/${socioId}?tab=financiero`)}
-            onSuccess={recargarCaja}
-          />
-        </section>
+        <PagoForm
+          socio={carga.socio}
+          cuenta={carga.cuenta}
+          onCancel={() => navigate(`/padron/socios/${socioId}?tab=financiero`)}
+          onSuccess={recargarCaja}
+        />
       )}
 
       <ComprobantesTable

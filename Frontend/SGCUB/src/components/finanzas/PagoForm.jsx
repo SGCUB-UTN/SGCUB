@@ -3,11 +3,11 @@ import { collectErrorMessages, formatAmount, formatDate } from '../personas/form
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
-import { SelectConFlecha } from '../socios/SocioFormFields'
+import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
-import { FormSection, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { FormPanel, NO_SPINNER_CLASS, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
@@ -55,32 +55,23 @@ const EXCESS_OPTIONS = [
   {
     value: EXCESS_PARTIAL,
     title: 'Pago parcial de la siguiente cuota',
-    description: 'Se imputa todo el dinero recibido: lo que sobre queda como pago parcial de la cuota siguiente.',
+    description: 'Se imputa todo el dinero recibido: lo que sobra queda como pago parcial de la cuota siguiente.',
     icon: 'event_repeat',
   },
   {
     value: EXCESS_CREDIT_NOTE,
-    title: 'Devolver con nota de crédito',
-    description: 'Se cobra solo lo que corresponde y el excedente se le devuelve al socio.',
+    title: 'Nota de crédito por el sobrante',
+    description: 'Se cobra solo lo que corresponde y el sobrante se devuelve con una nota de crédito.',
     icon: 'currency_exchange',
   },
 ]
 
-function ExcessOption({ option, selected, onSelect }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(option.value)}
-      aria-pressed={selected}
-      className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low'}`}
-    >
-      <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{option.icon}</span>
-      <span className="flex flex-col min-w-0">
-        <span className="text-base font-semibold text-on-surface">{option.title}</span>
-        <span className="text-sm text-on-surface-variant">{option.description}</span>
-      </span>
-    </button>
-  )
+// Default observation of a payment that settles a reverted one
+const reversalNote = (reversal) => {
+  if (!reversal) return ''
+  return reversal.otherSocio
+    ? `Pago anulado ${reversal.codigo} registrado en el socio correcto`
+    : `Vuelve a cobrar el pago anulado ${reversal.codigo}`
 }
 
 const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
@@ -182,7 +173,6 @@ function CuotasTable({ lines, debtTotal, period, showFuture, onToggleFuture, exp
 
   return (
     <DataTable
-      className="border-y border-outline-variant/30"
       tableClassName="min-w-[560px]"
       headers={(
         <>
@@ -348,8 +338,9 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 
 // Without `socio`, renders the empty layout (disabled sections, empty summary)
 // so the payment modal keeps its shape while a socio is chosen.
-// With `reversal` it charges again a reverted payment: the money already received is imputed in full
-// (the excess pays the next cuota partially) or the excess is refunded with a credit note.
+// With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
+// right one): the money already received is imputed in full (the excess pays the next cuota partially)
+// or the excess is refunded with a credit note.
 function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
@@ -363,12 +354,17 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
   const [removal, setRemoval] = useState(null)
-  const [paymentRows, setPaymentRows] = useState(() => (reversal
-    ? fitMethods(reversal.medios, reversal.total)
-    : [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))]))
-  const [excessMode, setExcessMode] = useState(EXCESS_PARTIAL)
+  // When the money received is more than all the socio owes, it can only be partly refunded
+  const [excessMode, setExcessMode] = useState(() => (
+    reversal && reversal.total > firstCuotasTotal(pendingCuotas, pendingCuotas.length) ? EXCESS_CREDIT_NOTE : EXCESS_PARTIAL
+  ))
+  const [paymentRows, setPaymentRows] = useState(() => {
+    if (!reversal) return [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))]
+    const target = excessMode === EXCESS_CREDIT_NOTE ? firstCuotasTotal(pendingCuotas, dueCount) : reversal.total
+    return fitMethods(reversal.medios, Math.min(reversal.total, target))
+  })
   const [refundMethod, setRefundMethod] = useState('')
-  const [refundReason, setRefundReason] = useState(() => (reversal ? `Excedente del pago anulado ${reversal.codigo}` : ''))
+  const [refundReason, setRefundReason] = useState(() => (reversal ? `Sobrante del pago anulado ${reversal.codigo}` : ''))
   const [confirmingRefund, setConfirmingRefund] = useState(false)
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
@@ -452,7 +448,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
         monto_total: enteredTotal,
         medios: paymentRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
-        observacion: observacion || (reversal ? `Vuelve a cobrar el pago anulado ${reversal.codigo}` : ''),
+        observacion: observacion || reversalNote(reversal),
         nota_credito: excess > 0
           ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable }
           : null,
@@ -493,10 +489,12 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     <form onSubmit={confirmPayment} className="flex flex-col" noValidate>
       <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
-          <FormSection
+          <FormPanel
+            id="payment-cuotas-title"
             icon="receipt_long"
             title="Cuotas a saldar"
             disabled={!socio || noDebt}
+            flush={pendingCuotas.length > 0}
           >
             {pendingCuotas.length ? (
               <CuotasTable
@@ -515,56 +513,69 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                 {socio ? 'El socio no tiene cuotas pendientes.' : 'Las cuotas pendientes del socio aparecerán aquí.'}
               </p>
             )}
-          </FormSection>
+          </FormPanel>
 
           {reversal && (
-            <FormSection
+            <FormPanel
+              id="payment-reversal-title"
               icon="currency_exchange"
-              title="Dinero del pago anulado"
-              description={`En el comprobante ${reversal.codigo} se recibieron ${formatAmount(received)}. Si el nuevo cobro es menor, elegí qué hacer con el excedente.`}
+              title={`Dinero del pago anulado ${reversal.codigo}`}
+              actions={<span className="text-base font-bold tabular-nums text-on-surface">{formatAmount(received)}</span>}
               disabled={!socio || noDebt}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <p className="text-base text-on-surface-variant">
+                Si el nuevo cobro es menor a lo que se recibió, elegí qué hacer con el sobrante.
+              </p>
+              <div role="radiogroup" aria-label="Qué hacer con el sobrante" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {EXCESS_OPTIONS.map((option) => (
-                  <ExcessOption key={option.value} option={option} selected={excessMode === option.value} onSelect={changeExcessMode} />
+                  <OptionCard
+                    key={option.value}
+                    icon={option.icon}
+                    title={option.title}
+                    description={option.description}
+                    selected={excessMode === option.value}
+                    onSelect={() => changeExcessMode(option.value)}
+                  />
                 ))}
               </div>
               {refundsExcess && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 min-w-0">
-                      <SelectConFlecha
-                        value={refundMethod}
-                        onChange={(event) => setRefundMethod(event.target.value)}
-                        aria-label="Medio de devolución"
-                        conError={showErrors && excess > 0 && !refundMethod}
-                      >
-                        <option value="">Medio de devolución</option>
-                        {paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
-                      </SelectConFlecha>
-                    </div>
-                    <p className="sm:w-48 shrink-0 self-center text-base text-on-surface-variant">
-                      A devolver: <strong className="text-on-surface">{formatAmount(excess)}</strong>
-                    </p>
-                  </div>
-                  <input
-                    type="text"
-                    value={refundReason}
-                    onChange={(event) => setRefundReason(event.target.value)}
-                    maxLength={200}
-                    aria-label="Motivo de la nota de crédito"
-                    aria-invalid={(showErrors && excess > 0 && !refundReason.trim()) || undefined}
-                    className={claseInput(showErrors && excess > 0 && !refundReason.trim())}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 pt-3 border-t border-outline-variant/30">
+                  <Campo id="payment-refund-method" label="Medio de devolución" requerido>
+                    <SelectConFlecha
+                      id="payment-refund-method"
+                      value={refundMethod}
+                      onChange={(event) => setRefundMethod(event.target.value)}
+                      conError={showErrors && excess > 0 && !refundMethod}
+                    >
+                      <option value="">Seleccioná un medio</option>
+                      {paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
+                    </SelectConFlecha>
+                  </Campo>
+                  <Campo id="payment-refund-reason" label="Motivo de la nota de crédito" requerido>
+                    <input
+                      id="payment-refund-reason"
+                      type="text"
+                      value={refundReason}
+                      onChange={(event) => setRefundReason(event.target.value)}
+                      maxLength={200}
+                      aria-invalid={(showErrors && excess > 0 && !refundReason.trim()) || undefined}
+                      className={claseInput(showErrors && excess > 0 && !refundReason.trim())}
+                    />
+                  </Campo>
+                  <p className="sm:col-span-2 text-base text-on-surface-variant">
+                    Sobrante a devolver: <strong className="text-on-surface tabular-nums">{formatAmount(excess)}</strong>
+                    {excess > 0 && ' · El responsable se pide al confirmar.'}
+                  </p>
                 </div>
               )}
               {showErrors && (formErrors.recibido || formErrors.devolucion) && (
                 <p className="text-sm text-error font-medium" role="alert">{formErrors.recibido || formErrors.devolucion}</p>
               )}
-            </FormSection>
+            </FormPanel>
           )}
 
-          <FormSection
+          <FormPanel
+            id="payment-methods-title"
             icon="payments"
             title="Formas de pago"
             description={socio && noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
@@ -607,9 +618,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             </div>
             {showErrors && formErrors.medios && <p className="text-sm text-error font-medium" role="alert">{formErrors.medios}</p>}
             {formErrors.montos && <p className="text-sm text-error font-medium" role="alert">{formErrors.montos}</p>}
-          </FormSection>
+          </FormPanel>
 
-          <FormSection icon="notes" title="Observaciones" disabled={!socio}>
+          <FormPanel id="payment-notes-title" icon="notes" title="Observaciones" disabled={!socio}>
             <input
               type="text"
               value={observacion}
@@ -619,7 +630,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
               aria-label="Observaciones"
               className={claseInput(false)}
             />
-          </FormSection>
+          </FormPanel>
         </div>
 
         <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>

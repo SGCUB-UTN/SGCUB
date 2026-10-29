@@ -8,14 +8,16 @@ import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatDate, formatNumber } from '../format'
 import { BenefitButton, PayButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
+import FlushSection, { SectionEmpty } from '../../shared/FlushSection'
+import { FLUSH_END_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
 import StatCard from '../../shared/StatCard'
-import { EmptyState, SecondaryButton, TabHeader } from './parts'
+import { SecondaryButton, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
+import useRevertPayment from '../../../hooks/useRevertPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
 
-const TABLE_CLASS = 'border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm'
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
 
 const MOVEMENT_BADGES = {
@@ -57,6 +59,7 @@ const otherMovements = (movimientos) => [
 export function FinancialStatement({ socio, finances }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
+  const { openReversal } = useRevertPayment()
   const socioId = socio.socio_id
   const { loading, error, account, becas, movimientos, reload: reloadFinances } = finances
   const cuotas = useMemo(() => account?.cuotas ?? [], [account])
@@ -74,7 +77,6 @@ export function FinancialStatement({ socio, finances }) {
   const scrollToSection = (id) => {
     const heading = document.getElementById(id)
     if (!heading) return
-    heading.focus({ preventScroll: true })
     heading.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       block: 'start',
@@ -100,14 +102,29 @@ export function FinancialStatement({ socio, finances }) {
   }
 
   if (!account) {
-    return <EmptyState icon="account_balance_wallet" title="Sin cuenta corriente" description="Este socio todavía no tiene una cuenta corriente asociada." />
+    return <SectionEmpty>Este socio todavía no tiene una cuenta corriente asociada.</SectionEmpty>
   }
 
   const title = `Cuenta Corriente ${formatNumber(account.cuenta_corriente_id)}`
 
   return (
     <section className="flex flex-col gap-6" aria-label={title}>
-      <TabHeader title={title} description="Detalle de cuotas, pagos, ingresos, devoluciones y beneficios del socio." divider={false} />
+      <TabHeader
+        title={title}
+        description="Detalle de cuotas, pagos, ingresos, devoluciones y beneficios del socio."
+        divider={false}
+        actions={(
+          <>
+            <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
+              Ingreso o devolución
+            </SecondaryButton>
+            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
+              Beca o descuento
+            </BenefitButton>
+            <PayButton onClick={() => openPayment({ socioId, onSuccess: reloadFinances })}>Pagar cuota</PayButton>
+          </>
+        )}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-6">
         <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
@@ -115,46 +132,27 @@ export function FinancialStatement({ socio, finances }) {
         <StatCard label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" tone="neutral" onClick={() => scrollToSection('beneficios-title')} />
       </div>
 
-      <section className="flex flex-col gap-6 my-4" aria-labelledby="cuotas-title">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h3 id="cuotas-title" tabIndex="-1" className="text-lg font-bold text-on-surface scroll-mt-6 focus:outline-none">Cuotas</h3>
-          <div className="flex flex-col sm:flex-row gap-2 [&>button]:justify-center">
-            <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
-              Ingreso o devolución
-            </SecondaryButton>
-            {account.comprobante_revertible_id && (
-              <SecondaryButton icon="undo" onClick={() => setComprobanteId(account.comprobante_revertible_id)}>
-                Revertir último pago
-              </SecondaryButton>
-            )}
-            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
-              Beca o descuento
-            </BenefitButton>
-            <PayButton onClick={() => openPayment({ socioId, onSuccess: reloadFinances })}>Pagar cuota</PayButton>
-          </div>
-        </div>
+      <FlushSection id="cuotas-title" icon="receipt_long" title="Cuotas">
         {cuotas.length === 0 ? (
-          <EmptyState icon="receipt_long" title="Sin cuotas generadas" description="La cuenta corriente no tiene cuotas registradas." />
+          <SectionEmpty>La cuenta corriente no tiene cuotas generadas.</SectionEmpty>
         ) : (
           <CuotasEstadoCuentaTable
             cuotas={cuotas}
+            revertibleIds={account.cuotas_revertibles ?? []}
             onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
             onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+            onRevert={() => openReversal({ comprobanteId: account.comprobante_revertible_id, onChanged: reloadFinances })}
             onChanged={reloadFinances}
           />
         )}
-      </section>
+      </FlushSection>
 
-      <section className="flex flex-col gap-3" aria-labelledby="otros-movimientos-title">
-        <h3 id="otros-movimientos-title" tabIndex="-1" className="text-lg font-bold text-on-surface py-2 scroll-mt-6 focus:outline-none">
-          Ingresos y devoluciones
-        </h3>
+      <FlushSection id="otros-movimientos-title" icon="swap_horiz" title="Ingresos y devoluciones">
         {movimientos === null && (
-          <p className="text-sm text-error" role="alert">No se pudieron cargar los ingresos y devoluciones del socio.</p>
+          <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar los ingresos y devoluciones del socio.</span></SectionEmpty>
         )}
         {movimientosOrdenados.length ? (
           <DataTable
-            className={TABLE_CLASS}
             tableClassName="min-w-[760px]"
             headers={(
               <>
@@ -200,14 +198,12 @@ export function FinancialStatement({ socio, finances }) {
           </DataTable>
         ) : (
           movimientos !== null && (
-            <p className="text-base text-on-surface-variant py-6 text-center border border-dashed border-outline-variant/40 rounded-xl">
-              Sin ingresos ni devoluciones registrados. No modifican la deuda del socio.
-            </p>
+            <SectionEmpty>Sin ingresos ni devoluciones registrados. No modifican la deuda del socio.</SectionEmpty>
           )
         )}
-      </section>
+      </FlushSection>
 
-      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
+      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} className={FLUSH_END_CLASS} />
 
       <ComprobanteDetailModal
         comprobanteId={comprobanteId}

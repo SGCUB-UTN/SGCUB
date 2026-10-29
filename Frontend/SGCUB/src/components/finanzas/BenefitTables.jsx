@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
+import FlushSection, { SectionEmpty } from '../shared/FlushSection'
 import { formatAmount } from '../personas/format'
 import { formatPeriod, periodOf } from '../shared/periodFormat'
 import { SCHOLARSHIP_STATES, cuotaDiscounts, isPaid, scholarshipState, todayIso } from './accountStatement'
@@ -10,7 +11,6 @@ import RemoveCuotaItemModal from './CuotaItemRemoval'
 import { removalBlocker } from './cuotaItems'
 import EditBenefitModal from './EditBenefitModal'
 
-const TABLE_CLASS = 'border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm'
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border whitespace-nowrap'
 
@@ -158,19 +158,19 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
   )
 }
 
-export function BenefitsTable({ becas, cuotas, onChanged }) {
+export function BenefitsTable({ becas, cuotas, onChanged, className = '' }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
 
   return (
-    <section className="flex flex-col gap-3" aria-labelledby="beneficios-title">
-      <h3 id="beneficios-title" tabIndex="-1" className="text-lg font-bold text-on-surface py-2 scroll-mt-6 focus:outline-none">Becas y descuentos</h3>
-      {becas === null && <p className="text-sm text-error" role="alert">No se pudieron cargar las becas del socio.</p>}
+    <FlushSection id="beneficios-title" icon="sell" title="Becas y descuentos" className={className}>
+      {becas === null && (
+        <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar las becas del socio.</span></SectionEmpty>
+      )}
       {rows.length ? (
         <DataTable
-          className={TABLE_CLASS}
           tableClassName="min-w-[860px] table-fixed"
           headers={(
             <>
@@ -209,11 +209,7 @@ export function BenefitsTable({ becas, cuotas, onChanged }) {
           ))}
         </DataTable>
       ) : (
-        becas !== null && (
-          <p className="text-base text-on-surface-variant py-6 text-center border border-dashed border-outline-variant/40 rounded-xl">
-            Sin becas ni descuentos.
-          </p>
-        )
+        becas !== null && <SectionEmpty>Sin becas ni descuentos.</SectionEmpty>
       )}
 
       <EditBenefitModal target={editing} onClose={() => setEditing(null)} onSaved={onChanged} />
@@ -228,6 +224,6 @@ export function BenefitsTable({ becas, cuotas, onChanged }) {
         onClose={() => setCancelling(null)}
         onRemoved={onChanged}
       />
-    </section>
+    </FlushSection>
   )
 }
