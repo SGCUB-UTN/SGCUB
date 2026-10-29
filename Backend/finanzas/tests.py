@@ -73,10 +73,10 @@ from .services import (
 	next_receipt_number,
 	pending_amounts,
 	register_payment,
+	revert_payment,
 	sync_cuota_charge,
 )
 from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
-from .views import _build_financial_report
 
 
 def crear_socio(dni, socio_inactivo=False, con_jugador=False, jugador_inactivo=False):
@@ -2450,86 +2450,97 @@ class ReporteMorosidadTests(APITestCase):
 
 
 class ResumenFinancieroTests(APITestCase):
+	"""Income, methods and refunds follow the money of the month; cuota indicators follow the period."""
+
 	def setUp(self):
 		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
-		today = timezone.localdate()
-		socio = crear_socio("78901237")
-		cuenta = account_for(socio)
-		crear_cuota_con_cargo(
-			cuenta,
-			"2026-08",
-			"1000.00",
-			EstadoCuotaChoices.VENCIDA_1,
-			venc1=today - timedelta(days=5),
-			venc2=today + timedelta(days=5),
+		self.periodo = timezone.localdate().strftime("%Y-%m")
+		self.socio = crear_socio("78901237")
+		self.cuota = crear_cuota_con_cargo(account_for(self.socio), self.periodo, "1000.00")
+		register_payment(self.socio.pk, [self.cuota.pk], [
+			{"medio_de_pago": "Efectivo", "monto": Decimal("400.00")},
+			{"medio_de_pago": "Transferencia", "monto": Decimal("200.00")},
+		], Decimal("600.00"))
+		for concepto, medio, monto in (
+			("Venta de indumentaria", "Transferencia", "300.00"),
+			("Donación", "Efectivo", "50.00"),
+			("Rifa", "Efectivo", "20.00"),
+			("Bufet", "Efectivo", "10.00"),
+		):
+			register_income(self.socio.pk, concepto, [{"medio_de_pago": medio, "monto": Decimal(monto)}], Decimal(monto))
+		anulado, _ = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
+		revert_payment(anulado.pk, "Carga duplicada", "Tesorera")
+		create_manual_refund(self.socio.pk, "Transferencia de más", Decimal("180.00"), "Transferencia", "Tesorera")
+
+	def resumen(self, **params):
+		return self.client.get(reverse("resumen-financiero"), {"periodo": self.periodo, **params})
+
+	def test_origen_de_los_ingresos_agrupa_los_conceptos_menores(self):
+		ingresos = self.resumen().data["ingresos"]
+
+		self.assertEqual(ingresos["total"], Decimal("980.00"))
+		self.assertEqual(ingresos["cuotas"], Decimal("600.00"))
+		self.assertEqual(
+			[(row["nombre"], row["monto"]) for row in ingresos["origen"]],
+			[("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Donación", Decimal("50.00")), ("Otros", Decimal("30.00"))],
 		)
+		self.assertEqual(ingresos["origen"][0]["porcentaje"], Decimal("61.2"))
 
-	def test_resumen_saldo_vencido_y_cobros_por_medio_solo_acreditados(self):
-		pago = Pago.objects.create(estado_pago=EstadoPagoChoices.ACREDITADO)
-		ItemPago.objects.bulk_create([
-			ItemPago(pago=pago, medio_de_pago="Transferencia", monto=Decimal("1200.00")),
-			ItemPago(pago=pago, medio_de_pago="BilleteraVirtual", monto=Decimal("350.00")),
-			ItemPago(pago=pago, medio_de_pago="Efectivo", monto=Decimal("150.00")),
-		])
-		pago_anulado = Pago.objects.create(estado_pago=EstadoPagoChoices.ANULADO)
-		ItemPago.objects.create(
-			pago=pago_anulado,
-			medio_de_pago="Transferencia",
-			monto=Decimal("999.00"),
-		)
-
-		response = self.client.get(reverse("resumen-financiero"))
-
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data, {
-			"socios_en_mora": 1,
-			"monto_adeudado_total": Decimal("1000.00"),
-			"cuotas_vencidas": 1,
-			"cuotas_vencidas_1": 1,
-			"cuotas_vencidas_2": 0,
-			"transferencia_bancaria": Decimal("1200.00"),
-			"billetera_virtual": Decimal("350.00"),
-			"pago_efectivo": Decimal("150.00"),
+	def test_kpis_de_las_cuotas_del_periodo(self):
+		self.assertEqual(self.resumen().data["cuotas"], {
+			"esperado": Decimal("1000.00"),
+			"cobrado": Decimal("600.00"),
+			"en_deuda": Decimal("400.00"),
+			"efectividad": Decimal("60.0"),
+			"generadas": 1,
+			"pagas": 0,
+			"recargos": Decimal("0.00"),
 		})
 
+	def test_medios_de_pago_dinamicos_sin_comprobantes_anulados(self):
+		medios = self.resumen().data["medios_de_pago"]
 
-class ResumenFinancieroPdfTests(APITestCase):
-	def setUp(self):
-		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
-		today = timezone.localdate()
-		cuenta = account_for(Socio.objects.create(persona=Persona.objects.create(nombre="Rosa", apellido="Mora", dni="78901250")))
-		crear_cuota_con_cargo(
-			cuenta, "2026-07", "700.00", EstadoCuotaChoices.VENCIDA_2,
-			venc1=today - timedelta(days=20), venc2=today - timedelta(days=10),
-		)
-		crear_cuota_con_cargo(
-			cuenta, "2026-08", "800.00", EstadoCuotaChoices.VENCIDA_1,
-			venc1=today - timedelta(days=5), venc2=today + timedelta(days=5),
-		)
-		crear_cuota_con_cargo(
-			cuenta, "2026-09", "900.00",
-			venc1=today + timedelta(days=5), venc2=today + timedelta(days=15),
-		)
+		self.assertEqual(medios["total"], Decimal("980.00"))
+		montos = {row["codigo"]: row["monto"] for row in medios["medios"]}
+		self.assertEqual(montos["Transferencia"], Decimal("500.00"))
+		self.assertEqual(montos["Efectivo"], Decimal("480.00"))
+		self.assertEqual(montos["BilleteraVirtual"], Decimal("0.00"))
 
-	def test_separa_deuda_en_fecha_y_vencidas_por_vencimiento(self):
-		report = _build_financial_report(date(2026, 9, 1))
+	def test_ingresos_extra_y_devoluciones_se_detallan_sin_restar(self):
+		data = self.resumen().data
 
-		self.assertEqual(report["cuotas_vencidas"], 2)
-		self.assertEqual(report["cuotas_vencidas_1"], 1)
-		self.assertEqual(report["cuotas_vencidas_2"], 1)
-		self.assertEqual(len(report["deudores"]), 1)
-		deudor = report["deudores"][0]
-		self.assertEqual(deudor["deuda_en_fecha"], Decimal("900.00"))
-		self.assertEqual(deudor["cuotas_vencidas_1"], 1)
-		self.assertEqual(deudor["cuotas_vencidas_2"], 1)
-		self.assertEqual(deudor["deuda_vencida"], Decimal("1500.00"))
+		self.assertEqual(data["ingresos_extra"]["total"], Decimal("380.00"))
+		self.assertEqual(len(data["ingresos_extra"]["movimientos"]), 4)
+		self.assertEqual(data["devoluciones"]["total"], Decimal("180.00"))
+		self.assertEqual(data["devoluciones"]["movimientos"][0]["codigo"], "DEV-X 00000001")
 
-	def test_descarga_pdf(self):
-		response = self.client.get(reverse("resumen-financiero-pdf"), {"periodo": "2026-09"})
+	def test_evolucion_de_los_ultimos_doce_periodos(self):
+		evolucion = self.resumen().data["evolucion"]
+
+		self.assertEqual(len(evolucion), 12)
+		self.assertEqual(evolucion[-1], {
+			"periodo": self.periodo, "facturado": Decimal("1000.00"), "cobrado": Decimal("600.00"), "efectividad": Decimal("60.0"),
+		})
+		self.assertIsNone(evolucion[0]["efectividad"])
+
+	def test_conserva_la_deuda_que_usa_el_dashboard(self):
+		data = self.client.get(reverse("resumen-financiero")).data
+
+		for campo in ("socios_en_mora", "monto_adeudado_total", "cuotas_vencidas", "cuotas_vencidas_1", "cuotas_vencidas_2"):
+			self.assertIn(campo, data)
+
+	def test_periodo_invalido(self):
+		self.assertEqual(self.resumen(periodo="2026-13").status_code, 400)
+
+	def test_descarga_pdf_con_la_misma_estructura(self):
+		response = self.client.get(reverse("resumen-financiero-pdf"), {"periodo": self.periodo})
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
-		self.assertIn(b"Mora, Rosa", response.content)
+		self.assertIn(f"informe-financiero-{self.periodo}.pdf", response["Content-Disposition"])
+		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
+			with self.subTest(texto=texto):
+				self.assertIn(texto, response.content)
 
 
 class ReporteMorosidadPdfTests(APITestCase):
