@@ -63,9 +63,9 @@ export default function IncomeOriginChart({ income }) {
 
       <ul className="flex flex-col gap-2 min-w-0 w-full">
         {income.origen.map((segment, index) => (
-          <li key={segment.nombre} className="flex items-start gap-2 min-w-0 text-sm">
-            <span className={`w-2.5 h-2.5 mt-1.5 shrink-0 rounded-sm ${SEGMENT_COLORS[index % SEGMENT_COLORS.length].fill}`} aria-hidden="true" />
-            <span className="flex-1 min-w-0 break-words text-on-surface">{segment.nombre}</span>
+          <li key={segment.nombre} className="flex items-center gap-2 min-w-0 text-sm">
+            <span className={`w-2.5 h-2.5 shrink-0 rounded-sm ${SEGMENT_COLORS[index % SEGMENT_COLORS.length].fill}`} aria-hidden="true" />
+            <span className="flex-1 min-w-0 truncate text-on-surface" title={segment.nombre}>{segment.nombre}</span>
             <span className="shrink-0 font-semibold tabular-nums text-on-surface">{formatPercentage(segment.porcentaje)}</span>
           </li>
         ))}

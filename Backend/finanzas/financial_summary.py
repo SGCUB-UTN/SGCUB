@@ -56,6 +56,7 @@ def income_origin(cuotas_total, extra_rows, total):
     others = sum((amount for _, amount in ranked[TOP_CONCEPTS:]), ZERO)
     if others:
         segments.append((OTHERS_LABEL, others))
+    segments.sort(key=lambda pair: pair[1], reverse=True)
     return [
         {"nombre": name, "monto": amount, "porcentaje": percentage(amount, total)}
         for name, amount in segments

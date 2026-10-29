@@ -2509,6 +2509,16 @@ class ResumenFinancieroTests(APITestCase):
 		)
 		self.assertEqual(ingresos["origen"][0]["porcentaje"], Decimal("61.2"))
 
+	def test_origen_de_los_ingresos_se_ordena_de_mayor_a_menor(self):
+		register_income(self.socio.pk, "Sponsoreo", [{"medio_de_pago": "Transferencia", "monto": Decimal("2000.00")}], Decimal("2000.00"))
+
+		origen = self.resumen().data["ingresos"]["origen"]
+
+		self.assertEqual(
+			[(row["nombre"], row["monto"]) for row in origen],
+			[("Sponsoreo", Decimal("2000.00")), ("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Otros", Decimal("80.00"))],
+		)
+
 	def test_kpis_de_las_cuotas_del_periodo(self):
 		self.assertEqual(self.resumen().data["cuotas"], {
 			"esperado": Decimal("1000.00"),
