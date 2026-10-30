@@ -15,7 +15,7 @@ import { registrarIngreso } from '../../api/pagos'
 import { registrarDevolucionManual } from '../../api/devoluciones'
 import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import useMediosPago from '../../hooks/useMediosPago'
-import { FormSection, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 
 const OPERATIONS = [
   {
@@ -278,21 +278,13 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
                       {paymentMethods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}
                     </SelectConFlecha>
                   </div>
-                  <div className="relative w-36 sm:w-48 shrink-0">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0.01"
-                      step="0.01"
-                      value={activeRows[0].monto}
-                      onChange={(event) => updateRow(0, { monto: event.target.value })}
-                      placeholder="0.00"
-                      aria-label="Monto a devolver"
-                      aria-invalid={(showErrors && !(Number(activeRows[0].monto) > 0)) || undefined}
-                      className={claseInput(showErrors && !(Number(activeRows[0].monto) > 0), `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`)}
-                    />
-                  </div>
+                  <AmountInput
+                    className="w-36 sm:w-48 shrink-0"
+                    value={activeRows[0].monto}
+                    onChange={(monto) => updateRow(0, { monto })}
+                    aria-label="Monto a devolver"
+                    invalid={showErrors && !(Number(activeRows[0].monto) > 0)}
+                  />
                 </div>
               )}
             </div>

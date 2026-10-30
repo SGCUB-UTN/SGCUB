@@ -11,6 +11,40 @@ export const NO_SPINNER_CLASS = '[appearance:textfield] [&::-webkit-inner-spin-b
 
 export const SUMMARY_GROUP_CLASS = 'mb-1 text-sm font-semibold uppercase tracking-wider text-outline'
 
+const AMOUNT_PATTERN = /^\d*(,\d{0,2})?$/
+
+const formatAmountText = (value) => {
+  if (value === '' || value === null || value === undefined) return ''
+  const [whole, decimals] = String(value).split('.')
+  const grouped = whole === '' ? '' : Number(whole).toLocaleString('es-AR')
+  return decimals === undefined ? grouped : `${grouped || '0'},${decimals}`
+}
+
+export function AmountInput({ value, onChange, invalid = false, className = '', ...props }) {
+  const handleChange = (event) => {
+    const raw = event.target.value
+    const text = (raw.endsWith('.') && !raw.includes(',') ? `${raw.slice(0, -1)},` : raw).replace(/\./g, '')
+    if (!AMOUNT_PATTERN.test(text)) return
+    onChange(text.replace(/^0+(?=\d)/, '').replace(',', '.'))
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={formatAmountText(value)}
+        onChange={handleChange}
+        aria-invalid={invalid || undefined}
+        className={claseInput(invalid, 'pl-7 font-semibold text-right')}
+        {...props}
+      />
+    </div>
+  )
+}
+
 export function SummaryLine({ label, value, isTotal = false, valueClassName = '' }) {
   const valueTone = valueClassName || 'text-on-surface'
   return (

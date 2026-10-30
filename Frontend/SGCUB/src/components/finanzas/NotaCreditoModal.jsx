@@ -5,7 +5,7 @@ import useMediosPago from '../../hooks/useMediosPago'
 import { formatAmount, getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import { AuthorizerSelect, NO_SPINNER_CLASS, SUBMIT_BUTTON_CLASS } from './formParts'
+import { AmountInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS } from './formParts'
 import { availableToRefund } from './refunds'
 
 const MODAL_Z_INDEX = 300
@@ -62,21 +62,12 @@ function NotaCreditoForm({ comprobante, onIssued, onCancel }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Campo id="nota-credito-monto" label="Monto a devolver" requerido error={showErrors ? errors.amount : ''}>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
-            <input
-              id="nota-credito-monto"
-              type="number"
-              inputMode="decimal"
-              min="0.01"
-              max={available}
-              step="0.01"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              aria-invalid={(showErrors && Boolean(errors.amount)) || undefined}
-              className={claseInput(showErrors && Boolean(errors.amount), `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`)}
-            />
-          </div>
+          <AmountInput
+            id="nota-credito-monto"
+            value={amount}
+            onChange={setAmount}
+            invalid={showErrors && Boolean(errors.amount)}
+          />
         </Campo>
         <Campo id="nota-credito-medio" label="Medio de devolución" requerido error={showErrors ? errors.method : ''}>
           <SelectConFlecha id="nota-credito-medio" value={method} onChange={(event) => setMethod(event.target.value)} conError={showErrors && Boolean(errors.method)}>

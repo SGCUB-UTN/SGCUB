@@ -7,7 +7,7 @@ import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
-import { FormPanel, NO_SPINNER_CLASS, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
@@ -292,22 +292,14 @@ export function PaymentRow({ row, index, paymentMethods, takenMethods, canRemove
         </SelectConFlecha>
       </div>
 
-      <div className="relative w-36 sm:w-48 shrink-0">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
-        <input
-          type="number"
-          inputMode="decimal"
-          min="0.01"
-          step="0.01"
-          value={row.monto}
-          onChange={(event) => onChange({ monto: event.target.value, edited: true })}
-          placeholder="0.00"
-          aria-label={`Monto del medio de pago ${index + 1}`}
-          aria-invalid={amountError || undefined}
-          disabled={locked}
-          className={claseInput(amountError, `${NO_SPINNER_CLASS} pl-7 font-semibold text-right`)}
-        />
-      </div>
+      <AmountInput
+        className="w-36 sm:w-48 shrink-0"
+        value={row.monto}
+        onChange={(monto) => onChange({ monto, edited: true })}
+        aria-label={`Monto del medio de pago ${index + 1}`}
+        invalid={amountError}
+        disabled={locked}
+      />
 
       {showActionSlot && (
         <div className="w-11 shrink-0">
