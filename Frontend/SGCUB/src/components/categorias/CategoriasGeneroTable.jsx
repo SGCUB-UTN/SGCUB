@@ -3,7 +3,7 @@ import DataTable from '../shared/DataTable'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
-import { formatRangoEdad } from './categoriaFormat'
+import { formatRangoEdad, GENERO_TAB_TONES } from './categoriaFormat'
 
 const SORT_VALUES = {
   name: (categoria) => categoria.nombre,
@@ -14,20 +14,21 @@ const SORT_VALUES = {
 const INITIAL_SORT = { columna: 'maxAge', direccion: 'desc' }
 const COLUMN_COUNT = 4
 
-function CategoriasGeneroTable({ categorias, isLoading, error }) {
+function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = false }) {
   const navigate = useNavigate()
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(categorias, SORT_VALUES, INITIAL_SORT)
 
   return (
-    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden">
+    <div className="min-w-0">
       <DataTable
         headerCase="title"
+        tableClassName="table-fixed min-w-[640px]"
         headers={(
           <>
-            <SortableHeader className="py-3 px-4" etiqueta="Edad" columna="maxAge" orden={sort} onOrdenar={sortBy} />
+            <SortableHeader className="py-3 px-4 w-48" etiqueta="Edad" columna="maxAge" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4 pl-6" etiqueta="Nombre" columna="name" orden={sort} onOrdenar={sortBy} />
-            <SortableHeader className="py-3 px-4 text-center" etiqueta="Jugadores" columna="jugadores" orden={sort} onOrdenar={sortBy} />
-            <SortableHeader className="py-3 px-4 text-center" etiqueta="Docentes" columna="docentes" orden={sort} onOrdenar={sortBy} />
+            <SortableHeader className="py-3 px-4 w-36 text-center" etiqueta="Jugadores" columna="jugadores" orden={sort} onOrdenar={sortBy} />
+            <SortableHeader className="py-3 px-4 w-36 text-center" etiqueta="Docentes" columna="docentes" orden={sort} onOrdenar={sortBy} />
           </>
         )}
       >
@@ -48,7 +49,12 @@ function CategoriasGeneroTable({ categorias, isLoading, error }) {
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer"
           >
             <td className="py-3 px-4 text-on-surface-variant">{formatRangoEdad(categoria)}</td>
-            <td className="py-3 px-4 pl-6 font-medium text-on-surface text-base">{categoria.nombre}</td>
+            <td className="py-3 px-4 pl-6 font-medium text-on-surface text-base">
+              {categoria.nombre}
+              {showGenero && GENERO_TAB_TONES[categoria.genero] && (
+                <span className={`ml-1.5 font-semibold ${GENERO_TAB_TONES[categoria.genero].text}`}>({categoria.genero})</span>
+              )}
+            </td>
             <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_jugadores ?? '—'}</td>
             <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_docentes ?? '—'}</td>
           </tr>

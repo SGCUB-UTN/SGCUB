@@ -1,30 +1,40 @@
 import { useMemo, useState } from 'react'
 import TableSearchInput from '../shared/TableSearchInput'
-import UnderlineTabs from '../shared/UnderlineTabs'
+import PersonTabs from '../personas/TabsNavPersonas'
 import CategoriasGeneroTable from './CategoriasGeneroTable'
-import { GENERO_OPTIONS } from './categoriaFormat'
+import { GENERO_TAB_TONES } from './categoriaFormat'
 import { matchesSearch } from '../shared/search'
 
-const PANEL_ID = 'categorias-genero-panel'
-const TAB_LABELS = { M: 'Categorías masculinas', F: 'Categorías femeninas' }
+export const ALL_CATEGORIES = 'todas'
 
-function CategoriasTable({ data, isLoading, error }) {
+const TABS = [
+  { id: ALL_CATEGORIES, label: 'Todas', icon: 'sports_soccer' },
+  { id: 'M', label: 'Masculinas', icon: 'man', tone: GENERO_TAB_TONES.M },
+  { id: 'F', label: 'Femeninas', icon: 'woman', tone: GENERO_TAB_TONES.F },
+]
+
+function CategoriasTable({ data, isLoading, error, genero, onGeneroChange }) {
   const [search, setSearch] = useState('')
-  const [genero, setGenero] = useState('M')
 
-  const byGenero = useMemo(() => {
+  const byTab = useMemo(() => {
     const filtered = (data ?? []).filter((categoria) => matchesSearch(search, [categoria.nombre]))
-    return Object.fromEntries(GENERO_OPTIONS.map(({ value }) => [
-      value,
-      filtered.filter((categoria) => categoria.genero === value),
+    return Object.fromEntries(TABS.map(({ id }) => [
+      id,
+      id === ALL_CATEGORIES ? filtered : filtered.filter((categoria) => categoria.genero === id),
     ]))
   }, [data, search])
 
-  const tabs = GENERO_OPTIONS.map(({ value }) => ({
-    value,
-    id: `categorias-tab-${value}`,
-    label: TAB_LABELS[value],
-    count: isLoading ? null : byGenero[value].length,
+  const tabs = TABS.map((tab) => ({
+    ...tab,
+    badge: !isLoading && { label: byTab[tab.id].length, tono: 'neutro' },
+    content: (
+      <CategoriasGeneroTable
+        categorias={byTab[tab.id]}
+        isLoading={isLoading}
+        error={error}
+        showGenero={tab.id === ALL_CATEGORIES}
+      />
+    ),
   }))
 
   return (
@@ -37,23 +47,7 @@ function CategoriasTable({ data, isLoading, error }) {
         className="sm:max-w-md"
       />
 
-      <div>
-        <UnderlineTabs
-          label="Categorías por género"
-          tabs={tabs}
-          value={genero}
-          onChange={setGenero}
-          panelId={PANEL_ID}
-          className="mb-4"
-        />
-        <div id={PANEL_ID} role="tabpanel" aria-labelledby={`categorias-tab-${genero}`}>
-          <CategoriasGeneroTable
-            categorias={byGenero[genero]}
-            isLoading={isLoading}
-            error={error}
-          />
-        </div>
-      </div>
+      <PersonTabs tabs={tabs} value={genero} onChange={onGeneroChange} panelClassName="min-w-0 bg-surface-container-lowest rounded-b-xl shadow-sm overflow-hidden" />
     </div>
   )
 }
