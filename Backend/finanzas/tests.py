@@ -63,6 +63,7 @@ from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
 	assign_benefit,
+	cancel_scholarship,
 	create_manual_refund,
 	register_income,
 	create_cuota,
@@ -75,6 +76,7 @@ from .services import (
 	register_payment,
 	revert_payment,
 	sync_cuota_charge,
+	update_scholarship,
 )
 from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
 
@@ -3692,6 +3694,37 @@ class ScholarshipLifecycleTests(APITestCase):
 
 		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("250.00")])
 		self.assertEqual(self.scholarship_amounts(self.august), [])
+
+	def cover_everything(self):
+		self.assertEqual(self.update(valor="100").status_code, 200)
+		october = self.generate("2026-10")
+		self.assertEqual(october.estado_cuota, EstadoCuotaChoices.PAGA)
+		return october
+
+	def test_cancel_keeps_past_cuotas_settled_by_the_scholarship(self):
+		october = self.cover_everything()
+
+		cancel_scholarship(self.scholarship.pk, "Dejó el club", "Comisión directiva", self.user, today=date(2026, 10, 15))
+
+		self.september.refresh_from_db()
+		october.refresh_from_db()
+		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("2500.00")])
+		self.assertEqual(self.september.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.scholarship_amounts(october), [])
+		self.assertEqual(self.charge(october), Decimal("2500.00"))
+		self.assertNotEqual(october.estado_cuota, EstadoCuotaChoices.PAGA)
+
+	def test_update_recalculates_settled_cuotas_only_from_the_current_period(self):
+		october = self.cover_everything()
+
+		update_scholarship(
+			self.scholarship.pk, "Porcentaje", Decimal("50"), date(2026, 7, 1), None, "Situación económica",
+			"Comisión directiva", self.user, today=date(2026, 10, 15),
+		)
+
+		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("2500.00")])
+		self.assertEqual(self.scholarship_amounts(october), [Decimal("1250.00")])
+		self.assertEqual(self.charge(october), Decimal("1250.00"))
 
 	def test_cancelled_scholarship_is_not_applied_to_new_cuotas(self):
 		self.cancel()

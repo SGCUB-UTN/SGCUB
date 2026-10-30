@@ -1307,16 +1307,20 @@ def is_paid_with_money(cuota):
     return cuota.estado_cuota == EstadoCuotaChoices.PAGA and cuota.movimiento.monto > 0
 
 
-def refresh_cuota_scholarships(cuota, socio_id, reason, authorized_by="", user=None):
+def is_settled_before(cuota, period):
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA and cuota.periodo < period
+
+
+def refresh_cuota_scholarships(cuota, socio_id, reason, authorized_by="", user=None, today=None):
     if has_active_payments(cuota):
         return add_missing_scholarships(cuota, list(scholarships_for_period(cuota_period_start(cuota)).filter(socio_id=socio_id)))
-    if is_paid_with_money(cuota):
+    if is_paid_with_money(cuota) or is_settled_before(cuota, (today or timezone.localdate()).strftime(PERIOD_FORMAT)):
         return []
     scholarships = list(scholarships_for_period(cuota_period_start(cuota)).filter(socio_id=socio_id))
     return rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
 
 
-def refresh_scholarship_items(account, reason, authorized_by="", user=None):
+def refresh_scholarship_items(account, reason, authorized_by="", user=None, today=None):
     cuotas = (
         Cuota.objects.select_for_update(of=("self",))
         .filter(movimiento__cuenta_corriente=account)
@@ -1324,7 +1328,7 @@ def refresh_scholarship_items(account, reason, authorized_by="", user=None):
     )
     created = []
     for cuota in by_period(cuotas):
-        created.extend(refresh_cuota_scholarships(cuota, account.socio_id, reason, authorized_by, user))
+        created.extend(refresh_cuota_scholarships(cuota, account.socio_id, reason, authorized_by, user, today))
     return created
 
 
@@ -1349,7 +1353,7 @@ def lock_scholarship(scholarship_id):
 
 
 @transaction.atomic
-def cancel_scholarship(scholarship_id, reason, authorized_by, user=None):
+def cancel_scholarship(scholarship_id, reason, authorized_by, user=None, today=None):
     account, scholarship = lock_scholarship(scholarship_id)
     scholarship.estado = EstadoBecaChoices.CANCELADA
     scholarship.fecha_cancelacion = timezone.now()
@@ -1359,13 +1363,13 @@ def cancel_scholarship(scholarship_id, reason, authorized_by, user=None):
     scholarship.save(update_fields=[
         "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion",
     ])
-    refresh_scholarship_items(account, f"Beca cancelada: {reason}", authorized_by, user)
+    refresh_scholarship_items(account, f"Beca cancelada: {reason}", authorized_by, user, today)
     record_scholarship(Accion.BECA_CANCELADA, scholarship, reason, authorized_by, user, account.socio)
     return scholarship
 
 
 @transaction.atomic
-def update_scholarship(scholarship_id, mode, value, start_date, end_date, reason, authorized_by, user=None):
+def update_scholarship(scholarship_id, mode, value, start_date, end_date, reason, authorized_by, user=None, today=None):
     account, scholarship = lock_scholarship(scholarship_id)
     scholarship.monto = value if mode == ModalidadMontoChoices.MONTO_FIJO else None
     scholarship.porcentaje = value if mode == ModalidadMontoChoices.PORCENTAJE else None
@@ -1377,7 +1381,7 @@ def update_scholarship(scholarship_id, mode, value, start_date, end_date, reason
     scholarship.save(update_fields=[
         "monto", "porcentaje", "fecha_aplicacion", "fecha_fin", "motivo", "autorizado_por", "estado",
     ])
-    refresh_scholarship_items(account, SCHOLARSHIP_UPDATED_REASON, authorized_by, user)
+    refresh_scholarship_items(account, SCHOLARSHIP_UPDATED_REASON, authorized_by, user, today)
     record_scholarship(Accion.BECA_MODIFICADA, scholarship, reason, authorized_by, user, account.socio)
     return scholarship
 
