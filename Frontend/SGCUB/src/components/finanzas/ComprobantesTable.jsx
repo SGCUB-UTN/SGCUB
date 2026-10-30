@@ -19,6 +19,7 @@ import { downloadCashMovementsCsv } from './cashMovementsCsv'
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-2.5 px-4'
 const CELL_CLASS = 'py-2.5 px-4'
+const ICON_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
 const TABS_ID = 'comprobantes-scope'
@@ -27,12 +28,17 @@ const SCOPES = [
   {
     value: 'todos',
     label: 'Todos los movimientos',
-    description: 'Comprobantes de ingresos y devoluciones.',
+    description: 'Comprobantes de cuotas, otros ingresos y devoluciones.',
   },
   {
-    value: 'Ingresos',
-    label: 'Ingresos',
-    description: 'Pagos de cuotas y otros ingresos.',
+    value: 'cuotas',
+    label: 'Cuotas',
+    description: 'Pagos de cuotas de socios.',
+  },
+  {
+    value: 'ingresos',
+    label: 'Otros ingresos',
+    description: 'Ingresos ajenos a cuotas.',
   },
   {
     value: 'devoluciones',
@@ -44,10 +50,10 @@ const SCOPES = [
 const ANNULLED_BADGE = 'bg-error-container text-on-error-container border-error/20'
 
 const TYPES = {
-  CuotaVigente: { label: 'Cobro de cuotas', group: 'recibos', badge: 'bg-primary/10 text-primary border-primary/20' },
-  CuotaAnulada: { label: 'Cobro de cuotas anulado', badgeLabel: 'Anulado', group: 'recibos', badge: ANNULLED_BADGE },
-  IngresoVigente: { label: 'Ingreso', group: 'recibos', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
-  IngresoAnulado: { label: 'Ingreso anulado', badgeLabel: 'Anulado', group: 'recibos', badge: ANNULLED_BADGE },
+  CuotaVigente: { label: 'Cobro de cuotas', group: 'cuotas', badge: 'bg-primary/10 text-primary border-primary/20' },
+  CuotaAnulada: { label: 'Cobro de cuotas anulado', badgeLabel: 'Anulado', group: 'cuotas', badge: ANNULLED_BADGE },
+  IngresoVigente: { label: 'Ingreso', group: 'ingresos', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  IngresoAnulado: { label: 'Ingreso anulado', badgeLabel: 'Anulado', group: 'ingresos', badge: ANNULLED_BADGE },
   NotaCredito: { label: 'Nota de crédito', group: 'devoluciones', badge: 'bg-amber-500/15 text-amber-800 border-amber-500/30' },
   Manual: { label: 'Devolución manual', group: 'devoluciones', badge: 'bg-error/10 text-error border-error/20' },
 }
@@ -264,14 +270,15 @@ function ComprobantesTable({
 
         <DataTable
           tableClassName="min-w-[820px]"
+          headerCase="title"
           headers={(
             <>
               <SortableHeader className={HEADER_CLASS} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
               <th className={HEADER_CLASS} scope="col">Concepto</th>
-              <th className={HEADER_CLASS} scope="col">Medio</th>
-              <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={HEADER_CLASS} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
+              <th className={`${HEADER_CLASS} text-center`} scope="col">Acciones</th>
             </>
           )}
         >
@@ -323,14 +330,8 @@ function ComprobantesTable({
                   {item.subConcept}
                 </span>
               </td>
-              <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap`}>
-                <span className="inline-flex items-center gap-1">
-                  {item.paymentMethod}
-                  <span className="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">chevron_right</span>
-                </span>
-              </td>
               <td
-                className={`${CELL_CLASS} text-right font-semibold tabular-nums whitespace-nowrap ${
+                className={`${CELL_CLASS} font-semibold tabular-nums whitespace-nowrap ${
                   item.isAnulado
                     ? 'text-outline line-through'
                     : item.isPositive
@@ -340,6 +341,21 @@ function ComprobantesTable({
               >
                 {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
                 {formatAmount(item.amount)}
+              </td>
+              <td className={`${CELL_CLASS} text-center`}>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleRowAction(item)
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  title="Ver detalle"
+                  aria-label={`Ver ${item.kind === 'comprobante' ? 'comprobante' : 'devolución'} ${item.refCode}`}
+                  className={ICON_BUTTON_CLASS}
+                >
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
+                </button>
               </td>
             </tr>
           ))}
