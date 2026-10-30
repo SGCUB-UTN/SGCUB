@@ -1,58 +1,82 @@
-import { Fragment, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import DataTable from '../shared/DataTable'
-import { formatAmount, formatDni, formatNumber } from '../personas/format'
-import FinancialTab from '../personas/tabs/FinancialTab'
+import { formatAmount, formatDni } from '../personas/format'
+import { profilePath } from './delinquencyFilters'
 
-const COLUMN_COUNT = 5
+const HEADER_CLASS = 'px-4 py-3'
+const TYPE_BADGES = {
+  Jugador: 'bg-primary/10 text-primary border-primary/20',
+  Socio: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
+}
+const ACTION_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-semibold transition-colors cursor-pointer'
 
-// Socios with overdue debt. Each row expands to show the socio's account statement.
+const debtNotice = (row) => ({
+  socioId: row.socio_id,
+  subject: 'Aviso de deuda pendiente',
+  body: `Hola ${row.nombre}, te recordamos que registrás ${row.cuotas_vencidas} ${row.cuotas_vencidas === 1 ? 'cuota vencida' : 'cuotas vencidas'} por un total de ${formatAmount(row.monto_adeudado)}. Podés regularizar tu situación en la secretaría del club.`,
+})
+
 function MorosidadTable({ filas }) {
-  const [expandedSocioId, setExpandedSocioId] = useState(null)
+  const navigate = useNavigate()
 
   return (
     <DataTable
-      className="border border-outline-variant/40 rounded-lg"
-      tableClassName="min-w-[760px]"
+      tableClassName="min-w-[900px]"
       headers={(
         <>
-          <th className="px-4 py-3" scope="col">Socio</th>
-          <th className="px-4 py-3" scope="col">DNI</th>
-          <th className="px-4 py-3" scope="col">Categoría deportiva</th>
-          <th className="px-4 py-3 text-right" scope="col">Monto adeudado</th>
-          <th className="px-4 py-3 text-right" scope="col">Días de mora</th>
+          <th className={HEADER_CLASS} scope="col">Socio / Jugador</th>
+          <th className={HEADER_CLASS} scope="col">Tipo</th>
+          <th className={HEADER_CLASS} scope="col">Categoría</th>
+          <th className={`${HEADER_CLASS} text-right`} scope="col">Cuotas adeudadas</th>
+          <th className={`${HEADER_CLASS} text-right`} scope="col">Monto deuda</th>
+          <th className={`${HEADER_CLASS} text-right`} scope="col">Acciones</th>
         </>
       )}
     >
-      {filas.map((fila) => {
-        const expanded = String(expandedSocioId) === String(fila.socio_id)
-        return (
-          <Fragment key={fila.socio_id}>
-            <tr className="hover:bg-surface-container-low/70">
-              <td className="px-4 py-3">
-                <button
-                  type="button"
-                  aria-expanded={expanded}
-                  onClick={() => setExpandedSocioId(expanded ? null : fila.socio_id)}
-                  className="inline-flex items-center gap-2 text-left font-semibold text-primary hover:underline"
-                >
-                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{expanded ? 'expand_less' : 'expand_more'}</span>
-                  {fila.apellido}, {fila.nombre}
-                </button>
-                <span className="block pl-7 text-xs text-on-surface-variant">Socio {formatNumber(fila.numero_socio)}</span>
-              </td>
-              <td className="px-4 py-3 text-on-surface-variant">{formatDni(fila.dni)}</td>
-              <td className="px-4 py-3 text-on-surface-variant">{fila.categoria_deportiva}</td>
-              <td className="px-4 py-3 text-right font-semibold text-error">{formatAmount(fila.monto_adeudado)}</td>
-              <td className="px-4 py-3 text-right tabular-nums text-on-surface">{fila.dias_mora}</td>
-            </tr>
-            {expanded && (
-              <tr className="bg-surface-container-low/50">
-                <td colSpan={COLUMN_COUNT} className="p-4"><FinancialTab socio={fila} /></td>
-              </tr>
+      {filas.map((fila) => (
+        <tr key={fila.socio_id} className="hover:bg-surface-container-low/70">
+          <td className="px-4 py-3">
+            <span className="block font-semibold text-on-surface">{fila.apellido}, {fila.nombre}</span>
+            <span className="block text-sm text-on-surface-variant">DNI {formatDni(fila.dni)}</span>
+          </td>
+          <td className="px-4 py-3">
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${TYPE_BADGES[fila.tipo] ?? TYPE_BADGES.Socio}`}>
+              {fila.tipo}
+            </span>
+          </td>
+          <td className="px-4 py-3 text-on-surface-variant">{fila.tipo === 'Jugador' ? fila.categoria_deportiva : '—'}</td>
+          <td className="px-4 py-3 text-right text-on-surface">
+            {fila.cuotas_vencidas}
+            <span className="block text-xs text-on-surface-variant">{fila.dias_mora} días de mora</span>
+          </td>
+          <td className="px-4 py-3 text-right whitespace-nowrap">
+            <span className="block font-semibold text-error">{formatAmount(fila.monto_adeudado)}</span>
+            {Number(fila.recargos) > 0 && (
+              <span className="block text-xs text-on-surface-variant">Incluye {formatAmount(fila.recargos)} de recargos</span>
             )}
-          </Fragment>
-        )
-      })}
+          </td>
+          <td className="px-4 py-3">
+            <div className="flex justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => navigate(profilePath(fila))}
+                className={`${ACTION_CLASS} text-primary hover:bg-primary-fixed/30`}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">account_balance_wallet</span>
+                Estado de cuenta
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/comunicaciones', { state: { debtNotice: debtNotice(fila) } })}
+                className={`${ACTION_CLASS} text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low`}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">campaign</span>
+                Notificar deuda
+              </button>
+            </div>
+          </td>
+        </tr>
+      ))}
     </DataTable>
   )
 }

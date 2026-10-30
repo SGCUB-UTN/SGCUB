@@ -2,12 +2,10 @@ import { api } from './conf'
 
 const reportEndpoint = 'finanzas/morosidad/'
 
-const buildReportParams = ({ alcance, q, categoria, socioIds, socioId }) => {
-  const params = { alcance }
-  if (q) params.q = q
-  if (categoria) params.categoria = categoria
-  if (socioIds?.length) params.socio_ids = socioIds.join(',')
-  if (socioId) params.socio_id = socioId
+const buildReportParams = ({ alcance, tipo, periodo, referencia, categoriaId, socioId }) => {
+  const params = { alcance, tipo, periodo, referencia }
+  if (alcance === 'categoria') params.categoria_id = categoriaId
+  if (alcance === 'socio') params.socio_id = socioId
   return params
 }
 

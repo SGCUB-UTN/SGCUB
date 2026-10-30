@@ -1,100 +1,60 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getJugadores } from '../api/jugadores'
 import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
-import { getSocios } from '../api/socios'
+import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
+import { defaultReference } from '../components/finanzas/delinquencyFilters'
 import PageHeader from '../components/shared/PageHeader'
-import { matchesSearch } from '../components/shared/search'
+import { SecondaryButton } from '../components/personas/tabs/parts'
+import useCategorias from '../hooks/useCategorias'
+
+const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), alcance: 'activos', categoriaId: '', tipo: 'todos' }
+
+const isReady = (filters, socio) => (
+  (filters.alcance !== 'categoria' || Boolean(filters.categoriaId))
+  && (filters.alcance !== 'socio' || Boolean(socio))
+)
 
 function Morosidad() {
-  const [socios, setSocios] = useState([])
-  const [jugadores, setJugadores] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [rosterError, setRosterError] = useState('')
-  const [scope, setScope] = useState('activos')
-  const [busqueda, setBusqueda] = useState('')
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('')
-  const [seleccionados, setSeleccionados] = useState([])
-  const [socioIndividual, setSocioIndividual] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [reporte, setReporte] = useState(null)
-  const [generationError, setGenerationError] = useState('')
-  const [reportFilters, setReportFilters] = useState(null)
+  const { categorias } = useCategorias()
+  const [filters, setFilters] = useState(INITIAL_FILTERS)
+  const [socio, setSocio] = useState(null)
+  const [result, setResult] = useState({ key: null, reporte: null, error: '' })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
 
+  const requestFilters = useMemo(() => ({ ...filters, socioId: socio?.socio_id ?? '' }), [filters, socio])
+  const requestKey = JSON.stringify(requestFilters)
+  const ready = isReady(filters, socio)
+  const isLoading = ready && result.key !== requestKey
+
   useEffect(() => {
-    let activo = true
-    Promise.all([getSocios(), getJugadores()])
-      .then(([sociosRespuesta, jugadoresRespuesta]) => {
-        if (!activo) return
-        setSocios(sociosRespuesta ?? [])
-        setJugadores(jugadoresRespuesta ?? [])
-      })
-      .catch(() => activo && setRosterError('No se pudieron cargar socios y categorías.'))
-      .finally(() => activo && setIsLoading(false))
-    return () => { activo = false }
-  }, [])
+    if (!ready) return undefined
+    let active = true
+    const key = JSON.stringify(requestFilters)
+    getReporteMorosidad(requestFilters)
+      .then((reporte) => active && setResult({ key, reporte, error: '' }))
+      .catch((requestError) => active && setResult({
+        key,
+        reporte: null,
+        error: requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.',
+      }))
+    return () => { active = false }
+  }, [ready, requestFilters])
 
-  const categoriaPorSocio = useMemo(() => Object.fromEntries(
-    jugadores.map((jugador) => [
-      String(jugador.socio?.socio_id),
-      typeof jugador.categoria === 'object' ? jugador.categoria?.nombre : '',
-    ]),
-  ), [jugadores])
-
-  const categorias = useMemo(() => [...new Set(
-    Object.values(categoriaPorSocio).filter(Boolean),
-  )].sort((a, b) => a.localeCompare(b, 'es')), [categoriaPorSocio])
-
-  const sociosFiltrados = useMemo(() => {
-    const termino = busqueda.trim()
-    return socios.filter((socio) => {
-      const coincideTexto = !termino || matchesSearch(termino, [socio.nombre, socio.apellido, socio.dni, socio.numero_socio])
-      const categoria = categoriaPorSocio[String(socio.socio_id)] || 'Sin categoría'
-      const coincideCategoria = !categoriaSeleccionada || categoria === categoriaSeleccionada
-      return coincideTexto && coincideCategoria
-    })
-  }, [busqueda, categoriaPorSocio, categoriaSeleccionada, socios])
-
-  const generarReporte = async () => {
-    if (scope === 'manual' && seleccionados.length === 0) {
-      setGenerationError('Seleccioná al menos un socio para generar el reporte.')
-      return
-    }
-    if (scope === 'socio' && !socioIndividual) {
-      setGenerationError('Seleccioná el socio que querés consultar.')
-      return
-    }
-
-    const filters = {
-      alcance: scope,
-      q: scope === 'filtrados' ? busqueda.trim() : '',
-      categoria: scope === 'filtrados' ? categoriaSeleccionada : '',
-      socioIds: scope === 'manual' ? seleccionados : [],
-      socioId: scope === 'socio' ? socioIndividual : '',
-    }
-
-    setGenerationError('')
+  const changeFilters = (changes) => {
     setExportError('')
-    setIsGenerating(true)
-    try {
-      const resultado = await getReporteMorosidad(filters)
-      setReporte(resultado)
-      setReportFilters(filters)
-    } catch (requestError) {
-      setGenerationError(requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.')
-    } finally {
-      setIsGenerating(false)
-    }
+    setFilters((current) => {
+      const next = { ...current, ...changes }
+      if (changes.periodo && changes.periodo !== current.periodo) next.referencia = defaultReference(changes.periodo)
+      return next
+    })
   }
 
   const exportPdf = async () => {
-    if (!reportFilters) return
     setExportError('')
     setIsExporting(true)
     try {
-      await downloadDelinquencyPdf(reportFilters)
+      await downloadDelinquencyPdf(requestFilters)
     } catch (requestError) {
       setExportError(requestError.response?.data?.detail || 'No se pudo generar el PDF del reporte.')
     } finally {
@@ -103,32 +63,39 @@ function Morosidad() {
   }
 
   return (
-    <div className="w-full flex flex-col gap-5 pb-8">
-      <PageHeader breadcrumb={[{ label: 'Finanzas' }, { label: 'Reporte de morosidad' }]} title="Reporte de morosidad" />
-      <MorosidadReport
-        sociosFiltrados={sociosFiltrados}
-        categorias={categorias}
-        categoriaPorSocio={categoriaPorSocio}
-        isLoading={isLoading}
-        rosterError={rosterError}
-        scope={scope}
-        onScopeChange={setScope}
-        busqueda={busqueda}
-        onBusquedaChange={setBusqueda}
-        categoriaSeleccionada={categoriaSeleccionada}
-        onCategoriaChange={setCategoriaSeleccionada}
-        seleccionados={seleccionados}
-        onSeleccionadosChange={setSeleccionados}
-        socioIndividual={socioIndividual}
-        onSocioIndividualChange={setSocioIndividual}
-        isGenerating={isGenerating}
-        onGenerate={generarReporte}
-        reporte={reporte}
-        generationError={generationError}
-        isExporting={isExporting}
-        onExportPdf={exportPdf}
-        exportError={exportError}
+    <div className="w-full flex flex-col pb-8">
+      <PageHeader
+        breadcrumb={[{ label: 'Finanzas' }, { label: 'Reporte de morosidad' }]}
+        title="Reporte de morosidad"
+        actions={(
+          <SecondaryButton
+            icon={isExporting ? 'progress_activity' : 'picture_as_pdf'}
+            onClick={exportPdf}
+            disabled={!ready || isLoading || isExporting || !result.reporte}
+          >
+            {isExporting ? 'Generando PDF...' : 'Exportar PDF'}
+          </SecondaryButton>
+        )}
       />
+      {exportError && <p className="mb-2 text-sm text-error" role="alert">{exportError}</p>}
+
+      <div className="mt-4">
+        <MorosidadFilters
+          filters={filters}
+          onChange={changeFilters}
+          categorias={categorias}
+          socio={socio}
+          onSocioChange={setSocio}
+        />
+      </div>
+
+      {ready ? (
+        <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
+      ) : (
+        <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
+          {filters.alcance === 'categoria' ? 'Elegí una categoría para ver su morosidad.' : 'Buscá el socio que querés consultar.'}
+        </p>
+      )}
     </div>
   )
 }
