@@ -83,11 +83,6 @@ function ReversalForm({ detalle, reverted, onSubmit, onCancel }) {
         </p>
       ) : (
         <>
-          <p className="text-base text-on-surface-variant">
-            El comprobante pasa a anulado y la deuda de las cuotas vuelve a como estaba, con los recargos de los
-            vencimientos que ya pasaron. Para terminar hay que resolver qué pasa con el dinero recibido.
-          </p>
-
           <Campo id="reversal-responsable" label="Responsable" requerido error={showErrors ? errors.responsable : ''}>
             <AuthorizerSelect id="reversal-responsable" value={responsable} onChange={setResponsable} invalid={showErrors && Boolean(errors.responsable)} />
           </Campo>
