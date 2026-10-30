@@ -6,6 +6,7 @@ import { getCargosDocente } from '../api/docentes'
 import { getJugadoresByCategoria } from '../api/jugadores'
 import AssignDocenteModal from '../components/categorias/AssignDocenteModal'
 import CategoriaDocenteTable from '../components/categorias/CategoriaDocenteTable'
+import CategoriaEmptyState from '../components/categorias/CategoriaEmptyState'
 import CategoriaFormModal from '../components/categorias/CategoriaFormModal'
 import CategoriaHeader from '../components/categorias/CategoriaHeader'
 import CategoriaJugadoresTable from '../components/categorias/CategoriaJugadoresTable'
@@ -14,11 +15,13 @@ import ConfirmRemoveDocenteModal from '../components/categorias/ConfirmRemoveDoc
 import { formatRangoEdad, GENERO_BADGE_CLASSES, getGeneroLabel, getTipoLabel } from '../components/categorias/categoriaFormat'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { DeactivateButton, EditButton } from '../components/personas/HeaderPersona'
-import PersonTabs from '../components/personas/TabsNavPersonas'
-import { EmptyState, PrimaryButton, TabHeader } from '../components/personas/tabs/parts'
+import { PrimaryButton, TabHeader } from '../components/personas/tabs/parts'
 import { getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useDocentes from '../hooks/useDocentes'
+import UnderlineTabs from '../components/shared/UnderlineTabs'
+
+const PANEL_ID = 'categoria-tab-panel'
 
 const fetchDetail = (id) => Promise.all([
   getCategoria(id),
@@ -49,6 +52,7 @@ function CategoriaDetail() {
   const [isDeletionOpen, setIsDeletionOpen] = useState(false)
   const [isAssignOpen, setIsAssignOpen] = useState(false)
   const [removal, setRemoval] = useState({ opened: false, docenteCategoria: null })
+  const [activeTab, setActiveTab] = useState('integrantes')
 
   useEffect(() => {
     let active = true
@@ -134,25 +138,26 @@ function CategoriaDetail() {
 
   const tabs = [
     {
-      id: 'integrantes',
+      value: 'integrantes',
+      id: 'categoria-tab-integrantes',
       label: 'Integrantes',
       icon: 'groups',
-      badge: { label: (jugadores?.length ?? 0) + docenteCategorias.length, tono: 'neutro' },
+      count: (jugadores?.length ?? 0) + docenteCategorias.length,
       content: (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-          <section className="flex flex-col gap-4 min-w-0">
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-4 min-w-0">
             <TabHeader
               title="Jugadores"
               description={`Total asignado a esta categoría: ${jugadores?.length ?? 0}`}
             />
             {!jugadores && <ErrorAlert message="No se pudieron cargar los jugadores de la categoría." />}
             {jugadores?.length === 0 && (
-              <EmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
+              <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
             )}
             {jugadores?.length > 0 && <CategoriaJugadoresTable jugadores={jugadores} categoriaId={categoria.categoria_id} />}
-          </section>
+          </div>
 
-          <section className="flex flex-col gap-4 min-w-0">
+          <div className="flex flex-col gap-4 min-w-0">
             <TabHeader
               title="Docentes"
               description={`Total asignado a esta categoría: ${docenteCategorias.length}`}
@@ -163,11 +168,11 @@ function CategoriaDetail() {
               )}
             />
             {docenteCategorias.length === 0 ? (
-              <EmptyState icon="school" title="Sin docentes" description="Todavía no hay docentes asignados a esta categoría." />
+              <CategoriaEmptyState icon="school" title="Sin docentes" description="Todavía no hay docentes asignados a esta categoría." />
             ) : (
               <CategoriaDocenteTable docenteCategorias={docenteCategorias} onRemove={openRemoval} />
             )}
-          </section>
+          </div>
         </div>
       ),
     },
@@ -200,7 +205,17 @@ function CategoriaDetail() {
         )}
       />
 
-      <PersonTabs tabs={tabs} />
+      <UnderlineTabs
+        label="Secciones de la categoría"
+        tabs={tabs}
+        value={activeTab}
+        onChange={setActiveTab}
+        panelId={PANEL_ID}
+        className="mb-6"
+      />
+      <div id={PANEL_ID} role="tabpanel" aria-labelledby={tabs.find((tab) => tab.value === activeTab).id}>
+        {tabs.find((tab) => tab.value === activeTab).content}
+      </div>
 
       <CategoriaFormModal
         key={`form-${modalKey}`}
