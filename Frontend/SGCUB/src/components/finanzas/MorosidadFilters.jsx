@@ -1,7 +1,5 @@
 import FilterSelect from '../shared/FilterSelect'
 import { getGeneroLabel } from '../categorias/categoriaFormat'
-import { formatDni } from '../personas/format'
-import SocioPicker from './SocioPicker'
 import { AFFILIATIONS, PERIOD_TYPES, SCOPES, referenceOptions } from './delinquencyFilters'
 
 const FILTER_CLASS = 'bg-surface-container-lowest border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
@@ -11,30 +9,7 @@ const categoryLabel = (categoria) => (
   categoria.genero ? `${categoria.nombre} (${getGeneroLabel(categoria.genero)})` : categoria.nombre
 )
 
-function SelectedSocio({ socio, onClear }) {
-  return (
-    <span className="inline-flex items-center gap-2 h-10 pl-3 pr-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-sm">
-      <span className="font-semibold text-on-surface">{socio.apellido}, {socio.nombre}</span>
-      {socio.es_jugador && (
-        <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-          Jugador
-        </span>
-      )}
-      <span className="text-on-surface-variant">DNI {formatDni(socio.dni)}</span>
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label="Cambiar socio"
-        title="Cambiar socio"
-        className="inline-flex items-center justify-center w-8 h-8 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low cursor-pointer"
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">close</span>
-      </button>
-    </span>
-  )
-}
-
-function MorosidadFilters({ filters, onChange, categorias, socio, onSocioChange }) {
+function MorosidadFilters({ filters, onChange, categorias }) {
   const set = (field) => (event) => onChange({ [field]: event.target.value })
 
   return (
@@ -69,15 +44,6 @@ function MorosidadFilters({ filters, onChange, categorias, socio, onSocioChange 
               <option key={categoria.categoria_id} value={categoria.categoria_id}>{categoryLabel(categoria)}</option>
             ))}
           </FilterSelect>
-        )}
-        {filters.alcance === 'socio' && (
-          socio
-            ? <SelectedSocio socio={socio} onClear={() => onSocioChange(null)} />
-            : (
-              <div className="w-full sm:w-80">
-                <SocioPicker compact placeholder="Buscar socio o jugador..." onSelect={onSocioChange} />
-              </div>
-            )
         )}
       </div>
 

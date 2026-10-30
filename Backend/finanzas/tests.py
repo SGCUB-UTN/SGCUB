@@ -2705,6 +2705,7 @@ class ReporteMorosidadTests(APITestCase):
 	def test_rechaza_filtros_invalidos(self):
 		for params in (
 			{"tipo": "otros"},
+			{"alcance": "socio"},
 			{"alcance": "categoria"},
 			{"periodo": "semanal", "referencia": "2026"},
 			{"periodo": "mensual", "referencia": "2026-13"},
@@ -2851,21 +2852,25 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertNotIn(b"Paz, Luis", response.content)
 
 	def test_respects_selected_scope(self):
-		response = self.download(alcance="socio", socio_id=self.up_to_date.pk)
+		otra_categoria = Categoria.objects.create(nombre="Otras", anio_vigente=2026, edad_maxima=18, genero="M")
+		response = self.download(alcance="categoria", categoria_id=otra_categoria.pk)
 
 		self.assertEqual(response.status_code, 200)
 		self.assertNotIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"No hay socios con deuda vencida", response.content)
 
-		response = self.download(alcance="socio", socio_id=self.debtor.pk, tipo="socios", periodo="anual", referencia="2026")
+		categoria = Categoria.objects.create(nombre="Primera", anio_vigente=2026, edad_maxima=30, genero="M")
+		Jugador.objects.create(socio=self.debtor, categoria=categoria)
+
+		response = self.download(alcance="categoria", categoria_id=categoria.pk, tipo="jugadores", periodo="anual", referencia="2026")
 
 		self.assertIn(b"Mora, Rosa", response.content)
-		self.assertIn(b"Alcance: Socio individual", response.content)
-		self.assertIn(b"Tipo: Solo socios", response.content)
+		self.assertIn(b"Primera", response.content)
+		self.assertIn(b"Tipo: Solo jugadores", response.content)
 		self.assertIn(b"Anual", response.content)
 
 	def test_rejects_invalid_parameters(self):
-		for params in ({"alcance": "todos"}, {"alcance": "manual"}, {"alcance": "socio", "socio_id": "x"}):
+		for params in ({"alcance": "todos"}, {"alcance": "manual"}, {"alcance": "socio"}, {"alcance": "categoria", "categoria_id": "x"}):
 			with self.subTest(params=params):
 				response = self.download(**params)
 

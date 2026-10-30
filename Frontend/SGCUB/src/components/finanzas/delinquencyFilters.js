@@ -7,7 +7,6 @@ export const PERIOD_TYPES = [
 export const SCOPES = [
   { value: 'activos', label: 'Todos los socios' },
   { value: 'categoria', label: 'Categoría' },
-  { value: 'socio', label: 'Un socio' },
 ]
 
 export const AFFILIATIONS = [

@@ -12,7 +12,6 @@ from .services import pending_amounts, unpaid_late_fees
 SCOPE_LABELS = {
     "activos": "Todos los socios",
     "categoria": "Categoría",
-    "socio": "Socio individual",
 }
 AFFILIATION_LABELS = {
     "todos": "Socios y jugadores",
@@ -78,15 +77,13 @@ def parse_period_window(period_type, reference):
 def parse_delinquency_params(query_params):
     scope = query_params.get("alcance", "activos").strip().lower()
     if scope not in SCOPE_LABELS:
-        raise ReporteMorosidadInvalidoError("El alcance debe ser activos, categoria o socio.")
+        raise ReporteMorosidadInvalidoError("El alcance debe ser activos o categoria.")
     affiliation = query_params.get("tipo", "todos").strip().lower()
     if affiliation not in AFFILIATION_LABELS:
         raise ReporteMorosidadInvalidoError("El tipo debe ser todos, socios o jugadores.")
 
     params = {"scope": scope, "affiliation": affiliation}
-    if scope == "socio":
-        params["socio_id"] = parse_positive_int(query_params.get("socio_id"), "Debe indicar un socio válido.")
-    elif scope == "categoria":
+    if scope == "categoria":
         params["category_id"] = parse_positive_int(query_params.get("categoria_id"), "Debe indicar una categoría válida.")
 
     period_type = query_params.get("periodo", "").strip().lower()
@@ -97,17 +94,14 @@ def parse_delinquency_params(query_params):
     return params
 
 
-def filter_socios(scope, socio_id=None, category_id=None, affiliation="todos"):
+def filter_socios(scope, category_id=None, affiliation="todos"):
     socios = Socio.objects.select_related(
         "persona",
         "estado_administrativo",
         "jugador__categoria",
         "cuenta_corriente",
-    )
-    if scope == "socio":
-        socios = socios.filter(socio_id=socio_id)
-    else:
-        socios = socios.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
+    ).filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
+
     if scope == "categoria":
         socios = socios.filter(jugador__categoria_id=category_id)
 

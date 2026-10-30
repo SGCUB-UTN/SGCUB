@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
 import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
@@ -14,31 +14,28 @@ const SECTION_CLASS = 'p-4 sm:p-5'
 
 const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), alcance: 'activos', categoriaId: '', tipo: 'todos' }
 
-const isReady = (filters, socio) => (
-  (filters.alcance !== 'categoria' || Boolean(filters.categoriaId))
-  && (filters.alcance !== 'socio' || Boolean(socio))
+const isReady = (filters) => (
+  filters.alcance !== 'categoria' || Boolean(filters.categoriaId)
 )
 
 function Morosidad() {
   const { categorias } = useCategorias()
   const [filters, setFilters] = useState(INITIAL_FILTERS)
-  const [socio, setSocio] = useState(null)
   const [result, setResult] = useState({ key: null, reporte: null, error: '' })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
   const [reservedHeight, setReservedHeight] = useState(0)
   const resultsRef = useRef(null)
 
-  const requestFilters = useMemo(() => ({ ...filters, socioId: socio?.socio_id ?? '' }), [filters, socio])
-  const requestKey = JSON.stringify(requestFilters)
-  const ready = isReady(filters, socio)
+  const requestKey = JSON.stringify(filters)
+  const ready = isReady(filters)
   const isLoading = ready && result.key !== requestKey
 
   useEffect(() => {
     if (!ready) return undefined
     let active = true
-    const key = JSON.stringify(requestFilters)
-    getReporteMorosidad(requestFilters)
+    const key = JSON.stringify(filters)
+    getReporteMorosidad(filters)
       .then((reporte) => active && setResult({ key, reporte, error: '' }))
       .catch((requestError) => active && setResult({
         key,
@@ -46,15 +43,10 @@ function Morosidad() {
         error: requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.',
       }))
     return () => { active = false }
-  }, [ready, requestFilters])
+  }, [ready, filters])
 
   const reserveResultsHeight = () => {
     if (ready && resultsRef.current) setReservedHeight(resultsRef.current.offsetHeight)
-  }
-
-  const changeSocio = (value) => {
-    reserveResultsHeight()
-    setSocio(value)
   }
 
   const changeFilters = (changes) => {
@@ -71,7 +63,7 @@ function Morosidad() {
     setExportError('')
     setIsExporting(true)
     try {
-      await downloadDelinquencyPdf(requestFilters)
+      await downloadDelinquencyPdf(filters)
     } catch (requestError) {
       setExportError(requestError.response?.data?.detail || 'No se pudo generar el PDF del reporte.')
     } finally {
@@ -96,15 +88,13 @@ function Morosidad() {
       />
       {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <section className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm relative z-20" aria-labelledby="morosidad-filters-title">
-        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={`${HEADING_CLASS} rounded-t-lg`} />
+      <section className={PANEL_CLASS} aria-labelledby="morosidad-filters-title">
+        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={HEADING_CLASS} />
         <div className={SECTION_CLASS}>
           <MorosidadFilters
             filters={filters}
             onChange={changeFilters}
             categorias={categorias}
-            socio={socio}
-            onSocioChange={changeSocio}
           />
         </div>
       </section>
@@ -114,7 +104,7 @@ function Morosidad() {
           <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
         ) : (
           <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
-            {filters.alcance === 'categoria' ? 'Elegí una categoría para ver su morosidad.' : 'Buscá el socio que querés consultar.'}
+            Elegí una categoría para ver su morosidad.
           </p>
         )}
       </div>
