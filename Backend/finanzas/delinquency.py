@@ -4,88 +4,128 @@ from django.db.models import Q
 from django.utils import timezone
 
 from configuracion.models import ConfiguracionGeneral
-from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
+from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Categoria, Socio
 
 from .models import OVERDUE_CUOTA_STATES, Cuota, EstadoCuotaChoices
-from .services import pending_amounts
+from .services import pending_amounts, unpaid_late_fees
 
 SCOPE_LABELS = {
-    "activos": "Socios activos",
-    "filtrados": "Filtros aplicados",
-    "manual": "Selección manual",
+    "activos": "Todos los socios",
+    "categoria": "Categoría",
     "socio": "Socio individual",
 }
+AFFILIATION_LABELS = {
+    "todos": "Socios y jugadores",
+    "socios": "Solo socios",
+    "jugadores": "Solo jugadores",
+}
+PERIOD_LABELS = {
+    "mensual": "Mensual",
+    "trimestral": "Trimestral",
+    "anual": "Anual",
+}
 NO_CATEGORY = "Sin categoría"
+PLAYER_TYPE = "Jugador"
+SOCIO_TYPE = "Socio"
 
 
 class ReporteMorosidadInvalidoError(Exception):
     pass
 
 
+def parse_positive_int(value, message):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ReporteMorosidadInvalidoError(message) from None
+    if number <= 0:
+        raise ReporteMorosidadInvalidoError(message)
+    return number
+
+
+def parse_period_window(period_type, reference):
+    """Returns the first and last cuota period (AAAA-MM) the report covers, and its label."""
+    reference = reference.strip().upper()
+    try:
+        if period_type == "mensual":
+            year, month = (int(part) for part in reference.split("-"))
+            if not 1 <= month <= 12:
+                raise ValueError
+            start = end = (year, month)
+            label = f"{month:02d}/{year}"
+        elif period_type == "trimestral":
+            year, quarter = reference.split("-T")
+            year, quarter = int(year), int(quarter)
+            if not 1 <= quarter <= 4:
+                raise ValueError
+            start, end = (year, quarter * 3 - 2), (year, quarter * 3)
+            label = f"{quarter}° trimestre {year}"
+        else:
+            year = int(reference)
+            start, end = (year, 1), (year, 12)
+            label = str(year)
+    except ValueError:
+        raise ReporteMorosidadInvalidoError("La referencia del período no es válida.") from None
+    if not 1900 <= year <= 9999:
+        raise ReporteMorosidadInvalidoError("La referencia del período no es válida.")
+    return {
+        "start": f"{start[0]:04d}-{start[1]:02d}",
+        "end": f"{end[0]:04d}-{end[1]:02d}",
+        "label": f"{PERIOD_LABELS[period_type]} · {label}",
+    }
+
+
 def parse_delinquency_params(query_params):
     scope = query_params.get("alcance", "activos").strip().lower()
     if scope not in SCOPE_LABELS:
-        raise ReporteMorosidadInvalidoError("El alcance debe ser activos, filtrados, manual o socio.")
+        raise ReporteMorosidadInvalidoError("El alcance debe ser activos, categoria o socio.")
+    affiliation = query_params.get("tipo", "todos").strip().lower()
+    if affiliation not in AFFILIATION_LABELS:
+        raise ReporteMorosidadInvalidoError("El tipo debe ser todos, socios o jugadores.")
 
-    params = {"scope": scope}
-    if scope == "manual":
-        try:
-            socio_ids = [int(value) for value in query_params.get("socio_ids", "").split(",") if value]
-        except ValueError:
-            raise ReporteMorosidadInvalidoError("La selección de socios no es válida.") from None
-        if not socio_ids:
-            raise ReporteMorosidadInvalidoError("Debe seleccionar al menos un socio.")
-        params["socio_ids"] = socio_ids
-    elif scope == "socio":
-        try:
-            params["socio_id"] = int(query_params.get("socio_id", ""))
-        except ValueError:
-            raise ReporteMorosidadInvalidoError("Debe indicar un socio válido.") from None
-    elif scope == "filtrados":
-        params["query"] = query_params.get("q", "").strip()
-        params["category"] = query_params.get("categoria", "").strip()
+    params = {"scope": scope, "affiliation": affiliation}
+    if scope == "socio":
+        params["socio_id"] = parse_positive_int(query_params.get("socio_id"), "Debe indicar un socio válido.")
+    elif scope == "categoria":
+        params["category_id"] = parse_positive_int(query_params.get("categoria_id"), "Debe indicar una categoría válida.")
+
+    period_type = query_params.get("periodo", "").strip().lower()
+    if period_type:
+        if period_type not in PERIOD_LABELS:
+            raise ReporteMorosidadInvalidoError("El período debe ser mensual, trimestral o anual.")
+        params["period"] = parse_period_window(period_type, query_params.get("referencia", ""))
     return params
 
 
-def filter_socios(scope, socio_ids=None, socio_id=None, query="", category=""):
+def filter_socios(scope, socio_id=None, category_id=None, affiliation="todos"):
     socios = Socio.objects.select_related(
         "persona",
         "estado_administrativo",
         "jugador__categoria",
         "cuenta_corriente",
     )
-    if scope == "activos":
-        return socios.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-    if scope == "manual":
-        return socios.filter(socio_id__in=socio_ids)
     if scope == "socio":
-        return socios.filter(socio_id=socio_id)
+        socios = socios.filter(socio_id=socio_id)
+    else:
+        socios = socios.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
+    if scope == "categoria":
+        socios = socios.filter(jugador__categoria_id=category_id)
 
-    for word in query.split():
-        condition = (
-            Q(persona__nombre__icontains=word)
-            | Q(persona__apellido__icontains=word)
-            | Q(persona__dni__icontains=word)
-        )
-        if word.isdigit():
-            condition |= Q(numero_socio=int(word))
-        socios = socios.filter(condition)
-
-    if category.lower() == NO_CATEGORY.lower():
+    if affiliation == "socios":
         socios = socios.filter(jugador__isnull=True)
-    elif category:
-        socios = socios.filter(jugador__categoria__nombre__iexact=category)
+    elif affiliation == "jugadores":
+        socios = socios.filter(jugador__isnull=False)
     return socios
 
 
-def overdue_cuotas_by_account(socios):
-    overdue = list(
-        Cuota.objects.filter(
-            movimiento__cuenta_corriente__socio__in=[socio.pk for socio in socios],
-            estado_cuota__in=OVERDUE_CUOTA_STATES,
-        )
-        .select_related("movimiento")
+def overdue_cuotas_by_account(socios, period=None):
+    overdue = Cuota.objects.filter(
+        movimiento__cuenta_corriente__socio__in=[socio.pk for socio in socios],
+        estado_cuota__in=OVERDUE_CUOTA_STATES,
     )
+    if period:
+        overdue = overdue.filter(periodo__gte=period["start"], periodo__lte=period["end"])
+    overdue = list(overdue.select_related("movimiento").prefetch_related("items"))
     pending = pending_amounts(overdue)
     by_account = {}
     for cuota in overdue:
@@ -100,14 +140,23 @@ def count_by_state(cuotas, state):
 
 def report_row(socio, cuotas, pending, today):
     player = getattr(socio, "jugador", None)
+    debt = sum((pending[cuota.pk] for cuota in cuotas), Decimal("0.00"))
+    late_fees = sum(
+        (min(unpaid_late_fees(cuota, list(cuota.items.all()), pending[cuota.pk]), pending[cuota.pk]) for cuota in cuotas),
+        Decimal("0.00"),
+    )
     return {
         "socio_id": socio.socio_id,
+        "jugador_id": player.jugador_id if player else None,
         "numero_socio": socio.numero_socio,
         "nombre": socio.persona.nombre,
         "apellido": socio.persona.apellido,
         "dni": socio.persona.dni,
-        "categoria_deportiva": player.categoria.nombre if player else NO_CATEGORY,
-        "monto_adeudado": sum((pending[cuota.pk] for cuota in cuotas), Decimal("0.00")),
+        "tipo": PLAYER_TYPE if player else SOCIO_TYPE,
+        "categoria_deportiva": player.categoria.nombre if player and player.categoria else NO_CATEGORY,
+        "monto_adeudado": debt,
+        "capital": debt - late_fees,
+        "recargos": late_fees,
         "cuotas_vencidas": len(cuotas),
         "cuotas_vencidas_1": count_by_state(cuotas, EstadoCuotaChoices.VENCIDA_1),
         "cuotas_vencidas_2": count_by_state(cuotas, EstadoCuotaChoices.VENCIDA_2),
@@ -115,10 +164,36 @@ def report_row(socio, cuotas, pending, today):
     }
 
 
-def delinquency_report(scope, **filters):
+def most_affected_category(rows):
+    debt_by_category = {}
+    for row in rows:
+        if row["tipo"] == PLAYER_TYPE and row["categoria_deportiva"] != NO_CATEGORY:
+            category = row["categoria_deportiva"]
+            debt_by_category[category] = debt_by_category.get(category, Decimal("0.00")) + row["monto_adeudado"]
+    if not debt_by_category:
+        return None
+    name, amount = max(debt_by_category.items(), key=lambda item: item[1])
+    return {"nombre": name, "monto": amount}
+
+
+def delinquency_percentage(delinquent, roster):
+    if not roster:
+        return Decimal("0.0")
+    return (Decimal(delinquent * 100) / Decimal(roster)).quantize(Decimal("0.1"))
+
+
+def scope_label(scope, category_id=None, **_):
+    if scope == "categoria":
+        category = Categoria.objects.filter(pk=category_id).first()
+        if category:
+            return f"Categoría {category.nombre}"
+    return SCOPE_LABELS[scope]
+
+
+def delinquency_report(scope, period=None, **filters):
     today = timezone.localdate()
     socios = list(filter_socios(scope, **filters).order_by("persona__apellido", "persona__nombre"))
-    cuotas_by_account, pending = overdue_cuotas_by_account(socios)
+    cuotas_by_account, pending = overdue_cuotas_by_account(socios, period)
     # Overdue cuotas a socio needs to count as delinquent
     threshold = ConfiguracionGeneral.load().cuotas_vencidas_morosidad
 
@@ -136,7 +211,13 @@ def delinquency_report(scope, **filters):
     return {
         "filas": rows,
         "fecha": timezone.localtime(),
-        "alcance": SCOPE_LABELS[scope],
+        "alcance": scope_label(scope, **filters),
+        "tipo": AFFILIATION_LABELS[filters.get("affiliation", "todos")],
+        "periodo": period["label"] if period else "Todos los períodos",
         "sin_cuenta": without_account,
         "cuotas_vencidas_minimas": threshold,
+        "padron": len(socios),
+        "monto_total": sum((row["monto_adeudado"] for row in rows), Decimal("0.00")),
+        "porcentaje_morosidad": delinquency_percentage(len(rows), len(socios)),
+        "categoria_mas_afectada": most_affected_category(rows),
     }
