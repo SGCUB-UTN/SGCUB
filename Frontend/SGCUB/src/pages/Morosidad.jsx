@@ -96,8 +96,8 @@ function Morosidad() {
       />
       {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <section className={PANEL_CLASS} aria-labelledby="morosidad-filters-title">
-        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={HEADING_CLASS} />
+      <section className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm relative z-20" aria-labelledby="morosidad-filters-title">
+        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={`${HEADING_CLASS} rounded-t-lg`} />
         <div className={SECTION_CLASS}>
           <MorosidadFilters
             filters={filters}

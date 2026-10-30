@@ -45,13 +45,17 @@ def total_row(rows):
 
 
 def summary_text(report):
+    monto_total = report.get("monto_total", Decimal("0.00"))
+    padron = report.get("padron", len(report.get("filas", [])))
+    porcentaje = report.get("porcentaje_morosidad", Decimal("0.00"))
+    categorias = report.get("categorias_afectadas", [])
     parts = [
-        f"Monto total adeudado: {format_amount(report['monto_total'])}",
-        f"Morosos: {len(report['filas'])} de {report['padron']}",
-        f"Morosidad: {report['porcentaje_morosidad']}%".replace(".", ","),
+        f"Monto total adeudado: {format_amount(monto_total)}",
+        f"Morosos: {len(report.get('filas', []))} de {padron}",
+        f"Morosidad: {porcentaje}%".replace(".", ","),
     ]
-    if report["categorias_afectadas"]:
-        category = report["categorias_afectadas"][0]
+    if categorias:
+        category = categorias[0]
         parts.append(f"Categoría más afectada: {category['nombre']} ({format_amount(category['monto'])})")
     return " · ".join(parts)
 
@@ -63,12 +67,14 @@ def render_delinquency_pdf(report):
 
     width = PAGE_SIZE[0] - 2 * MARGIN
     rows = report["filas"]
+    tipo = report.get("tipo", "Todos")
+    periodo = report.get("periodo", "Todos los períodos")
     story = [
         Paragraph(escape(club_name()), subtitle),
         Paragraph("Reporte de morosidad", title),
         Paragraph(escape(
             f"Generado el {report['fecha']:%d/%m/%Y %H:%M} · Alcance: {report['alcance']} · "
-            f"Tipo: {report['tipo']} · Período: {report['periodo']}"
+            f"Tipo: {tipo} · Período: {periodo}"
         ), subtitle),
         Spacer(1, 2 * mm),
         Paragraph(escape(summary_text(report)), styles["Normal"]),

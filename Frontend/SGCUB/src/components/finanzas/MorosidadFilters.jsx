@@ -15,6 +15,11 @@ function SelectedSocio({ socio, onClear }) {
   return (
     <span className="inline-flex items-center gap-2 h-10 pl-3 pr-1 bg-surface-container-lowest border border-outline-variant/40 rounded text-sm">
       <span className="font-semibold text-on-surface">{socio.apellido}, {socio.nombre}</span>
+      {socio.es_jugador && (
+        <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+          Jugador
+        </span>
+      )}
       <span className="text-on-surface-variant">DNI {formatDni(socio.dni)}</span>
       <button
         type="button"
@@ -68,7 +73,11 @@ function MorosidadFilters({ filters, onChange, categorias, socio, onSocioChange 
         {filters.alcance === 'socio' && (
           socio
             ? <SelectedSocio socio={socio} onClear={() => onSocioChange(null)} />
-            : <div className="w-full sm:w-80"><SocioPicker compact onSelect={onSocioChange} /></div>
+            : (
+              <div className="w-full sm:w-80">
+                <SocioPicker compact placeholder="Buscar socio o jugador..." onSelect={onSocioChange} />
+              </div>
+            )
         )}
       </div>
 
