@@ -11,7 +11,7 @@ const MODAL_Z_INDEX = 300
 
 const DANGER_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-error hover:bg-error/90 text-on-error shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 
-function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessage, onConfirm, onCancel }) {
+function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessage, authorizerLabel, authorizerError, withReason, onConfirm, onCancel }) {
   const [authorizer, setAuthorizer] = useState('')
   const [reason, setReason] = useState('')
   const [showErrors, setShowErrors] = useState(false)
@@ -19,8 +19,8 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
   const [submitError, setSubmitError] = useState('')
 
   const errors = {
-    authorizer: !authorizer ? 'Elegí quién autoriza.' : '',
-    reason: !reason.trim() ? 'Indicá el motivo.' : '',
+    authorizer: !authorizer ? authorizerError : '',
+    reason: withReason && !reason.trim() ? 'Indicá el motivo.' : '',
   }
 
   const submit = async (event) => {
@@ -42,27 +42,29 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
     <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
       <div className="text-base text-on-surface-variant">{description}</div>
 
-      <Campo id="authorization-authorizer" label="Autorizado por" requerido error={showErrors ? errors.authorizer : ''}>
+      <Campo id="authorization-authorizer" label={authorizerLabel} requerido error={showErrors ? errors.authorizer : ''}>
         <AuthorizerSelect id="authorization-authorizer" value={authorizer} onChange={setAuthorizer} invalid={showErrors && Boolean(errors.authorizer)} />
       </Campo>
 
-      <Campo
-        id="authorization-reason"
-        label="Motivo"
-        requerido
-        extra={<span className="text-sm text-outline font-normal">{reason.length}/{REASON_MAX_LENGTH}</span>}
-        error={showErrors ? errors.reason : ''}
-      >
-        <textarea
+      {withReason && (
+        <Campo
           id="authorization-reason"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          maxLength={REASON_MAX_LENGTH}
-          rows={3}
-          aria-invalid={(showErrors && Boolean(errors.reason)) || undefined}
-          className={claseInput(showErrors && Boolean(errors.reason), 'h-auto py-2.5 resize-none')}
-        />
-      </Campo>
+          label="Motivo"
+          requerido
+          extra={<span className="text-sm text-outline font-normal">{reason.length}/{REASON_MAX_LENGTH}</span>}
+          error={showErrors ? errors.reason : ''}
+        >
+          <textarea
+            id="authorization-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={REASON_MAX_LENGTH}
+            rows={3}
+            aria-invalid={(showErrors && Boolean(errors.reason)) || undefined}
+            className={claseInput(showErrors && Boolean(errors.reason), 'h-auto py-2.5 resize-none')}
+          />
+        </Campo>
+      )}
 
       {submitError && (
         <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
@@ -91,7 +93,21 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
   )
 }
 
-function AuthorizationModal({ opened, title, description, confirmLabel, confirmIcon = 'block', errorMessage = 'No se pudo completar la operación.', onConfirm, onClose }) {
+// Confirms a sensitive operation asking who authorizes it (or who is responsible for it) and, unless
+// `withReason` is false, why. `onConfirm` receives { motivo, autorizado_por }.
+function AuthorizationModal({
+  opened,
+  title,
+  description,
+  confirmLabel,
+  confirmIcon = 'block',
+  errorMessage = 'No se pudo completar la operación.',
+  authorizerLabel = 'Autorizado por',
+  authorizerError = 'Elegí quién autoriza.',
+  withReason = true,
+  onConfirm,
+  onClose,
+}) {
   return (
     <Modal
       opened={opened}
@@ -106,6 +122,9 @@ function AuthorizationModal({ opened, title, description, confirmLabel, confirmI
           confirmLabel={confirmLabel}
           confirmIcon={confirmIcon}
           errorMessage={errorMessage}
+          authorizerLabel={authorizerLabel}
+          authorizerError={authorizerError}
+          withReason={withReason}
           onConfirm={onConfirm}
           onCancel={onClose}
         />

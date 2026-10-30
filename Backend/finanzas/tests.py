@@ -30,6 +30,7 @@ from padron.models import (
 )
 from .generators import GeneradorItemsCuota
 from .models import (
+	AccionAuditoriaChoices,
 	Beca,
 	Comprobante,
 	ConceptoMovimiento,
@@ -37,6 +38,7 @@ from .models import (
 	CuentaCorriente,
 	Cuota,
 	DetalleImputacion,
+	Devolucion,
 	EjecucionTareaCuota,
 	EstadoBecaChoices,
 	EstadoItemCuotaChoices,
@@ -46,11 +48,11 @@ from .models import (
 	Imputacion,
 	ItemCuota,
 	ItemPago,
-	MedioDePagoChoices,
 	MedioPago,
 	MovimientoCuenta,
 	OrigenEjecucionChoices,
 	Pago,
+	RegistroAuditoria,
 	SecuenciaComprobante,
 	TipoTareaCuotaChoices,
 )
@@ -60,6 +62,10 @@ from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
+	assign_benefit,
+	cancel_scholarship,
+	create_manual_refund,
+	register_income,
 	create_cuota,
 	cuota_state,
 	finish_expired_scholarships,
@@ -68,10 +74,11 @@ from .services import (
 	next_receipt_number,
 	pending_amounts,
 	register_payment,
+	revert_payment,
 	sync_cuota_charge,
+	update_scholarship,
 )
 from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
-from .views import _build_financial_report
 
 
 def crear_socio(dni, socio_inactivo=False, con_jugador=False, jugador_inactivo=False):
@@ -99,12 +106,8 @@ def crear_socio(dni, socio_inactivo=False, con_jugador=False, jugador_inactivo=F
 	return Socio.objects.get(pk=socio.pk)
 
 
-def account_for(socio, balance=None):
-	account = CuentaCorriente.objects.get(socio=socio)
-	if balance is not None:
-		account.saldo = balance
-		account.save(update_fields=["saldo"])
-	return account
+def account_for(socio):
+	return CuentaCorriente.objects.get(socio=socio)
 
 
 def historical_account_id(apps, dni):
@@ -388,7 +391,6 @@ class ActualizacionCuotasPorConfiguracionTests(APITestCase):
 		cuota.refresh_from_db()
 		cuota.movimiento.refresh_from_db()
 		self.assertEqual(cuota.movimiento.monto, Decimal("3000.00"))
-		self.assertEqual(cuota.movimiento.cuenta_corriente.saldo, Decimal("-3000.00"))
 		self.assertEqual(
 			sorted(cuota.items.values_list("concepto", "monto")),
 			[("CuotaDeportiva", Decimal("1800.00")), ("CuotaSocial", Decimal("1200.00"))],
@@ -637,11 +639,11 @@ class ConceptosMovimientoTests(APITestCase):
 	def setUp(self):
 		self.client.force_authenticate(user=get_user_model().objects.create_user(username="caja"))
 
-	def crear(self, nombre, origen="IngresoManual"):
+	def crear(self, nombre, origen="Ingreso"):
 		return self.client.post(reverse("concepto-movimiento-list"), {"nombre": nombre, "origen": origen}, format="json")
 
 	def test_lista_los_conceptos_iniciales_filtrados_por_origen(self):
-		response = self.client.get(reverse("concepto-movimiento-list"), {"origen": "IngresoManual"})
+		response = self.client.get(reverse("concepto-movimiento-list"), {"origen": "Ingreso"})
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(
@@ -654,25 +656,26 @@ class ConceptosMovimientoTests(APITestCase):
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(response.data["nombre"], "Rifa anual")
-		self.assertTrue(ConceptoMovimiento.objects.filter(nombre="Rifa anual", origen="IngresoManual").exists())
+		self.assertTrue(ConceptoMovimiento.objects.filter(nombre="Rifa anual", origen="Ingreso").exists())
 
 	def test_alta_repetida_devuelve_el_concepto_existente(self):
-		existente = ConceptoMovimiento.objects.get(nombre="Donación", origen="IngresoManual")
+		existente = ConceptoMovimiento.objects.get(nombre="Donación", origen="Ingreso")
 
 		# Sin acento y en mayúsculas debe devolver el mismo existente
 		response = self.crear("DONACION")
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["concepto_movimiento_id"], existente.pk)
-		self.assertEqual(ConceptoMovimiento.objects.filter(origen="IngresoManual").count(), 3)
+		self.assertEqual(ConceptoMovimiento.objects.filter(origen="Ingreso").count(), 3)
 
 	def test_el_mismo_nombre_puede_existir_en_otro_origen(self):
-		response = self.crear("Donación", origen="Egreso")
+		response = self.crear("Donación", origen="DevolucionManual")
 
 		self.assertEqual(response.status_code, 201, response.data)
 
 	def test_rechaza_nota_de_credito_y_nombre_vacio(self):
 		self.assertEqual(self.crear("Ajuste", origen="NotaCredito").status_code, 400)
+		self.assertEqual(self.crear("Ajuste", origen="Egreso").status_code, 400)
 		self.assertEqual(self.crear("   ").status_code, 400)
 
 	def test_eliminar_concepto_no_utilizado(self):
@@ -691,222 +694,167 @@ class ConceptosMovimientoTests(APITestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertTrue(ConceptoMovimiento.objects.filter(pk=otro.pk).exists())
 
-	def test_no_se_puede_eliminar_un_concepto_utilizado_en_movimientos(self):
+	def test_no_se_puede_eliminar_un_concepto_utilizado(self):
 		socio = crear_socio("49000000")
-		cuenta = account_for(socio)
-		MovimientoCuenta.objects.create(
-			cuenta_corriente=cuenta,
-			tipo_movimiento="Abono",
-			origen_manual="IngresoManual",
-			concepto="Venta de indumentaria",
-			monto=Decimal("500.00"),
-			fecha=timezone.now(),
-		)
-		concepto = ConceptoMovimiento.objects.get(nombre="Venta de indumentaria")
+		register_income(socio.pk, "Venta de indumentaria", [{"medio_de_pago": "Efectivo", "monto": Decimal("500.00")}], Decimal("500.00"))
+		create_manual_refund(socio.pk, "Devolución por transferencia duplicada", Decimal("100.00"), "Efectivo", "Tesorera")
 
-		response = self.client.delete(reverse("concepto-movimiento-detail", args=[concepto.pk]))
-
-		self.assertEqual(response.status_code, 400)
-		self.assertTrue(ConceptoMovimiento.objects.filter(pk=concepto.pk).exists())
+		for nombre, origen in (("Venta de indumentaria", "Ingreso"), ("Devolución por transferencia duplicada", "DevolucionManual")):
+			with self.subTest(nombre=nombre):
+				concepto = ConceptoMovimiento.objects.get(nombre=nombre, origen=origen)
+				response = self.client.delete(reverse("concepto-movimiento-detail", args=[concepto.pk]))
+				self.assertEqual(response.status_code, 400)
+				self.assertTrue(ConceptoMovimiento.objects.filter(pk=concepto.pk).exists())
 
 
-class MovimientosManualesTests(APITestCase):
+class IngresosTests(APITestCase):
 	def setUp(self):
-		self.usuario = get_user_model().objects.create_user(username="caja")
-		self.client.force_authenticate(user=self.usuario)
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="caja"))
 		self.socio = crear_socio("49000001")
-		account_for(self.socio)
+		self.cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "50000.00")
 
-	def test_registra_ingreso_manual_y_actualiza_saldo(self):
-		response = self.client.post(reverse("movimiento-cuenta-manual"), {
+	def registrar(self, monto="10000.00", medios=None, concepto="Venta de indumentaria"):
+		return self.client.post(reverse("registrar-ingreso"), {
 			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Donación",
-			"monto": "2500.00",
-			"medio_de_pago": "Transferencia",
+			"concepto": concepto,
+			"monto_total": monto,
+			"medios": medios or [{"medio_de_pago": "Transferencia", "monto": monto}],
 		}, format="json")
+
+	def deuda(self):
+		return self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["total_adeudado"]
+
+	def test_registra_un_ingreso_con_recibo_sin_tocar_la_deuda(self):
+		response = self.registrar()
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(Decimal(response.data["monto"]), Decimal("2500.00"))
-		self.assertEqual(response.data["origen_manual"], "IngresoManual")
-		self.assertEqual(account_for(self.socio).saldo, Decimal("2500.00"))
+		self.assertTrue(response.data["es_ingreso"])
+		self.assertEqual(response.data["concepto"], "Venta de indumentaria")
+		self.assertEqual(response.data["periodos"], [])
+		movimiento = MovimientoCuenta.objects.get(pago_id=response.data["pago"])
+		self.assertEqual(movimiento.tipo_movimiento, "Ingreso")
+		self.assertEqual(movimiento.cuenta_corriente.socio, self.socio)
+		self.assertFalse(Imputacion.objects.exists())
+		self.assertEqual(self.deuda(), Decimal("50000.00"))
+		self.cuota.refresh_from_db()
+		self.assertEqual(self.cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
 
-	def test_registra_nota_de_credito_revirtiendo_movimiento(self):
-		original = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Transferencia duplicada",
-			"monto": "1000.00",
-			"medio_de_pago": "Transferencia",
-		}, format="json")
-		self.assertEqual(original.status_code, 201, original.data)
+	def test_admite_varios_medios_dinamicos(self):
+		codigo = self.client.post(reverse("medio-pago-list"), {"nombre": "Cuenta DNI"}, format="json").data["codigo"]
 
-		response = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución de transferencia duplicada",
-			"monto": "1000.00",
-			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
-		}, format="json")
+		response = self.registrar("3000.00", [
+			{"medio_de_pago": codigo, "monto": "1000.00"},
+			{"medio_de_pago": "Efectivo", "monto": "2000.00"},
+		])
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(response.data["movimiento_revertido"], original.data["movimiento_cuenta_id"])
-		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
+		self.assertEqual(
+			sorted((item["medio_de_pago"], item["monto"]) for item in response.data["pago_detalle"]["items_pago"]),
+			[(codigo, "1000.00"), ("Efectivo", "2000.00")],
+		)
 
-	def test_no_permite_revertir_otro_socio_ni_revertir_dos_veces(self):
-		original = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Donación",
-			"monto": "100.00",
-		}, format="json")
-		otra_persona = crear_socio("49000002")
-		account_for(otra_persona)
-		response = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": otra_persona.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución inválida",
-			"monto": "100.00",
-			"movimiento_revertido_id": original.data["movimiento_cuenta_id"],
+	def test_el_medio_de_pago_es_obligatorio(self):
+		response = self.client.post(reverse("registrar-ingreso"), {
+			"socio_id": self.socio.pk, "concepto": "Donación", "monto_total": "100.00", "medios": [],
 		}, format="json")
 
 		self.assertEqual(response.status_code, 400)
-		self.assertIn("socio", response.data["detail"].lower())
+		self.assertIn("medios", response.data)
 
-	def test_registra_egreso_devolucion_directa_sin_afectar_cuotas(self):
-		cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "1000.00")
-		response = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "Egreso",
-			"concepto": "Devolución por transferencia duplicada",
-			"monto": "1000.00",
-			"medio_de_pago": "Transferencia",
+	def test_los_medios_deben_sumar_el_total(self):
+		response = self.registrar("100.00", [{"medio_de_pago": "Efectivo", "monto": "90.00"}])
+
+		self.assertEqual(response.status_code, 400)
+
+	def test_el_recibo_es_el_de_cuotas_con_el_concepto_en_lugar_de_periodos(self):
+		comprobante = self.registrar().data
+
+		pdf = self.client.get(reverse("comprobante-pdf", args=[comprobante["comprobante_id"]]))
+
+		self.assertEqual(pdf.status_code, 200)
+		self.assertIn(b"RECIBO X", pdf.content)
+		self.assertIn(b"Venta de indumentaria", pdf.content)
+		self.assertNotIn(b"Per\xc3\xadodos abonados", pdf.content)
+		self.assertIn(f"comprobante-X-{comprobante['numero']:08d}.pdf", pdf["Content-Disposition"])
+
+	def test_comparte_la_numeracion_de_los_recibos_de_cuotas(self):
+		primero = self.registrar().data["numero"]
+		segundo = self.registrar().data["numero"]
+
+		self.assertEqual(segundo, primero + 1)
+
+	def test_anular_un_ingreso_no_toca_la_deuda_y_permite_devolver_el_dinero(self):
+		comprobante = self.registrar().data
+
+		response = self.client.post(reverse("revertir-pago", args=[comprobante["pago"]]), {
+			"motivo": "Talle equivocado", "responsable": "Tesorera",
 		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], "Anulado")
+		self.assertEqual(response.data["anulacion"]["responsable"], "Tesorera")
+		self.assertEqual(self.deuda(), Decimal("50000.00"))
+		nota = self.client.post(reverse("emitir-nota-credito", args=[comprobante["comprobante_id"]]), {
+			"monto": "10000.00", "medio_de_pago": "Efectivo", "motivo": "Devolución de la compra", "responsable": "Tesorera",
+		}, format="json")
+		self.assertEqual(nota.status_code, 201, nota.data)
+
+
+class DevolucionesManualesTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="caja"))
+		self.socio = crear_socio("49000003")
+		self.cuota = crear_cuota_con_cargo(account_for(self.socio), "2026-10", "20000.00")
+
+	def devolver(self, **extra):
+		datos = {
+			"socio_id": self.socio.pk,
+			"concepto": "Devolución por error en monto transferido",
+			"monto": "180000.00",
+			"medio_de_pago": "Transferencia",
+			"responsable": "Tesorera",
+		}
+		datos.update(extra)
+		return self.client.post(reverse("devolucion-list"), datos, format="json")
+
+	def test_registra_la_devolucion_sin_afectar_deuda_ni_ingresos(self):
+		response = self.devolver()
+
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(response.data["origen_manual"], "Egreso")
-		self.assertEqual(response.data["concepto"], "Devolución por transferencia duplicada")
-		cuota.refresh_from_db()
-		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
-		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
+		self.assertEqual(response.data["tipo"], "Manual")
+		self.assertEqual(response.data["codigo"], "DEV-X 00000001")
+		self.assertEqual(response.data["responsable"], "Tesorera")
+		self.assertEqual(response.data["usuario_nombre"], "caja")
+		self.assertIsNone(response.data["comprobante_anulado"])
+		self.assertFalse(Pago.objects.exists())
+		self.assertEqual(MovimientoCuenta.objects.count(), 1)
+		self.cuota.refresh_from_db()
+		self.assertEqual(self.cuota.estado_cuota, EstadoCuotaChoices.EN_FECHA)
 
-	def test_movimientos_manuales_impactan_en_resumen_financiero_por_medio(self):
-		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Donación",
-			"monto": "3000.00",
-			"medio_de_pago": "Transferencia",
-		}, format="json")
-		self.assertEqual(ingreso.status_code, 201)
+	def test_el_responsable_y_el_medio_son_obligatorios(self):
+		self.assertEqual(self.devolver(responsable="").status_code, 400)
+		self.assertEqual(self.devolver(medio_de_pago="Inexistente").status_code, 400)
 
-		self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución parcial",
-			"monto": "500.00",
-			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
-		}, format="json")
+	def test_genera_su_comprobante_con_el_mismo_formato(self):
+		devolucion = self.devolver().data
 
-		self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "Egreso",
-			"concepto": "Reintegro de gastos",
-			"monto": "200.00",
-			"medio_de_pago": "Efectivo",
-		}, format="json")
+		pdf = self.client.get(reverse("devolucion-pdf", args=[devolucion["devolucion_id"]]))
 
-		resumen = self.client.get(reverse("resumen-financiero"))
-		self.assertEqual(resumen.status_code, 200)
-		self.assertEqual(resumen.data["transferencia_bancaria"], Decimal("2500.00"))
-		self.assertEqual(resumen.data["pago_efectivo"], Decimal("-200.00"))
+		self.assertEqual(pdf.status_code, 200)
+		self.assertIn(b"DEVOLUCI", pdf.content)
+		self.assertIn(b"DEV-X 00000001", pdf.content)
+		self.assertIn(b"Tesorera", pdf.content)
+		self.assertIn("devolucion-00000001.pdf", pdf["Content-Disposition"])
 
-	def test_genera_pdf_de_nota_de_credito_y_movimiento_manual(self):
-		crear_cuota_con_cargo(account_for(self.socio), "2026-10", "2000.00")
+	def test_lista_filtrando_por_socio_y_tipo(self):
+		self.devolver()
+		otro = crear_socio("49000004")
+		create_manual_refund(otro.pk, "Otra devolución", Decimal("10.00"), "Efectivo", "Tesorera")
 
-		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Donación · Aporte extraordinario",
-			"monto": "1500.00",
-			"medio_de_pago": "Transferencia",
-		}, format="json")
-		self.assertEqual(ingreso.status_code, 201)
-		self.assertEqual(ingreso.data["numero_comprobante"], 1)
+		response = self.client.get(reverse("devolucion-list"), {"socio_id": self.socio.pk, "tipo": "Manual"})
 
-		nota_credito = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución total de operación · Ref. #" + str(ingreso.data["numero_comprobante"]),
-			"monto": "1500.00",
-			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
-		}, format="json")
-		self.assertEqual(nota_credito.status_code, 201)
-		self.assertEqual(nota_credito.data["numero_comprobante"], 2)
-
-		pdf_nc = self.client.get(reverse("movimiento-cuenta-pdf", args=[nota_credito.data["movimiento_cuenta_id"]]))
-		self.assertEqual(pdf_nc.status_code, 200)
-		self.assertEqual(pdf_nc["Content-Type"], "application/pdf")
-		self.assertIn("nota-credito-X-00000002.pdf", pdf_nc["Content-Disposition"])
-		self.assertIn(b"NOTA DE CR", pdf_nc.content)
-		self.assertIn(b"NC-X 00000002", pdf_nc.content)
-
-		pdf_ing = self.client.get(reverse("movimiento-cuenta-pdf", args=[ingreso.data["movimiento_cuenta_id"]]))
-		self.assertEqual(pdf_ing.status_code, 200)
-		self.assertIn(b"REVERTIDO POR NOTA DE CR", pdf_ing.content)
-		self.assertIn(b"NC-X 00000002", pdf_ing.content)
-
-	def test_permite_multiples_notas_de_credito_parciales_hasta_el_total(self):
-		ingreso = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Abono",
-			"origen": "IngresoManual",
-			"concepto": "Venta de indumentaria · Camiseta y short",
-			"monto": "1000.00",
-			"medio_de_pago": "Efectivo",
-		}, format="json")
-		self.assertEqual(ingreso.status_code, 201)
-
-		nc_1 = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución parcial · Camiseta",
-			"monto": "600.00",
-			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
-		}, format="json")
-		self.assertEqual(nc_1.status_code, 201, nc_1.data)
-
-		nc_exceso = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución excedida",
-			"monto": "450.00",
-			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
-		}, format="json")
-		self.assertEqual(nc_exceso.status_code, 400)
-
-		nc_2 = self.client.post(reverse("movimiento-cuenta-manual"), {
-			"socio_id": self.socio.pk,
-			"tipo": "Cargo",
-			"origen": "NotaCredito",
-			"concepto": "Devolución parcial · Short",
-			"monto": "400.00",
-			"movimiento_revertido_id": ingreso.data["movimiento_cuenta_id"],
-		}, format="json")
-		self.assertEqual(nc_2.status_code, 201, nc_2.data)
-		self.assertEqual(account_for(self.socio).saldo, Decimal("0.00"))
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)
 
 
 class BecaModeloTests(TestCase):
@@ -998,7 +946,6 @@ class GeneracionCuotasMensualesTests(TestCase):
 		self.assertEqual(cuota.items.count(), 2)
 		self.assertEqual(cuota.movimiento.tipo_movimiento, "Cargo")
 		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(cuenta.saldo, Decimal("-7500.00"))
 
 	def test_generar_periodo_pasado_crea_cuotas_vencidas_con_recargo(self):
 		configuracion = ConfiguracionFinanciera.load()
@@ -1064,7 +1011,6 @@ class CuotaEndpointTests(APITestCase):
 		self.assertEqual(Decimal(str(response.data["monto_total"])), Decimal("2500.00"))
 		cuota = Cuota.objects.get(pk=response.data["cuota_id"])
 		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
 
 	def test_no_permite_dos_cuotas_del_mismo_periodo(self):
 		self.crear()
@@ -1120,7 +1066,6 @@ class CuotaEndpointTests(APITestCase):
 
 		self.assertEqual(response.status_code, 204)
 		self.assertFalse(MovimientoCuenta.objects.filter(cuota_id=cuota_id).exists())
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("0.00"))
 
 	def test_agregar_descuento_actualiza_cargo_y_saldo(self):
 		cuota_id = self.crear().data["cuota_id"]
@@ -1137,13 +1082,11 @@ class CuotaEndpointTests(APITestCase):
 		sync_cuota_charge(cuota)
 
 		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("2000.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2000.00"))
 
 		item.delete()
 		sync_cuota_charge(cuota)
 
 		self.assertEqual(MovimientoCuenta.objects.get(cuota_id=cuota_id).monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
 
 	def test_estado_de_cuenta_lista_cuotas_por_movimientos(self):
 		self.crear()
@@ -1155,93 +1098,23 @@ class CuotaEndpointTests(APITestCase):
 		self.assertEqual(response.data["cuotas"][0]["periodo"], "2026-10")
 
 
-class CorregirPagoTests(APITestCase):
+class RegistrosFinancierosNoBorrablesTests(APITestCase):
 	def setUp(self):
-		self.root = get_user_model().objects.create_user(username="tesorero")
-		self.client.force_authenticate(user=self.root)
-
-		persona = Persona.objects.create(nombre="Ana", apellido="Perez", dni="12345678")
-		socio = Socio.objects.create(persona=persona)
-		self.cuenta = account_for(socio, Decimal("100.00"))
-		self.cuota_original = crear_cuota_con_cargo(self.cuenta, "Original", "100.00", EstadoCuotaChoices.PAGA)
-		self.cuota_corregida = crear_cuota_con_cargo(self.cuenta, "Corregida", "50.00")
-
-		self.pago_original = Pago.objects.create(
-			usuario=self.root,
-			estado_pago="Acreditado",
-			fecha=timezone.make_aware(datetime(2026, 9, 30, 10, 0)),
-		)
-		ItemPago.objects.create(
-			pago=self.pago_original,
-			medio_de_pago="Efectivo",
-			monto=Decimal("100.00"),
-		)
-		self.comprobante_original = Comprobante.objects.create(
-			pago=self.pago_original,
-			fecha_emision=date(2026, 9, 30),
-			numero=next_receipt_number(),
-			monto_total=Decimal("100.00"),
-		)
-		self.movimiento_original = MovimientoCuenta.objects.create(
-			cuenta_corriente=self.cuenta,
-			pago=self.pago_original,
-			tipo_movimiento="Abono",
-			fecha="2026-09-30T12:00:00Z",
-			monto=Decimal("100.00"),
-			concepto="Pago de cuotas",
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		socio = crear_socio("12345678")
+		cuota = crear_cuota_con_cargo(account_for(socio), "2026-09", "100.00")
+		self.pago, self.comprobante = register_payment(
+			socio.pk, [cuota.pk], [{"medio_de_pago": "Efectivo", "monto": Decimal("100.00")}], Decimal("100.00"),
 		)
 
-	def test_crea_reemplazo_anula_original_y_conserva_trazabilidad(self):
-		response = self.client.post(
-			reverse("corregir-pago", args=[self.pago_original.pk]),
-			{
-				"motivo": "Se registró un monto incorrecto",
-				"cuota_ids": [self.cuota_corregida.pk],
-				"monto_total": "50.00",
-				"medios": [{"medio_de_pago": "Transferencia", "monto": "50.00"}],
-			},
-			format="json",
-		)
-
-		self.assertEqual(response.status_code, 201, response.data)
-		self.pago_original.refresh_from_db()
-		self.cuenta.refresh_from_db()
-		self.assertEqual(self.pago_original.estado_pago, "Anulado")
-		self.assertEqual(self.pago_original.motivo_anulacion, "Se registró un monto incorrecto")
-		self.comprobante_original.refresh_from_db()
-		self.assertEqual(self.comprobante_original.estado, "Anulado")
-		self.assertEqual(self.comprobante_original.reemplazado_por_id, response.data["comprobante"]["comprobante_id"])
-		self.assertEqual(response.data["usuario"], "tesorero")
-		detalle = self.client.get(reverse("comprobante-detail", args=[self.comprobante_original.pk])).data
-		self.assertEqual(detalle["estado"], "Anulado")
-		self.assertEqual(detalle["reemplazado_por_numero"], response.data["comprobante"]["numero"])
-		detalle_nuevo = self.client.get(reverse("comprobante-detail", args=[response.data["comprobante"]["comprobante_id"]])).data
-		self.assertEqual(detalle_nuevo["reemplaza_a_numero"], self.comprobante_original.numero)
-		self.assertIsNone(detalle_nuevo["reemplazado_por_numero"])
-		self.assertEqual(self.cuenta.saldo, Decimal("50.00"))
-		self.assertTrue(Comprobante.objects.filter(pk=self.comprobante_original.pk).exists())
-		self.assertEqual(response.data["pago"]["usuario"], self.root.pk)
-		self.assertIn(f"#{self.pago_original.pk}", response.data["pago"]["observacion"])
-		reversion = MovimientoCuenta.objects.get(movimiento_revertido=self.movimiento_original)
-		self.assertEqual(reversion.tipo_movimiento, "Cargo")
-		self.assertIsNone(reversion.pago_id)
-		self.assertEqual(
-			MovimientoCuenta.objects.get(pago_id=response.data["pago"]["pago_id"]).tipo_movimiento,
-			"Abono",
-		)
-		self.assertEqual(Cuota.objects.get(pk=self.cuota_corregida.pk).estado_cuota, EstadoCuotaChoices.PAGA)
-		imputacion = Imputacion.objects.get(movimiento_origen__pago_id=response.data["pago"]["pago_id"])
-		self.assertEqual(imputacion.movimiento_destino.cuota_id, self.cuota_corregida.pk)
-		self.assertEqual(imputacion.monto_aplicado, Decimal("50.00"))
-
-	def test_no_permite_borrar_pago_ni_comprobante_original(self):
-		pago_response = self.client.delete(reverse("pago-detail", args=[self.pago_original.pk]))
-		comprobante_response = self.client.delete(reverse("comprobante-detail", args=[self.comprobante_original.pk]))
+	def test_no_permite_borrar_pago_ni_comprobante(self):
+		pago_response = self.client.delete(reverse("pago-detail", args=[self.pago.pk]))
+		comprobante_response = self.client.delete(reverse("comprobante-detail", args=[self.comprobante.pk]))
 
 		self.assertEqual(pago_response.status_code, 405)
 		self.assertEqual(comprobante_response.status_code, 405)
-		self.assertTrue(Pago.objects.filter(pk=self.pago_original.pk).exists())
-		self.assertTrue(Comprobante.objects.filter(pk=self.comprobante_original.pk).exists())
+		self.assertTrue(Pago.objects.filter(pk=self.pago.pk).exists())
+		self.assertTrue(Comprobante.objects.filter(pk=self.comprobante.pk).exists())
 
 
 class PagoTestBase(APITestCase):
@@ -1249,7 +1122,7 @@ class PagoTestBase(APITestCase):
 		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
 		persona = Persona.objects.create(nombre="Juan", apellido="Paz", dni="56789012")
 		self.socio = Socio.objects.create(persona=persona)
-		self.cuenta = account_for(self.socio, Decimal("-2000.00"))
+		self.cuenta = account_for(self.socio)
 		self.septiembre = crear_cuota_con_cargo(self.cuenta, "2026-09", "1000.00")
 		self.agosto = crear_cuota_con_cargo(self.cuenta, "2026-08", "1000.00")
 
@@ -1279,7 +1152,6 @@ class RegistroPagoTests(PagoTestBase):
 		self.assertNotEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
 		self.assertEqual(self.aplicado(self.agosto), Decimal("400.00"))
 		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-1600.00"))
 
 	def test_segundo_pago_no_puede_superar_el_saldo_pendiente(self):
 		self.pagar([self.agosto], "400.00")
@@ -1341,26 +1213,20 @@ class RegistroPagoTests(PagoTestBase):
 		self.assertIn("medios", response.data)
 		self.assertFalse(Pago.objects.exists())
 
-	def test_correccion_sobre_la_misma_cuota_ignora_el_pago_original(self):
+	def test_volver_a_cobrar_tras_revertir_ignora_el_pago_anulado(self):
 		original = self.pagar([self.agosto], "1000.00")
+		self.client.post(reverse("revertir-pago", args=[original.data["pago"]["pago_id"]]), {
+			"motivo": "Monto mal cargado", "responsable": "Tesorera",
+		}, format="json")
 
-		response = self.client.post(
-			reverse("corregir-pago", args=[original.data["pago"]["pago_id"]]),
-			{
-				"motivo": "Monto mal cargado",
-				"cuota_ids": [self.agosto.pk],
-				"monto_total": "800.00",
-				"medios": [{"medio_de_pago": "Transferencia", "monto": "800.00"}],
-			},
-			format="json",
-		)
+		response = self.pagar([self.agosto], "800.00")
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.agosto.refresh_from_db()
 		self.assertNotEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
 		activo = Imputacion.objects.filter(
 			movimiento_destino__cuota=self.agosto,
-			movimiento_origen__reversion__isnull=True,
+			movimiento_origen__pago__estado_pago="Acreditado",
 		)
 		self.assertEqual(sum(activo.values_list("monto_aplicado", flat=True)), Decimal("800.00"))
 
@@ -1420,7 +1286,6 @@ class CondonacionMoraTests(PagoTestBase):
 		self.agosto.refresh_from_db()
 		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
 		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-1000.00"))
 		detalle = dict(DetalleImputacion.objects.values_list("concepto", "monto"))
 		self.assertEqual(detalle["Mora"], Decimal("200.00"))
 		self.assertEqual(detalle["CondonacionMora"], Decimal("-200.00"))
@@ -1456,7 +1321,6 @@ class CondonacionMoraTests(PagoTestBase):
 		self.assertFalse(self.condonaciones().exists())
 		self.assertFalse(Pago.objects.exists())
 		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-2200.00"))
 
 	def test_requiere_autorizante_y_motivo(self):
 		response = self.pagar(
@@ -1501,17 +1365,10 @@ class EstadoCuentaPendienteTests(PagoTestBase):
 		self.assertEqual(Decimal(str(cuotas[self.agosto.pk]["monto_pagado"])), Decimal("250.00"))
 
 
-class CorreccionPagoTests(PagoTestBase):
-	def corregir(self, pago_id, cuotas, monto, motivo="Cuota equivocada"):
+class ReversionPagoTests(PagoTestBase):
+	def revertir(self, pago_id, motivo="Se omitió un descuento", responsable="Tesorera", **extra):
 		return self.client.post(
-			reverse("corregir-pago", args=[pago_id]),
-			{
-				"motivo": motivo,
-				"cuota_ids": [cuota.pk for cuota in cuotas],
-				"monto_total": monto,
-				"medios": [{"medio_de_pago": "Transferencia", "monto": monto}],
-			},
-			format="json",
+			reverse("revertir-pago", args=[pago_id]), {"motivo": motivo, "responsable": responsable, **extra}, format="json",
 		)
 
 	def pendiente(self, cuota):
@@ -1519,63 +1376,343 @@ class CorreccionPagoTests(PagoTestBase):
 		fila = next(item for item in response.data["cuotas"] if item["cuota_id"] == cuota.pk)
 		return Decimal(str(fila["saldo_pendiente"]))
 
-	def test_cuotas_del_pago_original_vuelven_a_estar_pendientes(self):
-		original = self.pagar([self.agosto], "1000.00")
+	def test_revierte_el_pago_restaura_la_deuda_y_anula_el_comprobante(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
 
-		response = self.corregir(original.data["pago"]["pago_id"], [self.septiembre], "1000.00")
+		response = self.revertir(pago["pago_id"])
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], "Anulado")
+		self.assertEqual(response.data["anulacion"]["motivo"], "Se omitió un descuento")
+		self.assertEqual(response.data["anulacion"]["responsable"], "Tesorera")
+		self.assertEqual(response.data["anulacion"]["usuario"], "tesorero")
+		self.agosto.refresh_from_db()
+		self.assertNotEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.pendiente(self.agosto), Decimal("1000.00"))
+		pago_anulado = Pago.objects.get(pk=pago["pago_id"])
+		self.assertEqual(pago_anulado.estado_pago, "Anulado")
+		self.assertIsNotNone(pago_anulado.fecha_anulacion)
+		self.assertEqual(
+			RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.PAGO_REVERTIDO).responsable, "Tesorera",
+		)
+
+	def test_solo_se_puede_revertir_el_ultimo_pago_de_cuotas(self):
+		primero = self.pagar([self.agosto], "1000.00").data["pago"]
+		segundo = self.pagar([self.septiembre], "500.00").data["pago"]
+
+		self.assertEqual(self.revertir(primero["pago_id"]).status_code, 400)
+		self.assertEqual(self.revertir(segundo["pago_id"]).status_code, 200)
+		self.assertEqual(self.revertir(primero["pago_id"]).status_code, 200)
+		self.assertEqual(self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["comprobante_revertible_id"], None)
+
+	def test_indica_que_comprobante_se_puede_revertir(self):
+		primero = self.pagar([self.agosto], "1000.00").data["comprobante"]
+		segundo = self.pagar([self.septiembre], "500.00").data["comprobante"]
+		_, ingreso = register_income(self.socio.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		revertible = {
+			comprobante_id: self.client.get(reverse("comprobante-detail", args=[comprobante_id])).data["revertible"]
+			for comprobante_id in (primero["comprobante_id"], segundo["comprobante_id"], ingreso.pk)
+		}
+
+		self.assertEqual(estado["comprobante_revertible_id"], segundo["comprobante_id"])
+		self.assertEqual(revertible, {primero["comprobante_id"]: False, segundo["comprobante_id"]: True, ingreso.pk: True})
+
+	def test_lista_los_comprobantes_del_socio(self):
+		self.pagar([self.agosto], "1000.00")
+		otro = crear_socio("56789099")
+		register_income(otro.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+
+		response = self.client.get(reverse("comprobante-list"), {"socio_id": self.socio.pk})
+
+		self.assertEqual([item["socio"]["socio_id"] for item in response.data], [self.socio.pk])
+
+	def test_un_ingreso_posterior_no_impide_revertir_el_pago(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+		register_income(self.socio.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+
+		self.assertEqual(self.revertir(pago["pago_id"]).status_code, 200)
+
+	def test_no_permite_revertir_dos_veces(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+		self.revertir(pago["pago_id"])
+
+		self.assertEqual(self.revertir(pago["pago_id"]).status_code, 400)
+
+	def test_motivo_y_responsable_son_obligatorios(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		self.assertEqual(self.revertir(pago["pago_id"], motivo="").status_code, 400)
+		self.assertEqual(self.revertir(pago["pago_id"], responsable="").status_code, 400)
+
+	def test_aplica_los_recargos_de_los_vencimientos_ya_pasados(self):
+		ConfiguracionFinanciera.load().__class__.objects.update(valor_recargo_1=Decimal("100.00"))
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		self.assertEqual(self.revertir(pago["pago_id"]).status_code, 200)
+
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.agosto.recargos_aplicados, 2)
+		self.assertTrue(ItemCuota.objects.filter(cuota=self.agosto, concepto="Mora").exists())
+		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.VENCIDA_2)
+
+	def test_pago_inexistente_devuelve_404(self):
+		self.assertEqual(self.revertir(999999).status_code, 404)
+
+	def test_informa_las_cuotas_del_ultimo_pago(self):
+		self.pagar([self.agosto], "1000.00")
+		self.pagar([self.septiembre], "1000.00")
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+
+		self.assertEqual(estado["cuotas_revertibles"], [self.septiembre.pk])
+
+	def test_registra_en_la_auditoria_que_se_hara_con_el_dinero(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		self.assertEqual(self.revertir(pago["pago_id"], desenlace="NuncaIngreso").status_code, 200)
+
+		registro = RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.PAGO_REVERTIDO)
+		self.assertEqual(registro.detalle["desenlace"], "NuncaIngreso")
+		self.assertFalse(Devolucion.objects.exists())
+
+	def test_nota_de_credito_por_el_total_en_la_misma_operacion(self):
+		datos = self.pagar([self.agosto], "1000.00").data
+
+		response = self.revertir(datos["pago"]["pago_id"], desenlace="NotaCreditoTotal", medio_de_pago="Transferencia")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		nota = Devolucion.objects.get()
+		self.assertEqual(nota.tipo, "NotaCredito")
+		self.assertEqual(nota.comprobante_anulado_id, datos["comprobante"]["comprobante_id"])
+		self.assertEqual(nota.monto, Decimal("1000.00"))
+		self.assertEqual(nota.medio_de_pago, "Transferencia")
+		self.assertEqual(nota.responsable, "Tesorera")
+		self.assertEqual(len(response.data["notas_credito"]), 1)
+
+	def test_el_medio_de_devolucion_solo_va_con_la_nota_de_credito_por_el_total(self):
+		pago = self.pagar([self.agosto], "1000.00").data["pago"]
+
+		sin_medio = self.revertir(pago["pago_id"], desenlace="NotaCreditoTotal")
+		medio_de_mas = self.revertir(pago["pago_id"], desenlace="CobrarNuevamente", medio_de_pago="Efectivo")
+
+		self.assertEqual(sin_medio.status_code, 400)
+		self.assertEqual(medio_de_mas.status_code, 400)
+		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, "Acreditado")
+
+	def test_pago_parcial_es_revertible_e_informa_sus_cuotas(self):
+		resp = self.pagar([self.agosto], "400.00").data
+		pago_id = resp["pago"]["pago_id"]
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(estado["cuotas_revertibles"], [self.agosto.pk])
+
+		self.assertEqual(self.revertir(pago_id).status_code, 200)
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.pendiente(self.agosto), Decimal("1000.00"))
+
+	def test_pago_completo_y_siguiente_parcial_informa_ambas_cuotas_revertibles(self):
+		resp = self.pagar([self.agosto, self.septiembre], "1500.00").data
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(sorted(estado["cuotas_revertibles"]), sorted([self.agosto.pk, self.septiembre.pk]))
+
+
+class ReversionSaldoPorBeneficioTests(PagoTestBase):
+	def descontar(self, cuota, valor):
+		response = self.client.post(reverse("cuota-beneficio", args=[cuota.pk]), {
+			"tipo": "Descuento",
+			"modalidad": "MontoFijo",
+			"valor": valor,
+			"fecha_aplicacion": "2026-09-01",
+			"motivo": "Perdón del saldo",
+			"autorizado_por": "Tesorería",
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+		return ItemCuota.objects.get(pk=response.data["item"]["item_cuota_id"])
+
+	def revertir_saldo(self, cuota, **extra):
+		datos = {"motivo": "El descuento era de otro monto", "responsable": "Tesorera", **extra}
+		return self.client.post(reverse("cuota-revertir-saldo", args=[cuota.pk]), datos, format="json")
+
+	def revertible(self):
+		return self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["saldo_beneficio_revertible"]
+
+	def test_un_descuento_que_salda_la_cuota_se_puede_revertir(self):
+		self.pagar([self.agosto], "1000.00")
+		descuento = self.descontar(self.septiembre, "1000.00")
+		self.assertEqual(self.revertible(), {"cuota_id": self.septiembre.pk, "item_cuota_id": descuento.pk})
+
+		response = self.revertir_saldo(self.septiembre)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.septiembre.refresh_from_db()
+		descuento.refresh_from_db()
+		self.assertNotEqual(self.septiembre.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(descuento.estado, EstadoItemCuotaChoices.ANULADO)
+		self.assertIsNone(self.revertible())
+		registro = RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.PAGO_REVERTIDO)
+		self.assertEqual(registro.responsable, "Tesorera")
+		self.assertEqual(registro.detalle["desenlace"], "NuncaIngreso")
+
+	def test_revertir_un_saldo_completado_con_descuento_conserva_el_pago_parcial(self):
+		self.pagar([self.agosto], "1000.00")
+		pago = self.pagar([self.septiembre], "600.00").data["pago"]
+		self.descontar(self.septiembre, "400.00")
+
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 200)
+
+		self.septiembre.refresh_from_db()
+		self.assertNotEqual(self.septiembre.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, EstadoPagoChoices.ACREDITADO)
+		self.assertEqual(self.aplicado(self.septiembre), Decimal("600.00"))
+
+	def test_una_cuota_saldada_por_un_pago_posterior_al_descuento_no_se_revierte_asi(self):
+		self.pagar([self.agosto], "1000.00")
+		self.descontar(self.septiembre, "400.00")
+		self.pagar([self.septiembre], "600.00")
+
+		self.assertIsNone(self.revertible())
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 400)
+
+	def test_solo_se_puede_revertir_la_ultima_cuota_saldada(self):
+		self.descontar(self.agosto, "1000.00")
+		self.descontar(self.septiembre, "1000.00")
+
+		self.assertEqual(self.revertir_saldo(self.agosto).status_code, 400)
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 200)
+		self.assertEqual(self.revertible()["cuota_id"], self.agosto.pk)
+
+	def test_solo_admite_que_el_pago_nunca_ingreso(self):
+		self.descontar(self.agosto, "1000.00")
+
+		response = self.revertir_saldo(self.agosto, desenlace="NotaCreditoTotal")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("desenlace", response.data)
+		self.assertEqual(self.revertir_saldo(self.agosto, desenlace="NuncaIngreso").status_code, 200)
+
+	def test_un_descuento_de_una_cuota_paga_no_se_puede_quitar(self):
+		descuento = self.descontar(self.agosto, "1000.00")
+
+		response = self.client.post(reverse("item-cuota-anular", args=[descuento.pk]), {
+			"motivo": "Error", "autorizado_por": "Tesorería",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		descuento.refresh_from_db()
+		self.assertEqual(descuento.estado, EstadoItemCuotaChoices.VIGENTE)
+
+
+class NotaCreditoTests(PagoTestBase):
+	def setUp(self):
+		super().setUp()
+		pago = self.pagar([self.agosto], "1000.00").data
+		self.comprobante_id = pago["comprobante"]["comprobante_id"]
+		self.pago_id = pago["pago"]["pago_id"]
+
+	def emitir(self, monto, comprobante_id=None):
+		return self.client.post(reverse("emitir-nota-credito", args=[comprobante_id or self.comprobante_id]), {
+			"monto": monto, "medio_de_pago": "Efectivo", "motivo": "Devolución del excedente", "responsable": "Tesorera",
+		}, format="json")
+
+	def revertir(self):
+		return self.client.post(
+			reverse("revertir-pago", args=[self.pago_id]), {"motivo": "Cobro mal hecho", "responsable": "Tesorera"}, format="json",
+		)
+
+	def test_solo_sobre_comprobantes_anulados(self):
+		self.assertEqual(self.emitir("100.00").status_code, 400)
+
+	def test_parciales_hasta_el_total_del_comprobante(self):
+		self.revertir()
+
+		primera = self.emitir("600.00")
+		excedida = self.emitir("450.00")
+		segunda = self.emitir("400.00")
+
+		self.assertEqual(primera.status_code, 201, primera.data)
+		self.assertEqual(primera.data["codigo"], "NC-X 00000001")
+		self.assertEqual(excedida.status_code, 400)
+		self.assertEqual(segunda.status_code, 201, segunda.data)
+		detalle = self.client.get(reverse("comprobante-detail", args=[self.comprobante_id])).data
+		self.assertEqual(Decimal(str(detalle["monto_devuelto"])), Decimal("1000.00"))
+		self.assertEqual(len(detalle["notas_credito"]), 2)
+
+	def test_volver_a_cobrar_con_descuento_y_devolver_el_excedente_en_la_misma_operacion(self):
+		self.revertir()
+		assign_benefit(self.agosto.pk, "Descuento", "MontoFijo", Decimal("200.00"), date(2026, 8, 1), "Hermanos", authorized_by="Presidente")
+
+		response = self.pagar([self.agosto], "800.00", nota_credito={
+			"comprobante_id": self.comprobante_id, "monto": "200.00", "medio_de_pago": "Efectivo",
+			"motivo": "Excedente por descuento omitido", "responsable": "Tesorera",
+		})
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.agosto.refresh_from_db()
-		self.septiembre.refresh_from_db()
-		self.assertNotEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
-		self.assertEqual(self.pendiente(self.agosto), Decimal("1000.00"))
-		self.assertEqual(self.septiembre.estado_cuota, EstadoCuotaChoices.PAGA)
-		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-1000.00"))
+		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		nota = Devolucion.objects.get()
+		self.assertEqual(nota.comprobante_anulado_id, self.comprobante_id)
+		self.assertEqual(nota.monto, Decimal("200.00"))
 
-	def test_registra_el_usuario_que_corrige(self):
-		original = self.pagar([self.agosto], "1000.00")
-		directivo = get_user_model().objects.create_user(username="directivo")
-		self.client.force_authenticate(user=directivo)
+	def test_el_excedente_puede_quedar_como_pago_parcial_de_la_siguiente_cuota(self):
+		self.revertir()
+		assign_benefit(self.agosto.pk, "Descuento", "MontoFijo", Decimal("200.00"), date(2026, 8, 1), "Hermanos", authorized_by="Presidente")
 
-		response = self.corregir(original.data["pago"]["pago_id"], [self.agosto], "900.00")
+		response = self.pagar([self.agosto, self.septiembre], "1000.00")
 
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(Pago.objects.get(pk=response.data["pago"]["pago_id"]).usuario, directivo)
-		self.assertEqual(response.data["usuario"], "directivo")
+		self.assertEqual(self.aplicado(self.septiembre), Decimal("200.00"))
+		self.assertFalse(Devolucion.objects.exists())
 
-	def test_no_permite_corregir_hacia_una_cuota_saldada_por_otro_pago(self):
-		self.pagar([self.agosto], "1000.00")
-		segundo = self.pagar([self.septiembre], "500.00")
+	def test_el_pago_registrado_en_otro_socio_puede_devolver_el_excedente(self):
+		self.revertir()
+		otro = crear_socio("56789098")
+		cuota_otro = crear_cuota_con_cargo(account_for(otro), "2026-08", "700.00")
 
-		response = self.corregir(segundo.data["pago"]["pago_id"], [self.agosto], "500.00")
-
-		self.assertEqual(response.status_code, 400)
-		self.assertEqual(Pago.objects.get(pk=segundo.data["pago"]["pago_id"]).estado_pago, "Acreditado")
-
-	def test_no_permite_corregir_un_pago_ya_anulado(self):
-		original = self.pagar([self.agosto], "1000.00")
-		self.corregir(original.data["pago"]["pago_id"], [self.agosto], "900.00")
-
-		response = self.corregir(original.data["pago"]["pago_id"], [self.agosto], "800.00")
-
-		self.assertEqual(response.status_code, 400)
-
-	def test_conserva_el_motivo_completo_y_la_observacion_original(self):
-		original = self.pagar([self.agosto], "1000.00", observacion="Pagó en ventanilla")
-		motivo = "Error de carga " * 25
-
-		response = self.corregir(original.data["pago"]["pago_id"], [self.agosto], "900.00", motivo=motivo)
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": otro.pk,
+			"cuota_ids": [cuota_otro.pk],
+			"monto_total": "700.00",
+			"medios": [{"medio_de_pago": "Efectivo", "monto": "700.00"}],
+			"nota_credito": {
+				"comprobante_id": self.comprobante_id, "monto": "300.00", "medio_de_pago": "Efectivo",
+				"motivo": "Excedente del pago cargado a otro socio", "responsable": "Tesorera",
+			},
+		}, format="json")
 
 		self.assertEqual(response.status_code, 201, response.data)
-		pago_original = Pago.objects.get(pk=original.data["pago"]["pago_id"])
-		self.assertEqual(pago_original.motivo_anulacion, motivo.strip())
-		self.assertEqual(pago_original.observacion, "Pagó en ventanilla")
+		nota = Devolucion.objects.get()
+		self.assertEqual(nota.cuenta_corriente.socio_id, self.socio.pk)
+		self.assertEqual(nota.monto, Decimal("300.00"))
 
-	def test_pago_inexistente_devuelve_404(self):
-		response = self.corregir(999999, [self.agosto], "100.00")
+	def test_una_nota_de_credito_invalida_cancela_tambien_el_nuevo_pago(self):
+		self.revertir()
 
-		self.assertEqual(response.status_code, 404)
+		response = self.pagar([self.agosto], "800.00", nota_credito={
+			"comprobante_id": self.comprobante_id, "monto": "5000.00", "medio_de_pago": "Efectivo",
+			"motivo": "Excedente", "responsable": "Tesorera",
+		})
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(Pago.objects.filter(estado_pago="Acreditado").count(), 0)
+
+	def test_la_nota_de_credito_tiene_su_comprobante_y_el_recibo_anulado_la_menciona(self):
+		self.revertir()
+		nota = self.emitir("300.00").data
+
+		pdf = self.client.get(reverse("devolucion-pdf", args=[nota["devolucion_id"]]))
+		recibo = self.client.get(reverse("comprobante-pdf", args=[self.comprobante_id]))
+
+		self.assertIn(b"NOTA DE CR", pdf.content)
+		self.assertIn(b"NC-X 00000001", pdf.content)
+		self.assertIn(b"ANULADO", recibo.content)
+		self.assertIn(b"NC-X 00000001", recibo.content)
 
 
 class BeneficioCuotaTests(APITestCase):
@@ -1601,9 +1738,6 @@ class BeneficioCuotaTests(APITestCase):
 	def cargo(self):
 		return MovimientoCuenta.objects.get(cuota=self.cuota).monto
 
-	def saldo(self):
-		return CuentaCorriente.objects.get(socio=self.socio).saldo
-
 	def test_descuento_fijo_reduce_la_cuota(self):
 		response = self.asignar()
 
@@ -1612,7 +1746,6 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual(response.data["item"]["concepto"], "DescuentoUnico")
 		self.assertEqual(response.data["item"]["motivo"], "Hermanos en el club")
 		self.assertEqual(self.cargo(), Decimal("2000.00"))
-		self.assertEqual(self.saldo(), Decimal("-2000.00"))
 
 	def test_descuento_porcentual_sobre_el_total(self):
 		response = self.asignar(modalidad="Porcentaje", valor="10")
@@ -2011,7 +2144,6 @@ class BecasEnGeneracionDeCuotasTests(TestCase):
 		self.assertEqual(cuota.movimiento.monto, Decimal("1250.00"))
 		self.assertEqual(self.cuota("2026-12").movimiento.monto, Decimal("1250.00"))
 		self.assertEqual(self.cuota("2027-01").movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-5000.00"))
 
 	def test_beca_finalizada_deja_de_aplicarse_y_conserva_el_historial(self):
 		self.beca(date(2026, 10, 1), date(2026, 11, 30), monto=Decimal("500.00"))
@@ -2185,23 +2317,13 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		)
 		self.assertEqual(self.desglose(detalle), [("CuotaSocial", Decimal("1500.00")), ("CuotaDeportiva", Decimal("1500.00"))])
 
-	def test_correccion_recalcula_el_desglose_sin_el_pago_original(self):
+	def test_volver_a_cobrar_recalcula_el_desglose_sin_el_pago_anulado(self):
 		original = self.pagar("1000.00")
 		pago_id = Comprobante.objects.get(numero=original["numero"]).pago_id
+		self.client.post(reverse("revertir-pago", args=[pago_id]), {"motivo": "Monto mal cargado", "responsable": "Tesorera"}, format="json")
 
-		response = self.client.post(
-			reverse("corregir-pago", args=[pago_id]),
-			{
-				"motivo": "Monto mal cargado",
-				"cuota_ids": [self.cuota.pk],
-				"monto_total": "1200.00",
-				"medios": [{"medio_de_pago": "Transferencia", "monto": "1200.00"}],
-			},
-			format="json",
-		)
+		detalle = self.pagar("1200.00")
 
-		self.assertEqual(response.status_code, 201, response.data)
-		detalle = self.client.get(reverse("comprobante-detail", args=[response.data["comprobante"]["comprobante_id"]])).data
 		self.assertEqual(self.desglose(detalle), [("CuotaSocial", Decimal("1000.00")), ("CuotaDeportiva", Decimal("200.00"))])
 
 	def test_comprobante_incompleto_bloquea_y_revierte_el_pago(self):
@@ -2222,7 +2344,6 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertIn("número de socio", response.data["detail"])
 		self.assertFalse(Pago.objects.exists())
 		self.assertFalse(Imputacion.objects.exists())
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, Decimal("-2500.00"))
 
 
 class ComprobanteListTests(ComprobanteTestBase):
@@ -2327,24 +2448,18 @@ class ComprobantePdfTests(ComprobanteTestBase):
 				self.assertIn(texto, contenido)
 		self.assertNotIn(b"ANULADO", contenido)
 
-	def test_recibo_anulado_indica_su_reemplazo(self):
+	def test_recibo_anulado_indica_sus_notas_de_credito(self):
 		original = self.pagar("1000.00")
-		pago_id = Comprobante.objects.get(numero=original["numero"]).pago_id
-		correccion = self.client.post(
-			reverse("corregir-pago", args=[pago_id]),
-			{
-				"motivo": "Monto mal cargado",
-				"cuota_ids": [self.cuota.pk],
-				"monto_total": "1200.00",
-				"medios": [{"medio_de_pago": "Transferencia", "monto": "1200.00"}],
-			},
-			format="json",
-		)
+		comprobante = Comprobante.objects.get(numero=original["numero"])
+		self.client.post(reverse("revertir-pago", args=[comprobante.pago_id]), {"motivo": "Monto mal cargado", "responsable": "Tesorera"}, format="json")
+		self.client.post(reverse("emitir-nota-credito", args=[comprobante.pk]), {
+			"monto": "1000.00", "medio_de_pago": "Efectivo", "motivo": "Devolución", "responsable": "Tesorera",
+		}, format="json")
 
 		contenido = self.descargar(original["numero"]).content
 
 		self.assertIn(b"ANULADO", contenido)
-		self.assertIn(f"X {correccion.data['comprobante']['numero']:08d}".encode(), contenido)
+		self.assertIn(b"NC-X 00000001", contenido)
 
 	def test_el_frontend_puede_leer_el_nombre_del_archivo(self):
 		detalle = self.pagar("100.00")
@@ -2404,7 +2519,6 @@ class ProteccionRegistrosFinancierosTests(PagoTestBase):
 			with self.subTest(method=method):
 				self.assertEqual(getattr(self.client, method)(url, data, format="json").status_code, 405)
 		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-1600.00"))
 		self.assertEqual(self.cuenta.estado_cuenta_corriente, "Activo")
 		self.assertEqual(self.client.get(url).status_code, 200)
 
@@ -2530,86 +2644,107 @@ class ReporteMorosidadTests(APITestCase):
 
 
 class ResumenFinancieroTests(APITestCase):
+	"""Income, methods and refunds follow the money of the month; cuota indicators follow the period."""
+
 	def setUp(self):
 		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
-		today = timezone.localdate()
-		socio = crear_socio("78901237")
-		cuenta = account_for(socio)
-		crear_cuota_con_cargo(
-			cuenta,
-			"2026-08",
-			"1000.00",
-			EstadoCuotaChoices.VENCIDA_1,
-			venc1=today - timedelta(days=5),
-			venc2=today + timedelta(days=5),
+		self.periodo = timezone.localdate().strftime("%Y-%m")
+		self.socio = crear_socio("78901237")
+		self.cuota = crear_cuota_con_cargo(account_for(self.socio), self.periodo, "1000.00")
+		register_payment(self.socio.pk, [self.cuota.pk], [
+			{"medio_de_pago": "Efectivo", "monto": Decimal("400.00")},
+			{"medio_de_pago": "Transferencia", "monto": Decimal("200.00")},
+		], Decimal("600.00"))
+		for concepto, medio, monto in (
+			("Venta de indumentaria", "Transferencia", "300.00"),
+			("Donación", "Efectivo", "50.00"),
+			("Rifa", "Efectivo", "20.00"),
+			("Bufet", "Efectivo", "10.00"),
+		):
+			register_income(self.socio.pk, concepto, [{"medio_de_pago": medio, "monto": Decimal(monto)}], Decimal(monto))
+		anulado, _ = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
+		revert_payment(anulado.pk, "Carga duplicada", "Tesorera")
+		create_manual_refund(self.socio.pk, "Transferencia de más", Decimal("180.00"), "Transferencia", "Tesorera")
+
+	def resumen(self, **params):
+		return self.client.get(reverse("resumen-financiero"), {"periodo": self.periodo, **params})
+
+	def test_origen_de_los_ingresos_agrupa_los_conceptos_menores(self):
+		ingresos = self.resumen().data["ingresos"]
+
+		self.assertEqual(ingresos["total"], Decimal("980.00"))
+		self.assertEqual(ingresos["cuotas"], Decimal("600.00"))
+		self.assertEqual(
+			[(row["nombre"], row["monto"]) for row in ingresos["origen"]],
+			[("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Donación", Decimal("50.00")), ("Otros", Decimal("30.00"))],
+		)
+		self.assertEqual(ingresos["origen"][0]["porcentaje"], Decimal("61.2"))
+
+	def test_origen_de_los_ingresos_se_ordena_de_mayor_a_menor(self):
+		register_income(self.socio.pk, "Sponsoreo", [{"medio_de_pago": "Transferencia", "monto": Decimal("2000.00")}], Decimal("2000.00"))
+
+		origen = self.resumen().data["ingresos"]["origen"]
+
+		self.assertEqual(
+			[(row["nombre"], row["monto"]) for row in origen],
+			[("Sponsoreo", Decimal("2000.00")), ("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Otros", Decimal("80.00"))],
 		)
 
-	def test_resumen_saldo_vencido_y_cobros_por_medio_solo_acreditados(self):
-		pago = Pago.objects.create(estado_pago=EstadoPagoChoices.ACREDITADO)
-		ItemPago.objects.bulk_create([
-			ItemPago(pago=pago, medio_de_pago=MedioDePagoChoices.TRANSFERENCIA, monto=Decimal("1200.00")),
-			ItemPago(pago=pago, medio_de_pago=MedioDePagoChoices.BILLETERA_VIRTUAL, monto=Decimal("350.00")),
-			ItemPago(pago=pago, medio_de_pago=MedioDePagoChoices.EFECTIVO, monto=Decimal("150.00")),
-		])
-		pago_anulado = Pago.objects.create(estado_pago=EstadoPagoChoices.ANULADO)
-		ItemPago.objects.create(
-			pago=pago_anulado,
-			medio_de_pago=MedioDePagoChoices.TRANSFERENCIA,
-			monto=Decimal("999.00"),
-		)
-
-		response = self.client.get(reverse("resumen-financiero"))
-
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data, {
-			"socios_en_mora": 1,
-			"monto_adeudado_total": Decimal("1000.00"),
-			"cuotas_vencidas": 1,
-			"cuotas_vencidas_1": 1,
-			"cuotas_vencidas_2": 0,
-			"transferencia_bancaria": Decimal("1200.00"),
-			"billetera_virtual": Decimal("350.00"),
-			"pago_efectivo": Decimal("150.00"),
+	def test_kpis_de_las_cuotas_del_periodo(self):
+		self.assertEqual(self.resumen().data["cuotas"], {
+			"esperado": Decimal("1000.00"),
+			"cobrado": Decimal("600.00"),
+			"en_deuda": Decimal("400.00"),
+			"efectividad": Decimal("60.0"),
+			"generadas": 1,
+			"pagas": 0,
+			"recargos": Decimal("0.00"),
 		})
 
+	def test_medios_de_pago_dinamicos_sin_comprobantes_anulados(self):
+		medios = self.resumen().data["medios_de_pago"]
 
-class ResumenFinancieroPdfTests(APITestCase):
-	def setUp(self):
-		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
-		today = timezone.localdate()
-		cuenta = account_for(Socio.objects.create(persona=Persona.objects.create(nombre="Rosa", apellido="Mora", dni="78901250")))
-		crear_cuota_con_cargo(
-			cuenta, "2026-07", "700.00", EstadoCuotaChoices.VENCIDA_2,
-			venc1=today - timedelta(days=20), venc2=today - timedelta(days=10),
-		)
-		crear_cuota_con_cargo(
-			cuenta, "2026-08", "800.00", EstadoCuotaChoices.VENCIDA_1,
-			venc1=today - timedelta(days=5), venc2=today + timedelta(days=5),
-		)
-		crear_cuota_con_cargo(
-			cuenta, "2026-09", "900.00",
-			venc1=today + timedelta(days=5), venc2=today + timedelta(days=15),
-		)
+		self.assertEqual(medios["total"], Decimal("980.00"))
+		montos = {row["codigo"]: row["monto"] for row in medios["medios"]}
+		self.assertEqual(montos["Transferencia"], Decimal("500.00"))
+		self.assertEqual(montos["Efectivo"], Decimal("480.00"))
+		self.assertEqual(montos["BilleteraVirtual"], Decimal("0.00"))
 
-	def test_separa_deuda_en_fecha_y_vencidas_por_vencimiento(self):
-		report = _build_financial_report(date(2026, 9, 1))
+	def test_ingresos_extra_y_devoluciones_se_detallan_sin_restar(self):
+		data = self.resumen().data
 
-		self.assertEqual(report["cuotas_vencidas"], 2)
-		self.assertEqual(report["cuotas_vencidas_1"], 1)
-		self.assertEqual(report["cuotas_vencidas_2"], 1)
-		self.assertEqual(len(report["deudores"]), 1)
-		deudor = report["deudores"][0]
-		self.assertEqual(deudor["deuda_en_fecha"], Decimal("900.00"))
-		self.assertEqual(deudor["cuotas_vencidas_1"], 1)
-		self.assertEqual(deudor["cuotas_vencidas_2"], 1)
-		self.assertEqual(deudor["deuda_vencida"], Decimal("1500.00"))
+		self.assertEqual(data["ingresos_extra"]["total"], Decimal("380.00"))
+		self.assertEqual(len(data["ingresos_extra"]["movimientos"]), 4)
+		self.assertEqual(data["devoluciones"]["total"], Decimal("180.00"))
+		self.assertEqual(data["devoluciones"]["movimientos"][0]["codigo"], "DEV-X 00000001")
 
-	def test_descarga_pdf(self):
-		response = self.client.get(reverse("resumen-financiero-pdf"), {"periodo": "2026-09"})
+	def test_evolucion_de_los_ultimos_doce_periodos(self):
+		evolucion = self.resumen().data["evolucion"]
+
+		self.assertEqual(len(evolucion), 12)
+		self.assertEqual(evolucion[-1], {
+			"periodo": self.periodo, "facturado": Decimal("1000.00"), "cobrado": Decimal("600.00"), "efectividad": Decimal("60.0"),
+		})
+		self.assertIsNone(evolucion[0]["efectividad"])
+
+	def test_conserva_la_deuda_que_usa_el_dashboard(self):
+		data = self.client.get(reverse("resumen-financiero")).data
+
+		for campo in ("socios_en_mora", "monto_adeudado_total", "cuotas_vencidas", "cuotas_vencidas_1", "cuotas_vencidas_2"):
+			self.assertIn(campo, data)
+
+	def test_periodo_invalido(self):
+		self.assertEqual(self.resumen(periodo="2026-13").status_code, 400)
+
+	def test_descarga_pdf_con_la_misma_estructura(self):
+		response = self.client.get(reverse("resumen-financiero-pdf"), {"periodo": self.periodo})
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
-		self.assertIn(b"Mora, Rosa", response.content)
+		self.assertIn(f"informe-financiero-{self.periodo}.pdf", response["Content-Disposition"])
+		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
+			with self.subTest(texto=texto):
+				self.assertIn(texto, response.content)
 
 
 class ReporteMorosidadPdfTests(APITestCase):
@@ -2669,7 +2804,7 @@ class RecargosPorMoraTests(APITestCase):
 		self.hoy = timezone.localdate()
 		persona = Persona.objects.create(nombre="Tomas", apellido="Rey", dni="89012345")
 		self.socio = Socio.objects.create(persona=persona)
-		self.cuenta = account_for(self.socio, Decimal("-1000.00"))
+		self.cuenta = account_for(self.socio)
 		self.configurar(valor_recargo_1="200.00", tipo_recargo_2="Porcentaje", valor_recargo_2="10.00")
 
 	def configurar(self, **valores):
@@ -2700,7 +2835,6 @@ class RecargosPorMoraTests(APITestCase):
 		self.assertEqual(cuota.recargos_aplicados, 2)
 		self.assertEqual(MovimientoCuenta.objects.get(cuota=cuota).monto, Decimal("1300.00"))
 		self.cuenta.refresh_from_db()
-		self.assertEqual(self.cuenta.saldo, Decimal("-1300.00"))
 		self.assertEqual(resultado["recargos_primer_vencimiento"], 1)
 		self.assertEqual(resultado["recargos_segundo_vencimiento"], 1)
 		self.assertEqual(resultado["monto_total"], Decimal("300.00"))
@@ -2839,23 +2973,18 @@ class EstadoCuotaConPagosTests(PagoTestBase):
 		self.agosto.refresh_from_db()
 		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.VENCIDA_2)
 
-	def test_corregir_pago_devuelve_la_cuota_a_vencida_en_segunda_fecha(self):
+	def test_revertir_pago_devuelve_la_cuota_a_vencida_en_segunda_fecha(self):
 		original = self.pagar([self.agosto], "1000.00")
 		self.agosto.refresh_from_db()
 		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
 
 		response = self.client.post(
-			reverse("corregir-pago", args=[original.data["pago"]["pago_id"]]),
-			{
-				"motivo": "Cuota equivocada",
-				"cuota_ids": [self.septiembre.pk],
-				"monto_total": "1000.00",
-				"medios": [{"medio_de_pago": "Transferencia", "monto": "1000.00"}],
-			},
+			reverse("revertir-pago", args=[original.data["pago"]["pago_id"]]),
+			{"motivo": "Socio equivocado", "responsable": "Tesorera"},
 			format="json",
 		)
 
-		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(response.status_code, 200, response.data)
 		self.agosto.refresh_from_db()
 		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.VENCIDA_2)
 
@@ -2899,7 +3028,6 @@ class CuotaVencimientosManualesTests(APITestCase):
 		self.assertIn(response.status_code, (200, 201), response.data)
 		self.assertEqual(response.data["estado_cuota"], state)
 		self.assertEqual(Decimal(str(response.data["monto_total"])), Decimal(amount))
-		self.assertEqual(CuentaCorriente.objects.get(socio=self.socio).saldo, -Decimal(amount))
 
 	def test_alta_con_primer_vencimiento_pasado_queda_vencida_con_primer_recargo(self):
 		response = self.create(-2, 4)
@@ -3027,7 +3155,7 @@ class NumeracionComprobanteTests(APITestCase):
 		)
 
 	def test_numeracion_continua_desde_ultimo_numero(self):
-		SecuenciaComprobante.objects.update_or_create(pk=1, defaults={"ultimo_numero": 41})
+		SecuenciaComprobante.objects.update_or_create(tipo="Recibo", defaults={"ultimo_numero": 41})
 
 		self.assertEqual(next_receipt_number(), 42)
 		self.assertEqual(next_receipt_number(), 43)
@@ -3043,7 +3171,7 @@ class NumeracionComprobanteTests(APITestCase):
 			primero.data["comprobante"]["numero"] + 1,
 		)
 		self.assertEqual(
-			SecuenciaComprobante.objects.get(pk=1).ultimo_numero,
+			SecuenciaComprobante.objects.get(tipo="Recibo").ultimo_numero,
 			segundo.data["comprobante"]["numero"],
 		)
 
@@ -3304,7 +3432,6 @@ class CurrentAccountOpeningTests(APITestCase):
 				next_period_start(2).strftime("%Y-%m"),
 			],
 		)
-		self.assertEqual(account.saldo, -sum(cuota.movimiento.monto for cuota in cuotas))
 		self.assertEqual(account.estado_cuenta_corriente, "Activo")
 
 		status_response = self.client.get(reverse("estado-cuenta-socio", args=[response.data["socio_id"]]))
@@ -3402,7 +3529,6 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), 3)
 		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
 		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
-		self.assertEqual(account.saldo, Decimal("-7500.00"))
 
 	def test_new_player_does_not_change_paid_current_cuota(self):
 		persona = Persona.objects.create(
@@ -3424,7 +3550,6 @@ class CurrentAccountOpeningTests(APITestCase):
 		cuota.refresh_from_db()
 		self.assertFalse(cuota.items.filter(concepto="CuotaDeportiva").exists())
 		self.assertEqual(cuota.movimiento.monto, Decimal("1000.00"))
-		self.assertEqual(CuentaCorriente.objects.get(socio=socio).saldo, Decimal("-6000.00"))
 
 	def test_saving_an_existing_socio_does_not_open_another_account(self):
 		socio = crear_socio("40111224")
@@ -3676,6 +3801,52 @@ class ScholarshipLifecycleTests(APITestCase):
 
 		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("250.00")])
 		self.assertEqual(self.scholarship_amounts(self.august), [])
+
+	def cover_everything(self):
+		self.assertEqual(self.update(valor="100").status_code, 200)
+		october = self.generate("2026-10")
+		self.assertEqual(october.estado_cuota, EstadoCuotaChoices.PAGA)
+		return october
+
+	def test_cancel_keeps_past_cuotas_settled_by_the_scholarship(self):
+		october = self.cover_everything()
+
+		cancel_scholarship(self.scholarship.pk, "Dejó el club", "Comisión directiva", self.user, today=date(2026, 10, 15))
+
+		self.september.refresh_from_db()
+		october.refresh_from_db()
+		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("2500.00")])
+		self.assertEqual(self.september.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.scholarship_amounts(october), [])
+		self.assertEqual(self.charge(october), Decimal("2500.00"))
+		self.assertNotEqual(october.estado_cuota, EstadoCuotaChoices.PAGA)
+
+	def test_update_recalculates_settled_cuotas_only_from_the_current_period(self):
+		october = self.cover_everything()
+
+		update_scholarship(
+			self.scholarship.pk, "Porcentaje", Decimal("50"), date(2026, 7, 1), None, "Situación económica",
+			"Comisión directiva", self.user, today=date(2026, 10, 15),
+		)
+
+		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("2500.00")])
+		self.assertEqual(self.scholarship_amounts(october), [Decimal("1250.00")])
+		self.assertEqual(self.charge(october), Decimal("1250.00"))
+
+	def test_the_latest_cuota_settled_by_a_cancelled_scholarship_can_be_reverted(self):
+		self.cover_everything()
+		cancel_scholarship(self.scholarship.pk, "Dejó el club", "Comisión directiva", self.user, today=date(2026, 10, 15))
+
+		response = self.client.post(reverse("cuota-revertir-saldo", args=[self.september.pk]), {
+			"motivo": "Se olvidó cancelar la beca", "responsable": "Tesorería",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.september.refresh_from_db()
+		self.assertEqual(self.scholarship_amounts(self.september), [])
+		self.assertNotEqual(self.september.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertTrue(ExclusionBeca.objects.filter(beca=self.scholarship, periodo="2026-09").exists())
+		self.assertEqual(self.scholarship_amounts(self.august), [Decimal("2500.00")])
 
 	def test_cancelled_scholarship_is_not_applied_to_new_cuotas(self):
 		self.cancel()
@@ -4197,3 +4368,66 @@ class PeriodoCuotasTests(APITestCase):
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIn("periodo", response.data)
+
+
+class FinancialAuditTests(PagoTestBase):
+	def entries(self, action):
+		return RegistroAuditoria.objects.filter(accion=action)
+
+	def test_payment_is_audited_with_session_user_receipt_and_methods(self):
+		response = self.pagar([self.agosto], "1000.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		entry = self.entries(AccionAuditoriaChoices.PAGO_REGISTRADO).get()
+		self.assertEqual(entry.usuario.username, "tesorero")
+		self.assertEqual(entry.socio, self.socio)
+		self.assertEqual(entry.monto, Decimal("1000.00"))
+		self.assertEqual(entry.referencia, f"X {Comprobante.objects.get().numero:08d}")
+		self.assertEqual(entry.detalle["medios"], [{"medio_de_pago": "Efectivo", "monto": "1000.00"}])
+
+	def test_late_fee_waiver_keeps_the_responsable_chosen_by_hand(self):
+		ItemCuota.objects.create(cuota=self.agosto, concepto="Mora", fecha_aplicacion=date(2026, 9, 11), monto=Decimal("200.00"))
+		sync_cuota_charge(self.agosto)
+
+		self.pagar([self.agosto], "1000.00", condonacion_mora={
+			"cuota_ids": [self.agosto.pk], "autorizado_por": "Presidente", "motivo": "Socio vitalicio",
+		})
+
+		entry = self.entries(AccionAuditoriaChoices.CONDONACION_MORA).get()
+		self.assertEqual(entry.responsable, "Presidente")
+		self.assertEqual(entry.usuario.username, "tesorero")
+		self.assertEqual(entry.monto, Decimal("200.00"))
+
+	def test_failed_operations_leave_no_trace(self):
+		self.pagar([self.agosto], "5000.00")
+
+		self.assertFalse(RegistroAuditoria.objects.exists())
+
+	def test_automatic_tasks_are_audited_as_system(self):
+		socio = crear_socio("49100001")
+		RegistroAuditoria.objects.all().delete()
+
+		generar_cuotas_mensuales(date(2026, 10, 1), today=date(2026, 10, 1), meses=1)
+
+		entry = self.entries(AccionAuditoriaChoices.CUOTA_CREADA).get(socio=socio)
+		self.assertIsNone(entry.usuario)
+		self.assertEqual(entry.referencia, "Cuota 2026-10")
+
+	def test_scholarship_and_discount_changes_are_audited(self):
+		grant_scholarship(self.socio.pk, "Porcentaje", Decimal("50"), date(2026, 8, 1), "Hermanos", "Presidente")
+
+		entry = self.entries(AccionAuditoriaChoices.BECA_OTORGADA).get()
+		self.assertEqual(entry.responsable, "Presidente")
+		self.assertIn("50%", entry.descripcion)
+
+	def test_audit_endpoint_filters_by_socio_and_action(self):
+		self.pagar([self.agosto], "1000.00")
+		otro = crear_socio("49100002")
+		RegistroAuditoria.objects.create(accion=AccionAuditoriaChoices.CUOTA_CREADA, descripcion="Otra", socio=otro)
+
+		response = self.client.get(reverse("registro-auditoria-list"), {"socio_id": self.socio.pk, "accion": "PagoRegistrado"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data), 1)
+		self.assertEqual(response.data[0]["usuario_nombre"], "tesorero")
+		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)

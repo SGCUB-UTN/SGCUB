@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { EmptyState, PrimaryButton, SecondaryButton, TabHeader } from './parts'
+import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useDocumentacion from '../../../hooks/useDocumentacion'
 import { collectErrorMessages } from '../format'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
 import PersonaDocumentsTable from '../../documental/PersonaDocumentsTable'
-import { FLUSH_END_CLASS } from '../../shared/flushTable'
+import { SectionEmpty } from '../../shared/FlushSection'
+import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
+import { KpiColumn, KpiGrid } from '../../shared/Kpi'
 
 const getEmptyUploadForm = () => ({
   tipo_documento: '',
@@ -23,6 +25,12 @@ const addMonths = (date, months) => {
   shifted.setUTCMonth(shifted.getUTCMonth() + months)
   return shifted.toISOString().split('T')[0]
 }
+
+const ACTIVE = 'vigentes'
+const HISTORY = 'historial'
+const PANEL_ID = 'documentation-section-panel'
+
+const countByStatus = (documents, status) => documents.filter((doc) => doc.status === status).length
 
 const SAVE_ERROR_MESSAGE = 'No se pudo guardar el documento.'
 
@@ -56,6 +64,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
 
   const [uploadForm, setUploadForm] = useState(getEmptyUploadForm())
   const [saveError, setSaveError] = useState(null)
+  const [activeSection, setActiveSection] = useState(ACTIVE)
 
   // Enabled types that apply to this profile; when editing, the document's own type is always offered
   const tiposFiltrados = tipos.filter(t => (
@@ -161,15 +170,15 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     }
   }
 
-  const handleDownloadZip = async () => {
+  const handleDownloadZip = async (scope) => {
     try {
       const { downloadZip } = await import('../../../api/documentacion');
-      const blob = await downloadZip(personaId);
+      const blob = await downloadZip(personaId, scope);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = personaInfo?.dni ? `${personaInfo.dni}-${personaInfo.nombre}_${personaInfo.apellido}.zip`.replace(/\s+/g, '_') : `documentos_${personaId}.zip`;
+      a.download = personaInfo?.dni ? `${personaInfo.dni}-${personaInfo.nombre}_${personaInfo.apellido}_${scope}.zip`.replace(/\s+/g, '_') : `documentos_${personaId}_${scope}.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -181,46 +190,74 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
 
   if (loading) return <div className="text-base text-on-surface-variant">Cargando documentación...</div>
 
+  const sections = [
+    { value: ACTIVE, id: 'documentos-vigentes-title', icon: 'description', title: 'Vigentes', count: documentosActivos.length },
+    { value: HISTORY, id: 'documentos-historial-title', icon: 'history', title: 'Historial', count: documentosHistoricos.length },
+  ]
+  const expiringCount = countByStatus(documentosActivos, 'por_vencer')
+  const expiredCount = countByStatus(documentosActivos, 'vencido')
+
   return (
     <div className="flex flex-col">
       <TabHeader
-        title="Documentación Requerida"
-        description="Control de habilitaciones institucionales, certificados médicos laborales y títulos habilitantes reglamentarios."
-        divider={false}
-        actions={(
-          <>
-            <SecondaryButton icon="folder_zip" onClick={handleDownloadZip}>Descargar ZIP</SecondaryButton>
-            <PrimaryButton icon="upload_file" onClick={handleNewClick}>Cargar documento</PrimaryButton>
-          </>
-        )}
+        title="Documentación requerida"
+        description="Habilitaciones, certificados y títulos de la persona."
       />
 
-      {documentosActivos.length === 0 ? (
-        <EmptyState
-          icon="folder_off"
-          title="Sin documentos cargados"
-          description="Todavía no hay documentación cargada para esta persona."
-        />
-      ) : (
-        <PersonaDocumentsTable
-          documents={documentosActivos}
-          getTypeName={getNombreTipo}
-          onEdit={handleEditClick}
-          onDelete={handleDeleteClick}
-          className={documentosHistoricos.length > 0 ? '' : FLUSH_END_CLASS}
-        />
-      )}
+      <KpiGrid columns={3} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
+        <KpiColumn label="Vigentes" value={countByStatus(documentosActivos, 'vigente')} />
+        <KpiColumn label="Por vencer" value={expiringCount} tone={expiringCount ? 'text-amber-700' : 'text-on-surface'} />
+        <KpiColumn label="Vencidos" value={expiredCount} tone={expiredCount ? 'text-error' : 'text-on-surface'} />
+      </KpiGrid>
 
-      {documentosHistoricos.length > 0 && (
-        <PersonaDocumentsTable
-          title="Historial de Documentación"
-          documents={documentosHistoricos}
-          getTypeName={getNombreTipo}
-          onDelete={handleDeleteClick}
-          isHistory
-          className={`mt-6 ${FLUSH_END_CLASS}`}
-        />
-      )}
+      <SegmentedTabs
+        label="Documentación de la persona"
+        sections={sections}
+        value={activeSection}
+        onChange={setActiveSection}
+        panelId={PANEL_ID}
+        className="mt-6"
+      />
+
+      <div className={TAB_PANEL_CLASS}>
+        <div id={PANEL_ID} role="tabpanel" aria-labelledby={sections.find((section) => section.value === activeSection).id}>
+          {activeSection === ACTIVE && (
+            <>
+              {documentosActivos.length === 0 ? (
+                <SectionEmpty>Todavía no hay documentación cargada para esta persona.</SectionEmpty>
+              ) : (
+                <PersonaDocumentsTable
+                  documents={documentosActivos}
+                  getTypeName={getNombreTipo}
+                  onEdit={handleEditClick}
+                  onDelete={handleDeleteClick}
+                />
+              )}
+              <TableFooter>
+                <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0}>Descargar ZIP</SecondaryButton>
+                <SecondaryButton icon="upload_file" onClick={handleNewClick}>Agregar documento</SecondaryButton>
+              </TableFooter>
+            </>
+          )}
+          {activeSection === HISTORY && (
+            <>
+              {documentosHistoricos.length === 0 ? (
+                <SectionEmpty>No hay versiones anteriores de los documentos.</SectionEmpty>
+              ) : (
+                <PersonaDocumentsTable
+                  documents={documentosHistoricos}
+                  getTypeName={getNombreTipo}
+                  onDelete={handleDeleteClick}
+                  isHistory
+                />
+              )}
+              <TableFooter>
+                <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(HISTORY)} disabled={documentosHistoricos.length === 0}>Descargar ZIP</SecondaryButton>
+              </TableFooter>
+            </>
+          )}
+        </div>
+      </div>
 
       <DocumentacionUploadModal 
         isOpen={uploadModalOpen} 

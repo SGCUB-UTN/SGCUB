@@ -26,6 +26,8 @@ const FORMULARIO_INICIAL = {
   fecha_venc2: '',
 }
 
+const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
+const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 const GENERATE_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
@@ -140,47 +142,44 @@ function Cuotas() {
         )}
       />
 
-      <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
-        <div role="region" aria-labelledby="billing-phase-title">
-          <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" />
-          <div className="px-4 sm:px-5 py-3">
-            <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
-          </div>
+      <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">
+        <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" className={HEADING_CLASS} />
+        <div className="px-4 sm:px-5 py-3">
+          <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
         </div>
-
-        <div role="region" aria-labelledby="period-kpis-title">
-          <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" />
-          <div className={SECTION_CLASS}>
-            <PeriodKpis
-              summary={summary.data}
-              rows={cuotas.data}
-              isLoading={summary.isLoading || cuotas.isLoading}
-              error={summary.error || cuotas.error}
-            />
-          </div>
-        </div>
-
         <AutomationStatus runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
+      </section>
 
-        <div role="region" aria-labelledby="period-cuotas-title">
-          <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} />
-          {actionError && (
-            <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
-          )}
-          <PeriodCuotasTable
-            key={period}
-            rows={cuotas.data ?? []}
-            isLoading={cuotas.isLoading}
-            error={cuotas.error}
-            period={period}
-            onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
-            onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
-            onEdit={abrirEditar}
-            onDelete={abrirEliminar}
-            onChanged={reload}
+      <section className={PANEL_CLASS} aria-labelledby="period-kpis-title">
+        <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" className={HEADING_CLASS} />
+        <div className={SECTION_CLASS}>
+          <PeriodKpis
+            summary={summary.data}
+            rows={cuotas.data}
+            isLoading={summary.isLoading || cuotas.isLoading}
+            error={summary.error || cuotas.error}
           />
         </div>
-      </div>
+      </section>
+
+      <section className={PANEL_CLASS} aria-labelledby="period-cuotas-title">
+        <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
+        {actionError && (
+          <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
+        )}
+        <PeriodCuotasTable
+          key={period}
+          rows={cuotas.data ?? []}
+          isLoading={cuotas.isLoading}
+          error={cuotas.error}
+          period={period}
+          onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
+          onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
+          onEdit={abrirEditar}
+          onDelete={abrirEliminar}
+          onChanged={reload}
+        />
+      </section>
 
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 

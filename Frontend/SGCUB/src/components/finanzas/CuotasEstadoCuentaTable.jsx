@@ -30,27 +30,69 @@ const byPeriodDesc = (a, b) => String(b.periodo).localeCompare(String(a.periodo)
 
 const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?? 0) > 0
 
-const groupCuotas = (cuotas, period) => {
+// The latest paid cuotas are always shown: the ones of the latest payment (the only one that can be
+// reverted) or, without it, the paid cuota of the latest period. The rest of the paid ones fold away.
+const groupCuotas = (cuotas, period, revertibleIds, settlementCuotaId) => {
   const sorted = [...cuotas].sort(byPeriodDesc)
   const visible = sorted.filter((cuota) => String(cuota.periodo) <= period || isPartiallyPaid(cuota) || isPaid(cuota))
+  const paid = visible.filter(isPaid)
+  const fromLatestPayment = paid.filter((cuota) => revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId)
+  const latestPaid = fromLatestPayment.length ? fromLatestPayment : paid.slice(0, 1)
   return {
     upToDate: visible.filter((cuota) => !isPaid(cuota) && !isOverdue(cuota)),
     overdue: visible.filter((cuota) => !isPaid(cuota) && isOverdue(cuota)),
-    paid: visible.filter(isPaid),
+    latestPaid,
+    latestTitle: fromLatestPayment.length ? 'Último pago' : 'Última cuota paga',
+    olderPaid: paid.filter((cuota) => !latestPaid.includes(cuota)),
+    future: sorted.filter((cuota) => !visible.includes(cuota)),
   }
 }
 
-function SectionRow({ title, count }) {
+const NO_IDS = []
+
+const SECTION_ROW_CLASS = 'bg-surface-container-low/40'
+const SECTION_CELL_CLASS = 'py-1.5 px-4 text-left text-xs font-semibold uppercase tracking-wider text-outline'
+
+function SectionRow({ title, count, expanded, onToggle }) {
   return (
-    <tr className="bg-surface-container-low/40">
-      <th colSpan={COLUMN_COUNT} scope="rowgroup" className="py-1.5 px-4 text-left text-xs font-semibold uppercase tracking-wider text-outline">
-        {title} <span className="font-normal">({count})</span>
+    <tr className={`${SECTION_ROW_CLASS} cursor-pointer hover:bg-surface-container-low transition-colors`} onClick={onToggle}>
+      <th colSpan={COLUMN_COUNT} scope="rowgroup" className={SECTION_CELL_CLASS}>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle()
+          }}
+          className="inline-flex items-center gap-1 h-4 uppercase tracking-wider cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+        >
+          <span className={`material-symbols-outlined leading-none transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 16 }} aria-hidden="true">expand_more</span>
+          {title} <span className="font-normal">({count})</span>
+        </button>
       </th>
     </tr>
   )
 }
 
-function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged }) {
+function PaidAction({ revertible, onRevert }) {
+  if (!revertible) return <span className="text-sm font-normal text-on-surface-variant">Pagada</span>
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onRevert()
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+    >
+      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
+      Revertir pago
+    </button>
+  )
+}
+
+function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged }) {
   const badge = rowBadge(cuota)
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -86,7 +128,15 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
           </div>
         </td>
         <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
-        <td className="py-3 px-4 text-right font-semibold text-on-surface">{formatAmount(Number(cuota.saldo_pendiente ?? 0))}</td>
+        <td className="py-2 px-4 text-right font-semibold text-on-surface whitespace-nowrap">
+          {revertible ? (
+            <PaidAction revertible onRevert={() => onRevert(cuota)} />
+          ) : isPaid(cuota) ? (
+            <PaidAction revertible={false} />
+          ) : (
+            formatAmount(Number(cuota.saldo_pendiente ?? 0))
+          )}
+        </td>
       </tr>
       {expanded && (
         <CuotaDetailPanel
@@ -96,27 +146,48 @@ function CuotaRow({ cuota, expanded, onToggle, onPay, onAssignBenefit, onChanged
           onPay={onPay}
           onAssignBenefit={onAssignBenefit}
           onChanged={onChanged}
+          extraActions={revertible && onRevert && (
+            <button
+              type="button"
+              onClick={() => onRevert(cuota)}
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
+              Revertir pago
+            </button>
+          )}
         />
       )}
     </Fragment>
   )
 }
 
-function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) {
+// `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
+// `className` styles the table shell (e.g. edge to edge inside a section).
+function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
-  const [showPaid, setShowPaid] = useState(false)
-  const groups = groupCuotas(cuotas, currentPeriod())
-  const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.paid, 10)
+  const [collapsed, setCollapsed] = useState({ future: true, olderPaid: true })
+  const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds, settlementCuotaId)
+  const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
 
+  const toggleSection = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }))
+  const renderSection = (section, title, rows, visibleRows = rows) => rows.length > 0 && (
+    <Fragment key={section}>
+      <SectionRow title={title} count={rows.length} expanded={!collapsed[section]} onToggle={() => toggleSection(section)} />
+      {!collapsed[section] && visibleRows.map(renderRow)}
+    </Fragment>
+  )
   const toggle = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
   const renderRow = (cuota) => (
     <CuotaRow
       key={cuota.cuota_id}
       cuota={cuota}
       expanded={expandedId === cuota.cuota_id}
+      revertible={revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId}
       onToggle={toggle}
       onPay={onPay}
       onAssignBenefit={onAssignBenefit}
+      onRevert={onRevert}
       onChanged={onChanged}
     />
   )
@@ -125,14 +196,14 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
   return (
     <div className="flex flex-col gap-4">
       <DataTable
-        className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
+        className={className}
         tableClassName="min-w-[560px]"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
             <th className="py-3 px-4" scope="col">Período</th>
             <th className="py-3 px-4 text-right w-44" scope="col">Total</th>
-            <th className="py-3 px-4 text-right w-44" scope="col">Pendiente</th>
+            <th className="py-3 px-4 text-right w-48" scope="col">Pendiente</th>
           </>
         )}
       >
@@ -141,28 +212,13 @@ function CuotasEstadoCuentaTable({ cuotas, onPay, onAssignBenefit, onChanged }) 
             <td colSpan={COLUMN_COUNT} className="py-4 px-4 text-center text-base text-on-surface-variant">El socio no tiene cuotas pendientes.</td>
           </tr>
         )}
-        {groups.upToDate.length > 0 && <SectionRow title="En fecha" count={groups.upToDate.length} />}
-        {groups.upToDate.map(renderRow)}
-        {groups.overdue.length > 0 && <SectionRow title="Vencidas" count={groups.overdue.length} />}
-        {groups.overdue.map(renderRow)}
-        {groups.paid.length > 0 && (
-          <tr>
-            <td colSpan={COLUMN_COUNT} className="py-1.5 px-3">
-              <button
-                type="button"
-                onClick={() => setShowPaid((current) => !current)}
-                aria-expanded={showPaid}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-              >
-                <span className={`material-symbols-outlined text-[18px] transition-transform ${showPaid ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-                {showPaid ? 'Ocultar cuotas pagas' : `Mostrar cuotas pagas (${groups.paid.length})`}
-              </button>
-            </td>
-          </tr>
-        )}
-        {showPaid && visiblePaid.map(renderRow)}
+        {renderSection('future', 'Cuotas futuras', groups.future)}
+        {renderSection('upToDate', 'En fecha', groups.upToDate)}
+        {renderSection('overdue', 'Vencidas', groups.overdue)}
+        {renderSection('latestPaid', groups.latestTitle, groups.latestPaid)}
+        {renderSection('olderPaid', 'Más cuotas pagas', groups.olderPaid, visiblePaid)}
       </DataTable>
-      {showPaid && groups.paid.length > 10 && (
+      {!collapsed.olderPaid && groups.olderPaid.length > 10 && (
         <TablePagination id="cuotas-pagas-rows-per-page" rowsPerPageOptions={[10, 25, 50]} {...paginationProps} />
       )}
     </div>

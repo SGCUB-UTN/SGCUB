@@ -1,4 +1,5 @@
 // Piezas visuales compartidas por las pestañas de la ficha de persona.
+import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 
 export function RecordSection({ title, color = 'bg-primary-container', extra, children }) {
   return (
@@ -26,6 +27,42 @@ export function TabHeader({ title, description, actions, divider = true }) {
         {description && <p className="text-base text-on-surface-variant">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 flex-wrap shrink-0">{actions}</div>}
+    </div>
+  )
+}
+
+export const TAB_PANEL_CLASS = 'min-w-0 overflow-hidden rounded-b-xl border-x border-b border-outline-variant/30 bg-surface-container-lowest'
+
+export function SegmentedTabs({ label, sections, value, onChange, panelId, className = '' }) {
+  return (
+    <div role="tablist" aria-label={label} className={`flex gap-1 p-1.5 overflow-x-auto rounded-t-xl bg-surface-container border border-outline-variant/30 ${className}`}>
+      {sections.map((section) => {
+        const active = section.value === value
+        return (
+          <button
+            key={section.value}
+            id={section.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={panelId}
+            onClick={() => onChange(section.value)}
+            className={`flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-base font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${active ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`}
+          >
+            <span className={`material-symbols-outlined ${active ? 'text-primary' : 'text-outline'}`} style={{ fontSize: 20 }} aria-hidden="true">{section.icon}</span>
+            {section.title}
+            {section.count != null && <span className="font-normal text-on-surface-variant">({section.count})</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function TableFooter({ className = '', children }) {
+  return (
+    <div className={`flex flex-wrap justify-end gap-2 py-3 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS} ${className}`}>
+      {children}
     </div>
   )
 }

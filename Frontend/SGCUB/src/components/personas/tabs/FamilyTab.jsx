@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { formatDni, formatPhone } from '../format'
-import { SecondaryButton, Field, TabHeader, EmptyState } from './parts'
+import { SecondaryButton, Field, TabHeader, TableFooter, EmptyState } from './parts'
 import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
-import { FLUSH_END_CLASS } from '../../shared/flushTable'
+import { FLUSH_END_CLASS, FLUSH_FOOTER_CLASS } from '../../shared/flushTable'
 
 function formatearDomicilioContacto(person) {
   if (!person?.domicilio_calle && !person?.domicilio_numero) return ''
@@ -183,9 +183,6 @@ export default function FamilyTab({
         title="Vínculos familiares y contactos de emergencia"
         description={description}
         divider={false}
-        actions={onAdd && (
-          <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar familiar / contacto</SecondaryButton>
-        )}
       />
 
       {contacts.length === 0 ? (
@@ -201,8 +198,14 @@ export default function FamilyTab({
           onEdit={onEdit ? setContactToEdit : undefined}
           onDelete={onDelete ? setContactToDelete : undefined}
           mostrarResponsableLegal={mostrarResponsableLegal}
-          className={FLUSH_END_CLASS}
+          className={onAdd ? 'border-b-0' : FLUSH_END_CLASS}
         />
+      )}
+
+      {onAdd && (
+        <TableFooter className={`${FLUSH_FOOTER_CLASS} ${contacts.length === 0 ? 'mt-6' : ''}`}>
+          <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar familiar / contacto</SecondaryButton>
+        </TableFooter>
       )}
 
       {selectedContact && (

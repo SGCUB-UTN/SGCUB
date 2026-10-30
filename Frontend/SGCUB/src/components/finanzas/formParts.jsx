@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getAutorizantes } from '../../api/usuarios'
+import SectionHeading from '../shared/SectionHeading'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
@@ -9,6 +10,40 @@ import { SelectConFlecha } from '../socios/SocioFormFields'
 export const NO_SPINNER_CLASS = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 export const SUMMARY_GROUP_CLASS = 'mb-1 text-sm font-semibold uppercase tracking-wider text-outline'
+
+const AMOUNT_PATTERN = /^\d*(,\d{0,2})?$/
+
+const formatAmountText = (value) => {
+  if (value === '' || value === null || value === undefined) return ''
+  const [whole, decimals] = String(value).split('.')
+  const grouped = whole === '' ? '' : Number(whole).toLocaleString('es-AR')
+  return decimals === undefined ? grouped : `${grouped || '0'},${decimals}`
+}
+
+export function AmountInput({ value, onChange, invalid = false, className = '', ...props }) {
+  const handleChange = (event) => {
+    const raw = event.target.value
+    const text = (raw.endsWith('.') && !raw.includes(',') ? `${raw.slice(0, -1)},` : raw).replace(/\./g, '')
+    if (!AMOUNT_PATTERN.test(text)) return
+    onChange(text.replace(/^0+(?=\d)/, '').replace(',', '.'))
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={formatAmountText(value)}
+        onChange={handleChange}
+        aria-invalid={invalid || undefined}
+        className={claseInput(invalid, 'pl-7 font-semibold text-right')}
+        {...props}
+      />
+    </div>
+  )
+}
 
 export function SummaryLine({ label, value, isTotal = false, valueClassName = '' }) {
   const valueTone = valueClassName || 'text-on-surface'
@@ -104,6 +139,42 @@ export function FormSection({ icon, title, description, disabled = false, classN
       </div>
       {children}
     </fieldset>
+  )
+}
+
+// Same panel as the Cuotas and Resumen financiero pages: a heading bar on top of the section's content.
+// `flush` drops the content padding, for tables that go edge to edge.
+export function FormPanel({ id, icon, title, description, actions, disabled = false, flush = false, children }) {
+  return (
+    <fieldset
+      disabled={disabled}
+      aria-labelledby={id}
+      className={`min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden transition-opacity ${disabled ? 'opacity-50' : ''}`}
+    >
+      <SectionHeading id={id} as="h3" icon={icon} title={title} actions={actions} className="px-4 sm:px-5 border-b" />
+      {description && <p className={`px-4 sm:px-5 pt-3 text-base text-on-surface-variant ${flush ? 'pb-3' : ''}`}>{description}</p>}
+      <div className={flush ? '' : 'flex flex-col gap-3 px-4 sm:px-5 py-4'}>{children}</div>
+    </fieldset>
+  )
+}
+
+// Selectable card of a mutually exclusive choice (what to do with an excess, how to settle a reversal)
+export function OptionCard({ icon, title, description, selected, disabled = false, onSelect }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      onClick={onSelect}
+      className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low'}`}
+    >
+      <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{icon}</span>
+      <span className="flex flex-col min-w-0">
+        <span className="text-base font-semibold text-on-surface">{title}</span>
+        <span className="text-sm text-on-surface-variant">{description}</span>
+      </span>
+    </button>
   )
 }
 

@@ -152,7 +152,7 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
     run = new_run(TipoTareaCuotaChoices.GENERACION, today.strftime(PERIOD_FORMAT), origin, user)
     created = []
     try:
-        result = generar_cuotas_mensuales(today, today=today, created=created)
+        result = generar_cuotas_mensuales(today, today=today, created=created, user=acting_user(user))
     except Exception as error:
         record_failure(run, error)
         raise
@@ -259,7 +259,7 @@ def run_surcharges(today, numbers, origin=OrigenEjecucionChoices.AUTOMATICA, use
     started = timezone.now()
     applied = []
     try:
-        result = apply_surcharges(today, applied=applied)
+        result = apply_surcharges(today, applied=applied, user=acting_user(user))
     except Exception as error:
         for number in numbers:
             record_failure(new_run(SURCHARGE_TASKS[number], period, origin, user, started), error)
@@ -302,7 +302,7 @@ def run_manual_surcharges(today=None, user=None):
     period = today.strftime(PERIOD_FORMAT)
     reached = due_surcharges(period, today)
     if not reached:
-        return apply_surcharges(today)
+        return apply_surcharges(today, user=acting_user(user))
     done = recorded_surcharges(period)
     numbers = [number for number in reached if SURCHARGE_TASKS[number] not in done] or reached[-1:]
     return run_surcharges(today, numbers, OrigenEjecucionChoices.MANUAL, user)

@@ -1,34 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getComprobantes } from '../api/comprobantes'
 import { getResumenFinanciero } from '../api/resumenFinanciero'
 import { getSocios } from '../api/socios'
 import { parseDueDate } from '../components/documental/dueDate'
 import { getDocumentos, getTiposDocumento } from '../api/documentacion'
 import { DEFAULT_DOCUMENT_ALERT_DAYS, getDocumentAlertDays } from '../api/configuracion'
-
-/**
- * Derives collection KPIs from the comprobantes list for the current calendar month.
- *
- * @param {Array} comprobantes - Full list of comprobantes returned by the API.
- * @returns {{ totalRecaudadoMes: number, mesLabel: string }}
- */
-function calcularRecaudacionMes(comprobantes) {
-  const ahora = new Date()
-  const mesActual = ahora.getMonth()
-  const anioActual = ahora.getFullYear()
-
-  const totalRecaudadoMes = comprobantes
-    .filter((comprobante) => {
-      if (!comprobante.fecha_emision) return false
-      const fecha = new Date(comprobante.fecha_emision)
-      return fecha.getMonth() === mesActual && fecha.getFullYear() === anioActual
-    })
-    .reduce((acumulado, comprobante) => acumulado + Number(comprobante.monto_total ?? 0), 0)
-
-  const mesLabel = ahora.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-
-  return { totalRecaudadoMes, mesLabel }
-}
 
 /**
  * Classifies active documents into expired and upcoming-to-expire groups.
@@ -71,7 +46,6 @@ function clasificarDocumentos(documentos, alertDays) {
 export default function useDashboard() {
   const [resumenFinanciero, setResumenFinanciero] = useState(null)
   const [socios, setSocios] = useState([])
-  const [comprobantes, setComprobantes] = useState([])
   const [documentos, setDocumentos] = useState([])
   const [tiposDocumento, setTiposDocumento] = useState([])
   const [alertDays, setAlertDays] = useState(DEFAULT_DOCUMENT_ALERT_DAYS)
@@ -80,7 +54,6 @@ export default function useDashboard() {
   const [errors, setErrors] = useState({
     resumenFinanciero: null,
     socios: null,
-    comprobantes: null,
     documentos: null,
   })
 
@@ -93,7 +66,6 @@ export default function useDashboard() {
       const results = await Promise.allSettled([
         getResumenFinanciero(),
         getSocios(),
-        getComprobantes(),
         getDocumentos(''),
         getTiposDocumento(),
         getDocumentAlertDays(),
@@ -104,7 +76,6 @@ export default function useDashboard() {
       const [
         resumenResult,
         sociosResult,
-        comprobantesResult,
         documentosResult,
         tiposResult,
         alertDaysResult,
@@ -112,7 +83,6 @@ export default function useDashboard() {
 
       setResumenFinanciero(resumenResult.status === 'fulfilled' ? resumenResult.value : null)
       setSocios(sociosResult.status === 'fulfilled' ? (sociosResult.value ?? []) : [])
-      setComprobantes(comprobantesResult.status === 'fulfilled' ? (comprobantesResult.value ?? []) : [])
       setDocumentos(documentosResult.status === 'fulfilled' ? (documentosResult.value ?? []) : [])
       setTiposDocumento(tiposResult.status === 'fulfilled' ? (tiposResult.value ?? []) : [])
       if (alertDaysResult.status === 'fulfilled') setAlertDays(alertDaysResult.value)
@@ -120,7 +90,6 @@ export default function useDashboard() {
       setErrors({
         resumenFinanciero: resumenResult.status === 'rejected' ? resumenResult.reason : null,
         socios: sociosResult.status === 'rejected' ? sociosResult.reason : null,
-        comprobantes: comprobantesResult.status === 'rejected' ? comprobantesResult.reason : null,
         documentos: documentosResult.status === 'rejected' ? documentosResult.reason : null,
       })
 
@@ -138,12 +107,6 @@ export default function useDashboard() {
       return estado.includes('activo') && !estado.includes('inactivo')
     }),
     [socios],
-  )
-
-  // --- Derived: recaudación del mes actual ---
-  const { totalRecaudadoMes, mesLabel } = useMemo(
-    () => calcularRecaudacionMes(comprobantes),
-    [comprobantes],
   )
 
   // --- Derived: documentos activos agrupados (most recent per person+type) ---
@@ -177,9 +140,9 @@ export default function useDashboard() {
     isLoading,
     errors,
 
-    // Financial KPIs
-    totalRecaudadoMes,
-    mesLabel,
+    // Financial KPIs: money that came in this month (receipts in force, cuotas and incomes)
+    totalRecaudadoMes: resumenFinanciero ? Number(resumenFinanciero.ingresos.total) : 0,
+    mesLabel: new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }),
     sociosEnMora: resumenFinanciero?.socios_en_mora ?? null,
     montoAdeudadoTotal: resumenFinanciero?.monto_adeudado_total ?? null,
     cuotasVencidas: resumenFinanciero?.cuotas_vencidas ?? null,

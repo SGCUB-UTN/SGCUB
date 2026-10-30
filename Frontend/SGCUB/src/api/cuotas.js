@@ -62,6 +62,11 @@ export const annulItemCuota = async (itemId, authorization) => {
   return response.data
 }
 
+export const revertirSaldoCuota = async (cuotaId, reversion) => {
+  const response = await api.post(`${cuotasEndpoint}${cuotaId}/revertir-saldo/`, reversion)
+  return response.data
+}
+
 export const putDescuento = async (itemId, descuento) => {
   const response = await api.put(`finanzas/item-cuota/${itemId}/descuento/`, descuento)
   return response.data

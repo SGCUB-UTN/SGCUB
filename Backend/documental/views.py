@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
-from django.db.models import OuterRef, Subquery
+from django.db.models import Max, OuterRef, Subquery
 
 from configuracion.models import ConfiguracionGeneral
 from configuracion.services import Seccion, record_catalog_update, record_change
@@ -190,10 +190,25 @@ import io
 import os
 from django.http import HttpResponse
 
+ZIP_VIGENTES = "vigentes"
+ZIP_HISTORIAL = "historial"
+
+
+def documents_in_scope(persona_id, scope):
+    documentos = Documento.objects.filter(persona_id=persona_id)
+    if scope:
+        latest_ids = documentos.values("tipo_documento").annotate(latest=Max("id_documento")).values("latest")
+        documentos = documentos.filter(id_documento__in=latest_ids) if scope == ZIP_VIGENTES else documentos.exclude(id_documento__in=latest_ids)
+    return documentos.exclude(archivoUrl='')
+
+
 @extend_schema(tags=["Documental / Exportar"])
 @api_view(["GET"])
 def download_zip(request, persona_id):
-    documentos = Documento.objects.filter(persona_id=persona_id).exclude(archivoUrl='')
+    scope = request.query_params.get("alcance", "")
+    if scope not in ("", ZIP_VIGENTES, ZIP_HISTORIAL):
+        return Response({'detail': 'El alcance debe ser vigentes o historial.'}, status=400)
+    documentos = documents_in_scope(persona_id, scope)
     if not documentos.exists():
         return Response({'detail': 'No hay documentos con archivos adjuntos.'}, status=404)
         
@@ -211,5 +226,6 @@ def download_zip(request, persona_id):
         return Response({'detail': 'No hay documentos físicos válidos para descargar.'}, status=404)
         
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="documentos_persona_{persona_id}.zip"'
+    suffix = f"_{scope}" if scope else ""
+    response['Content-Disposition'] = f'attachment; filename="documentos_persona_{persona_id}{suffix}.zip"'
     return response

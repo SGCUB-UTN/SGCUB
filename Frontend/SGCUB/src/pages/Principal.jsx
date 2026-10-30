@@ -3,7 +3,7 @@ import useDashboard from '../hooks/useDashboard'
 import DocumentSummarySection from '../components/dashboard/DocumentSummarySection'
 import FinancialKpiSection from '../components/dashboard/FinancialKpiSection'
 import ProcessStatusSection from '../components/dashboard/ProcessStatusSection'
-import MovimientoManualModal from '../components/finanzas/MovimientoManualModal'
+import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -17,7 +17,7 @@ const DATE_LABEL = new Date().toLocaleDateString('es-AR', {
 
 export default function Principal() {
   const { openPayment } = useRegisterPayment()
-  const [movimientoManualAbierto, setMovimientoManualAbierto] = useState(false)
+  const [movimientoAbierto, setMovimientoAbierto] = useState(false)
   const {
     isLoading,
     totalRecaudadoMes,
@@ -40,7 +40,7 @@ export default function Principal() {
         actions={(
           <>
             <PrimaryButton icon="payments" onClick={() => openPayment()}>Registrar pago</PrimaryButton>
-            <SecondaryButton icon="swap_horiz" onClick={() => setMovimientoManualAbierto(true)}>Registrar movimiento</SecondaryButton>
+            <SecondaryButton icon="swap_horiz" onClick={() => setMovimientoAbierto(true)}>Ingreso o devolución</SecondaryButton>
           </>
         )}
       />
@@ -66,9 +66,9 @@ export default function Principal() {
         <ProcessStatusSection />
       </div>
 
-      <MovimientoManualModal
-        opened={movimientoManualAbierto}
-        onClose={() => setMovimientoManualAbierto(false)}
+      <OtroMovimientoModal
+        opened={movimientoAbierto}
+        onClose={() => setMovimientoAbierto(false)}
       />
     </div>
   )
