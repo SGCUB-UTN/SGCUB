@@ -2346,6 +2346,19 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(socio["dni"], "80000001")
 		self.assertEqual(socio["apellido"], "Prueba")
 
+	def test_annulled_receipt_lists_its_reason(self):
+		receipt = self.pagar("2500.00")
+		self.client.post(
+			reverse("revertir-pago", args=[receipt["pago"]]),
+			{"motivo": "Se cargó dos veces", "responsable": "Tesorera"},
+			format="json",
+		)
+
+		comprobantes, _ = self.list_comprobantes()
+
+		self.assertEqual(comprobantes[0]["estado"], "Anulado")
+		self.assertEqual(comprobantes[0]["motivo_anulacion"], "Se cargó dos veces")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 

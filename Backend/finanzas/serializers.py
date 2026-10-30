@@ -403,11 +403,12 @@ class ComprobanteListSerializer(ComprobanteSerializer):
     es_ingreso = serializers.SerializerMethodField()
     concepto = serializers.SerializerMethodField()
     monto_devuelto = serializers.SerializerMethodField()
+    motivo_anulacion = serializers.CharField(source="pago.motivo_anulacion", read_only=True)
 
     class Meta(ComprobanteSerializer.Meta):
         fields = [
             "comprobante_id", "pago", "codigo", "fecha_emision", "numero", "monto_total", "estado",
-            "socio", "es_ingreso", "concepto", "monto_devuelto",
+            "socio", "es_ingreso", "concepto", "monto_devuelto", "motivo_anulacion",
         ]
 
     def get_codigo(self, obj):
