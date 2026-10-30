@@ -76,7 +76,7 @@ function Caja() {
             <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: recargarCaja })}>
               Registrar pago
             </PrimaryButton>
-            <SecondaryButton icon="swap_horiz" onClick={() => setMovimientoAbierto(true)}>
+            <SecondaryButton icon="currency_exchange" onClick={() => setMovimientoAbierto(true)}>
               Ingreso o devolución
             </SecondaryButton>
           </div>

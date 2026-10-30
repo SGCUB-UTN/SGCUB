@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
+import SegmentedControl from '../shared/SegmentedControl'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -10,6 +11,7 @@ import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { matchesSearch } from '../shared/search'
+import { downloadCashMovementsCsv } from './cashMovementsCsv'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
@@ -18,27 +20,29 @@ const ALL = 'todos'
 
 const SCOPES = [
   {
-    id: 'todos',
-    titulo: 'Todos los movimientos',
-    detalle: 'Recibos de cuotas e ingresos, notas de crédito y devoluciones.',
+    value: 'todos',
+    label: 'Todos los movimientos',
+    description: 'Recibos de cuotas e ingresos, notas de crédito y devoluciones.',
   },
   {
-    id: 'recibos',
-    titulo: 'Recibos',
-    detalle: 'Pagos de cuotas e ingresos ajenos a cuotas.',
+    value: 'recibos',
+    label: 'Recibos',
+    description: 'Pagos de cuotas e ingresos ajenos a cuotas.',
   },
   {
-    id: 'devoluciones',
-    titulo: 'Devoluciones',
-    detalle: 'Notas de crédito y devoluciones manuales. No restan de los ingresos.',
+    value: 'devoluciones',
+    label: 'Devoluciones',
+    description: 'Notas de crédito y devoluciones manuales. No restan de los ingresos.',
   },
 ]
 
+const ANNULLED_BADGE = 'bg-error-container text-on-error-container border-error/20'
+
 const TYPES = {
   CuotaVigente: { label: 'Cobro de cuotas', group: 'recibos', badge: 'bg-primary/10 text-primary border-primary/20' },
-  CuotaAnulada: { label: 'Cobro de cuotas anulado', group: 'recibos', badge: 'bg-error-container text-on-error-container border-error/20' },
+  CuotaAnulada: { label: 'Cobro de cuotas anulado', badgeLabel: 'Anulado', group: 'recibos', badge: ANNULLED_BADGE },
   IngresoVigente: { label: 'Ingreso', group: 'recibos', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
-  IngresoAnulado: { label: 'Ingreso anulado', group: 'recibos', badge: 'bg-error-container text-on-error-container border-error/20' },
+  IngresoAnulado: { label: 'Ingreso anulado', badgeLabel: 'Anulado', group: 'recibos', badge: ANNULLED_BADGE },
   NotaCredito: { label: 'Nota de crédito', group: 'devoluciones', badge: 'bg-amber-500/15 text-amber-800 border-amber-500/30' },
   Manual: { label: 'Devolución manual', group: 'devoluciones', badge: 'bg-error/10 text-error border-error/20' },
 }
@@ -47,6 +51,13 @@ const receiptType = (comprobante) => {
   const annulled = comprobante.estado === 'Anulado'
   if (comprobante.es_ingreso) return annulled ? 'IngresoAnulado' : 'IngresoVigente'
   return annulled ? 'CuotaAnulada' : 'CuotaVigente'
+}
+
+const receiptDetail = (comprobante, refunded) => {
+  if (comprobante.estado === 'Anulado') {
+    return comprobante.motivo_anulacion ? `Anulado: ${comprobante.motivo_anulacion}` : 'Anulado'
+  }
+  return refunded > 0 ? `Devuelto con notas de crédito: ${formatAmount(refunded)}` : `Pago #${comprobante.pago}`
 }
 
 const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : '')
@@ -83,7 +94,8 @@ function ComprobantesTable({
         raw: comprobante,
         filterCode: type,
         refCode: comprobante.codigo,
-        badgeLabel: TYPES[type].label,
+        typeLabel: TYPES[type].label,
+        badgeLabel: TYPES[type].badgeLabel ?? TYPES[type].label,
         badgeClass: TYPES[type].badge,
         date: comprobante.fecha_emision,
         sortDate: `${comprobante.fecha_emision || ''}-R${String(comprobante.numero).padStart(8, '0')}`,
@@ -91,7 +103,7 @@ function ComprobantesTable({
         socio: comprobante.socio,
         socioLabel: socioName(comprobante.socio),
         concept: comprobante.es_ingreso ? comprobante.concepto : 'Cobro de cuotas',
-        subConcept: refunded > 0 ? `Devuelto con notas de crédito: ${formatAmount(refunded)}` : `Pago #${comprobante.pago}`,
+        subConcept: receiptDetail(comprobante, refunded),
         paymentMethod: 'Ver comprobante',
         amount: Number(comprobante.monto_total ?? 0),
         isPositive: true,
@@ -105,6 +117,7 @@ function ComprobantesTable({
       raw: devolucion,
       filterCode: devolucion.tipo,
       refCode: devolucion.codigo,
+      typeLabel: TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre,
       badgeLabel: TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre,
       badgeClass: TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
       date: devolucion.fecha,
@@ -149,7 +162,7 @@ function ComprobantesTable({
         item.socioLabel,
         item.concept,
         item.subConcept,
-        item.badgeLabel,
+        item.typeLabel,
         item.paymentMethod,
         item.refCode,
       ])
@@ -193,84 +206,73 @@ function ComprobantesTable({
       className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm overflow-hidden"
       aria-labelledby="comprobantes-title"
     >
-      <div className="p-5 border-b border-outline-variant/20 flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 id="comprobantes-title" className="text-xl font-bold text-on-surface">
-              Movimientos y comprobantes de caja
-            </h2>
-            <p className="text-sm text-on-surface-variant">
-              Recibos de cuotas e ingresos, notas de crédito y devoluciones manuales.
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-primary text-2xl" aria-hidden="true">receipt_long</span>
+      <div className="p-5 pb-4 border-b border-outline-variant/20 flex flex-col gap-4">
+        <div>
+          <h2 id="comprobantes-title" className="text-xl font-bold text-on-surface">
+            Movimientos y comprobantes de caja
+          </h2>
+          <p className="text-sm text-on-surface-variant">
+            {SCOPES.find((option) => option.value === scope).description}
+          </p>
         </div>
 
-        <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <legend className="sr-only">Seleccionar tipo de registros de caja</legend>
-          {SCOPES.map((opcion) => (
-            <label
-              key={opcion.id}
-              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                scope === opcion.id
-                  ? 'border-primary bg-primary/5'
-                  : 'border-outline-variant/40 hover:bg-surface-container-low'
-              }`}
-            >
-              <input
-                type="radio"
-                name="alcance-caja"
-                value={opcion.id}
-                checked={scope === opcion.id}
-                onChange={() => changeScope(opcion.id)}
-                className="mt-1 accent-primary"
-              />
-              <span>
-                <span className="block font-semibold text-on-surface">{opcion.titulo}</span>
-                <span className="block mt-0.5 text-sm text-on-surface-variant">{opcion.detalle}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-      </div>
-
-      <div className="p-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
-        <TableSearchInput
-          value={search}
-          onChange={withPageReset(setSearch)}
-          placeholder="Buscar por comprobante, socio, DNI o concepto..."
-          label="Filtrar movimientos y comprobantes"
+        <SegmentedControl
+          label="Seleccionar tipo de registros de caja"
+          options={SCOPES}
+          value={scope}
+          onChange={changeScope}
+          className="self-start"
         />
-        <FilterSelect
-          className={FILTER_CLASS}
-          value={month}
-          onChange={(event) => withPageReset(setMonth)(event.target.value)}
-          aria-label="Filtrar por mes"
-        >
-          <option value={ALL}>Mes: Todos</option>
-          {availableMonths.map((value) => <option key={value} value={value}>{formatPeriod(value)}</option>)}
-        </FilterSelect>
-        <FilterSelect
-          className={FILTER_CLASS}
-          value={typeFilter}
-          onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
-          aria-label="Filtrar por tipo de movimiento"
-        >
-          <option value={ALL}>Estado / Tipo: Todos</option>
-          {visibleTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </FilterSelect>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <TableSearchInput
+            value={search}
+            onChange={withPageReset(setSearch)}
+            placeholder="Buscar por comprobante, socio, DNI o concepto..."
+            label="Filtrar movimientos y comprobantes"
+          />
+          <FilterSelect
+            className={FILTER_CLASS}
+            value={month}
+            onChange={(event) => withPageReset(setMonth)(event.target.value)}
+            aria-label="Filtrar por mes"
+          >
+            <option value={ALL}>Mes: Todos</option>
+            {availableMonths.map((value) => <option key={value} value={value}>{formatPeriod(value)}</option>)}
+          </FilterSelect>
+          <FilterSelect
+            className={FILTER_CLASS}
+            value={typeFilter}
+            onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
+            aria-label="Filtrar por tipo de movimiento"
+          >
+            <option value={ALL}>Estado / Tipo: Todos</option>
+            {visibleTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </FilterSelect>
+          <button
+            type="button"
+            onClick={() => downloadCashMovementsCsv(sorted)}
+            disabled={isLoading || Boolean(error) || sorted.length === 0}
+            title="Exportar movimientos filtrados"
+            aria-label="Exportar movimientos filtrados"
+            className="inline-flex items-center justify-center h-10 w-10 shrink-0 p-2 border border-outline-variant rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">receipt_long</span>
+          </button>
+        </div>
       </div>
 
       <DataTable
         tableClassName="min-w-[820px]"
+        headerCase="title"
         headers={(
           <>
             <SortableHeader className={HEADER_CLASS} etiqueta="Referencia" columna="number" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
-            <th className={HEADER_CLASS} scope="col">Concepto y comprobante asociado</th>
+            <th className={HEADER_CLASS} scope="col">Concepto y Comprobante</th>
             <th className={HEADER_CLASS} scope="col">Medio / Acción</th>
             <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
           </>
