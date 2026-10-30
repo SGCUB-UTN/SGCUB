@@ -1,6 +1,6 @@
-import { KpiColumn, KpiGrid } from '../shared/Kpi'
+import { KpiGrid } from '../shared/Kpi'
 import SectionHeading from '../shared/SectionHeading'
-import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
+import { formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import AffectedCategories from './AffectedCategories'
 import MorosidadTable from './MorosidadTable'
 import PadronStatusChart from './PadronStatusChart'
@@ -9,21 +9,49 @@ const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-v
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 
-function AmountKpi({ value, ...props }) {
-  return <KpiColumn value={formatWholeMoney(value)} title={formatMoney(value)} {...props} />
+const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
+
+function BreakdownItem({ swatchClass, label, amount, tone }) {
+  return (
+    <li className="flex items-center gap-2 min-w-0 text-sm">
+      <span className={`w-2.5 h-2.5 shrink-0 rounded-sm ${swatchClass}`} aria-hidden="true" />
+      <span className="flex-1 min-w-0 truncate text-on-surface-variant">{label}</span>
+      <span className={`shrink-0 font-semibold tabular-nums ${tone}`} title={formatMoney(amount)}>{formatWholeMoney(amount)}</span>
+    </li>
+  )
+}
+
+function DebtKpi({ rows, total }) {
+  const capital = sumBy(rows, 'capital')
+  const surcharges = sumBy(rows, 'recargos')
+  const capitalShare = total > 0 ? (capital / total) * 100 : 0
+  return (
+    <div className="min-w-0 h-full flex flex-col justify-center">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Monto total adeudado</h3>
+      <p className={`mt-1 text-2xl font-bold tabular-nums leading-tight ${total > 0 ? 'text-error' : 'text-on-surface'}`} title={formatMoney(total)}>
+        {formatWholeMoney(total)}
+      </p>
+      {total > 0 && (
+        <>
+          <div className="mt-3 flex h-2 gap-0.5" aria-hidden="true">
+            {capital > 0 && <div className="h-full rounded bg-outline-variant" style={{ width: `${capitalShare}%` }} />}
+            {surcharges > 0 && <div className="h-full flex-1 rounded bg-error" />}
+          </div>
+          <ul className="mt-2 flex flex-col gap-1">
+            <BreakdownItem swatchClass="bg-outline-variant" label="Cuota s/recargo" amount={capital} tone="text-on-surface" />
+            <BreakdownItem swatchClass="bg-error" label="Recargos por mora" amount={surcharges} tone="text-error" />
+          </ul>
+        </>
+      )}
+    </div>
+  )
 }
 
 function MorosidadKpis({ reporte }) {
-  const total = Number(reporte.monto_total)
   const delinquent = reporte.filas.length
   return (
     <KpiGrid columns={4}>
-      <AmountKpi
-        label="Monto total adeudado"
-        value={total}
-        tone={total > 0 ? 'text-error' : 'text-on-surface'}
-        caption={`${formatCount(delinquent)} ${delinquent === 1 ? 'socio moroso' : 'socios morosos'}`}
-      />
+      <DebtKpi rows={reporte.filas} total={Number(reporte.monto_total)} />
       <PadronStatusChart delinquent={delinquent} roster={reporte.padron} percentage={reporte.porcentaje_morosidad} />
       <AffectedCategories categories={reporte.categorias_afectadas} />
     </KpiGrid>

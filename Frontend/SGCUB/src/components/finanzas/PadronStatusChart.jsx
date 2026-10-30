@@ -74,7 +74,6 @@ export default function PadronStatusChart({ delinquent, roster, percentage }) {
           ))}
         </ul>
       </div>
-      <p className="mt-auto pt-1 text-sm text-on-surface-variant">{formatCount(roster)} en el padrón</p>
     </div>
   )
 }
