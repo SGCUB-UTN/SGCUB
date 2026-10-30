@@ -335,6 +335,11 @@ def item_pago_detail(request, pk):
 	return Response(ItemPagoSerializer(get_object_or_404(ItemPago, pk=pk)).data)
 
 
+def _requested_month(request):
+	value = request.query_params.get("periodo")
+	return parse_period(value) if value else None
+
+
 @extend_schema(tags=["Finanzas/Comprobante"], responses=ComprobanteListSerializer)
 @api_view(["GET"])
 def comprobante_list(request):
@@ -359,6 +364,12 @@ def comprobante_list(request):
 		comprobantes = comprobantes.filter(
 			pago__movimiento__imputaciones_origen__movimiento_destino__cuota_id=int(cuota_id),
 		).distinct()
+	try:
+		month = _requested_month(request)
+	except ValueError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	if month:
+		comprobantes = comprobantes.filter(fecha_emision__year=month.year, fecha_emision__month=month.month)
 	return Response(ComprobanteListSerializer(comprobantes, many=True).data)
 
 
@@ -424,6 +435,12 @@ def devolucion_list_create(request):
 			refunds = refunds.filter(cuenta_corriente__socio_id=int(socio_id))
 		if request.query_params.get("tipo"):
 			refunds = refunds.filter(tipo=request.query_params["tipo"])
+		try:
+			month = _requested_month(request)
+		except ValueError as error:
+			return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+		if month:
+			refunds = refunds.filter(fecha__year=month.year, fecha__month=month.month)
 		return Response(DevolucionSerializer(refunds, many=True).data)
 
 	serializer = DevolucionManualSerializer(data=request.data)

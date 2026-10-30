@@ -856,6 +856,22 @@ class DevolucionesManualesTests(APITestCase):
 		self.assertEqual(len(response.data), 1)
 		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)
 
+	def test_lista_filtrando_por_periodo(self):
+		octubre = self.devolver().data
+		septiembre = self.devolver().data
+		Devolucion.objects.filter(pk=septiembre["devolucion_id"]).update(
+			fecha=timezone.make_aware(datetime(2026, 9, 15, 12, 0)),
+		)
+		Devolucion.objects.filter(pk=octubre["devolucion_id"]).update(
+			fecha=timezone.make_aware(datetime(2026, 10, 15, 12, 0)),
+		)
+
+		response = self.client.get(reverse("devolucion-list"), {"periodo": "2026-09"})
+		invalido = self.client.get(reverse("devolucion-list"), {"periodo": "septiembre"})
+
+		self.assertEqual([item["devolucion_id"] for item in response.data], [septiembre["devolucion_id"]])
+		self.assertEqual(invalido.status_code, 400)
+
 
 class BecaModeloTests(TestCase):
 	def setUp(self):
@@ -1427,6 +1443,18 @@ class ReversionPagoTests(PagoTestBase):
 		response = self.client.get(reverse("comprobante-list"), {"socio_id": self.socio.pk})
 
 		self.assertEqual([item["socio"]["socio_id"] for item in response.data], [self.socio.pk])
+
+	def test_lista_los_comprobantes_del_periodo(self):
+		pago = self.pagar([self.agosto], "1000.00").data["comprobante"]
+		_, ingreso = register_income(self.socio.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+		Comprobante.objects.filter(pk=pago["comprobante_id"]).update(fecha_emision=date(2026, 9, 10))
+		Comprobante.objects.filter(pk=ingreso.pk).update(fecha_emision=date(2026, 10, 5))
+
+		response = self.client.get(reverse("comprobante-list"), {"periodo": "2026-10"})
+		invalido = self.client.get(reverse("comprobante-list"), {"periodo": "2026-13"})
+
+		self.assertEqual([item["comprobante_id"] for item in response.data], [ingreso.pk])
+		self.assertEqual(invalido.status_code, 400)
 
 	def test_un_ingreso_posterior_no_impide_revertir_el_pago(self):
 		pago = self.pagar([self.agosto], "1000.00").data["pago"]
