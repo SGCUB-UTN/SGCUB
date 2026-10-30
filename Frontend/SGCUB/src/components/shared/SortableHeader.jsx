@@ -10,7 +10,7 @@ export default function SortableHeader({ etiqueta, columna, orden, onOrdenar, cl
         type="button"
         onClick={() => onOrdenar(columna)}
         title={`Ordenar ${SIGUIENTE[direccion] ?? 'de menor a mayor'}`}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider font-semibold whitespace-nowrap cursor-pointer hover:text-primary transition-colors ${direccion ? 'text-primary' : ''}`}
+        className={`inline-flex items-center gap-1 [text-transform:inherit] [letter-spacing:inherit] font-semibold whitespace-nowrap cursor-pointer hover:text-primary transition-colors ${direccion ? 'text-primary' : ''}`}
       >
         {etiqueta}
         <span
