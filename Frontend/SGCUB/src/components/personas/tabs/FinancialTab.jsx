@@ -13,7 +13,7 @@ import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
 import { KpiColumn, KpiGrid } from '../../shared/Kpi'
 import { formatCount, formatMoney, formatWholeMoney } from '../../cuota/cuotaPeriod'
-import { SecondaryButton, TabHeader } from './parts'
+import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useRevertPayment from '../../../hooks/useRevertPayment'
@@ -32,39 +32,6 @@ const SECTIONS = [
 ]
 
 const PANEL_ID = 'financial-section-panel'
-
-function PanelFooter({ children }) {
-  return (
-    <div className={`flex flex-wrap justify-end gap-2 py-3 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS}`}>
-      {children}
-    </div>
-  )
-}
-
-function SectionTabs({ value, onChange }) {
-  return (
-    <div role="tablist" aria-label="Secciones de la cuenta corriente" className="flex gap-1 p-1.5 mt-6 overflow-x-auto rounded-t-xl bg-surface-container border border-outline-variant/30">
-      {SECTIONS.map((section) => {
-        const active = section.value === value
-        return (
-          <button
-            key={section.value}
-            id={section.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            aria-controls={PANEL_ID}
-            onClick={() => onChange(section.value)}
-            className={`flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-base font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${active ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`}
-          >
-            <span className={`material-symbols-outlined ${active ? 'text-primary' : 'text-outline'}`} style={{ fontSize: 20 }} aria-hidden="true">{section.icon}</span>
-            {section.title}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 const MOVEMENT_BADGES = {
   Ingreso: { label: 'Ingreso', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -234,9 +201,16 @@ export function FinancialStatement({ socio, finances }) {
           value={summary.activeScholarships == null ? '—' : formatCount(summary.activeScholarships)}
         />
       </KpiGrid>
-      <SectionTabs value={activeSection} onChange={setActiveSection} />
+      <SegmentedTabs
+        label="Secciones de la cuenta corriente"
+        sections={SECTIONS}
+        value={activeSection}
+        onChange={setActiveSection}
+        panelId={PANEL_ID}
+        className="mt-6"
+      />
 
-      <div className="min-w-0 overflow-hidden rounded-b-xl border-x border-b border-outline-variant/30 bg-surface-container-lowest">
+      <div className={TAB_PANEL_CLASS}>
         <div id={PANEL_ID} role="tabpanel" aria-labelledby={SECTIONS.find((section) => section.value === activeSection).id}>
           {activeSection === CUOTAS && (cuotas.length === 0 ? (
             <SectionEmpty>La cuenta corriente no tiene cuotas generadas.</SectionEmpty>
@@ -254,21 +228,21 @@ export function FinancialStatement({ socio, finances }) {
           {activeSection === MOVEMENTS && (
             <>
               <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
-              <PanelFooter>
+              <TableFooter>
                 <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
                   Agregar ingreso o devolución
                 </SecondaryButton>
-              </PanelFooter>
+              </TableFooter>
             </>
           )}
           {activeSection === BENEFITS && (
             <>
               <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
-              <PanelFooter>
+              <TableFooter>
                 <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
                   Agregar beca o descuento
                 </BenefitButton>
-              </PanelFooter>
+              </TableFooter>
             </>
           )}
         </div>

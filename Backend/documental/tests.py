@@ -1,10 +1,17 @@
+import io
+import shutil
+import tempfile
+import zipfile
+
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from padron.models import Persona
 
-from .models import Documento, TipoDocumento
+from .models import Documento, EstadoDocumento, TipoDocumento
 
 
 class TipoDocumentoTests(APITestCase):
@@ -94,3 +101,59 @@ class TipoDocumentoTests(APITestCase):
         self.assertIn("fecha_vencimiento", sin_vencimiento.data)
         self.assertEqual(con_vencimiento.status_code, 201, con_vencimiento.data)
         self.assertEqual(Documento.objects.filter(tipo_documento=tipo).count(), 1)
+
+
+class DescargaZipTests(APITestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+        settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="administrativo"))
+        self.persona = Persona.objects.create(nombre="Ana", apellido="Paz", dni="70000002")
+        self.estado = EstadoDocumento.objects.first() or EstadoDocumento.objects.create(nombre="Vigente")
+        dni = TipoDocumento.objects.get(nombre="DNI")
+        apto = TipoDocumento.objects.get(nombre="Apto Físico")
+        self.dni_anterior = self.documento(dni, "dni-2025.pdf")
+        self.dni_actual = self.documento(dni, "dni-2026.pdf")
+        self.apto = self.documento(apto, "apto.pdf")
+
+    def documento(self, tipo, nombre_archivo):
+        documento = Documento(tipo_documento=tipo, estado_documento=self.estado, persona=self.persona, nombre=nombre_archivo)
+        documento.archivoUrl.save(nombre_archivo, ContentFile(b"%PDF-1.4"), save=True)
+        return documento
+
+    def descargar(self, **params):
+        return self.client.get(reverse("download_zip", args=[self.persona.pk]), params)
+
+    def archivos(self, response):
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archivo:
+            return len(archivo.namelist())
+
+    def test_sin_alcance_descarga_todos_los_documentos(self):
+        response = self.descargar()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.archivos(response), 3)
+
+    def test_vigentes_descarga_la_ultima_version_de_cada_tipo(self):
+        response = self.descargar(alcance="vigentes")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.archivos(response), 2)
+        self.assertIn("_vigentes.zip", response["Content-Disposition"])
+
+    def test_historial_descarga_solo_las_versiones_anteriores(self):
+        response = self.descargar(alcance="historial")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.archivos(response), 1)
+
+    def test_historial_vacio_responde_404(self):
+        self.dni_anterior.delete()
+
+        self.assertEqual(self.descargar(alcance="historial").status_code, 404)
+
+    def test_rechaza_un_alcance_desconocido(self):
+        self.assertEqual(self.descargar(alcance="otros").status_code, 400)

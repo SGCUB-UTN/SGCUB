@@ -55,8 +55,9 @@ export const getAlertasCount = async () => {
   return data
 }
 
-export const downloadZip = async (personaId) => {
+export const downloadZip = async (personaId, alcance) => {
   const response = await api.get(`documental/zip/${personaId}/`, {
+    params: alcance ? { alcance } : undefined,
     responseType: 'blob',
   })
   return response.data

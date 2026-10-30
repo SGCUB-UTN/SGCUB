@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
-import { FLUSH_TABLE_CLASS, INSET_PADDING_X_CLASS } from '../shared/flushTable'
-import SectionHeading from '../shared/SectionHeading'
+import { INSET_PADDING_X_CLASS } from '../shared/flushTable'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TableSearchInput from '../shared/TableSearchInput'
@@ -66,10 +65,9 @@ function ActionButton({ icon, label, className, onClick }) {
   )
 }
 
-export default function PersonaDocumentsTable({ title, documents, getTypeName, onEdit, onDelete, isHistory = false, className = '' }) {
+export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, onDelete, isHistory = false }) {
   const [search, setSearch] = useState('')
   const [docType, setDocType] = useState(ALL)
-  const [status, setStatus] = useState(ALL)
 
   const rows = useMemo(() => {
     const today = new Date()
@@ -89,41 +87,27 @@ export default function PersonaDocumentsTable({ title, documents, getTypeName, o
   const filteredRows = useMemo(() => {
     return rows.filter(doc =>
       matchesSearch(search, [doc.typeName]) &&
-      (docType === ALL || String(doc.tipo_documento) === docType) &&
-      (status === ALL || doc.status === status))
-  }, [rows, search, docType, status])
+      (docType === ALL || String(doc.tipo_documento) === docType))
+  }, [rows, search, docType])
 
   const { ordenadas: sortedRows, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filteredRows, SORT_VALUES, INITIAL_SORT)
 
   return (
-    <div className={`min-w-0 ${FLUSH_TABLE_CLASS} ${className}`}>
-      {title && (
-        <SectionHeading
-          as="h3"
-          icon="history"
-          title={title}
-          className={`${INSET_PADDING_X_CLASS} border-b`}
-          actions={<span className="text-sm text-on-surface-variant">{rows.length} documentos</span>}
-        />
-      )}
-      <div className={`${INSET_PADDING_X_CLASS} py-4 border-b border-outline-variant/20 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5`}>
-        <TableSearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Filtrar por tipo de documento..."
-          label="Filtrar documentos"
-        />
-        <FilterSelect className={SELECT_CLASS} value={docType} onChange={e => setDocType(e.target.value)} aria-label="Filtrar por tipo de documento">
-          <option value={ALL}>Tipo: Todos</option>
-          {typeOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </FilterSelect>
-        {!isHistory && (
-          <FilterSelect className={SELECT_CLASS} value={status} onChange={e => setStatus(e.target.value)} aria-label="Filtrar por estado">
-            <option value={ALL}>Estado: Todos</option>
-            {Object.entries(STATUS_LABELS).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
+    <div className="min-w-0">
+      {isHistory && (
+        <div className={`${INSET_PADDING_X_CLASS} py-4 border-b border-outline-variant/30 bg-surface-container-low/60 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5`}>
+          <TableSearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Filtrar por tipo de documento..."
+            label="Filtrar documentos"
+          />
+          <FilterSelect className={SELECT_CLASS} value={docType} onChange={e => setDocType(e.target.value)} aria-label="Filtrar por tipo de documento">
+            <option value={ALL}>Tipo: Todos</option>
+            {typeOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </FilterSelect>
-        )}
-      </div>
+        </div>
+      )}
       <DataTable
         headers={(
           <>
