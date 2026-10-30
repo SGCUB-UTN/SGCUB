@@ -3,7 +3,7 @@ import DataTable from '../shared/DataTable'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
-import { formatRangoEdad, GENERO_BADGE_CLASSES } from './categoriaFormat'
+import { formatRangoEdad } from './categoriaFormat'
 
 const SORT_VALUES = {
   name: (categoria) => categoria.nombre,
@@ -13,22 +13,15 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'maxAge', direccion: 'desc' }
 const COLUMN_COUNT = 4
-const TITLES = { M: 'CATEGORÍAS MASCULINAS', F: 'CATEGORÍAS FEMENINAS' }
 
-function CategoriasGeneroTable({ genero, categorias, isLoading, error }) {
+function CategoriasGeneroTable({ categorias, isLoading, error }) {
   const navigate = useNavigate()
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(categorias, SORT_VALUES, INITIAL_SORT)
 
   return (
-    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
-      <div className="px-6 py-4 border-b border-outline-variant/20 flex items-center gap-3">
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-base font-semibold ${GENERO_BADGE_CLASSES[genero]}`}>
-          {TITLES[genero]}
-        </span>
-        {!isLoading && <span className="ml-auto text-sm text-on-surface-variant">{categorias.length} categorías</span>}
-      </div>
-
+    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden">
       <DataTable
+        headerCase="title"
         headers={(
           <>
             <SortableHeader className="py-3 px-4" etiqueta="Edad" columna="maxAge" orden={sort} onOrdenar={sortBy} />

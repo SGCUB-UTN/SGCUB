@@ -47,7 +47,7 @@ function Categorias() {
         )}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <StatCard label="Total" value={totals.total} icon="sports_soccer" tone="neutral" />
         <StatCard label="Masculinas" value={totals.male} icon="man" tone="neutral" />
         <StatCard label="Femeninas" value={totals.female} icon="woman" tone="neutral" />
