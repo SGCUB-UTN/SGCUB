@@ -54,7 +54,14 @@ export default {
         "tertiary": "var(--color-tertiary)",
         "on-secondary-fixed-variant": "var(--color-on-secondary-fixed-variant)",
         "surface-container-highest": "var(--color-surface-container-highest)",
-        "on-tertiary-fixed-variant": "var(--color-on-tertiary-fixed-variant)"
+        "on-tertiary-fixed-variant": "var(--color-on-tertiary-fixed-variant)",
+        "chart-income": "var(--color-chart-income)",
+        "chart-1": "var(--color-chart-1)",
+        "chart-2": "var(--color-chart-2)",
+        "chart-3": "var(--color-chart-3)",
+        "chart-4": "var(--color-chart-4)",
+        "chart-5": "var(--color-chart-5)",
+        "chart-6": "var(--color-chart-6)"
       },
       borderRadius: {
         "DEFAULT": "0.125rem",

@@ -10,26 +10,16 @@ import IncomeOriginChart from '../components/resumen/IncomeOriginChart'
 import DataTable from '../components/shared/DataTable'
 import { KpiColumn, KpiGrid } from '../components/shared/Kpi'
 import PageHeader from '../components/shared/PageHeader'
+import SectionDivider from '../components/shared/SectionDivider'
 import SectionHeading from '../components/shared/SectionHeading'
+import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../components/shared/panel'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
 
-const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
-const BODY_CLASS = 'px-4 sm:px-5 py-4'
-const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded text-sm font-semibold text-on-surface bg-surface-container-lowest hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
 const TOGGLE_BUTTON_CLASS = 'inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent'
 
 const socioLabel = (socio) => `${socio.apellido}, ${socio.nombre}`
-
-function SectionDivider({ children }) {
-  return (
-    <div className="flex items-center gap-3 pt-2" role="presentation">
-      <span className="text-xs font-bold uppercase tracking-widest text-outline whitespace-nowrap">{children}</span>
-      <span className="h-px flex-1 bg-outline-variant/40" />
-    </div>
-  )
-}
 
 function TotalLabel({ amount, negative = false }) {
   return (

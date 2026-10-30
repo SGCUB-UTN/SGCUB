@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
-import SegmentedControl from '../shared/SegmentedControl'
+import SectionHeading from '../shared/SectionHeading'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
-import { formatPeriod, periodOf, periodOptions } from '../shared/periodFormat'
+import TableTabs from '../shared/TableTabs'
+import { tabId, tabPanelId } from '../shared/tabIds'
+import { PANEL_CLASS } from '../shared/panel'
+import { formatPeriod } from '../shared/periodFormat'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
@@ -14,25 +17,27 @@ import { matchesSearch } from '../shared/search'
 import { downloadCashMovementsCsv } from './cashMovementsCsv'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const HEADER_CLASS = 'py-3 px-4'
+const HEADER_CLASS = 'py-2.5 px-4'
+const CELL_CLASS = 'py-2.5 px-4'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
+const TABS_ID = 'comprobantes-scope'
 
 const SCOPES = [
   {
     value: 'todos',
     label: 'Todos los movimientos',
-    description: 'Recibos de cuotas e ingresos, notas de crédito y devoluciones.',
+    description: 'Comprobantes de ingresos y devoluciones.',
   },
   {
-    value: 'recibos',
-    label: 'Recibos',
-    description: 'Pagos de cuotas e ingresos ajenos a cuotas.',
+    value: 'Ingresos',
+    label: 'Ingresos',
+    description: 'Pagos de cuotas y otros ingresos.',
   },
   {
     value: 'devoluciones',
     label: 'Devoluciones',
-    description: 'Notas de crédito y devoluciones manuales. No restan de los ingresos.',
+    description: 'Notas de crédito y devoluciones manuales.',
   },
 ]
 
@@ -72,6 +77,7 @@ const SORT_VALUES = {
 const INITIAL_SORT = { columna: 'date', direccion: 'desc' }
 
 function ComprobantesTable({
+  period,
   comprobantes = [],
   devoluciones = [],
   isLoading,
@@ -82,7 +88,6 @@ function ComprobantesTable({
   const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState(ALL)
-  const [month, setMonth] = useState(ALL)
 
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
@@ -138,10 +143,13 @@ function ComprobantesTable({
     return [...receiptItems, ...refundItems]
   }, [comprobantes, devoluciones])
 
-  const availableMonths = useMemo(
-    () => periodOptions(unifiedItems, (item) => periodOf(item.date)),
-    [unifiedItems],
-  )
+  const scopeOptions = useMemo(() => {
+    if (isLoading || error) return SCOPES
+    return SCOPES.map((option) => ({
+      ...option,
+      count: unifiedItems.filter((item) => option.value === 'todos' || TYPES[item.filterCode]?.group === option.value).length,
+    }))
+  }, [unifiedItems, isLoading, error])
 
   const visibleTypeOptions = useMemo(
     () => Object.entries(TYPES)
@@ -156,7 +164,6 @@ function ComprobantesTable({
     return unifiedItems.filter((item) => {
       if (scope !== 'todos' && TYPES[item.filterCode]?.group !== scope) return false
       if (typeFilter !== ALL && item.filterCode !== typeFilter) return false
-      if (month !== ALL && periodOf(item.date) !== month) return false
       if (!text) return true
       return matchesSearch(text, [
         item.socioLabel,
@@ -173,7 +180,7 @@ function ComprobantesTable({
           item.socio?.numero_socio,
         ].some((field) => String(field ?? '').includes(textDigits)))
     })
-  }, [unifiedItems, scope, typeFilter, month, search])
+  }, [unifiedItems, scope, typeFilter, search])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
@@ -202,155 +209,144 @@ function ComprobantesTable({
   }
 
   return (
-    <section
-      className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm overflow-hidden"
-      aria-labelledby="comprobantes-title"
-    >
-      <div className="p-5 pb-4 border-b border-outline-variant/20 flex flex-col gap-4">
-        <div>
-          <h2 id="comprobantes-title" className="text-xl font-bold text-on-surface">
-            Movimientos y comprobantes de caja
-          </h2>
+    <section className={PANEL_CLASS} aria-labelledby="comprobantes-title">
+      <SectionHeading
+        id="comprobantes-title"
+        icon="receipt_long"
+        title="Movimientos y comprobantes de caja"
+        className="px-4 sm:px-5"
+      />
+
+      <TableTabs
+        id={TABS_ID}
+        label="Tipo de registros de caja"
+        options={scopeOptions}
+        value={scope}
+        onChange={changeScope}
+      />
+
+      <div id={tabPanelId(TABS_ID)} role="tabpanel" aria-labelledby={tabId(TABS_ID, scope)}>
+        <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/30 flex flex-col gap-3">
           <p className="text-sm text-on-surface-variant">
             {SCOPES.find((option) => option.value === scope).description}
           </p>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <TableSearchInput
+              value={search}
+              onChange={withPageReset(setSearch)}
+              placeholder="Buscar por comprobante, socio, DNI o concepto..."
+              label="Filtrar movimientos y comprobantes"
+            />
+            <FilterSelect
+              className={FILTER_CLASS}
+              value={typeFilter}
+              onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
+              aria-label="Filtrar por tipo de movimiento"
+            >
+              <option value={ALL}>Estado / Tipo: Todos</option>
+              {visibleTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </FilterSelect>
+            <button
+              type="button"
+              onClick={() => downloadCashMovementsCsv(sorted, period)}
+              disabled={isLoading || Boolean(error) || sorted.length === 0}
+              title="Exportar movimientos filtrados"
+              aria-label="Exportar movimientos filtrados"
+              className="inline-flex items-center justify-center h-10 w-10 shrink-0 p-2 border border-outline-variant rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">download</span>
+            </button>
+          </div>
         </div>
 
-        <SegmentedControl
-          label="Seleccionar tipo de registros de caja"
-          options={SCOPES}
-          value={scope}
-          onChange={changeScope}
-          className="self-start"
-        />
-
-        <div className="flex flex-wrap items-center gap-4">
-          <TableSearchInput
-            value={search}
-            onChange={withPageReset(setSearch)}
-            placeholder="Buscar por comprobante, socio, DNI o concepto..."
-            label="Filtrar movimientos y comprobantes"
+        <DataTable
+          tableClassName="min-w-[820px]"
+          headers={(
+            <>
+              <SortableHeader className={HEADER_CLASS} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
+              <th className={HEADER_CLASS} scope="col">Concepto</th>
+              <th className={HEADER_CLASS} scope="col">Medio</th>
+              <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
+            </>
+          )}
+        >
+          <TableMessageRow
+            colSpan={COLUMN_COUNT}
+            isLoading={isLoading}
+            isEmpty={Boolean(error) || visibleRows.length === 0}
+            error={error}
+            loadingText="Cargando movimientos y comprobantes..."
+            errorText="No se pudieron cargar los movimientos de caja."
+            emptyText={
+              unifiedItems.length === 0
+                ? `No hay movimientos ni comprobantes registrados en ${formatPeriod(period)}.`
+                : 'No hay movimientos que coincidan con el filtro.'
+            }
           />
-          <FilterSelect
-            className={FILTER_CLASS}
-            value={month}
-            onChange={(event) => withPageReset(setMonth)(event.target.value)}
-            aria-label="Filtrar por mes"
-          >
-            <option value={ALL}>Mes: Todos</option>
-            {availableMonths.map((value) => <option key={value} value={value}>{formatPeriod(value)}</option>)}
-          </FilterSelect>
-          <FilterSelect
-            className={FILTER_CLASS}
-            value={typeFilter}
-            onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
-            aria-label="Filtrar por tipo de movimiento"
-          >
-            <option value={ALL}>Estado / Tipo: Todos</option>
-            {visibleTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </FilterSelect>
-          <button
-            type="button"
-            onClick={() => downloadCashMovementsCsv(sorted)}
-            disabled={isLoading || Boolean(error) || sorted.length === 0}
-            title="Exportar movimientos filtrados"
-            aria-label="Exportar movimientos filtrados"
-            className="inline-flex items-center justify-center h-10 w-10 shrink-0 p-2 border border-outline-variant rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">receipt_long</span>
-          </button>
-        </div>
-      </div>
 
-      <DataTable
-        tableClassName="min-w-[820px]"
-        headerCase="title"
-        headers={(
-          <>
-            <SortableHeader className={HEADER_CLASS} etiqueta="Referencia" columna="number" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
-            <th className={HEADER_CLASS} scope="col">Concepto y Comprobante</th>
-            <th className={HEADER_CLASS} scope="col">Medio / Acción</th>
-            <SortableHeader className={`${HEADER_CLASS} text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
-          </>
-        )}
-      >
-        <TableMessageRow
-          colSpan={COLUMN_COUNT}
-          isLoading={isLoading}
-          isEmpty={Boolean(error) || visibleRows.length === 0}
-          error={error}
-          loadingText="Cargando movimientos y comprobantes..."
-          errorText="No se pudieron cargar los movimientos de caja."
-          emptyText={
-            unifiedItems.length === 0
-              ? 'Todavía no hay movimientos ni comprobantes registrados.'
-              : 'No hay movimientos que coincidan con el filtro.'
-          }
-        />
-
-        {!isLoading && !error && visibleRows.map((item) => (
-          <tr
-            key={item.key}
-            onClick={() => handleRowAction(item)}
-            onKeyDown={(event) => handleKeyDown(event, item)}
-            tabIndex={0}
-            role="button"
-            className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
-          >
-            <td className="py-3 px-4 whitespace-nowrap">
-              <div className="flex flex-col items-start gap-1">
-                <span className="font-bold text-primary">{item.refCode}</span>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border ${item.badgeClass}`}>
+          {!isLoading && !error && visibleRows.map((item) => (
+            <tr
+              key={item.key}
+              onClick={() => handleRowAction(item)}
+              onKeyDown={(event) => handleKeyDown(event, item)}
+              tabIndex={0}
+              role="button"
+              className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+            >
+              <td className={`${CELL_CLASS} whitespace-nowrap`}>
+                <span className="block font-semibold text-primary">{item.refCode}</span>
+                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${item.badgeClass}`}>
                   {item.badgeLabel}
                 </span>
-              </div>
-            </td>
-            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(item.date)}</td>
-            <td className="py-3 px-4">
-              {item.socio ? (
-                <>
-                  <span className="block font-medium text-on-surface">{item.socioLabel}</span>
-                  <span className="block text-sm text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
-                </>
-              ) : (
-                <span className="text-on-surface-variant">—</span>
-              )}
-            </td>
-            <td className="py-3 px-4 max-w-xs">
-              <span className="block font-medium text-on-surface truncate" title={item.concept}>
-                {item.concept}
-              </span>
-              <span className="block text-xs text-on-surface-variant truncate" title={item.subConcept}>
-                {item.subConcept}
-              </span>
-            </td>
-            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">
-              <span className="inline-flex items-center gap-1 text-sm">
-                {item.paymentMethod}
-                <span className="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">chevron_right</span>
-              </span>
-            </td>
-            <td
-              className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
-                item.isAnulado
-                  ? 'text-outline line-through'
-                  : item.isPositive
-                    ? 'text-emerald-700'
-                    : 'text-error'
-              }`}
-            >
-              {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
-              {formatAmount(item.amount)}
-            </td>
-          </tr>
-        ))}
-      </DataTable>
+              </td>
+              <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap`}>{formatDate(item.date)}</td>
+              <td className={CELL_CLASS}>
+                {item.socio ? (
+                  <>
+                    <span className="block text-on-surface">{item.socioLabel}</span>
+                    <span className="block text-xs text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
+                  </>
+                ) : (
+                  <span className="text-on-surface-variant">—</span>
+                )}
+              </td>
+              <td className={`${CELL_CLASS} max-w-xs`}>
+                <span className="block text-on-surface truncate" title={item.concept}>
+                  {item.concept}
+                </span>
+                <span className="block text-xs text-on-surface-variant truncate" title={item.subConcept}>
+                  {item.subConcept}
+                </span>
+              </td>
+              <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap`}>
+                <span className="inline-flex items-center gap-1">
+                  {item.paymentMethod}
+                  <span className="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">chevron_right</span>
+                </span>
+              </td>
+              <td
+                className={`${CELL_CLASS} text-right font-semibold tabular-nums whitespace-nowrap ${
+                  item.isAnulado
+                    ? 'text-outline line-through'
+                    : item.isPositive
+                      ? 'text-emerald-700'
+                      : 'text-error'
+                }`}
+              >
+                {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
+                {formatAmount(item.amount)}
+              </td>
+            </tr>
+          ))}
+        </DataTable>
 
-      <TablePagination id="comprobantes-rows-per-page" {...paginationProps} />
+        <TablePagination id="comprobantes-rows-per-page" {...paginationProps} />
+      </div>
     </section>
   )
 }

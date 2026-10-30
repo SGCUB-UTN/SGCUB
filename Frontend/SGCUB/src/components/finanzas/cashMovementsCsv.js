@@ -24,7 +24,7 @@ const csvCell = (value) => {
   return /[";\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
-export function downloadCashMovementsCsv(items) {
+export function downloadCashMovementsCsv(items, period) {
   const lines = [
     CSV_COLUMNS.map(([header]) => csvCell(header)).join(';'),
     ...items.map((item) => CSV_COLUMNS.map(([, value]) => csvCell(value(item))).join(';')),
@@ -32,7 +32,7 @@ export function downloadCashMovementsCsv(items) {
   const url = URL.createObjectURL(new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `movimientos-caja-${new Date().toISOString().slice(0, 10)}.csv`
+  link.download = `movimientos-caja-${period}.csv`
   document.body.appendChild(link)
   link.click()
   link.remove()

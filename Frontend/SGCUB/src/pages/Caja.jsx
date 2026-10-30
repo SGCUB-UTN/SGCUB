@@ -2,40 +2,41 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getSocio } from '../api/socios'
 import { getEstadoCuenta } from '../api/estadoCuenta'
-import { getComprobantes } from '../api/comprobantes'
-import { getDevoluciones } from '../api/devoluciones'
+import PeriodSelector from '../components/cuota/PeriodSelector'
+import { isValidPeriod } from '../components/cuota/cuotaPeriod'
+import CashKpis from '../components/finanzas/CashKpis'
 import PagoForm from '../components/finanzas/PagoForm'
 import ComprobantesTable from '../components/finanzas/ComprobantesTable'
 import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
 import DevolucionDetailModal from '../components/finanzas/DevolucionDetailModal'
 import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
+import SectionDivider from '../components/shared/SectionDivider'
+import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 
+import useMovimientosCaja from '../hooks/useMovimientosCaja'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import { ErrorFile, LoadingFile } from '../components/personas/FileStatus'
 import { isActiveStatus } from '../components/personas/format'
-
-const fetchRegistros = () => Promise.all([getComprobantes(), getDevoluciones()])
-  .then(([comprobantes, devoluciones]) => ({ loading: false, error: null, comprobantes, devoluciones }))
 
 const SIN_SOCIO = { loading: false, socio: null, cuenta: null, error: null }
 
 function Caja() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const socioId = searchParams.get('socio')
+  const requestedPeriod = searchParams.get('periodo')
+  const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
   const { openPayment } = useRegisterPayment()
   const [cargaSocio, setCarga] = useState({ loading: true, socio: null, cuenta: null, error: null })
   const carga = socioId ? cargaSocio : SIN_SOCIO
-  const [registros, setRegistros] = useState({ loading: true, error: null, comprobantes: [], devoluciones: [] })
+  const movimientos = useMovimientosCaja(period)
   const [comprobanteId, setComprobanteId] = useState(null)
   const [devolucionSeleccionada, setDevolucionSeleccionada] = useState(null)
   const [movimientoAbierto, setMovimientoAbierto] = useState(false)
 
-  const recargarCaja = useCallback(() => fetchRegistros()
-    .then(setRegistros)
-    .catch(() => setRegistros((actual) => ({ ...actual, loading: false, error: 'No se pudieron cargar los movimientos de caja.' }))), [])
+  const recargarCaja = movimientos.reload
 
   const recargarCuenta = useCallback(() => {
     if (!socioId) return
@@ -49,13 +50,11 @@ function Caja() {
     recargarCuenta()
   }, [recargarCaja, recargarCuenta])
 
-  useEffect(() => {
-    let activo = true
-    fetchRegistros()
-      .then((cargados) => activo && setRegistros(cargados))
-      .catch(() => activo && setRegistros((actual) => ({ ...actual, loading: false, error: 'No se pudieron cargar los movimientos de caja.' })))
-    return () => { activo = false }
-  }, [])
+  const changePeriod = (value) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    next.set('periodo', value)
+    return next
+  })
 
   useEffect(() => {
     if (!socioId) return undefined
@@ -72,7 +71,8 @@ function Caja() {
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Caja y cobros' }]}
         title="Caja y cobros"
         actions={(
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <PeriodSelector value={period} onChange={changePeriod} />
             <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: recargarCaja })}>
               Registrar pago
             </PrimaryButton>
@@ -105,11 +105,22 @@ function Caja() {
         />
       )}
 
+      <SectionDivider>Resumen mensual · {formatPeriod(period)}</SectionDivider>
+
+      <CashKpis
+        period={period}
+        comprobantes={movimientos.comprobantes}
+        devoluciones={movimientos.devoluciones}
+        isLoading={movimientos.isLoading}
+        error={movimientos.error}
+      />
+
       <ComprobantesTable
-        comprobantes={registros.comprobantes}
-        devoluciones={registros.devoluciones}
-        isLoading={registros.loading}
-        error={registros.error}
+        period={period}
+        comprobantes={movimientos.comprobantes}
+        devoluciones={movimientos.devoluciones}
+        isLoading={movimientos.isLoading}
+        error={movimientos.error}
         onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
         onSelectDevolucion={setDevolucionSeleccionada}
       />
