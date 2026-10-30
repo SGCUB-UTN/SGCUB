@@ -8,7 +8,7 @@ import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { formatAmount, formatDate } from '../format'
 import { BenefitButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
-import FlushSection, { SectionEmpty } from '../../shared/FlushSection'
+import { SectionEmpty } from '../../shared/FlushSection'
 import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
 import { KpiColumn, KpiGrid } from '../../shared/Kpi'
@@ -32,6 +32,14 @@ const SECTIONS = [
 ]
 
 const PANEL_ID = 'financial-section-panel'
+
+function PanelFooter({ children }) {
+  return (
+    <div className={`flex flex-wrap justify-end gap-2 py-3 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS}`}>
+      {children}
+    </div>
+  )
+}
 
 function SectionTabs({ value, onChange }) {
   return (
@@ -206,17 +214,7 @@ export function FinancialStatement({ socio, finances }) {
     <section className="flex flex-col gap-6" aria-label="Resumen de cuenta">
       <TabHeader
         title="Resumen de cuenta"
-        description="Detalle de cuotas, pagos, ingresos, devoluciones y beneficios del socio."
-        /*actions={(
-          <>
-            <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
-              Ingreso o devolución
-            </SecondaryButton>
-            <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
-              Beca o descuento
-            </BenefitButton>
-          </>
-        )}*/
+        description="Detalle de la situación financiera del socio."
       />
 
       <KpiGrid columns={3} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
@@ -254,9 +252,25 @@ export function FinancialStatement({ socio, finances }) {
             />
           ))}
           {activeSection === MOVEMENTS && (
-            <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
+            <>
+              <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
+              <PanelFooter>
+                <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
+                  Agregar ingreso o devolución
+                </SecondaryButton>
+              </PanelFooter>
+            </>
           )}
-          {activeSection === BENEFITS && <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />}
+          {activeSection === BENEFITS && (
+            <>
+              <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
+              <PanelFooter>
+                <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
+                  Agregar beca o descuento
+                </BenefitButton>
+              </PanelFooter>
+            </>
+          )}
         </div>
       </div>
 

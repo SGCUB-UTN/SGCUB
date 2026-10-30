@@ -74,24 +74,6 @@ function SectionRow({ title, count, expanded, onToggle }) {
   )
 }
 
-function ToggleRow({ expanded, onToggle, children }) {
-  return (
-    <tr>
-      <td colSpan={COLUMN_COUNT} className="py-1.5 px-3">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-        >
-          <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-          {children}
-        </button>
-      </td>
-    </tr>
-  )
-}
-
 function PaidAction({ revertible, onRevert }) {
   if (!revertible) return <span className="text-sm font-normal text-on-surface-variant">Pagada</span>
   return (
@@ -170,16 +152,15 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
 // `className` styles the table shell (e.g. edge to edge inside a section).
 function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
-  const [showPaid, setShowPaid] = useState(false)
-  const [collapsed, setCollapsed] = useState({ future: true })
+  const [collapsed, setCollapsed] = useState({ future: true, olderPaid: true })
   const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds, settlementCuotaId)
   const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
 
   const toggleSection = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }))
-  const renderSection = (section, title, rows) => rows.length > 0 && (
+  const renderSection = (section, title, rows, visibleRows = rows) => rows.length > 0 && (
     <Fragment key={section}>
       <SectionRow title={title} count={rows.length} expanded={!collapsed[section]} onToggle={() => toggleSection(section)} />
-      {!collapsed[section] && rows.map(renderRow)}
+      {!collapsed[section] && visibleRows.map(renderRow)}
     </Fragment>
   )
   const toggle = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
@@ -221,14 +202,9 @@ function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuo
         {renderSection('upToDate', 'En fecha', groups.upToDate)}
         {renderSection('overdue', 'Vencidas', groups.overdue)}
         {renderSection('latestPaid', groups.latestTitle, groups.latestPaid)}
-        {groups.olderPaid.length > 0 && (
-          <ToggleRow expanded={showPaid} onToggle={() => setShowPaid((current) => !current)}>
-            {showPaid ? 'Ocultar cuotas pagas anteriores' : `Mostrar más cuotas pagas (${groups.olderPaid.length})`}
-          </ToggleRow>
-        )}
-        {showPaid && visiblePaid.map(renderRow)}
+        {renderSection('olderPaid', 'Más cuotas pagas', groups.olderPaid, visiblePaid)}
       </DataTable>
-      {showPaid && groups.olderPaid.length > 10 && (
+      {!collapsed.olderPaid && groups.olderPaid.length > 10 && (
         <TablePagination id="cuotas-pagas-rows-per-page" rowsPerPageOptions={[10, 25, 50]} {...paginationProps} />
       )}
     </div>
