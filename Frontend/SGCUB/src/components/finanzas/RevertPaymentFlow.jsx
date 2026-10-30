@@ -40,16 +40,15 @@ function ReceiptSummary({ detalle }) {
   )
 }
 
-function ReversalForm({ detalle, reverted, onSubmit, onCancel }) {
+export function ReversalForm({ summary, available, reverted, onSubmit, onCancel }) {
   const { paymentMethods } = useMediosPago()
   const [responsable, setResponsable] = useState('')
   const [reason, setReason] = useState('')
-  const [outcome, setOutcome] = useState('')
+  const [outcome, setOutcome] = useState(available > 0 ? '' : NEVER_RECEIVED)
   const [refundMethod, setRefundMethod] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const available = availableToRefund(detalle)
 
   const errors = {
     responsable: !reverted && !responsable ? 'Elegí el responsable.' : '',
@@ -74,7 +73,7 @@ function ReversalForm({ detalle, reverted, onSubmit, onCancel }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
-      <ReceiptSummary detalle={detalle} />
+      {summary}
 
       {reverted ? (
         <p className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-base text-on-surface" role="status">
@@ -273,7 +272,8 @@ function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
       {detalle && stage !== DONE && (
         <ReversalForm
           key={stage}
-          detalle={detalle}
+          summary={<ReceiptSummary detalle={detalle} />}
+          available={availableToRefund(detalle)}
           reverted={locked}
           onSubmit={locked ? resettle : revert}
           onCancel={onClose}

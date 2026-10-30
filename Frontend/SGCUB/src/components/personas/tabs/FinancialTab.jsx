@@ -65,6 +65,13 @@ const MOVEMENT_BADGES = {
   NotaCredito: { label: 'Nota de crédito', className: 'bg-amber-50 text-amber-800 border-amber-200' },
 }
 
+const reversalFor = (account, cuota, onChanged) => {
+  const settlement = account.saldo_beneficio_revertible
+  if (settlement?.cuota_id !== cuota.cuota_id) return { comprobanteId: account.comprobante_revertible_id, onChanged }
+  const item = cuota.items.find((candidate) => candidate.item_cuota_id === settlement.item_cuota_id)
+  return { settlement: { cuota, item }, onChanged }
+}
+
 // Incomes (by their receipt) and refunds of the socio, newest first
 const otherMovements = (movimientos) => [
   ...(movimientos?.ingresos ?? []).map((comprobante) => ({
@@ -239,9 +246,10 @@ export function FinancialStatement({ socio, finances }) {
             <CuotasEstadoCuentaTable
               cuotas={cuotas}
               revertibleIds={account.cuotas_revertibles ?? []}
+              settlementCuotaId={account.saldo_beneficio_revertible?.cuota_id ?? null}
               onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
               onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
-              onRevert={() => openReversal({ comprobanteId: account.comprobante_revertible_id, onChanged: reloadFinances })}
+              onRevert={(cuota) => openReversal(reversalFor(account, cuota, reloadFinances))}
               onChanged={reloadFinances}
             />
           ))}

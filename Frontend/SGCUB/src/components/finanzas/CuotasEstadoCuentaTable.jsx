@@ -32,11 +32,11 @@ const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?
 
 // The latest paid cuotas are always shown: the ones of the latest payment (the only one that can be
 // reverted) or, without it, the paid cuota of the latest period. The rest of the paid ones fold away.
-const groupCuotas = (cuotas, period, revertibleIds) => {
+const groupCuotas = (cuotas, period, revertibleIds, settlementCuotaId) => {
   const sorted = [...cuotas].sort(byPeriodDesc)
   const visible = sorted.filter((cuota) => String(cuota.periodo) <= period || isPartiallyPaid(cuota) || isPaid(cuota))
   const paid = visible.filter(isPaid)
-  const fromLatestPayment = paid.filter((cuota) => revertibleIds.includes(cuota.cuota_id))
+  const fromLatestPayment = paid.filter((cuota) => revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId)
   const latestPaid = fromLatestPayment.length ? fromLatestPayment : paid.slice(0, 1)
   return {
     upToDate: visible.filter((cuota) => !isPaid(cuota) && !isOverdue(cuota)),
@@ -148,7 +148,7 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
         <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
         <td className="py-2 px-4 text-right font-semibold text-on-surface whitespace-nowrap">
           {isPaid(cuota)
-            ? <PaidAction revertible={revertible} onRevert={onRevert} />
+            ? <PaidAction revertible={revertible} onRevert={() => onRevert(cuota)} />
             : formatAmount(Number(cuota.saldo_pendiente ?? 0))}
         </td>
       </tr>
@@ -168,11 +168,11 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
 
 // `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
 // `className` styles the table shell (e.g. edge to edge inside a section).
-function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
+function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
   const [showPaid, setShowPaid] = useState(false)
   const [collapsed, setCollapsed] = useState({ future: true })
-  const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds)
+  const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds, settlementCuotaId)
   const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
 
   const toggleSection = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }))
@@ -188,7 +188,7 @@ function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, onPay, onAssi
       key={cuota.cuota_id}
       cuota={cuota}
       expanded={expandedId === cuota.cuota_id}
-      revertible={revertibleIds.includes(cuota.cuota_id)}
+      revertible={revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId}
       onToggle={toggle}
       onPay={onPay}
       onAssignBenefit={onAssignBenefit}
