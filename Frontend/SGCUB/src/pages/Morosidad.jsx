@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
 import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
@@ -26,6 +26,8 @@ function Morosidad() {
   const [result, setResult] = useState({ key: null, reporte: null, error: '' })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+  const [reservedHeight, setReservedHeight] = useState(0)
+  const resultsRef = useRef(null)
 
   const requestFilters = useMemo(() => ({ ...filters, socioId: socio?.socio_id ?? '' }), [filters, socio])
   const requestKey = JSON.stringify(requestFilters)
@@ -46,7 +48,17 @@ function Morosidad() {
     return () => { active = false }
   }, [ready, requestFilters])
 
+  const reserveResultsHeight = () => {
+    if (ready && resultsRef.current) setReservedHeight(resultsRef.current.offsetHeight)
+  }
+
+  const changeSocio = (value) => {
+    reserveResultsHeight()
+    setSocio(value)
+  }
+
   const changeFilters = (changes) => {
+    reserveResultsHeight()
     setExportError('')
     setFilters((current) => {
       const next = { ...current, ...changes }
@@ -92,18 +104,20 @@ function Morosidad() {
             onChange={changeFilters}
             categorias={categorias}
             socio={socio}
-            onSocioChange={setSocio}
+            onSocioChange={changeSocio}
           />
         </div>
       </section>
 
-      {ready ? (
-        <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
-      ) : (
-        <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
-          {filters.alcance === 'categoria' ? 'Elegí una categoría para ver su morosidad.' : 'Buscá el socio que querés consultar.'}
-        </p>
-      )}
+      <div ref={resultsRef} style={{ minHeight: ready ? undefined : reservedHeight }}>
+        {ready ? (
+          <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
+        ) : (
+          <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
+            {filters.alcance === 'categoria' ? 'Elegí una categoría para ver su morosidad.' : 'Buscá el socio que querés consultar.'}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
