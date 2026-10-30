@@ -1,13 +1,16 @@
+import { useNavigate } from 'react-router-dom'
 import { KpiGrid } from '../shared/Kpi'
 import SectionHeading from '../shared/SectionHeading'
-import { formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
+import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import AffectedCategories from './AffectedCategories'
+import { bulkDebtNotice } from './debtNotices'
 import MorosidadTable from './MorosidadTable'
 import PadronStatusChart from './PadronStatusChart'
 
 const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
+const NOTIFY_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded bg-primary text-on-primary hover:bg-primary/90 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
 const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
 
@@ -59,6 +62,8 @@ function MorosidadKpis({ reporte }) {
 }
 
 function MorosidadReport({ reporte, isLoading, error }) {
+  const navigate = useNavigate()
+
   if (error) {
     return <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">{error}</p>
   }
@@ -69,7 +74,17 @@ function MorosidadReport({ reporte, isLoading, error }) {
   return (
     <div className={`flex flex-col gap-5 transition-opacity ${isLoading ? 'opacity-60' : ''}`} aria-busy={isLoading}>
       <section className={PANEL_CLASS} aria-labelledby="morosidad-kpis-title">
-        <SectionHeading id="morosidad-kpis-title" icon="monitoring" title="Indicadores de morosidad" className={HEADING_CLASS} />
+        <SectionHeading
+          id="morosidad-kpis-title"
+          icon="monitoring"
+          title="Indicadores de morosidad"
+          className={HEADING_CLASS}
+          actions={(
+            <p className="text-sm text-on-surface-variant">
+              {reporte.alcance} · {reporte.tipo} · {reporte.periodo} · Actualizado el {reporte.fecha}
+            </p>
+          )}
+        />
         <div className={SECTION_CLASS}>
           <MorosidadKpis reporte={reporte} />
         </div>
@@ -81,10 +96,16 @@ function MorosidadReport({ reporte, isLoading, error }) {
           icon="receipt_long"
           title="Detalle de morosidad"
           className={HEADING_CLASS}
-          actions={(
-            <p className="text-sm text-on-surface-variant">
-              {reporte.alcance} · {reporte.tipo} · {reporte.periodo} · Actualizado el {reporte.fecha}
-            </p>
+          actions={reporte.filas.length > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/comunicaciones', { state: { debtNotice: bulkDebtNotice(reporte.filas) } })}
+              className={NOTIFY_BUTTON_CLASS}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">campaign</span>
+              Notificar a todos
+              <span className="tabular-nums">({formatCount(reporte.filas.length)})</span>
+            </button>
           )}
         />
         {reporte.filas.length === 0 ? (

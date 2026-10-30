@@ -4,6 +4,7 @@ import DataTable from '../shared/DataTable'
 import SortableHeader from '../shared/SortableHeader'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import { formatAmount, formatDni } from '../personas/format'
+import { debtNotice } from './debtNotices'
 import { profilePath } from './delinquencyFilters'
 
 const HEADER_CLASS = 'px-4 py-3 normal-case tracking-normal font-semibold'
@@ -18,12 +19,6 @@ const TYPE_BADGES = {
   Socio: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
 }
 const ACTION_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-md transition-colors cursor-pointer'
-
-const debtNotice = (row) => ({
-  socioId: row.socio_id,
-  subject: 'Aviso de deuda pendiente',
-  body: `Hola ${row.nombre}, te recordamos que registrás ${row.cuotas_vencidas} ${row.cuotas_vencidas === 1 ? 'cuota vencida' : 'cuotas vencidas'} por un total de ${formatAmount(row.monto_adeudado)}. Podés regularizar tu situación en la secretaría del club.`,
-})
 
 function ActionButton({ label, icon, className, onClick }) {
   return (

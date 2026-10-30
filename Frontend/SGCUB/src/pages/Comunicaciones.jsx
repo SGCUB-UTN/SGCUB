@@ -7,6 +7,7 @@ import CanalesSelector from '../components/comunicaciones/CanalesSelector'
 import SegmentedCategoriesSelector from '../components/comunicaciones/SegmentedCategoriesSelector'
 import IndividualPlayerSelector from '../components/comunicaciones/IndividualPlayerSelector'
 import CoverageAlerts from '../components/comunicaciones/CoverageAlerts'
+import ListRecipientsSummary from '../components/comunicaciones/ListRecipientsSummary'
 import MessageComposer from '../components/comunicaciones/MessageComposer'
 import ConfirmSendModal from '../components/comunicaciones/ConfirmSendModal'
 import ExcludedListModal from '../components/comunicaciones/ExcludedListModal'
@@ -15,9 +16,29 @@ import useCategorias from '../hooks/useCategorias'
 import useSocio from '../hooks/useSocio'
 import { getComunicacionesKPIs, postEnviarNotificacion } from '../api/comunicaciones'
 
+const initialScope = (debtNotice) => {
+  if (debtNotice?.socioIds) return 'lista'
+  return debtNotice ? 'individual' : 'segmentada'
+}
+
+const withoutContact = (socios) => socios
+  .filter((s) => !s.email && !s.telefono)
+  .map((s) => ({
+    id: s.socio_id,
+    dni: s.dni || 'Sin DNI',
+    nombre: `${s.nombre || ''} ${s.apellido || ''}`.trim() || 'Socio sin nombre',
+    categoria: s.numero_socio ? `Socio #${s.numero_socio}` : 'Socio',
+    motivo: 'Sin teléfono ni correo electrónico registrado',
+  }))
+
+const reachableBy = (canales) => (s) => (
+  (canales.has('email') && Boolean(s.email)) || (canales.has('whatsapp') && Boolean(s.telefono))
+)
+
 export default function Comunicaciones() {
   const navigate = useNavigate()
   const debtNotice = useLocation().state?.debtNotice
+  const listIds = debtNotice?.socioIds
 
   // Datos reales del padrón obtenidos directamente del Backend
   const { categorias } = useCategorias()
@@ -27,7 +48,7 @@ export default function Comunicaciones() {
   const [kpis, setKpis] = useState(null)
 
   // Alcance: 'segmentada' o 'individual'
-  const [scope, setScope] = useState(debtNotice ? 'individual' : 'segmentada')
+  const [scope, setScope] = useState(initialScope(debtNotice))
 
   // Canales de difusión seleccionados para envío masivo (Email, WhatsApp o ambos)
   const [canalesMasivos, setCanalesMasivos] = useState(new Set(['email', 'whatsapp']))
@@ -74,17 +95,15 @@ export default function Comunicaciones() {
   }, [socios, selectedSocio, debtNotice])
 
   // Socios reales que NO tienen ningún dato de contacto cargado en la BD
-  const excluidos = useMemo(() => {
-    return (socios || [])
-      .filter((s) => !s.email && !s.telefono)
-      .map((s) => ({
-        id: s.socio_id,
-        dni: s.dni || 'Sin DNI',
-        nombre: `${s.nombre || ''} ${s.apellido || ''}`.trim() || 'Socio sin nombre',
-        categoria: s.numero_socio ? `Socio #${s.numero_socio}` : 'Socio',
-        motivo: 'Sin teléfono ni correo electrónico registrado',
-      }))
-  }, [socios])
+  const excluidos = useMemo(() => withoutContact(socios || []), [socios])
+
+  const listSocios = useMemo(() => {
+    if (!listIds) return []
+    const ids = new Set(listIds.map(String))
+    return (socios || []).filter((s) => ids.has(String(s.socio_id)))
+  }, [socios, listIds])
+
+  const listExcluidos = useMemo(() => withoutContact(listSocios), [listSocios])
 
   // Métricas calculadas basadas en los socios reales cargados
   const computedKPIs = useMemo(() => {
@@ -203,6 +222,10 @@ export default function Comunicaciones() {
       return 0
     }
 
+    if (scope === 'lista') {
+      return listSocios.filter(reachableBy(canalesMasivos)).length
+    }
+
     const hasEmail = canalesMasivos.has('email')
     const hasWhatsApp = canalesMasivos.has('whatsapp')
 
@@ -227,7 +250,7 @@ export default function Comunicaciones() {
       total = sociosValidos.length
     }
     return total
-  }, [scope, selectedSocio, selectedContactos, selectedCategoryIds, categorias, socios, canalesMasivos])
+  }, [scope, selectedSocio, selectedContactos, selectedCategoryIds, categorias, socios, canalesMasivos, listSocios])
 
   // Descartar borrador
   const handleDiscard = () => {
@@ -242,7 +265,7 @@ export default function Comunicaciones() {
       return
     }
 
-    if (scope === 'segmentada' && canalesMasivos.size === 0) {
+    if (scope !== 'individual' && canalesMasivos.size === 0) {
       alert('Debe seleccionar al menos un canal de difusión (Email o WhatsApp).')
       return
     }
@@ -271,10 +294,10 @@ export default function Comunicaciones() {
             estado: 'ENVIADA',
           })
         }
-      } else if (scope === 'segmentada') {
+      } else {
         const hasEmail = canalesMasivos.has('email')
         const hasWhatsApp = canalesMasivos.has('whatsapp')
-        ;(socios || []).forEach((s) => {
+        ;(scope === 'lista' ? listSocios : socios || []).forEach((s) => {
           if (hasWhatsApp && s.telefono) {
             envios.push({
               socio: s.socio_id,
@@ -358,7 +381,7 @@ export default function Comunicaciones() {
         </div>
 
         {/* Selector de Alcance */}
-        <ScopeSelector scope={scope} onChange={setScope} />
+        <ScopeSelector scope={scope} onChange={setScope} showList={Boolean(listIds)} />
 
         {/* Vista Individual con Socios Reales */}
         {scope === 'individual' && (
@@ -399,6 +422,22 @@ export default function Comunicaciones() {
           </div>
         )}
 
+        {scope === 'lista' && (
+          <div className="flex flex-col gap-4">
+            <CanalesSelector
+              canalesSeleccionados={canalesMasivos}
+              onToggleCanal={handleToggleCanalMasivo}
+            />
+
+            <ListRecipientsSummary
+              validCount={destinatariosCount}
+              totalCount={listSocios.length}
+              excludedCount={listExcluidos.length}
+              onOpenExcluidos={() => setIsExcluidosOpen(true)}
+            />
+          </div>
+        )}
+
         {/* Bloque 2: Contenido del Mensaje */}
         <MessageComposer
           asunto={asunto}
@@ -422,7 +461,7 @@ export default function Comunicaciones() {
               alert('El socio seleccionado no tiene canales de contacto habilitados o seleccionados.')
               return
             }
-            if (scope === 'segmentada' && canalesMasivos.size === 0) {
+            if (scope !== 'individual' && canalesMasivos.size === 0) {
               alert('Debe seleccionar al menos un canal de difusión (Email o WhatsApp).')
               return
             }
@@ -446,7 +485,7 @@ export default function Comunicaciones() {
       <ExcludedListModal
         isOpen={isExcluidosOpen}
         onClose={() => setIsExcluidosOpen(false)}
-        excluidos={excluidos}
+        excluidos={scope === 'lista' ? listExcluidos : excluidos}
       />
 
       <PreviewModal
