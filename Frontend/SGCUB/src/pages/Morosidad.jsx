@@ -1,100 +1,69 @@
-import { useEffect, useMemo, useState } from 'react'
-import { getJugadores } from '../api/jugadores'
+import { useEffect, useRef, useState } from 'react'
 import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
-import { getSocios } from '../api/socios'
+import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
+import { defaultReference } from '../components/finanzas/delinquencyFilters'
 import PageHeader from '../components/shared/PageHeader'
-import { matchesSearch } from '../components/shared/search'
+import SectionHeading from '../components/shared/SectionHeading'
+import { SecondaryButton } from '../components/personas/tabs/parts'
+import useCategorias from '../hooks/useCategorias'
+
+const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
+const HEADING_CLASS = 'px-4 sm:px-5 border-b'
+const SECTION_CLASS = 'p-4 sm:p-5'
+
+const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), alcance: 'activos', categoriaId: '', tipo: 'todos' }
+
+const isReady = (filters) => (
+  filters.alcance !== 'categoria' || Boolean(filters.categoriaId)
+)
 
 function Morosidad() {
-  const [socios, setSocios] = useState([])
-  const [jugadores, setJugadores] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [rosterError, setRosterError] = useState('')
-  const [scope, setScope] = useState('activos')
-  const [busqueda, setBusqueda] = useState('')
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('')
-  const [seleccionados, setSeleccionados] = useState([])
-  const [socioIndividual, setSocioIndividual] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [reporte, setReporte] = useState(null)
-  const [generationError, setGenerationError] = useState('')
-  const [reportFilters, setReportFilters] = useState(null)
+  const { categorias } = useCategorias()
+  const [filters, setFilters] = useState(INITIAL_FILTERS)
+  const [result, setResult] = useState({ key: null, reporte: null, error: '' })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+  const [reservedHeight, setReservedHeight] = useState(0)
+  const resultsRef = useRef(null)
+
+  const requestKey = JSON.stringify(filters)
+  const ready = isReady(filters)
+  const isLoading = ready && result.key !== requestKey
 
   useEffect(() => {
-    let activo = true
-    Promise.all([getSocios(), getJugadores()])
-      .then(([sociosRespuesta, jugadoresRespuesta]) => {
-        if (!activo) return
-        setSocios(sociosRespuesta ?? [])
-        setJugadores(jugadoresRespuesta ?? [])
-      })
-      .catch(() => activo && setRosterError('No se pudieron cargar socios y categorías.'))
-      .finally(() => activo && setIsLoading(false))
-    return () => { activo = false }
-  }, [])
+    if (!ready) return undefined
+    let active = true
+    const key = JSON.stringify(filters)
+    getReporteMorosidad(filters)
+      .then((reporte) => active && setResult({ key, reporte, error: '' }))
+      .catch((requestError) => active && setResult({
+        key,
+        reporte: null,
+        error: requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.',
+      }))
+    return () => { active = false }
+  }, [ready, filters])
 
-  const categoriaPorSocio = useMemo(() => Object.fromEntries(
-    jugadores.map((jugador) => [
-      String(jugador.socio?.socio_id),
-      typeof jugador.categoria === 'object' ? jugador.categoria?.nombre : '',
-    ]),
-  ), [jugadores])
+  const reserveResultsHeight = () => {
+    if (ready && resultsRef.current) setReservedHeight(resultsRef.current.offsetHeight)
+  }
 
-  const categorias = useMemo(() => [...new Set(
-    Object.values(categoriaPorSocio).filter(Boolean),
-  )].sort((a, b) => a.localeCompare(b, 'es')), [categoriaPorSocio])
-
-  const sociosFiltrados = useMemo(() => {
-    const termino = busqueda.trim()
-    return socios.filter((socio) => {
-      const coincideTexto = !termino || matchesSearch(termino, [socio.nombre, socio.apellido, socio.dni, socio.numero_socio])
-      const categoria = categoriaPorSocio[String(socio.socio_id)] || 'Sin categoría'
-      const coincideCategoria = !categoriaSeleccionada || categoria === categoriaSeleccionada
-      return coincideTexto && coincideCategoria
-    })
-  }, [busqueda, categoriaPorSocio, categoriaSeleccionada, socios])
-
-  const generarReporte = async () => {
-    if (scope === 'manual' && seleccionados.length === 0) {
-      setGenerationError('Seleccioná al menos un socio para generar el reporte.')
-      return
-    }
-    if (scope === 'socio' && !socioIndividual) {
-      setGenerationError('Seleccioná el socio que querés consultar.')
-      return
-    }
-
-    const filters = {
-      alcance: scope,
-      q: scope === 'filtrados' ? busqueda.trim() : '',
-      categoria: scope === 'filtrados' ? categoriaSeleccionada : '',
-      socioIds: scope === 'manual' ? seleccionados : [],
-      socioId: scope === 'socio' ? socioIndividual : '',
-    }
-
-    setGenerationError('')
+  const changeFilters = (changes) => {
+    reserveResultsHeight()
     setExportError('')
-    setIsGenerating(true)
-    try {
-      const resultado = await getReporteMorosidad(filters)
-      setReporte(resultado)
-      setReportFilters(filters)
-    } catch (requestError) {
-      setGenerationError(requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.')
-    } finally {
-      setIsGenerating(false)
-    }
+    setFilters((current) => {
+      const next = { ...current, ...changes }
+      if (changes.periodo && changes.periodo !== current.periodo) next.referencia = defaultReference(changes.periodo)
+      return next
+    })
   }
 
   const exportPdf = async () => {
-    if (!reportFilters) return
     setExportError('')
     setIsExporting(true)
     try {
-      await downloadDelinquencyPdf(reportFilters)
+      await downloadDelinquencyPdf(filters)
     } catch (requestError) {
       setExportError(requestError.response?.data?.detail || 'No se pudo generar el PDF del reporte.')
     } finally {
@@ -104,31 +73,41 @@ function Morosidad() {
 
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
-      <PageHeader breadcrumb={[{ label: 'Finanzas' }, { label: 'Reporte de morosidad' }]} title="Reporte de morosidad" />
-      <MorosidadReport
-        sociosFiltrados={sociosFiltrados}
-        categorias={categorias}
-        categoriaPorSocio={categoriaPorSocio}
-        isLoading={isLoading}
-        rosterError={rosterError}
-        scope={scope}
-        onScopeChange={setScope}
-        busqueda={busqueda}
-        onBusquedaChange={setBusqueda}
-        categoriaSeleccionada={categoriaSeleccionada}
-        onCategoriaChange={setCategoriaSeleccionada}
-        seleccionados={seleccionados}
-        onSeleccionadosChange={setSeleccionados}
-        socioIndividual={socioIndividual}
-        onSocioIndividualChange={setSocioIndividual}
-        isGenerating={isGenerating}
-        onGenerate={generarReporte}
-        reporte={reporte}
-        generationError={generationError}
-        isExporting={isExporting}
-        onExportPdf={exportPdf}
-        exportError={exportError}
+      <PageHeader
+        breadcrumb={[{ label: 'Finanzas' }, { label: 'Reporte de morosidad' }]}
+        title="Reporte de morosidad"
+        actions={(
+          <SecondaryButton
+            icon={isExporting ? 'progress_activity' : 'picture_as_pdf'}
+            onClick={exportPdf}
+            disabled={!ready || isLoading || isExporting || !result.reporte}
+          >
+            {isExporting ? 'Generando PDF...' : 'Exportar PDF'}
+          </SecondaryButton>
+        )}
       />
+      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
+
+      <section className={PANEL_CLASS} aria-labelledby="morosidad-filters-title">
+        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={HEADING_CLASS} />
+        <div className={SECTION_CLASS}>
+          <MorosidadFilters
+            filters={filters}
+            onChange={changeFilters}
+            categorias={categorias}
+          />
+        </div>
+      </section>
+
+      <div ref={resultsRef} style={{ minHeight: ready ? undefined : reservedHeight }}>
+        {ready ? (
+          <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
+        ) : (
+          <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
+            Elegí una categoría para ver su morosidad.
+          </p>
+        )}
+      </div>
     </div>
   )
 }
