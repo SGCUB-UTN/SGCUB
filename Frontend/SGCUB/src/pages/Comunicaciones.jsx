@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/shared/PageHeader'
 import ComunicacionesKPIs from '../components/comunicaciones/ComunicacionesKPIs'
 import ScopeSelector from '../components/comunicaciones/ScopeSelector'
@@ -17,6 +17,7 @@ import { getComunicacionesKPIs, postEnviarNotificacion } from '../api/comunicaci
 
 export default function Comunicaciones() {
   const navigate = useNavigate()
+  const debtNotice = useLocation().state?.debtNotice
 
   // Datos reales del padrón obtenidos directamente del Backend
   const { categorias } = useCategorias()
@@ -26,7 +27,7 @@ export default function Comunicaciones() {
   const [kpis, setKpis] = useState(null)
 
   // Alcance: 'segmentada' o 'individual'
-  const [scope, setScope] = useState('segmentada')
+  const [scope, setScope] = useState(debtNotice ? 'individual' : 'segmentada')
 
   // Canales de difusión seleccionados para envío masivo (Email, WhatsApp o ambos)
   const [canalesMasivos, setCanalesMasivos] = useState(new Set(['email', 'whatsapp']))
@@ -39,8 +40,8 @@ export default function Comunicaciones() {
   const [selectedContactos, setSelectedContactos] = useState(new Set(['socio_tel', 'socio_email']))
 
   // Formulario del mensaje
-  const [asunto, setAsunto] = useState('')
-  const [cuerpo, setCuerpo] = useState('')
+  const [asunto, setAsunto] = useState(debtNotice?.subject ?? '')
+  const [cuerpo, setCuerpo] = useState(debtNotice?.body ?? '')
   const [copiaSecretaria, setCopiaSecretaria] = useState(true)
 
   // Modales
@@ -67,9 +68,10 @@ export default function Comunicaciones() {
   // Seleccionar automáticamente el primer socio real si hay cargados
   useEffect(() => {
     if (socios && socios.length > 0 && selectedSocio === null) {
-      setSelectedSocio(socios[0])
+      const requested = socios.find((s) => String(s.socio_id) === String(debtNotice?.socioId))
+      setSelectedSocio(requested ?? socios[0])
     }
-  }, [socios, selectedSocio])
+  }, [socios, selectedSocio, debtNotice])
 
   // Socios reales que NO tienen ningún dato de contacto cargado en la BD
   const excluidos = useMemo(() => {
