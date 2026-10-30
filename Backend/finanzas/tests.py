@@ -1501,6 +1501,27 @@ class ReversionPagoTests(PagoTestBase):
 		self.assertEqual(medio_de_mas.status_code, 400)
 		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, "Acreditado")
 
+	def test_pago_parcial_es_revertible_e_informa_sus_cuotas(self):
+		resp = self.pagar([self.agosto], "400.00").data
+		pago_id = resp["pago"]["pago_id"]
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(estado["cuotas_revertibles"], [self.agosto.pk])
+
+		self.assertEqual(self.revertir(pago_id).status_code, 200)
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.pendiente(self.agosto), Decimal("1000.00"))
+
+	def test_pago_completo_y_siguiente_parcial_informa_ambas_cuotas_revertibles(self):
+		resp = self.pagar([self.agosto, self.septiembre], "1500.00").data
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(sorted(estado["cuotas_revertibles"]), sorted([self.agosto.pk, self.septiembre.pk]))
+
 
 class ReversionSaldoPorBeneficioTests(PagoTestBase):
 	def descontar(self, cuota, valor):

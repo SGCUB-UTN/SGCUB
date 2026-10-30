@@ -2,7 +2,14 @@ const ICONOS = { asc: 'arrow_upward', desc: 'arrow_downward' }
 const ARIA_SORT = { asc: 'ascending', desc: 'descending' }
 const SIGUIENTE = { asc: 'de mayor a menor', desc: 'de menor a mayor' }
 
-export default function SortableHeader({ etiqueta, columna, orden, onOrdenar, className = '', labelClassName = 'uppercase tracking-wider' }) {
+export default function SortableHeader({
+  etiqueta,
+  columna,
+  orden,
+  onOrdenar,
+  className = '',
+  labelClassName = '[text-transform:inherit] [letter-spacing:inherit]',
+}) {
   const direccion = orden.columna === columna ? orden.direccion : null
   return (
     <th className={className} scope="col" aria-sort={ARIA_SORT[direccion] ?? 'none'}>
