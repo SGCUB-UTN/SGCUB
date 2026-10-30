@@ -5,20 +5,20 @@ import { collectErrorMessages } from '../format'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
 import PersonaDocumentsTable from '../../documental/PersonaDocumentsTable'
+import MissingDocumentsTable from '../../documental/MissingDocumentsTable'
+import { appliesToProfile, findMissingDocumentTypes } from '../../documental/missingDocuments'
 import { SectionEmpty } from '../../shared/FlushSection'
 import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { KpiColumn, KpiGrid } from '../../shared/Kpi'
 
-const getEmptyUploadForm = () => ({
-  tipo_documento: '',
+const getEmptyUploadForm = (tipoDocumento = '') => ({
+  tipo_documento: tipoDocumento,
   archivo: null,
   archivoUrl_existing: null,
   borrar_archivo: false,
   fecha_emision: new Date().toISOString().split('T')[0],
   fecha_vencimiento: '',
 })
-
-const PROFILE_FIELDS = { jugador: 'aplica_jugador', socio: 'aplica_socio', docente: 'aplica_docente' }
 
 const addMonths = (date, months) => {
   const shifted = new Date(`${date}T00:00:00Z`)
@@ -69,8 +69,9 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   // Enabled types that apply to this profile; when editing, the document's own type is always offered
   const tiposFiltrados = tipos.filter(t => (
     String(t.id_tipo_documento) === String(uploadForm.tipo_documento)
-    || (t.activo && t[PROFILE_FIELDS[personaType] ?? 'aplica_jugador'])
+    || (t.activo && appliesToProfile(t, personaType))
   ))
+  const missingTipos = findMissingDocumentTypes(tipos, documentosActivos, personaType)
 
   const suggestedDueDate = (form) => {
     const tipo = tipos.find(t => String(t.id_tipo_documento) === String(form.tipo_documento))
@@ -97,10 +98,11 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     setUploadModalOpen(true)
   }
 
-  const handleNewClick = () => {
+  const handleNewClick = (tipo = null) => {
+    const form = getEmptyUploadForm(tipo ? tipo.id_tipo_documento : '')
     setIsEditing(false)
     setDocToEdit(null)
-    setUploadForm(getEmptyUploadForm())
+    setUploadForm({ ...form, fecha_vencimiento: suggestedDueDate(form) })
     setSaveError(null)
     setUploadModalOpen(true)
   }
@@ -204,11 +206,16 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
         description="Habilitaciones, certificados y títulos de la persona."
       />
 
-      <KpiGrid columns={3} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
+      <KpiGrid columns={4} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
         <KpiColumn label="Vigentes" value={countByStatus(documentosActivos, 'vigente')} />
         <KpiColumn label="Por vencer" value={expiringCount} tone={expiringCount ? 'text-amber-700' : 'text-on-surface'} />
         <KpiColumn label="Vencidos" value={expiredCount} tone={expiredCount ? 'text-error' : 'text-on-surface'} />
+        <KpiColumn label="Faltantes" value={missingTipos.length} tone={missingTipos.length ? 'text-error' : 'text-on-surface'} />
       </KpiGrid>
+
+      {missingTipos.length > 0 && (
+        <MissingDocumentsTable tipos={missingTipos} onUpload={handleNewClick} className="mt-6" />
+      )}
 
       <SegmentedTabs
         label="Documentación de la persona"
@@ -235,7 +242,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
               )}
               <TableFooter>
                 <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0}>Descargar ZIP</SecondaryButton>
-                <SecondaryButton icon="upload_file" onClick={handleNewClick}>Agregar documento</SecondaryButton>
+                <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
               </TableFooter>
             </>
           )}

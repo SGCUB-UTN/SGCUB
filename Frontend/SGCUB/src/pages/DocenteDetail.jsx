@@ -19,6 +19,7 @@ import useLocalidades from '../hooks/useLocalidades'
 
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
+import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 function DocenteDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -32,8 +33,11 @@ function DocenteDetail() {
   const loading = carga.id !== id
   const { docente, error } = carga
 
-  const { documentosActivos: activos } = useDocumentacion(docente?.persona)
-  const badgeConfig = React.useMemo(() => buildDocumentBadges(activos), [activos])
+  const { documentosActivos: activos, tipos: tiposDocumento } = useDocumentacion(docente?.persona)
+  const badgeConfig = React.useMemo(
+    () => buildDocumentBadges(activos, findMissingDocumentTypes(tiposDocumento, activos, 'docente').length),
+    [activos, tiposDocumento],
+  )
 
   const [modalBajaAbierto, setModalBajaAbierto] = useState(false)
   const [dandoDeBaja, setDandoDeBaja] = useState(false)

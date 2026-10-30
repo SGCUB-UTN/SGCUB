@@ -20,6 +20,7 @@ import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
+import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
@@ -51,8 +52,11 @@ function JugadorDetail() {
 
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { documentosActivos: activos } = useDocumentacion(jugador?.socio?.persona)
-  const badgeConfig = React.useMemo(() => buildDocumentBadges(activos), [activos])
+  const { documentosActivos: activos, tipos: tiposDocumento } = useDocumentacion(jugador?.socio?.persona)
+  const badgeConfig = React.useMemo(
+    () => buildDocumentBadges(activos, findMissingDocumentTypes(tiposDocumento, activos, 'jugador').length),
+    [activos, tiposDocumento],
+  )
   // Loaded here so the tab badge and the financial tab share a single request
   const finances = useSocioFinances(jugador?.socio?.socio_id)
   const refreshFinances = finances.reload
