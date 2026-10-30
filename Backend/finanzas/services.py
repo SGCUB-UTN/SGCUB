@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Prefetch, Q, Sum
+from django.db.models import Max, Prefetch, Q, Sum
 from django.utils import timezone
 
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
@@ -19,6 +19,7 @@ from .models import (
     ConfiguracionFinanciera,
     CuentaCorriente,
     Cuota,
+    DesenlaceReversionChoices,
     DetalleImputacion,
     Devolucion,
     EstadoBecaChoices,
@@ -1417,9 +1418,7 @@ def remove_late_fee(cuota, item, reason, authorized_by, user):
     )
 
 
-def remove_benefit(cuota, item, reason, authorized_by, user):
-    if has_active_payments(cuota):
-        raise CuotaConPagosError("La cuota tiene pagos aplicados: no se le pueden quitar becas ni descuentos.")
+def annul_benefit(cuota, item, reason, authorized_by, user):
     if item.beca_id:
         ExclusionBeca.objects.get_or_create(
             beca_id=item.beca_id,
@@ -1427,6 +1426,68 @@ def remove_benefit(cuota, item, reason, authorized_by, user):
             defaults={"motivo": benefit_reason(reason), "autorizado_por": authorized_by, "usuario": user},
         )
     annul_item(item, reason, authorized_by, user)
+
+
+def remove_benefit(cuota, item, reason, authorized_by, user):
+    if has_active_payments(cuota):
+        raise CuotaConPagosError("La cuota tiene pagos aplicados: no se le pueden quitar becas ni descuentos.")
+    annul_benefit(cuota, item, reason, authorized_by, user)
+
+
+def latest_payment_date(cuota):
+    return active_imputations().filter(movimiento_destino__cuota=cuota).aggregate(
+        latest=Max("movimiento_origen__pago__fecha"),
+    )["latest"]
+
+
+def settling_benefit(cuota):
+    if cuota.estado_cuota != EstadoCuotaChoices.PAGA:
+        return None
+    benefits = [item for item in cuota.items.all() if item.concepto in REMOVABLE_BENEFITS]
+    if not benefits:
+        return None
+    latest = max(benefits, key=lambda item: item.pk)
+    paid_at = latest_payment_date(cuota)
+    if paid_at is None or (latest.fecha_creacion is not None and latest.fecha_creacion > paid_at):
+        return latest
+    return None
+
+
+def revertible_settlement(account):
+    cuota = (
+        Cuota.objects.filter(movimiento__cuenta_corriente=account, estado_cuota=EstadoCuotaChoices.PAGA)
+        .order_by("-periodo", "-pk")
+        .first()
+    )
+    item = settling_benefit(cuota) if cuota else None
+    return (cuota, item) if item else (None, None)
+
+
+@transaction.atomic
+def revert_benefit_settlement(cuota_id, reason, responsable, user=None, today=None):
+    cuota = lock_cuota(cuota_id)
+    account = cuota.movimiento.cuenta_corriente
+    settled, item = revertible_settlement(account)
+    if settled is None or settled.pk != cuota.pk:
+        raise BeneficioInvalidoError("Solo se puede revertir la última cuota saldada con una beca o un descuento.")
+
+    annul_benefit(cuota, item, reason, responsable, user)
+    sync_cuota_charge(cuota)
+    cuota.movimiento.refresh_from_db(fields=["monto"])
+    today = today or timezone.localdate()
+    refresh_cuota_state(cuota, pending_amounts([cuota])[cuota.pk], today)
+    apply_cuota_surcharges(cuota.pk, today, user=user)
+    record_transaction(
+        Accion.PAGO_REVERTIDO,
+        f"Saldo de la cuota {cuota.periodo} con {item.get_concepto_display().lower()} revertido: {reason}",
+        user,
+        responsable,
+        socio=account.socio,
+        amount=item.monto,
+        reference=f"Cuota {cuota.periodo}",
+        detail={"cuota_id": cuota.pk, "item_cuota_id": item.pk, "desenlace": DesenlaceReversionChoices.NUNCA_INGRESO},
+    )
+    return cuota
 
 
 @transaction.atomic

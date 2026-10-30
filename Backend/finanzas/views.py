@@ -68,6 +68,7 @@ from .serializers import (
 	IngresoSerializer,
 	NotaCreditoSerializer,
 	ReversionPagoSerializer,
+	ReversionSaldoSerializer,
 	PagoSerializer,
 	RegistroAuditoriaSerializer,
 	CuentaCorrienteEstadoSerializer,
@@ -99,6 +100,7 @@ from .services import (
 	remove_cuota_item,
 	reschedule_cuota,
 	revert_configuration_version,
+	revert_benefit_settlement,
 	revert_payment,
 	update_discount,
 	update_scholarship,
@@ -761,6 +763,23 @@ def cuota_beneficio(request, pk):
 		"item": ItemCuotaSerializer(item).data if item else None,
 		"aplicado_a_cuota": item is not None,
 	}, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Finanzas/Cuota"], request=ReversionSaldoSerializer, responses=CuotaSerializer)
+@api_view(["POST"])
+def cuota_revertir_saldo(request, pk):
+	get_object_or_404(Cuota.objects.filter(movimiento__isnull=False), pk=pk)
+	serializer = ReversionSaldoSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		revert_benefit_settlement(pk, data["motivo"], data["responsable"], _current_user(request))
+	except BeneficioInvalidoError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	cuota = _cuotas_queryset().get(pk=pk)
+	return Response(CuotaSerializer(cuota, context={"pending": pending_amounts([cuota])}).data)
 
 
 @extend_schema(tags=["Finanzas/Beca"], request=OtorgarBecaSerializer)

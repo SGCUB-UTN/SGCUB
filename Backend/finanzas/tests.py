@@ -1502,6 +1502,92 @@ class ReversionPagoTests(PagoTestBase):
 		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, "Acreditado")
 
 
+class ReversionSaldoPorBeneficioTests(PagoTestBase):
+	def descontar(self, cuota, valor):
+		response = self.client.post(reverse("cuota-beneficio", args=[cuota.pk]), {
+			"tipo": "Descuento",
+			"modalidad": "MontoFijo",
+			"valor": valor,
+			"fecha_aplicacion": "2026-09-01",
+			"motivo": "Perdón del saldo",
+			"autorizado_por": "Tesorería",
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+		return ItemCuota.objects.get(pk=response.data["item"]["item_cuota_id"])
+
+	def revertir_saldo(self, cuota, **extra):
+		datos = {"motivo": "El descuento era de otro monto", "responsable": "Tesorera", **extra}
+		return self.client.post(reverse("cuota-revertir-saldo", args=[cuota.pk]), datos, format="json")
+
+	def revertible(self):
+		return self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data["saldo_beneficio_revertible"]
+
+	def test_un_descuento_que_salda_la_cuota_se_puede_revertir(self):
+		self.pagar([self.agosto], "1000.00")
+		descuento = self.descontar(self.septiembre, "1000.00")
+		self.assertEqual(self.revertible(), {"cuota_id": self.septiembre.pk, "item_cuota_id": descuento.pk})
+
+		response = self.revertir_saldo(self.septiembre)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.septiembre.refresh_from_db()
+		descuento.refresh_from_db()
+		self.assertNotEqual(self.septiembre.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(descuento.estado, EstadoItemCuotaChoices.ANULADO)
+		self.assertIsNone(self.revertible())
+		registro = RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.PAGO_REVERTIDO)
+		self.assertEqual(registro.responsable, "Tesorera")
+		self.assertEqual(registro.detalle["desenlace"], "NuncaIngreso")
+
+	def test_revertir_un_saldo_completado_con_descuento_conserva_el_pago_parcial(self):
+		self.pagar([self.agosto], "1000.00")
+		pago = self.pagar([self.septiembre], "600.00").data["pago"]
+		self.descontar(self.septiembre, "400.00")
+
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 200)
+
+		self.septiembre.refresh_from_db()
+		self.assertNotEqual(self.septiembre.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, EstadoPagoChoices.ACREDITADO)
+		self.assertEqual(self.aplicado(self.septiembre), Decimal("600.00"))
+
+	def test_una_cuota_saldada_por_un_pago_posterior_al_descuento_no_se_revierte_asi(self):
+		self.pagar([self.agosto], "1000.00")
+		self.descontar(self.septiembre, "400.00")
+		self.pagar([self.septiembre], "600.00")
+
+		self.assertIsNone(self.revertible())
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 400)
+
+	def test_solo_se_puede_revertir_la_ultima_cuota_saldada(self):
+		self.descontar(self.agosto, "1000.00")
+		self.descontar(self.septiembre, "1000.00")
+
+		self.assertEqual(self.revertir_saldo(self.agosto).status_code, 400)
+		self.assertEqual(self.revertir_saldo(self.septiembre).status_code, 200)
+		self.assertEqual(self.revertible()["cuota_id"], self.agosto.pk)
+
+	def test_solo_admite_que_el_pago_nunca_ingreso(self):
+		self.descontar(self.agosto, "1000.00")
+
+		response = self.revertir_saldo(self.agosto, desenlace="NotaCreditoTotal")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("desenlace", response.data)
+		self.assertEqual(self.revertir_saldo(self.agosto, desenlace="NuncaIngreso").status_code, 200)
+
+	def test_un_descuento_de_una_cuota_paga_no_se_puede_quitar(self):
+		descuento = self.descontar(self.agosto, "1000.00")
+
+		response = self.client.post(reverse("item-cuota-anular", args=[descuento.pk]), {
+			"motivo": "Error", "autorizado_por": "Tesorería",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		descuento.refresh_from_db()
+		self.assertEqual(descuento.estado, EstadoItemCuotaChoices.VIGENTE)
+
+
 class NotaCreditoTests(PagoTestBase):
 	def setUp(self):
 		super().setUp()
@@ -3725,6 +3811,21 @@ class ScholarshipLifecycleTests(APITestCase):
 		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("2500.00")])
 		self.assertEqual(self.scholarship_amounts(october), [Decimal("1250.00")])
 		self.assertEqual(self.charge(october), Decimal("1250.00"))
+
+	def test_the_latest_cuota_settled_by_a_cancelled_scholarship_can_be_reverted(self):
+		self.cover_everything()
+		cancel_scholarship(self.scholarship.pk, "Dejó el club", "Comisión directiva", self.user, today=date(2026, 10, 15))
+
+		response = self.client.post(reverse("cuota-revertir-saldo", args=[self.september.pk]), {
+			"motivo": "Se olvidó cancelar la beca", "responsable": "Tesorería",
+		}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.september.refresh_from_db()
+		self.assertEqual(self.scholarship_amounts(self.september), [])
+		self.assertNotEqual(self.september.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertTrue(ExclusionBeca.objects.filter(beca=self.scholarship, periodo="2026-09").exists())
+		self.assertEqual(self.scholarship_amounts(self.august), [Decimal("2500.00")])
 
 	def test_cancelled_scholarship_is_not_applied_to_new_cuotas(self):
 		self.cancel()

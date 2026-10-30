@@ -48,6 +48,7 @@ from .services import (
     receipt_detail,
     refund_code,
     refunded_amount,
+    revertible_settlement,
     surcharge_reason,
     user_name,
 )
@@ -186,6 +187,19 @@ class ReversionPagoSerializer(serializers.Serializer):
         if not full_credit_note and attrs.get("medio_de_pago"):
             raise serializers.ValidationError({"medio_de_pago": "El medio de devolución solo corresponde a una nota de crédito por el total."})
         return attrs
+
+
+class ReversionSaldoSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=500, trim_whitespace=True)
+    responsable = serializers.CharField(max_length=120, trim_whitespace=True)
+    desenlace = serializers.ChoiceField(choices=DesenlaceReversionChoices.choices, required=False)
+
+    def validate_desenlace(self, value):
+        if value != DesenlaceReversionChoices.NUNCA_INGRESO:
+            raise serializers.ValidationError(
+                "La cuota se saldó con una beca o un descuento: no ingresó dinero, solo corresponde que el pago nunca ingresó."
+            )
+        return value
 
 
 class DevolucionManualSerializer(serializers.Serializer):
@@ -348,7 +362,7 @@ class ItemCuotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemCuota
         fields = "__all__"
-        read_only_fields = ["item_cuota_id"]
+        read_only_fields = ["item_cuota_id", "fecha_creacion"]
 
 
 class PagoSerializer(serializers.ModelSerializer):
@@ -510,6 +524,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     total_mora = serializers.SerializerMethodField()
     comprobante_revertible_id = serializers.SerializerMethodField()
     cuotas_revertibles = serializers.SerializerMethodField()
+    saldo_beneficio_revertible = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCorriente
@@ -519,6 +534,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             "estado_cuenta_corriente",
             "comprobante_revertible_id",
             "cuotas_revertibles",
+            "saldo_beneficio_revertible",
             "cuotas",
             "cuotas_generadas",
             "cuotas_pagas",
@@ -563,6 +579,10 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     def get_cuotas_revertibles(self, obj):
         """Cuotas paid by that latest payment."""
         return latest_payment_cuota_ids(self._latest_payment(obj))
+
+    def get_saldo_beneficio_revertible(self, obj):
+        cuota, item = revertible_settlement(obj)
+        return {"cuota_id": cuota.pk, "item_cuota_id": item.pk} if cuota else None
 
     def get_cuotas(self, obj):
         return CuotaSerializer(

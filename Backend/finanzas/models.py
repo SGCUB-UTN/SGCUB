@@ -147,6 +147,7 @@ class ItemCuota(models.Model):
         blank=True,
     )
     vencimiento = models.PositiveSmallIntegerField(null=True, blank=True)
+    fecha_creacion = models.DateTimeField(default=timezone.now, null=True, blank=True)
     estado = models.CharField(
         max_length=20,
         choices=EstadoItemCuotaChoices.choices,
