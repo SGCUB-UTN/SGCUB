@@ -33,7 +33,7 @@ function MorosidadFilters({ filters, onChange, categorias, socio, onSocioChange 
   const set = (field) => (event) => onChange({ [field]: event.target.value })
 
   return (
-    <div className="flex flex-wrap items-center gap-4 mb-6" role="group" aria-label="Filtros del reporte">
+    <div className="flex flex-wrap items-center gap-4" role="group" aria-label="Filtros del reporte">
       <div className={GROUP_CLASS}>
         <FilterSelect etiqueta="Período:" className={FILTER_CLASS} value={filters.periodo} onChange={set('periodo')}>
           {PERIOD_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

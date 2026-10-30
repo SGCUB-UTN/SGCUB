@@ -2661,7 +2661,7 @@ class ReporteMorosidadTests(APITestCase):
 		self.assertEqual(self.reporte(tipo="jugadores")["filas"][0]["tipo"], "Jugador")
 		self.assertEqual(self.reporte(tipo="jugadores")["filas"][0]["jugador_id"], jugador.jugador.jugador_id)
 
-	def test_filtra_por_categoria_y_detecta_la_mas_afectada(self):
+	def test_filtra_por_categoria_y_lista_las_afectadas(self):
 		jugador = self.deudor_jugador("78901239")
 		categoria = jugador.jugador.categoria
 		self.deudor_jugador("78901240")
@@ -2670,7 +2670,21 @@ class ReporteMorosidadTests(APITestCase):
 
 		self.assertEqual([fila["socio_id"] for fila in data["filas"]], [jugador.pk])
 		self.assertEqual(data["alcance"], f"Categoría {categoria.nombre}")
-		self.assertEqual(data["categoria_mas_afectada"], {"nombre": categoria.nombre, "monto": Decimal("3000.00")})
+		self.assertEqual(data["categorias_afectadas"], [{"nombre": categoria.nombre, "morosos": 1, "monto": Decimal("3000.00")}])
+
+	def test_categorias_afectadas_agrupan_morosos_y_ordenan_por_monto(self):
+		mayor = self.deudor_jugador("78901241").jugador.categoria
+		companero = self.deudor_jugador("78901242").jugador
+		companero.categoria = mayor
+		companero.save(update_fields=["categoria"])
+		menor = self.deudor_jugador("78901243").jugador.categoria
+
+		categorias = self.reporte()["categorias_afectadas"]
+
+		self.assertEqual(categorias, [
+			{"nombre": mayor.nombre, "morosos": 2, "monto": Decimal("6000.00")},
+			{"nombre": menor.nombre, "morosos": 1, "monto": Decimal("3000.00")},
+		])
 
 	def test_filtra_las_cuotas_por_periodo(self):
 		crear_cuota_con_cargo(

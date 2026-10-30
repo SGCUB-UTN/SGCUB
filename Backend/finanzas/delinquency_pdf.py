@@ -50,8 +50,8 @@ def summary_text(report):
         f"Morosos: {len(report['filas'])} de {report['padron']}",
         f"Morosidad: {report['porcentaje_morosidad']}%".replace(".", ","),
     ]
-    category = report["categoria_mas_afectada"]
-    if category:
+    if report["categorias_afectadas"]:
+        category = report["categorias_afectadas"][0]
         parts.append(f"Categoría más afectada: {category['nombre']} ({format_amount(category['monto'])})")
     return " · ".join(parts)
 

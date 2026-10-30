@@ -4,8 +4,13 @@ import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
 import { defaultReference } from '../components/finanzas/delinquencyFilters'
 import PageHeader from '../components/shared/PageHeader'
+import SectionHeading from '../components/shared/SectionHeading'
 import { SecondaryButton } from '../components/personas/tabs/parts'
 import useCategorias from '../hooks/useCategorias'
+
+const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
+const HEADING_CLASS = 'px-4 sm:px-5 border-b'
+const SECTION_CLASS = 'p-4 sm:p-5'
 
 const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), alcance: 'activos', categoriaId: '', tipo: 'todos' }
 
@@ -63,7 +68,7 @@ function Morosidad() {
   }
 
   return (
-    <div className="w-full flex flex-col pb-8">
+    <div className="w-full flex flex-col gap-5 pb-8">
       <PageHeader
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Reporte de morosidad' }]}
         title="Reporte de morosidad"
@@ -77,17 +82,20 @@ function Morosidad() {
           </SecondaryButton>
         )}
       />
-      {exportError && <p className="mb-2 text-sm text-error" role="alert">{exportError}</p>}
+      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <div className="mt-4">
-        <MorosidadFilters
-          filters={filters}
-          onChange={changeFilters}
-          categorias={categorias}
-          socio={socio}
-          onSocioChange={setSocio}
-        />
-      </div>
+      <section className={PANEL_CLASS} aria-labelledby="morosidad-filters-title">
+        <SectionHeading id="morosidad-filters-title" icon="filter_alt" title="Filtros" className={HEADING_CLASS} />
+        <div className={SECTION_CLASS}>
+          <MorosidadFilters
+            filters={filters}
+            onChange={changeFilters}
+            categorias={categorias}
+            socio={socio}
+            onSocioChange={setSocio}
+          />
+        </div>
+      </section>
 
       {ready ? (
         <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />

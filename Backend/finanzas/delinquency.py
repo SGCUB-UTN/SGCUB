@@ -164,16 +164,15 @@ def report_row(socio, cuotas, pending, today):
     }
 
 
-def most_affected_category(rows):
-    debt_by_category = {}
+def affected_categories(rows):
+    by_category = {}
     for row in rows:
         if row["tipo"] == PLAYER_TYPE and row["categoria_deportiva"] != NO_CATEGORY:
-            category = row["categoria_deportiva"]
-            debt_by_category[category] = debt_by_category.get(category, Decimal("0.00")) + row["monto_adeudado"]
-    if not debt_by_category:
-        return None
-    name, amount = max(debt_by_category.items(), key=lambda item: item[1])
-    return {"nombre": name, "monto": amount}
+            name = row["categoria_deportiva"]
+            category = by_category.setdefault(name, {"nombre": name, "morosos": 0, "monto": Decimal("0.00")})
+            category["morosos"] += 1
+            category["monto"] += row["monto_adeudado"]
+    return sorted(by_category.values(), key=lambda category: (-category["monto"], category["nombre"]))
 
 
 def delinquency_percentage(delinquent, roster):
@@ -219,5 +218,5 @@ def delinquency_report(scope, period=None, **filters):
         "padron": len(socios),
         "monto_total": sum((row["monto_adeudado"] for row in rows), Decimal("0.00")),
         "porcentaje_morosidad": delinquency_percentage(len(rows), len(socios)),
-        "categoria_mas_afectada": most_affected_category(rows),
+        "categorias_afectadas": affected_categories(rows),
     }
