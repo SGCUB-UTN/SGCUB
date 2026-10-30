@@ -44,17 +44,50 @@ const groupCuotas = (cuotas, period, revertibleIds) => {
     latestPaid,
     latestTitle: fromLatestPayment.length ? 'Último pago' : 'Última cuota paga',
     olderPaid: paid.filter((cuota) => !latestPaid.includes(cuota)),
+    future: sorted.filter((cuota) => !visible.includes(cuota)),
   }
 }
 
 const NO_IDS = []
 
-function SectionRow({ title, count }) {
+const SECTION_ROW_CLASS = 'bg-surface-container-low/40'
+const SECTION_CELL_CLASS = 'py-1.5 px-4 text-left text-xs font-semibold uppercase tracking-wider text-outline'
+
+function SectionRow({ title, count, expanded, onToggle }) {
   return (
-    <tr className="bg-surface-container-low/40">
-      <th colSpan={COLUMN_COUNT} scope="rowgroup" className="py-1.5 px-4 text-left text-xs font-semibold uppercase tracking-wider text-outline">
-        {title} <span className="font-normal">({count})</span>
+    <tr className={`${SECTION_ROW_CLASS} cursor-pointer hover:bg-surface-container-low transition-colors`} onClick={onToggle}>
+      <th colSpan={COLUMN_COUNT} scope="rowgroup" className={SECTION_CELL_CLASS}>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle()
+          }}
+          className="inline-flex items-center gap-1 h-4 uppercase tracking-wider cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+        >
+          <span className={`material-symbols-outlined leading-none transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 16 }} aria-hidden="true">expand_more</span>
+          {title} <span className="font-normal">({count})</span>
+        </button>
       </th>
+    </tr>
+  )
+}
+
+function ToggleRow({ expanded, onToggle, children }) {
+  return (
+    <tr>
+      <td colSpan={COLUMN_COUNT} className="py-1.5 px-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+        >
+          <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
+          {children}
+        </button>
+      </td>
     </tr>
   )
 }
@@ -138,9 +171,17 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
 function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
   const [showPaid, setShowPaid] = useState(false)
+  const [collapsed, setCollapsed] = useState({ future: true })
   const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds)
   const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
 
+  const toggleSection = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }))
+  const renderSection = (section, title, rows) => rows.length > 0 && (
+    <Fragment key={section}>
+      <SectionRow title={title} count={rows.length} expanded={!collapsed[section]} onToggle={() => toggleSection(section)} />
+      {!collapsed[section] && rows.map(renderRow)}
+    </Fragment>
+  )
   const toggle = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
   const renderRow = (cuota) => (
     <CuotaRow
@@ -176,26 +217,14 @@ function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, onPay, onAssi
             <td colSpan={COLUMN_COUNT} className="py-4 px-4 text-center text-base text-on-surface-variant">El socio no tiene cuotas pendientes.</td>
           </tr>
         )}
-        {groups.upToDate.length > 0 && <SectionRow title="En fecha" count={groups.upToDate.length} />}
-        {groups.upToDate.map(renderRow)}
-        {groups.overdue.length > 0 && <SectionRow title="Vencidas" count={groups.overdue.length} />}
-        {groups.overdue.map(renderRow)}
-        {groups.latestPaid.length > 0 && <SectionRow title={groups.latestTitle} count={groups.latestPaid.length} />}
-        {groups.latestPaid.map(renderRow)}
+        {renderSection('future', 'Cuotas futuras', groups.future)}
+        {renderSection('upToDate', 'En fecha', groups.upToDate)}
+        {renderSection('overdue', 'Vencidas', groups.overdue)}
+        {renderSection('latestPaid', groups.latestTitle, groups.latestPaid)}
         {groups.olderPaid.length > 0 && (
-          <tr>
-            <td colSpan={COLUMN_COUNT} className="py-1.5 px-3">
-              <button
-                type="button"
-                onClick={() => setShowPaid((current) => !current)}
-                aria-expanded={showPaid}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-              >
-                <span className={`material-symbols-outlined text-[18px] transition-transform ${showPaid ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-                {showPaid ? 'Ocultar cuotas pagas anteriores' : `Mostrar más cuotas pagas (${groups.olderPaid.length})`}
-              </button>
-            </td>
-          </tr>
+          <ToggleRow expanded={showPaid} onToggle={() => setShowPaid((current) => !current)}>
+            {showPaid ? 'Ocultar cuotas pagas anteriores' : `Mostrar más cuotas pagas (${groups.olderPaid.length})`}
+          </ToggleRow>
         )}
         {showPaid && visiblePaid.map(renderRow)}
       </DataTable>

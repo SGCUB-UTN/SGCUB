@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
-import FlushSection, { SectionEmpty } from '../shared/FlushSection'
+import { SectionEmpty } from '../shared/FlushSection'
 import { formatAmount } from '../personas/format'
 import { formatPeriod, periodOf } from '../shared/periodFormat'
 import { SCHOLARSHIP_STATES, cuotaDiscounts, isPaid, scholarshipState, todayIso } from './accountStatement'
@@ -158,14 +158,14 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
   )
 }
 
-export function BenefitsTable({ becas, cuotas, onChanged, className = '' }) {
+export function BenefitsTable({ becas, cuotas, onChanged }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
 
   return (
-    <FlushSection id="beneficios-title" icon="sell" title="Becas y descuentos" className={className}>
+    <>
       {becas === null && (
         <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar las becas del socio.</span></SectionEmpty>
       )}
@@ -224,6 +224,6 @@ export function BenefitsTable({ becas, cuotas, onChanged, className = '' }) {
         onClose={() => setCancelling(null)}
         onRemoved={onChanged}
       />
-    </FlushSection>
+    </>
   )
 }

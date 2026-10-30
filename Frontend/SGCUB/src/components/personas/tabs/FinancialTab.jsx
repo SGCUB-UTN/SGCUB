@@ -5,13 +5,14 @@ import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
 import DevolucionDetailModal from '../../finanzas/DevolucionDetailModal'
 import OtroMovimientoModal from '../../finanzas/OtroMovimientoModal'
 import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
-import { formatAmount, formatDate, formatNumber } from '../format'
-import { BenefitButton, PayButton } from '../HeaderPersona'
+import { formatAmount, formatDate } from '../format'
+import { BenefitButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
 import FlushSection, { SectionEmpty } from '../../shared/FlushSection'
-import { FLUSH_END_CLASS } from '../../shared/flushTable'
+import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
-import StatCard from '../../shared/StatCard'
+import { KpiColumn, KpiGrid } from '../../shared/Kpi'
+import { formatCount, formatMoney, formatWholeMoney } from '../../cuota/cuotaPeriod'
 import { SecondaryButton, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
@@ -19,6 +20,43 @@ import useRevertPayment from '../../../hooks/useRevertPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
+
+const CUOTAS = 'cuotas'
+const MOVEMENTS = 'movimientos'
+const BENEFITS = 'beneficios'
+
+const SECTIONS = [
+  { value: CUOTAS, id: 'cuotas-title', icon: 'receipt_long', title: 'Cuotas' },
+  { value: MOVEMENTS, id: 'otros-movimientos-title', icon: 'swap_horiz', title: 'Ingresos y devoluciones' },
+  { value: BENEFITS, id: 'beneficios-title', icon: 'sell', title: 'Becas y descuentos' },
+]
+
+const PANEL_ID = 'financial-section-panel'
+
+function SectionTabs({ value, onChange }) {
+  return (
+    <div role="tablist" aria-label="Secciones de la cuenta corriente" className="flex gap-1 p-1.5 mt-6 overflow-x-auto rounded-t-xl bg-surface-container border border-outline-variant/30">
+      {SECTIONS.map((section) => {
+        const active = section.value === value
+        return (
+          <button
+            key={section.value}
+            id={section.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={PANEL_ID}
+            onClick={() => onChange(section.value)}
+            className={`flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-base font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${active ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'}`}
+          >
+            <span className={`material-symbols-outlined ${active ? 'text-primary' : 'text-outline'}`} style={{ fontSize: 20 }} aria-hidden="true">{section.icon}</span>
+            {section.title}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 const MOVEMENT_BADGES = {
   Ingreso: { label: 'Ingreso', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -55,6 +93,66 @@ const otherMovements = (movimientos) => [
   })),
 ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
 
+function MovementsTable({ movimientos, movements, onOpen }) {
+  return (
+    <>
+      {movimientos === null && (
+        <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar los ingresos y devoluciones del socio.</span></SectionEmpty>
+      )}
+      {movements.length ? (
+        <DataTable
+          tableClassName="min-w-[760px]"
+          headers={(
+            <>
+              <th className="py-3 px-4 w-[16%]" scope="col">Comprobante</th>
+              <th className="py-3 px-4 w-[16%]" scope="col">Tipo</th>
+              <th className="py-3 px-4 w-[14%]" scope="col">Fecha</th>
+              <th className="py-3 px-4" scope="col">Concepto</th>
+              <th className="py-3 px-4 w-[16%]" scope="col">Medio</th>
+              <th className="py-3 px-4 w-[15%] text-right" scope="col">Monto</th>
+            </>
+          )}
+        >
+          {movements.map((movement) => (
+            <tr
+              key={movement.key}
+              tabIndex={0}
+              role="button"
+              onClick={() => onOpen(movement)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onOpen(movement)
+                }
+              }}
+              className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+            >
+              <td className="py-3 px-4 font-bold text-primary whitespace-nowrap tabular-nums">{movement.codigo}</td>
+              <td className="py-3 px-4">
+                <span className={`${BADGE_CLASS} ${movement.badge.className}`}>{movement.badge.label}</span>
+              </td>
+              <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
+              <td className="py-3 px-4 text-on-surface font-medium break-words">{movement.concepto || '—'}</td>
+              <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{movement.detalle}</td>
+              <td
+                className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
+                  movement.anulado ? 'text-outline line-through' : movement.isRefund ? 'text-error' : 'text-emerald-700'
+                }`}
+              >
+                {movement.anulado ? '' : movement.isRefund ? '− ' : '+ '}{formatAmount(movement.monto)}
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      ) : (
+        movimientos !== null && (
+          <SectionEmpty>Sin ingresos ni devoluciones registrados. No modifican la deuda del socio.</SectionEmpty>
+        )
+      )}
+    </>
+  )
+}
+
 // Renders finances already loaded with useSocioFinances, so the page can share them (e.g. for the tab badge)
 export function FinancialStatement({ socio, finances }) {
   const { openPayment } = useRegisterPayment()
@@ -66,21 +164,13 @@ export function FinancialStatement({ socio, finances }) {
   const [comprobanteId, setComprobanteId] = useState(null)
   const [devolucionSeleccionada, setDevolucionSeleccionada] = useState(null)
   const [modalMovimientoAbierto, setModalMovimientoAbierto] = useState(false)
+  const [activeSection, setActiveSection] = useState(CUOTAS)
 
   const movimientosOrdenados = useMemo(() => otherMovements(movimientos), [movimientos])
 
   const openMovement = (movement) => {
     if (movement.isRefund) setDevolucionSeleccionada(movement.raw)
     else setComprobanteId(movement.raw.comprobante_id)
-  }
-
-  const scrollToSection = (id) => {
-    const heading = document.getElementById(id)
-    if (!heading) return
-    heading.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start',
-    })
   }
 
   const summary = useMemo(() => {
@@ -105,15 +195,12 @@ export function FinancialStatement({ socio, finances }) {
     return <SectionEmpty>Este socio todavía no tiene una cuenta corriente asociada.</SectionEmpty>
   }
 
-  const title = `Cuenta Corriente ${formatNumber(account.cuenta_corriente_id)}`
-
   return (
-    <section className="flex flex-col gap-6" aria-label={title}>
+    <section className="flex flex-col gap-6" aria-label="Resumen de cuenta">
       <TabHeader
-        title={title}
+        title="Resumen de cuenta"
         description="Detalle de cuotas, pagos, ingresos, devoluciones y beneficios del socio."
-        divider={false}
-        actions={(
+        /*actions={(
           <>
             <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
               Ingreso o devolución
@@ -121,89 +208,49 @@ export function FinancialStatement({ socio, finances }) {
             <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
               Beca o descuento
             </BenefitButton>
-            <PayButton onClick={() => openPayment({ socioId, onSuccess: reloadFinances })}>Pagar cuota</PayButton>
           </>
-        )}
+        )}*/
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 xl:gap-6">
-        <StatCard label="Cuotas pendientes" value={summary.pendingCount} icon="pending_actions" tone={summary.pendingCount ? 'warning' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
-        <StatCard label="Saldo adeudado" value={formatAmount(summary.debt)} icon="account_balance" tone={summary.debt ? 'error' : 'neutral'} onClick={() => scrollToSection('cuotas-title')} />
-        <StatCard label="Becas vigentes" value={summary.activeScholarships ?? '—'} icon="sell" tone="neutral" onClick={() => scrollToSection('beneficios-title')} />
+      <KpiGrid columns={3} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
+        <KpiColumn
+          label="Cuotas pendientes"
+          value={formatCount(summary.pendingCount)}
+          tone={summary.pendingCount ? 'text-amber-700' : 'text-on-surface'}
+        />
+        <KpiColumn
+          label="Saldo adeudado"
+          value={formatWholeMoney(summary.debt)}
+          title={formatMoney(summary.debt)}
+          tone={summary.debt ? 'text-error' : 'text-on-surface'}
+        />
+        <KpiColumn
+          label="Becas vigentes"
+          value={summary.activeScholarships == null ? '—' : formatCount(summary.activeScholarships)}
+        />
+      </KpiGrid>
+      <SectionTabs value={activeSection} onChange={setActiveSection} />
+
+      <div className="min-w-0 overflow-hidden rounded-b-xl border-x border-b border-outline-variant/30 bg-surface-container-lowest">
+        <div id={PANEL_ID} role="tabpanel" aria-labelledby={SECTIONS.find((section) => section.value === activeSection).id}>
+          {activeSection === CUOTAS && (cuotas.length === 0 ? (
+            <SectionEmpty>La cuenta corriente no tiene cuotas generadas.</SectionEmpty>
+          ) : (
+            <CuotasEstadoCuentaTable
+              cuotas={cuotas}
+              revertibleIds={account.cuotas_revertibles ?? []}
+              onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
+              onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+              onRevert={() => openReversal({ comprobanteId: account.comprobante_revertible_id, onChanged: reloadFinances })}
+              onChanged={reloadFinances}
+            />
+          ))}
+          {activeSection === MOVEMENTS && (
+            <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
+          )}
+          {activeSection === BENEFITS && <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />}
+        </div>
       </div>
-
-      <FlushSection id="cuotas-title" icon="receipt_long" title="Cuotas">
-        {cuotas.length === 0 ? (
-          <SectionEmpty>La cuenta corriente no tiene cuotas generadas.</SectionEmpty>
-        ) : (
-          <CuotasEstadoCuentaTable
-            cuotas={cuotas}
-            revertibleIds={account.cuotas_revertibles ?? []}
-            onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
-            onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
-            onRevert={() => openReversal({ comprobanteId: account.comprobante_revertible_id, onChanged: reloadFinances })}
-            onChanged={reloadFinances}
-          />
-        )}
-      </FlushSection>
-
-      <FlushSection id="otros-movimientos-title" icon="swap_horiz" title="Ingresos y devoluciones">
-        {movimientos === null && (
-          <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar los ingresos y devoluciones del socio.</span></SectionEmpty>
-        )}
-        {movimientosOrdenados.length ? (
-          <DataTable
-            tableClassName="min-w-[760px]"
-            headers={(
-              <>
-                <th className="py-3 px-4 w-[16%]" scope="col">Comprobante</th>
-                <th className="py-3 px-4 w-[16%]" scope="col">Tipo</th>
-                <th className="py-3 px-4 w-[14%]" scope="col">Fecha</th>
-                <th className="py-3 px-4" scope="col">Concepto</th>
-                <th className="py-3 px-4 w-[16%]" scope="col">Medio</th>
-                <th className="py-3 px-4 w-[15%] text-right" scope="col">Monto</th>
-              </>
-            )}
-          >
-            {movimientosOrdenados.map((movement) => (
-              <tr
-                key={movement.key}
-                tabIndex={0}
-                role="button"
-                onClick={() => openMovement(movement)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    openMovement(movement)
-                  }
-                }}
-                className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
-              >
-                <td className="py-3 px-4 font-bold text-primary whitespace-nowrap tabular-nums">{movement.codigo}</td>
-                <td className="py-3 px-4">
-                  <span className={`${BADGE_CLASS} ${movement.badge.className}`}>{movement.badge.label}</span>
-                </td>
-                <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
-                <td className="py-3 px-4 text-on-surface font-medium break-words">{movement.concepto || '—'}</td>
-                <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{movement.detalle}</td>
-                <td
-                  className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
-                    movement.anulado ? 'text-outline line-through' : movement.isRefund ? 'text-error' : 'text-emerald-700'
-                  }`}
-                >
-                  {movement.anulado ? '' : movement.isRefund ? '− ' : '+ '}{formatAmount(movement.monto)}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        ) : (
-          movimientos !== null && (
-            <SectionEmpty>Sin ingresos ni devoluciones registrados. No modifican la deuda del socio.</SectionEmpty>
-          )
-        )}
-      </FlushSection>
-
-      <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} className={FLUSH_END_CLASS} />
 
       <ComprobanteDetailModal
         comprobanteId={comprobanteId}
