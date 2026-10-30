@@ -15,13 +15,11 @@ import ConfirmRemoveDocenteModal from '../components/categorias/ConfirmRemoveDoc
 import { formatRangoEdad, GENERO_BADGE_CLASSES, getGeneroLabel, getTipoLabel } from '../components/categorias/categoriaFormat'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { DeactivateButton, EditButton } from '../components/personas/HeaderPersona'
+import PersonTabs from '../components/personas/TabsNavPersonas'
 import { PrimaryButton, TabHeader } from '../components/personas/tabs/parts'
 import { getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useDocentes from '../hooks/useDocentes'
-import UnderlineTabs from '../components/shared/UnderlineTabs'
-
-const PANEL_ID = 'categoria-tab-panel'
 
 const fetchDetail = (id) => Promise.all([
   getCategoria(id),
@@ -52,7 +50,6 @@ function CategoriaDetail() {
   const [isDeletionOpen, setIsDeletionOpen] = useState(false)
   const [isAssignOpen, setIsAssignOpen] = useState(false)
   const [removal, setRemoval] = useState({ opened: false, docenteCategoria: null })
-  const [activeTab, setActiveTab] = useState('integrantes')
 
   useEffect(() => {
     let active = true
@@ -138,41 +135,45 @@ function CategoriaDetail() {
 
   const tabs = [
     {
-      value: 'integrantes',
-      id: 'categoria-tab-integrantes',
-      label: 'Integrantes',
+      id: 'jugadores',
+      label: 'Jugadores',
       icon: 'groups',
-      count: (jugadores?.length ?? 0) + docenteCategorias.length,
+      badge: { label: jugadores?.length ?? 0, tono: 'neutro' },
       content: (
-        <div className="flex flex-col gap-8">
-          <div className="flex flex-col gap-4 min-w-0">
-            <TabHeader
-              title="Jugadores"
-              description={`Total asignado a esta categoría: ${jugadores?.length ?? 0}`}
-            />
-            {!jugadores && <ErrorAlert message="No se pudieron cargar los jugadores de la categoría." />}
-            {jugadores?.length === 0 && (
-              <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
+        <div className="flex flex-col gap-4 min-w-0">
+          <TabHeader
+            title="Jugadores"
+            description={`Total asignado a esta categoría: ${jugadores?.length ?? 0}`}
+          />
+          {!jugadores && <ErrorAlert message="No se pudieron cargar los jugadores de la categoría." />}
+          {jugadores?.length === 0 && (
+            <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
+          )}
+          {jugadores?.length > 0 && <CategoriaJugadoresTable jugadores={jugadores} categoriaId={categoria.categoria_id} />}
+        </div>
+      ),
+    },
+    {
+      id: 'docentes',
+      label: 'Docentes',
+      icon: 'school',
+      badge: { label: docenteCategorias.length, tono: 'neutro' },
+      content: (
+        <div className="flex flex-col gap-4 min-w-0">
+          <TabHeader
+            title="Docentes"
+            description={`Total asignado a esta categoría: ${docenteCategorias.length}`}
+            actions={(
+              <PrimaryButton icon="person_add" onClick={() => openModal(setIsAssignOpen)}>
+                Asignar docente
+              </PrimaryButton>
             )}
-            {jugadores?.length > 0 && <CategoriaJugadoresTable jugadores={jugadores} categoriaId={categoria.categoria_id} />}
-          </div>
-
-          <div className="flex flex-col gap-4 min-w-0">
-            <TabHeader
-              title="Docentes"
-              description={`Total asignado a esta categoría: ${docenteCategorias.length}`}
-              actions={(
-                <PrimaryButton icon="person_add" onClick={() => openModal(setIsAssignOpen)}>
-                  Asignar docente
-                </PrimaryButton>
-              )}
-            />
-            {docenteCategorias.length === 0 ? (
-              <CategoriaEmptyState icon="school" title="Sin docentes" description="Todavía no hay docentes asignados a esta categoría." />
-            ) : (
-              <CategoriaDocenteTable docenteCategorias={docenteCategorias} onRemove={openRemoval} />
-            )}
-          </div>
+          />
+          {docenteCategorias.length === 0 ? (
+            <CategoriaEmptyState icon="school" title="Sin docentes" description="Todavía no hay docentes asignados a esta categoría." />
+          ) : (
+            <CategoriaDocenteTable docenteCategorias={docenteCategorias} onRemove={openRemoval} />
+          )}
         </div>
       ),
     },
@@ -199,23 +200,13 @@ function CategoriaDetail() {
         ]}
         actions={(
           <>
-            <EditButton onClick={() => openModal(setIsFormOpen)}>Editar categoría</EditButton>
+            <EditButton onClick={() => openModal(setIsFormOpen)}>Editar</EditButton>
             <DeactivateButton icon="delete" onClick={() => openModal(setIsDeletionOpen)}>Eliminar</DeactivateButton>
           </>
         )}
       />
 
-      <UnderlineTabs
-        label="Secciones de la categoría"
-        tabs={tabs}
-        value={activeTab}
-        onChange={setActiveTab}
-        panelId={PANEL_ID}
-        className="mb-6"
-      />
-      <div id={PANEL_ID} role="tabpanel" aria-labelledby={tabs.find((tab) => tab.value === activeTab).id}>
-        {tabs.find((tab) => tab.value === activeTab).content}
-      </div>
+      <PersonTabs key={id} tabs={tabs} />
 
       <CategoriaFormModal
         key={`form-${modalKey}`}
