@@ -30,7 +30,7 @@ export default function AffectedCategories({ categories }) {
   const maxAmount = Number(top[0]?.monto ?? 0)
 
   return (
-    <div className="min-w-0 h-full flex flex-col sm:col-span-2">
+    <div className="min-w-0 h-full flex flex-col">
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Categorías más afectadas</h3>
         {categories.length > 0 && (

@@ -2670,7 +2670,7 @@ class ReporteMorosidadTests(APITestCase):
 
 		self.assertEqual([fila["socio_id"] for fila in data["filas"]], [jugador.pk])
 		self.assertEqual(data["alcance"], f"Categoría {categoria.nombre}")
-		self.assertEqual(data["categorias_afectadas"], [{"nombre": categoria.nombre, "morosos": 1, "monto": Decimal("3000.00")}])
+		self.assertEqual(data["categorias_afectadas"], [])
 
 	def test_categorias_afectadas_agrupan_morosos_y_ordenan_por_monto(self):
 		mayor = self.deudor_jugador("78901241").jugador.categoria

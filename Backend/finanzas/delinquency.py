@@ -205,6 +205,7 @@ def delinquency_report(scope, period=None, **filters):
         "filas": rows,
         "fecha": timezone.localtime(),
         "alcance": scope_label(scope, **filters),
+        "alcance_codigo": scope,
         "tipo": AFFILIATION_LABELS[filters.get("affiliation", "todos")],
         "periodo": period["label"] if period else "Todos los períodos",
         "sin_cuenta": without_account,
@@ -212,5 +213,5 @@ def delinquency_report(scope, period=None, **filters):
         "padron": len(socios),
         "monto_total": sum((row["monto_adeudado"] for row in rows), Decimal("0.00")),
         "porcentaje_morosidad": delinquency_percentage(len(rows), len(socios)),
-        "categorias_afectadas": affected_categories(rows),
+        "categorias_afectadas": affected_categories(rows) if scope != "categoria" else [],
     }

@@ -52,12 +52,15 @@ function DebtKpi({ rows, total }) {
 
 function MorosidadKpis({ reporte }) {
   const delinquent = reporte.filas.length
+  const showCategories = reporte.alcance_codigo !== 'categoria'
   return (
-    <KpiGrid columns={4}>
-      <DebtKpi rows={reporte.filas} total={Number(reporte.monto_total)} />
-      <PadronStatusChart delinquent={delinquent} roster={reporte.padron} percentage={reporte.porcentaje_morosidad} />
-      <AffectedCategories categories={reporte.categorias_afectadas} />
-    </KpiGrid>
+    <div className={showCategories ? '' : 'max-w-3xl'}>
+      <KpiGrid columns={showCategories ? 3 : 2}>
+        <DebtKpi rows={reporte.filas} total={Number(reporte.monto_total)} />
+        <PadronStatusChart delinquent={delinquent} roster={reporte.padron} percentage={reporte.porcentaje_morosidad} />
+        {showCategories && <AffectedCategories categories={reporte.categorias_afectadas ?? []} />}
+      </KpiGrid>
+    </div>
   )
 }
 
