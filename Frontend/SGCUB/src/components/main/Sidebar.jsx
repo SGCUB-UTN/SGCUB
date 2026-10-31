@@ -318,7 +318,6 @@ export default function Sidebar({ collapsed, onToggle }) {
                 </div>
                 <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
               </summary>
-              <hr className="app-sidebar-divider border-0 border-t border-outline-variant/40 my-2 mx-space-sm" />
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                 <PermissionGate permission={PERMISSIONS.manageUsers}>
                   <NavLink to="/usuarios" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
