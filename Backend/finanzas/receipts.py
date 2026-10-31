@@ -20,7 +20,7 @@ REFUND_FILENAMES = {TipoDevolucionChoices.MANUAL: "devolucion", TipoDevolucionCh
 
 
 def receipt_filename(receipt):
-    return f"comprobante-{RECEIPT_TYPE}-{receipt.numero:08d}.pdf"
+    return f"recibo-{receipt.numero:08d}.pdf"
 
 
 def refund_filename(refund):
@@ -36,12 +36,18 @@ def render_period_label(period_str):
         return period_str
 
 
-def build_periodos_rows(periodos):
+def build_periodos_rows(periodos, style):
     rows = []
     for p in periodos:
-        rows.append([Paragraph(f"<b>{render_period_label(p['periodo'])} ({p['periodo']})</b>"), format_amount(p["monto_aplicado"])])
+        rows.append([
+            Paragraph(f"<b>{escape(render_period_label(p['periodo']))} ({escape(p['periodo'])})</b>", style),
+            format_amount(p["monto_aplicado"]),
+        ])
         for line in p.get("detalle", []):
-            rows.append([f"      • {line['concepto_nombre']}", format_amount(line["monto"])])
+            rows.append([
+                Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;• {escape(line['concepto_nombre'])}", style),
+                format_amount(line["monto"]),
+            ])
     return rows
 
 
@@ -75,17 +81,17 @@ def methods_table(methods):
     )
 
 
-def render_document(title, code, issued, socio, notes, sections, footer):
+def render_document(title, number, issued, socio, notes, sections, footer):
     """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
     styles = document_styles()
     socio = socio or {}
+    number_str = f"{number:08d}" if isinstance(number, int) else str(number)
     story = [
         Paragraph(escape(club_name()), styles["subtitle"]),
         *([Paragraph(escape(details), styles["subtitle"])] if (details := club_details()) else []),
-        Paragraph(title, styles["title"]),
-        Paragraph("Documento no válido como factura", styles["subtitle"]),
-        Spacer(1, 6 * mm),
-        table([["Comprobante N°", "Fecha de emisión"], [code, issued.strftime("%d/%m/%Y")]], [WIDTH / 2, WIDTH / 2]),
+        Paragraph(f"{title} - N° {number_str}", styles["title"]),
+        Paragraph(escape(f"Documento no válido como factura · Fecha de emisión: {issued:%d/%m/%Y}"), styles["subtitle"]),
+        Spacer(1, 4 * mm),
     ]
     for note in notes:
         story += [Spacer(1, 4 * mm), Paragraph(escape(note), styles["cancelled"])]
@@ -111,7 +117,7 @@ def render_document(title, code, issued, socio, notes, sections, footer):
         rightMargin=20 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title=f"{title} {code}",
+        title=f"{title} - N° {number_str}",
         author=club_name(),
         pageCompression=0,
     ).build(story)
@@ -134,7 +140,7 @@ def render_receipt_pdf(receipt):
     else:
         content = ("Períodos abonados", lambda styles: table(
             [["Período / Concepto", "Importe"]]
-            + build_periodos_rows(detail["periodos"])
+            + build_periodos_rows(detail["periodos"], styles["normal"])
             + [["Total abonado", format_amount(detail["monto_total"])]],
             [WIDTH * 0.6, WIDTH * 0.4],
             total_row=True,
@@ -142,7 +148,7 @@ def render_receipt_pdf(receipt):
     methods = [(method["medio_de_pago"], method["monto"]) for method in detail["medios"]]
     return render_document(
         f"RECIBO {detail['tipo']}",
-        receipt_code(receipt),
+        receipt.numero,
         detail["fecha_emision"],
         detail["socio"],
         receipt_notes(receipt),
@@ -157,8 +163,8 @@ def render_refund_pdf(refund):
     if cancelled is not None:
         sections.append(("Comprobante anulado", lambda styles: table(
             [
-                ["Comprobante", "Fecha de emisión", "Importe"],
-                [receipt_code(cancelled), cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
+                ["Recibo X", "Fecha de emisión", "Importe"],
+                [f"{cancelled.numero:08d}", cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
             ],
             [WIDTH * 0.4, WIDTH * 0.3, WIDTH * 0.3],
         )))
@@ -168,7 +174,7 @@ def render_refund_pdf(refund):
     ]
     return render_document(
         REFUND_TITLES[refund.tipo],
-        refund_code(refund),
+        refund.numero,
         timezone.localtime(refund.fecha).date(),
         socio_detail(refund.cuenta_corriente.socio),
         [],

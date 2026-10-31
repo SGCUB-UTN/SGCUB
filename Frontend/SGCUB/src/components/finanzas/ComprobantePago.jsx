@@ -1,6 +1,6 @@
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
-import DownloadComprobanteButtom from './DownloadComprobanteButtom'
+import DownloadComprobanteButton from './DownloadComprobanteButton'
 import DesgloseComprobante from './DesgloseComprobante'
 
 function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, numero, fecha: fechaEmision, onBack, backLabel = 'Volver al estado de cuenta' }) {
@@ -15,7 +15,7 @@ function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, nume
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-surface-container-low border border-outline-variant/30">
         <div><p className="text-sm text-on-surface-variant">Fecha</p><p className="font-semibold text-on-surface">{fecha}</p></div>
-        <div><p className="text-sm text-on-surface-variant">Comprobante N°</p><p className="font-semibold text-on-surface">{detalle?.tipo ? `${detalle.tipo} - ` : ''}{numero ?? 'Pendiente'}</p></div>
+        <div><p className="text-sm text-on-surface-variant">Comprobante N°</p><p className="font-semibold text-on-surface">{detalle?.codigo ?? (numero ? `X ${String(numero).padStart(8, '0')}` : 'Pendiente')}</p></div>
         <div><p className="text-sm text-on-surface-variant">Socio N°</p><p className="font-semibold text-on-surface">{socio.numero_socio}</p></div>
         <div><p className="text-sm text-on-surface-variant">Nombre y apellido</p><p className="font-semibold text-on-surface">{socio.nombre} {socio.apellido}</p></div>
         <div><p className="text-sm text-on-surface-variant">DNI</p><p className="font-semibold text-on-surface">{formatDni(socio.dni)}</p></div>
@@ -35,7 +35,7 @@ function ComprobantePago({ socio, detalle, medios, montoTotal, observacion, nume
 
       {observacion && <div className="p-4 bg-surface-container-low rounded-lg"><p className="text-sm text-on-surface-variant">Observación</p><p className="text-on-surface">{observacion}</p></div>}
       <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
-        <DownloadComprobanteButtom comprobanteId={detalle?.comprobante_id} />
+        <DownloadComprobanteButton comprobanteId={detalle?.comprobante_id} />
         <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>
       </div>
     </div>
