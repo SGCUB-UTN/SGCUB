@@ -8,7 +8,7 @@ import useRevertPayment from '../../hooks/useRevertPayment'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import AuthorizationModal from './AuthorizationModal'
 import DesgloseComprobante from './DesgloseComprobante'
-import DownloadComprobanteButtom from './DownloadComprobanteButtom'
+import DownloadComprobanteButton from './DownloadComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
 import { availableToRefund, reversalOf } from './refunds'
 
@@ -39,7 +39,7 @@ function CreditNotes({ detalle, methodLabel }) {
               {formatDate(note.fecha)} · {methodLabel(note.medio_de_pago)} · Responsable: {note.responsable}
             </p>
           </div>
-          <DownloadComprobanteButtom devolucionId={note.devolucion_id} label="PDF" />
+          <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
         </div>
       ))}
       <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
@@ -163,7 +163,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
           )}
 
           <div className="pt-3 border-t border-outline-variant/30 flex flex-wrap gap-2">
-            <DownloadComprobanteButtom comprobanteId={detalle.comprobante_id} />
+            <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
             {detalle.revertible && (
               <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>

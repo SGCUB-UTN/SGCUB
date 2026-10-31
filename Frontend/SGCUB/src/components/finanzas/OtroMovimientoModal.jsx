@@ -7,7 +7,7 @@ import { claseInput } from '../socios/socioForm'
 import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
-import DownloadComprobanteButtom from './DownloadComprobanteButtom'
+import DownloadComprobanteButton from './DownloadComprobanteButton'
 import SocioPicker from './SocioPicker'
 import { PaymentRow } from './PagoForm'
 import { INCOME, MANUAL_REFUND, isOtherConcept } from './conceptOrigins'
@@ -87,7 +87,7 @@ function DevolucionRegistrada({ devolucion, onBack }) {
       </section>
 
       <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
-        <DownloadComprobanteButtom devolucionId={devolucion.devolucion_id} />
+        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
         <SecondaryButton icon="arrow_back" onClick={onBack}>Volver</SecondaryButton>
       </div>
     </div>
