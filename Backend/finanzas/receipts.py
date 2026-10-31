@@ -164,8 +164,8 @@ def render_refund_pdf(refund):
     if cancelled is not None:
         sections.append(("Comprobante anulado", lambda styles: table(
             [
-                ["Comprobante", "Fecha de emisión", "Importe"],
-                [receipt_code(cancelled), cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
+                ["Recibo X", "Fecha de emisión", "Importe"],
+                [f"{cancelled.numero:08d}", cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
             ],
             [WIDTH * 0.4, WIDTH * 0.3, WIDTH * 0.3],
         )))
