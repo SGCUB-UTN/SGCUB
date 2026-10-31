@@ -1,6 +1,6 @@
 import { Modal } from '@mantine/core'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
-import DownloadComprobanteButtom from './DownloadComprobanteButtom'
+import DownloadComprobanteButton from './DownloadComprobanteButton'
 
 function Row({ label, children }) {
   return (
@@ -52,7 +52,7 @@ function DevolucionDetailModal({ devolucion, opened, onClose }) {
             : 'Registra dinero devuelto que nunca se contó como ingreso. No modifica la deuda ni los ingresos.'}
         </p>
 
-        <DownloadComprobanteButtom devolucionId={devolucion.devolucion_id} />
+        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
       </div>
     </Modal>
   )

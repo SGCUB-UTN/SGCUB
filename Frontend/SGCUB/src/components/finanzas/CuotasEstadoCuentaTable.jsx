@@ -129,9 +129,13 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
         </td>
         <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
         <td className="py-2 px-4 text-right font-semibold text-on-surface whitespace-nowrap">
-          {isPaid(cuota)
-            ? <PaidAction revertible={revertible} onRevert={() => onRevert(cuota)} />
-            : formatAmount(Number(cuota.saldo_pendiente ?? 0))}
+          {revertible ? (
+            <PaidAction revertible onRevert={() => onRevert(cuota)} />
+          ) : isPaid(cuota) ? (
+            <PaidAction revertible={false} />
+          ) : (
+            formatAmount(Number(cuota.saldo_pendiente ?? 0))
+          )}
         </td>
       </tr>
       {expanded && (
@@ -142,6 +146,16 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
           onPay={onPay}
           onAssignBenefit={onAssignBenefit}
           onChanged={onChanged}
+          extraActions={revertible && onRevert && (
+            <button
+              type="button"
+              onClick={() => onRevert(cuota)}
+              className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
+              Revertir pago
+            </button>
+          )}
         />
       )}
     </Fragment>

@@ -12,7 +12,7 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
-const ACTION_GRID_CLASS = 'grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
+export const ACTION_GRID_CLASS ='grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
 export default function PersonHeader({ breadcrumb = [], name, surname, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'

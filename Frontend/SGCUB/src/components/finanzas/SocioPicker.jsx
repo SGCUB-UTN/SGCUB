@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import useSocio from '../../hooks/useSocio'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 
 const MAX_RESULTS = 8
 
-function ResultsList({ results, onSelect, className }) {
+function ResultsList({ results, onSelect, className = '' }) {
   return (
-    <ul className={`border border-outline-variant/30 rounded-lg overflow-hidden divide-y divide-outline-variant/20 bg-surface-container-lowest ${className}`}>
+    <ul className={`border border-outline-variant/30 rounded-lg divide-y divide-outline-variant/20 bg-surface-container-lowest ${className}`}>
       {results.map((socio) => (
         <li key={socio.socio_id}>
           <button
@@ -16,7 +16,14 @@ function ResultsList({ results, onSelect, className }) {
             className="w-full flex items-center justify-between gap-4 p-3 text-left bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer"
           >
             <span className="min-w-0">
-              <strong className="block text-on-surface truncate">{socio.apellido}, {socio.nombre}</strong>
+              <span className="flex items-center gap-2">
+                <strong className="block text-on-surface truncate">{socio.apellido}, {socio.nombre}</strong>
+                {socio.es_jugador && (
+                  <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                    Jugador
+                  </span>
+                )}
+              </span>
               <span className="text-sm text-on-surface-variant">DNI {formatDni(socio.dni)} · Socio {formatNumber(socio.numero_socio)}</span>
             </span>
             <span className="material-symbols-outlined text-on-surface-variant shrink-0" aria-hidden="true">arrow_forward</span>
@@ -31,9 +38,27 @@ function ResultsList({ results, onSelect, className }) {
 // `compact` drops the heading, uses the full width and floats the results over the content
 // below (used as the header of the empty payment form).
 // `excludedId` leaves a socio out of the results (e.g. the one a payment was wrongly registered to)
-function SocioPicker({ onSelect, compact = false, excludedId = null, description = 'Buscá por nombre, apellido, DNI o número de socio.' }) {
+function SocioPicker({
+  onSelect,
+  compact = false,
+  excludedId = null,
+  description = 'Buscá por nombre, apellido, DNI o número de socio.',
+  placeholder = 'Nombre, DNI o N° de socio',
+}) {
   const { socios, isLoading, error } = useSocio()
   const [query, setQuery] = useState('')
+  const [isOpen, setIsOpen] = useState(true)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
+  }, [])
 
   const activeSocios = useMemo(
     () => socios.filter((socio) => isActiveStatus(socio.estado_administrativo_nombre) && socio.socio_id !== excludedId),
@@ -52,6 +77,7 @@ function SocioPicker({ onSelect, compact = false, excludedId = null, description
 
   return (
     <section
+      ref={containerRef}
       className={`flex flex-col ${compact ? 'gap-2' : 'gap-4'}`}
       aria-labelledby={compact ? undefined : 'socio-picker-title'}
       aria-label={compact ? 'Buscar socio' : undefined}
@@ -71,22 +97,31 @@ function SocioPicker({ onSelect, compact = false, excludedId = null, description
         <input
           autoFocus
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setIsOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setIsOpen(true)
+          }}
           className="w-full h-11 pl-10 pr-4 bg-surface-container-low border border-outline-variant/40 rounded-lg text-on-surface focus:outline-none focus:border-primary"
-          placeholder="Nombre, DNI o N° de socio"
-          aria-label="Buscar socio por nombre, DNI o número de socio"
+          placeholder={placeholder}
+          aria-label={placeholder}
         />
-        {compact && results.length > 0 && (
-          <ResultsList results={results} onSelect={onSelect} className="absolute z-20 left-0 right-0 top-full mt-1 shadow-lg" />
+        {compact && isOpen && results.length > 0 && (
+          <ResultsList results={results} onSelect={onSelect} className="absolute z-30 left-0 right-0 top-full mt-1 shadow-xl max-h-72 overflow-y-auto" />
+        )}
+        {compact && isOpen && noMatches && (
+          <div className="absolute z-30 left-0 right-0 top-full mt-1 p-3 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-xl text-sm text-on-surface-variant">
+            No encontramos socios activos con ese criterio.
+          </div>
         )}
       </div>
 
       {isLoading && <p className="text-sm text-on-surface-variant">Cargando socios...</p>}
       {error && <p className="text-sm text-error" role="alert">No se pudieron cargar los socios.</p>}
 
-      {!compact && results.length > 0 && <ResultsList results={results} onSelect={onSelect} className="max-w-2xl" />}
+      {!compact && results.length > 0 && <ResultsList results={results} onSelect={onSelect} className="max-w-2xl overflow-hidden" />}
 
-      {noMatches && <p className="text-sm text-on-surface-variant">No encontramos socios activos con ese criterio.</p>}
+      {!compact && noMatches && <p className="text-sm text-on-surface-variant">No encontramos socios activos con ese criterio.</p>}
     </section>
   )
 }

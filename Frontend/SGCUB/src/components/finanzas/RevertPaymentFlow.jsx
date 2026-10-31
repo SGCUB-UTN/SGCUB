@@ -6,7 +6,7 @@ import useMediosPago from '../../hooks/useMediosPago'
 import { formatAmount, formatDni, getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import DownloadComprobanteButtom from './DownloadComprobanteButtom'
+import DownloadComprobanteButton from './DownloadComprobanteButton'
 import { AuthorizerSelect, OptionCard, SUBMIT_BUTTON_CLASS } from './formParts'
 import RegisterPaymentModal from './RegisterPaymentModal'
 import { availableToRefund, reversalOf } from './refunds'
@@ -178,8 +178,8 @@ function ReversalDone({ detalle, creditNote, onClose }) {
         </div>
       </div>
       <div className="pt-4 border-t border-outline-variant/20 flex flex-wrap items-center justify-end gap-3">
-        <DownloadComprobanteButtom comprobanteId={detalle.comprobante_id} label="Recibo anulado" />
-        {creditNote && <DownloadComprobanteButtom devolucionId={creditNote.devolucion_id} label="Nota de crédito" />}
+        <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} label="Recibo anulado" />
+        {creditNote && <DownloadComprobanteButton devolucionId={creditNote.devolucion_id} label="Nota de crédito" />}
         <button type="button" onClick={onClose} className={SUBMIT_BUTTON_CLASS}>Cerrar</button>
       </div>
     </div>

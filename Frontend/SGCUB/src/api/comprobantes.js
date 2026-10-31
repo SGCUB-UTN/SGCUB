@@ -17,7 +17,7 @@ export const getComprobante = async (comprobanteId) => {
 
 export const descargarComprobantePdf = async (comprobanteId) => {
   const response = await api.get(`${comprobantesEndpoint}${comprobanteId}/pdf/`, { responseType: 'blob' })
-  savePdfResponse(response, `comprobante-${comprobanteId}.pdf`)
+  savePdfResponse(response, `recibo-${comprobanteId}.pdf`)
 }
 
 // Refunds money of an annulled receipt: { monto, medio_de_pago, motivo, responsable }

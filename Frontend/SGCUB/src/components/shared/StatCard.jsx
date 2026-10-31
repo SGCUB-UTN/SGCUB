@@ -12,16 +12,18 @@ const SIZES = {
   lg: { row: 'mt-2', value: 'font-display-lg text-display-lg leading-none', caption: 'text-base' },
 }
 
-const BASE_CLASS = 'min-w-0 w-full text-left bg-surface-container-lowest border rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
+const BASE_CLASS = 'min-w-0 w-full text-left bg-surface-container-lowest border rounded-lg p-4 flex items-center justify-between gap-3'
+const INTERACTIVE_CLASS = 'shadow-xs cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
+const STATIC_CLASS = 'shadow-sm'
 
 export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, onClick, isSelected = false }) {
   const style = TONES[tone] ?? TONES.neutral
   const sizeStyle = SIZES[size] ?? SIZES.md
   const Container = onClick ? 'button' : 'div'
-  const borderClass = isSelected ? 'border-primary ring-1 ring-primary' : 'border-outline-variant/30 hover:border-outline-variant'
+  const borderClass = isSelected ? 'border-primary ring-1 ring-primary' : `border-outline-variant/30 ${onClick ? 'hover:border-outline-variant' : ''}`
   const buttonProps = onClick ? { type: 'button', onClick, 'aria-pressed': isSelected } : {}
   return (
-    <Container className={`${BASE_CLASS} ${borderClass}`} {...buttonProps}>
+    <Container className={`${BASE_CLASS} ${onClick ? INTERACTIVE_CLASS : STATIC_CLASS} ${borderClass}`} {...buttonProps}>
       <div className="flex flex-col min-w-0">
         {eyebrow && (
           <span className={`text-sm font-semibold uppercase tracking-wider ${style.accent ?? 'text-outline'}`}>{eyebrow}</span>

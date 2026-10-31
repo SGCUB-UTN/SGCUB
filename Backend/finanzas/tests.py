@@ -775,7 +775,7 @@ class IngresosTests(APITestCase):
 		self.assertIn(b"RECIBO X", pdf.content)
 		self.assertIn(b"Venta de indumentaria", pdf.content)
 		self.assertNotIn(b"Per\xc3\xadodos abonados", pdf.content)
-		self.assertIn(f"comprobante-X-{comprobante['numero']:08d}.pdf", pdf["Content-Disposition"])
+		self.assertIn(f"recibo-{comprobante['numero']:08d}.pdf", pdf["Content-Disposition"])
 
 	def test_comparte_la_numeracion_de_los_recibos_de_cuotas(self):
 		primero = self.registrar().data["numero"]
@@ -842,7 +842,7 @@ class DevolucionesManualesTests(APITestCase):
 
 		self.assertEqual(pdf.status_code, 200)
 		self.assertIn(b"DEVOLUCI", pdf.content)
-		self.assertIn(b"DEV-X 00000001", pdf.content)
+		self.assertIn(b"00000001", pdf.content)
 		self.assertIn(b"Tesorera", pdf.content)
 		self.assertIn("devolucion-00000001.pdf", pdf["Content-Disposition"])
 
@@ -1529,6 +1529,27 @@ class ReversionPagoTests(PagoTestBase):
 		self.assertEqual(medio_de_mas.status_code, 400)
 		self.assertEqual(Pago.objects.get(pk=pago["pago_id"]).estado_pago, "Acreditado")
 
+	def test_pago_parcial_es_revertible_e_informa_sus_cuotas(self):
+		resp = self.pagar([self.agosto], "400.00").data
+		pago_id = resp["pago"]["pago_id"]
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(estado["cuotas_revertibles"], [self.agosto.pk])
+
+		self.assertEqual(self.revertir(pago_id).status_code, 200)
+		self.agosto.refresh_from_db()
+		self.assertEqual(self.pendiente(self.agosto), Decimal("1000.00"))
+
+	def test_pago_completo_y_siguiente_parcial_informa_ambas_cuotas_revertibles(self):
+		resp = self.pagar([self.agosto, self.septiembre], "1500.00").data
+		comprobante_id = resp["comprobante"]["comprobante_id"]
+
+		estado = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk])).data
+		self.assertEqual(estado["comprobante_revertible_id"], comprobante_id)
+		self.assertEqual(sorted(estado["cuotas_revertibles"]), sorted([self.agosto.pk, self.septiembre.pk]))
+
 
 class ReversionSaldoPorBeneficioTests(PagoTestBase):
 	def descontar(self, cuota, valor):
@@ -1717,7 +1738,7 @@ class NotaCreditoTests(PagoTestBase):
 		recibo = self.client.get(reverse("comprobante-pdf", args=[self.comprobante_id]))
 
 		self.assertIn(b"NOTA DE CR", pdf.content)
-		self.assertIn(b"NC-X 00000001", pdf.content)
+		self.assertIn(b"00000001", pdf.content)
 		self.assertIn(b"ANULADO", recibo.content)
 		self.assertIn(b"NC-X 00000001", recibo.content)
 
@@ -2448,13 +2469,13 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		self.assertEqual(response["Content-Type"], "application/pdf")
 		self.assertEqual(
 			response["Content-Disposition"],
-			f'attachment; filename="comprobante-X-{detalle["numero"]:08d}.pdf"',
+			f'attachment; filename="recibo-{detalle["numero"]:08d}.pdf"',
 		)
 		contenido = response.content
 		self.assertTrue(contenido.startswith(b"%PDF"))
 		for texto in (
 			b"RECIBO X",
-			f"X {detalle['numero']:08d}".encode(),
+			f"{detalle['numero']:08d}".encode(),
 			self.socio.persona.dni.encode(),
 			b"Prueba, Socio",
 			b"2026-10",
@@ -2605,9 +2626,9 @@ class ReporteMorosidadTests(APITestCase):
 			venc1=self.hoy + timedelta(days=3), venc2=self.hoy + timedelta(days=13),
 		)
 
-	def reporte(self):
-		response = self.client.get(reverse("reporte-morosidad"))
-		self.assertEqual(response.status_code, 200)
+	def reporte(self, **params):
+		response = self.client.get(reverse("reporte-morosidad"), params)
+		self.assertEqual(response.status_code, 200, response.data)
 		return response.data
 
 	def fila(self, data):
@@ -2661,6 +2682,101 @@ class ReporteMorosidadTests(APITestCase):
 		self.assertEqual(len(data["filas"]), 1)
 		self.assertEqual(data["sin_cuenta"], 1)
 		self.assertNotIn("erroresConsulta", data)
+
+	def test_kpis_del_padron_filtrado(self):
+		crear_socio("78901235")
+		crear_socio("78901236")
+		crear_socio("78901237")
+
+		data = self.reporte()
+
+		self.assertEqual(data["padron"], 4)
+		self.assertEqual(data["monto_total"], Decimal("1000.00"))
+		self.assertEqual(data["porcentaje_morosidad"], Decimal("25.0"))
+
+	def test_separa_capital_y_recargos_por_mora(self):
+		ItemCuota.objects.create(cuota=self.vencida, concepto="Mora", fecha_aplicacion=self.hoy, monto=Decimal("150.00"))
+		sync_cuota_charge(self.vencida)
+
+		fila = self.fila(self.reporte())
+
+		self.assertEqual(fila["monto_adeudado"], Decimal("1150.00"))
+		self.assertEqual(fila["capital"], Decimal("1000.00"))
+		self.assertEqual(fila["recargos"], Decimal("150.00"))
+
+	def deudor_jugador(self, dni):
+		jugador = crear_socio(dni, con_jugador=True)
+		crear_cuota_con_cargo(
+			account_for(jugador), "2026-08", "3000.00", EstadoCuotaChoices.VENCIDA_1,
+			venc1=self.hoy - timedelta(days=5), venc2=self.hoy + timedelta(days=5),
+		)
+		return jugador
+
+	def test_filtra_por_tipo_de_afiliacion(self):
+		jugador = self.deudor_jugador("78901238")
+
+		solo_jugadores = [fila["socio_id"] for fila in self.reporte(tipo="jugadores")["filas"]]
+		solo_socios = [fila["socio_id"] for fila in self.reporte(tipo="socios")["filas"]]
+
+		self.assertEqual(solo_jugadores, [jugador.pk])
+		self.assertEqual(solo_socios, [self.socio.pk])
+		self.assertEqual(self.reporte(tipo="jugadores")["filas"][0]["tipo"], "Jugador")
+		self.assertEqual(self.reporte(tipo="jugadores")["filas"][0]["jugador_id"], jugador.jugador.jugador_id)
+
+	def test_filtra_por_categoria_y_lista_las_afectadas(self):
+		jugador = self.deudor_jugador("78901239")
+		categoria = jugador.jugador.categoria
+		self.deudor_jugador("78901240")
+
+		data = self.reporte(alcance="categoria", categoria_id=categoria.pk)
+
+		self.assertEqual([fila["socio_id"] for fila in data["filas"]], [jugador.pk])
+		self.assertEqual(data["alcance"], f"Categoría {categoria.nombre}")
+		self.assertEqual(data["categorias_afectadas"], [])
+
+	def test_categorias_afectadas_agrupan_morosos_y_ordenan_por_monto(self):
+		mayor = self.deudor_jugador("78901241").jugador.categoria
+		companero = self.deudor_jugador("78901242").jugador
+		companero.categoria = mayor
+		companero.save(update_fields=["categoria"])
+		menor = self.deudor_jugador("78901243").jugador.categoria
+
+		categorias = self.reporte()["categorias_afectadas"]
+
+		self.assertEqual(categorias, [
+			{"nombre": mayor.nombre, "morosos": 2, "monto": Decimal("6000.00")},
+			{"nombre": menor.nombre, "morosos": 1, "monto": Decimal("3000.00")},
+		])
+
+	def test_filtra_las_cuotas_por_periodo(self):
+		crear_cuota_con_cargo(
+			self.cuenta, "2026-02", "500.00", EstadoCuotaChoices.VENCIDA_2,
+			venc1=self.hoy - timedelta(days=200), venc2=self.hoy - timedelta(days=190),
+		)
+
+		mensual = self.fila(self.reporte(periodo="mensual", referencia="2026-02"))
+		trimestral = self.fila(self.reporte(periodo="trimestral", referencia="2026-T3"))
+		anual = self.reporte(periodo="anual", referencia="2026")
+
+		self.assertEqual(mensual["monto_adeudado"], Decimal("500.00"))
+		self.assertEqual(trimestral["monto_adeudado"], Decimal("1000.00"))
+		self.assertEqual(self.fila(anual)["monto_adeudado"], Decimal("1500.00"))
+		self.assertEqual(anual["periodo"], "Anual · 2026")
+		self.assertEqual(self.reporte(periodo="anual", referencia="2025")["filas"], [])
+
+	def test_rechaza_filtros_invalidos(self):
+		for params in (
+			{"tipo": "otros"},
+			{"alcance": "socio"},
+			{"alcance": "categoria"},
+			{"periodo": "semanal", "referencia": "2026"},
+			{"periodo": "mensual", "referencia": "2026-13"},
+			{"periodo": "trimestral", "referencia": "2026-T5"},
+		):
+			with self.subTest(params=params):
+				response = self.client.get(reverse("reporte-morosidad"), params)
+
+				self.assertEqual(response.status_code, 400)
 
 
 class ResumenFinancieroTests(APITestCase):
@@ -2761,7 +2877,7 @@ class ResumenFinancieroTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
-		self.assertIn(f"informe-financiero-{self.periodo}.pdf", response["Content-Disposition"])
+		self.assertIn(f"resumen-financiero-{self.periodo}.pdf", response["Content-Disposition"])
 		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
 			with self.subTest(texto=texto):
 				self.assertIn(texto, response.content)
@@ -2798,19 +2914,25 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertNotIn(b"Paz, Luis", response.content)
 
 	def test_respects_selected_scope(self):
-		response = self.download(alcance="socio", socio_id=self.up_to_date.pk)
+		otra_categoria = Categoria.objects.create(nombre="Otras", anio_vigente=2026, edad_maxima=18, genero="M")
+		response = self.download(alcance="categoria", categoria_id=otra_categoria.pk)
 
 		self.assertEqual(response.status_code, 200)
 		self.assertNotIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"No hay socios con deuda vencida", response.content)
 
-		response = self.download(alcance="manual", socio_ids=f"{self.debtor.pk},{self.up_to_date.pk}")
+		categoria = Categoria.objects.create(nombre="Primera", anio_vigente=2026, edad_maxima=30, genero="M")
+		Jugador.objects.create(socio=self.debtor, categoria=categoria)
+
+		response = self.download(alcance="categoria", categoria_id=categoria.pk, tipo="jugadores", periodo="anual", referencia="2026")
 
 		self.assertIn(b"Mora, Rosa", response.content)
-		self.assertIn(rb"Alcance: Selecci\363n manual", response.content)
+		self.assertIn(b"Primera", response.content)
+		self.assertIn(b"Tipo: Solo jugadores", response.content)
+		self.assertIn(b"Anual", response.content)
 
 	def test_rejects_invalid_parameters(self):
-		for params in ({"alcance": "todos"}, {"alcance": "manual"}, {"alcance": "socio", "socio_id": "x"}):
+		for params in ({"alcance": "todos"}, {"alcance": "manual"}, {"alcance": "socio"}, {"alcance": "categoria", "categoria_id": "x"}):
 			with self.subTest(params=params):
 				response = self.download(**params)
 

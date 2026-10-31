@@ -1,11 +1,12 @@
 const GRID_CLASSES = {
+  2: 'sm:grid-cols-2 sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0',
   3: 'sm:grid-cols-3 sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0',
   4: 'sm:grid-cols-2 xl:grid-cols-4 xl:gap-0 xl:divide-x xl:[&>*]:px-6 xl:[&>*:first-child]:pl-0 xl:[&>*:last-child]:pr-0',
 }
 
 export function KpiGrid({ columns = 4, className = '', children }) {
   return (
-    <div className={`grid grid-cols-1 gap-6 divide-outline-variant/40 ${GRID_CLASSES[columns]} ${className}`}>
+    <div className={`grid grid-cols-1 gap-6 divide-outline-variant/40 ${GRID_CLASSES[columns] ?? ''} ${className}`}>
       {children}
     </div>
   )
