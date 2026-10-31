@@ -22,13 +22,16 @@ def delinquency_filename(report):
     return f"reporte-morosidad-{report['fecha']:%Y%m%d-%H%M}.pdf"
 
 
-def report_rows(rows):
+def report_rows(rows, styles):
+    def cell(text):
+        return Paragraph(escape(str(text or "—")), styles["Normal"])
+
     return [
         [
-            f"{row['apellido']}, {row['nombre']}",
+            cell(f"{row['apellido']}, {row['nombre']}"),
             row["dni"],
             row["tipo"],
-            row["categoria_deportiva"] if row["tipo"] == "Jugador" else "—",
+            cell(row["categoria_deportiva"]) if row["tipo"] == "Jugador" else "—",
             str(row["cuotas_vencidas"]),
             format_amount(row["recargos"]),
             format_amount(row["monto_adeudado"]),
@@ -83,7 +86,7 @@ def render_delinquency_pdf(report):
 
     if rows:
         content = table(
-            [HEADERS] + report_rows(rows) + [total_row(rows)],
+            [HEADERS] + report_rows(rows, styles) + [total_row(rows)],
             [width * share for share in COLUMN_SHARES],
             total_row=True,
             right_aligned_from=4,

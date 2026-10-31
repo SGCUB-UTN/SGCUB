@@ -18,7 +18,7 @@ MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agost
 
 
 def financial_summary_filename(period_str):
-    return f"informe-financiero-{period_str}.pdf"
+    return f"resumen-financiero-{period_str}.pdf"
 
 
 def period_label(period):

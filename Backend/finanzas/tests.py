@@ -2836,7 +2836,7 @@ class ResumenFinancieroTests(APITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
-		self.assertIn(f"informe-financiero-{self.periodo}.pdf", response["Content-Disposition"])
+		self.assertIn(f"resumen-financiero-{self.periodo}.pdf", response["Content-Disposition"])
 		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
 			with self.subTest(texto=texto):
 				self.assertIn(texto, response.content)
