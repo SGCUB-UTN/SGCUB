@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { downloadDelinquencyPdf, getReporteMorosidad } from '../api/morosidad'
 import MorosidadFilters from '../components/finanzas/MorosidadFilters'
 import MorosidadReport from '../components/finanzas/MorosidadReport'
@@ -12,11 +12,7 @@ const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-v
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 
-const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), alcance: 'activos', categoriaId: '', tipo: 'todos' }
-
-const isReady = (filters) => (
-  filters.alcance !== 'categoria' || Boolean(filters.categoriaId)
-)
+const INITIAL_FILTERS = { periodo: 'anual', referencia: defaultReference('anual'), tipo: 'todos', categoriaId: '' }
 
 function Morosidad() {
   const { categorias } = useCategorias()
@@ -24,15 +20,11 @@ function Morosidad() {
   const [result, setResult] = useState({ key: null, reporte: null, error: '' })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
-  const [reservedHeight, setReservedHeight] = useState(0)
-  const resultsRef = useRef(null)
 
   const requestKey = JSON.stringify(filters)
-  const ready = isReady(filters)
-  const isLoading = ready && result.key !== requestKey
+  const isLoading = result.key !== requestKey
 
   useEffect(() => {
-    if (!ready) return undefined
     let active = true
     const key = JSON.stringify(filters)
     getReporteMorosidad(filters)
@@ -43,14 +35,9 @@ function Morosidad() {
         error: requestError.response?.data?.detail || 'No se pudo generar el reporte de morosidad.',
       }))
     return () => { active = false }
-  }, [ready, filters])
-
-  const reserveResultsHeight = () => {
-    if (ready && resultsRef.current) setReservedHeight(resultsRef.current.offsetHeight)
-  }
+  }, [filters])
 
   const changeFilters = (changes) => {
-    reserveResultsHeight()
     setExportError('')
     setFilters((current) => {
       const next = { ...current, ...changes }
@@ -80,7 +67,7 @@ function Morosidad() {
           <SecondaryButton
             icon={isExporting ? 'progress_activity' : 'picture_as_pdf'}
             onClick={exportPdf}
-            disabled={!ready || isLoading || isExporting || !result.reporte}
+            disabled={isLoading || isExporting || !result.reporte}
           >
             {isExporting ? 'Generando PDF...' : 'Exportar PDF'}
           </SecondaryButton>
@@ -99,15 +86,7 @@ function Morosidad() {
         </div>
       </section>
 
-      <div ref={resultsRef} style={{ minHeight: ready ? undefined : reservedHeight }}>
-        {ready ? (
-          <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
-        ) : (
-          <p className="py-12 text-center border-2 border-dashed border-outline-variant/50 rounded-md text-on-surface-variant">
-            Elegí una categoría para ver su morosidad.
-          </p>
-        )}
-      </div>
+      <MorosidadReport reporte={result.reporte} isLoading={isLoading} error={result.error} />
     </div>
   )
 }

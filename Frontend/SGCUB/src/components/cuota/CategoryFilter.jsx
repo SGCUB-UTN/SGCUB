@@ -33,7 +33,15 @@ function OptionButton({ label, selected, onSelect }) {
   )
 }
 
-export default function CategoryFilter({ value, categories, hasUncategorized, onChange, disabled = false, disabledReason }) {
+export default function CategoryFilter({
+  value,
+  categories,
+  hasUncategorized,
+  onChange,
+  disabled = false,
+  disabledReason,
+  genderGroups = true,
+}) {
   const [opened, setOpened] = useState(false)
   const [gender, setGender] = useState(null)
   const selected = selectedCategory(value, categories)
@@ -96,11 +104,13 @@ export default function CategoryFilter({ value, categories, hasUncategorized, on
 
           {activeGender ? (
             <div className="flex flex-col max-h-64 overflow-y-auto">
-              <OptionButton
-                label={activeGender.allLabel}
-                selected={value === genderFilterValue(activeGender.value)}
-                onSelect={() => select(genderFilterValue(activeGender.value))}
-              />
+              {genderGroups && (
+                <OptionButton
+                  label={activeGender.allLabel}
+                  selected={value === genderFilterValue(activeGender.value)}
+                  onSelect={() => select(genderFilterValue(activeGender.value))}
+                />
+              )}
               {categories.filter((category) => category.gender === activeGender.value).map((category) => (
                 <OptionButton
                   key={category.value}
