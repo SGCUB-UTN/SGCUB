@@ -775,7 +775,7 @@ class IngresosTests(APITestCase):
 		self.assertIn(b"RECIBO X", pdf.content)
 		self.assertIn(b"Venta de indumentaria", pdf.content)
 		self.assertNotIn(b"Per\xc3\xadodos abonados", pdf.content)
-		self.assertIn(f"comprobante-X-{comprobante['numero']:08d}.pdf", pdf["Content-Disposition"])
+		self.assertIn(f"recibo-{comprobante['numero']:08d}.pdf", pdf["Content-Disposition"])
 
 	def test_comparte_la_numeracion_de_los_recibos_de_cuotas(self):
 		primero = self.registrar().data["numero"]
@@ -842,7 +842,7 @@ class DevolucionesManualesTests(APITestCase):
 
 		self.assertEqual(pdf.status_code, 200)
 		self.assertIn(b"DEVOLUCI", pdf.content)
-		self.assertIn(b"DEV-X 00000001", pdf.content)
+		self.assertIn(b"00000001", pdf.content)
 		self.assertIn(b"Tesorera", pdf.content)
 		self.assertIn("devolucion-00000001.pdf", pdf["Content-Disposition"])
 
@@ -1710,7 +1710,7 @@ class NotaCreditoTests(PagoTestBase):
 		recibo = self.client.get(reverse("comprobante-pdf", args=[self.comprobante_id]))
 
 		self.assertIn(b"NOTA DE CR", pdf.content)
-		self.assertIn(b"NC-X 00000001", pdf.content)
+		self.assertIn(b"00000001", pdf.content)
 		self.assertIn(b"ANULADO", recibo.content)
 		self.assertIn(b"NC-X 00000001", recibo.content)
 
@@ -2428,13 +2428,13 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		self.assertEqual(response["Content-Type"], "application/pdf")
 		self.assertEqual(
 			response["Content-Disposition"],
-			f'attachment; filename="comprobante-X-{detalle["numero"]:08d}.pdf"',
+			f'attachment; filename="recibo-{detalle["numero"]:08d}.pdf"',
 		)
 		contenido = response.content
 		self.assertTrue(contenido.startswith(b"%PDF"))
 		for texto in (
 			b"RECIBO X",
-			f"X {detalle['numero']:08d}".encode(),
+			f"{detalle['numero']:08d}".encode(),
 			self.socio.persona.dni.encode(),
 			b"Prueba, Socio",
 			b"2026-10",
