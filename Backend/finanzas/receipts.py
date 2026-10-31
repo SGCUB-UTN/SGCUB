@@ -89,10 +89,9 @@ def render_document(title, number, issued, socio, notes, sections, footer):
     story = [
         Paragraph(escape(club_name()), styles["subtitle"]),
         *([Paragraph(escape(details), styles["subtitle"])] if (details := club_details()) else []),
-        Paragraph(title, styles["title"]),
-        Paragraph("Documento no válido como factura", styles["subtitle"]),
-        Spacer(1, 6 * mm),
-        table([["Comprobante N°", "Fecha de emisión"], [number_str, issued.strftime("%d/%m/%Y")]], [WIDTH / 2, WIDTH / 2]),
+        Paragraph(f"{title} - N° {number_str}", styles["title"]),
+        Paragraph(escape(f"Documento no válido como factura · Fecha de emisión: {issued:%d/%m/%Y}"), styles["subtitle"]),
+        Spacer(1, 4 * mm),
     ]
     for note in notes:
         story += [Spacer(1, 4 * mm), Paragraph(escape(note), styles["cancelled"])]
@@ -118,7 +117,7 @@ def render_document(title, number, issued, socio, notes, sections, footer):
         rightMargin=20 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title=f"{title} N° {number_str}",
+        title=f"{title} - N° {number_str}",
         author=club_name(),
         pageCompression=0,
     ).build(story)
