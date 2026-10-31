@@ -16,6 +16,7 @@ import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { matchesSearch } from '../shared/search'
 import { downloadCashMovementsCsv } from './cashMovementsCsv'
+import { conceptGroup } from './conceptOrigins'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-2.5 px-4'
@@ -55,6 +56,27 @@ const TYPES = {
   Manual: { label: 'Devolución manual', group: 'devoluciones', badge: 'bg-error/10 text-error border-error/20' },
 }
 
+const ACTIVE = 'activo'
+const INACTIVE = 'inactivo'
+const STATUS_OPTIONS = [{ value: ACTIVE, label: 'Activo' }, { value: INACTIVE, label: 'Inactivo' }]
+
+const SCOPE_FILTERS = {
+  todos: { label: 'Estado', field: 'status', options: STATUS_OPTIONS },
+  cuotas: { label: 'Estado', field: 'status', options: [{ value: ACTIVE, label: 'Activo' }, { value: INACTIVE, label: 'Anulado' }] },
+  ingresos: { label: 'Estado', field: 'status', options: STATUS_OPTIONS, conceptLabel: 'Concepto' },
+  devoluciones: {
+    label: 'Tipo',
+    field: 'filterCode',
+    options: [{ value: 'NotaCredito', label: TYPES.NotaCredito.label }, { value: 'Manual', label: TYPES.Manual.label }],
+    conceptLabel: 'Motivo',
+  },
+}
+
+const groupFields = (concept) => {
+  const group = conceptGroup(concept)
+  return { conceptGroup: group, conceptKey: group.toLocaleLowerCase('es') }
+}
+
 const receiptType = (comprobante) => {
   const annulled = comprobante.estado === 'Anulado'
   if (comprobante.es_ingreso) return annulled ? 'IngresoAnulado' : 'IngresoVigente'
@@ -92,7 +114,9 @@ function ComprobantesTable({
 }) {
   const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState(ALL)
+  const [mainFilter, setMainFilter] = useState(ALL)
+  const [conceptFilter, setConceptFilter] = useState(ALL)
+  const filters = SCOPE_FILTERS[scope]
 
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
@@ -118,6 +142,8 @@ function ComprobantesTable({
         amount: Number(comprobante.monto_total ?? 0),
         isPositive: true,
         isAnulado: comprobante.estado === 'Anulado',
+        status: comprobante.estado === 'Anulado' ? INACTIVE : ACTIVE,
+        ...(comprobante.es_ingreso ? groupFields(comprobante.concepto) : {}),
       }
     })
 
@@ -143,6 +169,8 @@ function ComprobantesTable({
       amount: Number(devolucion.monto ?? 0),
       isPositive: false,
       isAnulado: false,
+      status: ACTIVE,
+      ...groupFields(devolucion.concepto),
     }))
 
     return [...receiptItems, ...refundItems]
@@ -156,19 +184,26 @@ function ComprobantesTable({
     }))
   }, [unifiedItems, isLoading, error])
 
-  const visibleTypeOptions = useMemo(
-    () => Object.entries(TYPES)
-      .filter(([, type]) => scope === 'todos' || type.group === scope)
-      .map(([value, type]) => ({ value, label: type.label })),
-    [scope],
-  )
+  const conceptOptions = useMemo(() => {
+    if (!filters.conceptLabel) return []
+    const groups = new Map()
+    unifiedItems.forEach((item) => {
+      if (item.conceptKey && TYPES[item.filterCode]?.group === scope && !groups.has(item.conceptKey)) {
+        groups.set(item.conceptKey, item.conceptGroup)
+      }
+    })
+    return [...groups]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+  }, [unifiedItems, scope, filters])
 
   const filtered = useMemo(() => {
     const text = search.trim()
     const textDigits = text.replace(/[.#]/g, '')
     return unifiedItems.filter((item) => {
       if (scope !== 'todos' && TYPES[item.filterCode]?.group !== scope) return false
-      if (typeFilter !== ALL && item.filterCode !== typeFilter) return false
+      if (mainFilter !== ALL && item[filters.field] !== mainFilter) return false
+      if (conceptFilter !== ALL && item.conceptKey !== conceptFilter) return false
       if (!text) return true
       return matchesSearch(text, [
         item.socioLabel,
@@ -185,7 +220,7 @@ function ComprobantesTable({
           item.socio?.numero_socio,
         ].some((field) => String(field ?? '').includes(textDigits)))
     })
-  }, [unifiedItems, scope, typeFilter, search])
+  }, [unifiedItems, scope, filters, mainFilter, conceptFilter, search])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
@@ -194,7 +229,8 @@ function ComprobantesTable({
   const changeScope = (nextScope) => {
     withPageReset(() => {
       setScope(nextScope)
-      setTypeFilter(ALL)
+      setMainFilter(ALL)
+      setConceptFilter(ALL)
     })()
   }
 
@@ -245,15 +281,28 @@ function ComprobantesTable({
             />
             <FilterSelect
               className={FILTER_CLASS}
-              value={typeFilter}
-              onChange={(event) => withPageReset(setTypeFilter)(event.target.value)}
-              aria-label="Filtrar por tipo de movimiento"
+              value={mainFilter}
+              onChange={(event) => withPageReset(setMainFilter)(event.target.value)}
+              aria-label={`Filtrar por ${filters.label.toLowerCase()}`}
             >
-              <option value={ALL}>Estado / Tipo: Todos</option>
-              {visibleTypeOptions.map((option) => (
+              <option value={ALL}>{filters.label}: Todos</option>
+              {filters.options.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </FilterSelect>
+            {filters.conceptLabel && (
+              <FilterSelect
+                className={FILTER_CLASS}
+                value={conceptFilter}
+                onChange={(event) => withPageReset(setConceptFilter)(event.target.value)}
+                aria-label={`Filtrar por ${filters.conceptLabel.toLowerCase()}`}
+              >
+                <option value={ALL}>{filters.conceptLabel}: Todos</option>
+                {conceptOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </FilterSelect>
+            )}
             <button
               type="button"
               onClick={() => downloadCashMovementsCsv(sorted, period)}
