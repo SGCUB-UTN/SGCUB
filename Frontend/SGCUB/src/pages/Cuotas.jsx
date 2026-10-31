@@ -133,16 +133,15 @@ function Cuotas() {
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Cuotas' }]}
         title="Cuotas"
         actions={(
-          <div className="flex flex-wrap items-center gap-2.5">
-            <PeriodSelector value={period} onChange={changePeriod} />
-            <button type="button" onClick={() => setGenerateOpen(true)} className={GENERATE_BUTTON_CLASS}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">request_quote</span>
-              Generar cuotas
-            </button>
-          </div>
+          <button type="button" onClick={() => setGenerateOpen(true)} className={GENERATE_BUTTON_CLASS}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">request_quote</span>
+            Generar cuotas
+          </button>
         )}
       />
-      <SectionDivider>Resumen mensual</SectionDivider>
+      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+        Resumen mensual
+      </SectionDivider>
       <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">
         <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" className={HEADING_CLASS} />
         <div className="px-4 sm:px-5 py-3">
