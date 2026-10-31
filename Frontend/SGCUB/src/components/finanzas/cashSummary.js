@@ -1,3 +1,5 @@
+import { conceptGroup } from './conceptOrigins'
+
 const ANNULLED = 'Anulado'
 
 const totalOf = (items, amount) => ({
@@ -11,7 +13,7 @@ const refundAmount = (devolucion) => devolucion.monto
 function groupByConcept(receipts) {
   const groups = new Map()
   receipts.forEach((receipt) => {
-    const label = String(receipt.concepto ?? '').trim() || 'Sin concepto'
+    const label = conceptGroup(receipt.concepto)
     const key = label.toLocaleLowerCase('es')
     const group = groups.get(key) ?? { key, label, amount: 0, count: 0 }
     group.amount += Number(receipt.monto_total ?? 0)
