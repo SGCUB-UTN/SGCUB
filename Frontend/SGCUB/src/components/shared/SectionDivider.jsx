@@ -6,4 +6,3 @@ export default function SectionDivider({ children }) {
     </div>
   )
 }
-f
