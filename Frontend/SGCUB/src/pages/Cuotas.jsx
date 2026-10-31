@@ -139,7 +139,7 @@ function Cuotas() {
           </button>
         )}
       />
-      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+      <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>
         Resumen mensual
       </SectionDivider>
       <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">

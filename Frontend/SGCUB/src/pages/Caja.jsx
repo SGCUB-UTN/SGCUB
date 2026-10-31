@@ -104,7 +104,7 @@ function Caja() {
         />
       )}
 
-      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+      <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>
         Resumen mensual
       </SectionDivider>
 

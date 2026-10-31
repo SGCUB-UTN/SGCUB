@@ -233,7 +233,7 @@ function ResumenFinanciero() {
 
       {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+      <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>
         Resumen mensual
       </SectionDivider>
 
