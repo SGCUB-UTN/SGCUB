@@ -29,22 +29,18 @@ const SCOPES = [
   {
     value: 'todos',
     label: 'Todos los movimientos',
-    description: 'Comprobantes de cuotas, otros ingresos y devoluciones.',
   },
   {
-    value: 'Cobro de cuotas',
+    value: 'cuotas',
     label: 'Cobro de cuotas',
-    description: 'Cobros de cuotas de socios.',
   },
   {
     value: 'ingresos',
     label: 'Otros ingresos',
-    description: 'Ingresos ajenos a cuotas.',
   },
   {
     value: 'devoluciones',
     label: 'Devoluciones',
-    description: 'Notas de crédito y devoluciones manuales.',
   },
 ]
 
