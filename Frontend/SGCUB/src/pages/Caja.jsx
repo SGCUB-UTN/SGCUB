@@ -94,7 +94,7 @@ function Caja() {
         />
       )}
 
-      <SectionDivider>Resumen mensual · {formatPeriod(period)}</SectionDivider>
+      <SectionDivider>Resumen mensual</SectionDivider>
 
       <CashKpis
         period={period}

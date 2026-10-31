@@ -236,7 +236,7 @@ function ResumenFinanciero() {
 
       {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <SectionDivider>Resumen mensual · {formatPeriod(period)}</SectionDivider>
+      <SectionDivider>Resumen mensual</SectionDivider>
 
       {isLoading && <LoadingPanel />}
       {error && (

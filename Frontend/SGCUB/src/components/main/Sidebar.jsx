@@ -160,7 +160,12 @@ export default function Sidebar({ collapsed, onToggle }) {
                     <span className="app-sidebar-label text-base">Cuotas</span>
                   </span>
                 </NavLink>
-
+                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
+                    <span className="app-sidebar-label text-base">Caja y cobros</span>
+                  </span>
+                </NavLink>
                 <NavLink to="/resumen-financiero" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance</span>
@@ -171,12 +176,6 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">warning</span>
                     <span className="app-sidebar-label text-base">Reporte de morosidad</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
-                    <span className="app-sidebar-label text-base">Caja y cobros</span>
                   </span>
                 </NavLink>
               </div>

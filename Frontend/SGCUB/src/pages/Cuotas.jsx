@@ -18,6 +18,7 @@ import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import { collectErrorMessages } from '../components/personas/format'
+import SectionDivider from '../components/shared/SectionDivider'
 
 const FORMULARIO_INICIAL = {
   socio_id: '',
@@ -141,7 +142,7 @@ function Cuotas() {
           </div>
         )}
       />
-
+      <SectionDivider>Resumen mensual</SectionDivider>
       <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">
         <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" className={HEADING_CLASS} />
         <div className="px-4 sm:px-5 py-3">
