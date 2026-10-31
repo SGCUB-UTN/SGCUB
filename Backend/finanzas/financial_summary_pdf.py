@@ -93,7 +93,7 @@ def render_financial_summary_pdf(summary):
                 [row["codigo"], row["fecha"].strftime("%d/%m/%Y"), cell(socio_label(row["socio"])), cell(row["concepto"]), format_amount(row["monto"])]
                 for row in summary["ingresos_extra"]["movimientos"]
             ],
-            (0.16, 0.11, 0.3, 0.25, 0.18),
+            (0.16, 0.14, 0.26, 0.26, 0.18),
             width,
             ["Total", "", "", "", format_amount(summary["ingresos_extra"]["total"])],
             "No hubo ingresos extra en el período.",
@@ -122,7 +122,7 @@ def render_financial_summary_pdf(summary):
                 ]
                 for row in summary["devoluciones"]["movimientos"]
             ],
-            (0.16, 0.11, 0.3, 0.25, 0.18),
+            (0.17, 0.13, 0.26, 0.26, 0.18),
             width,
             ["Total", "", "", "", format_amount(summary["devoluciones"]["total"])],
             "No hubo devoluciones en el período.",
