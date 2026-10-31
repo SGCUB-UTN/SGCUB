@@ -1,8 +1,9 @@
-export default function SectionDivider({ children }) {
+export default function SectionDivider({ children, actions }) {
   return (
-    <div className="flex items-center gap-3 pt-2" role="presentation">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2" role={actions ? undefined : 'presentation'}>
       <span className="text-xs font-bold uppercase tracking-widest text-outline whitespace-nowrap">{children}</span>
-      <span className="h-px flex-1 bg-outline-variant/40" />
+      <span className="h-px flex-1 min-w-8 bg-outline-variant/40" />
+      {actions}
     </div>
   )
 }

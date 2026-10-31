@@ -11,6 +11,14 @@ export const formatPeriod = (period) => {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+const SHORT_MONTHS = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.']
+
+export const formatShortPeriod = (period) => {
+  const [year, month] = String(period ?? '').split('-').map(Number)
+  if (!year || !SHORT_MONTHS[month - 1]) return period ?? ''
+  return `${SHORT_MONTHS[month - 1]} ${year}`
+}
+
 // Distinct periods of the given rows, most recent first.
 export const periodOptions = (rows, getPeriod) =>
   [...new Set(rows.map(getPeriod).filter(Boolean))].sort().reverse()

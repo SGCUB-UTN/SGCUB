@@ -11,7 +11,6 @@ import { tabId, tabPanelId } from '../shared/tabIds'
 import { PANEL_CLASS } from '../shared/panel'
 import { formatPeriod } from '../shared/periodFormat'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
-import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { matchesSearch } from '../shared/search'
@@ -109,8 +108,6 @@ function ComprobantesTable({
   error,
   onSelect,
   onSelectDevolucion,
-  onRegisterPayment,
-  onRegisterMovement,
 }) {
   const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
@@ -312,18 +309,6 @@ function ComprobantesTable({
             >
               <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">download</span>
             </button>
-            <div className="flex flex-wrap items-center gap-2.5 ml-auto">
-              {(scope === 'todos' || scope === 'cuotas') && (
-                <PrimaryButton icon="payments" onClick={onRegisterPayment}>
-                  Registrar pago
-                </PrimaryButton>
-              )}
-              {scope !== 'cuotas' && (
-                <SecondaryButton icon="currency_exchange" onClick={onRegisterMovement}>
-                  Ingreso o devolución
-                </SecondaryButton>
-              )}
-            </div>
           </div>
         </div>
 

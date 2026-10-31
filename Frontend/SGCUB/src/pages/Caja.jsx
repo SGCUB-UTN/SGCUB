@@ -11,6 +11,7 @@ import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModa
 import DevolucionDetailModal from '../components/finanzas/DevolucionDetailModal'
 import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import SectionDivider from '../components/shared/SectionDivider'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 
@@ -69,7 +70,16 @@ function Caja() {
       <PageHeader
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Caja y cobros' }]}
         title="Caja y cobros"
-        actions={<PeriodSelector value={period} onChange={changePeriod} />}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2.5">
+            <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: recargarCaja })}>
+              Registrar pago
+            </PrimaryButton>
+            <SecondaryButton icon="currency_exchange" onClick={() => setMovimientoAbierto(true)}>
+              Registrar movimiento
+            </SecondaryButton>
+          </div>
+        )}
       />
 
       {carga.loading && socioId && <LoadingFile text="Cargando formulario de pago..." />}
@@ -94,7 +104,9 @@ function Caja() {
         />
       )}
 
-      <SectionDivider>Resumen mensual</SectionDivider>
+      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+        Resumen mensual
+      </SectionDivider>
 
       <CashKpis
         period={period}
@@ -112,8 +124,6 @@ function Caja() {
         error={movimientos.error}
         onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
         onSelectDevolucion={setDevolucionSeleccionada}
-        onRegisterPayment={() => openPayment({ onSuccess: recargarCaja })}
-        onRegisterMovement={() => setMovimientoAbierto(true)}
       />
 
       <ComprobanteDetailModal
