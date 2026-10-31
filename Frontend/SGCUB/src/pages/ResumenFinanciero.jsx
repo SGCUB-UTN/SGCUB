@@ -224,19 +224,18 @@ function ResumenFinanciero() {
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Resumen financiero' }]}
         title="Resumen financiero"
         actions={(
-          <div className="flex flex-wrap items-center gap-2.5">
-            <PeriodSelector value={period} onChange={changePeriod} />
-            <button type="button" disabled={isLoading || isExporting} onClick={handleExport} className={EXPORT_BUTTON_CLASS}>
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{isExporting ? 'hourglass_top' : 'download'}</span>
-              {isExporting ? 'Generando...' : 'Exportar informe'}
-            </button>
-          </div>
+          <button type="button" disabled={isLoading || isExporting} onClick={handleExport} className={EXPORT_BUTTON_CLASS}>
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{isExporting ? 'hourglass_top' : 'download'}</span>
+            {isExporting ? 'Generando...' : 'Exportar informe'}
+          </button>
         )}
       />
 
       {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
-      <SectionDivider>Resumen mensual</SectionDivider>
+      <SectionDivider actions={<PeriodSelector variant="divider" value={period} onChange={changePeriod} />}>
+        Resumen mensual
+      </SectionDivider>
 
       {isLoading && <LoadingPanel />}
       {error && (
