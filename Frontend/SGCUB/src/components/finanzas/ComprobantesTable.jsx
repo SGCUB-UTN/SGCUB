@@ -117,6 +117,7 @@ function ComprobantesTable({
   const [mainFilter, setMainFilter] = useState(ALL)
   const [conceptFilter, setConceptFilter] = useState(ALL)
   const filters = SCOPE_FILTERS[scope]
+  const scopeDescription = SCOPES.find((option) => option.value === scope).description
 
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
@@ -268,9 +269,7 @@ function ComprobantesTable({
 
       <div id={tabPanelId(TABS_ID)} role="tabpanel" aria-labelledby={tabId(TABS_ID, scope)}>
         <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/30 flex flex-col gap-3">
-          <p className="text-sm text-on-surface-variant">
-            {SCOPES.find((option) => option.value === scope).description}
-          </p>
+          {scopeDescription && <p className="text-sm text-on-surface-variant">{scopeDescription}</p>}
 
           <div className="flex flex-wrap items-center gap-4">
             <TableSearchInput
