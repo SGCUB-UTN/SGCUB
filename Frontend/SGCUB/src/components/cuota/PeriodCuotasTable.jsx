@@ -231,6 +231,12 @@ export default function PeriodCuotasTable({
   const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
   const hasUncategorized = rows.some((row) => !row.categoria_id)
+  const categoryLocked = type === CUOTA_TYPES.MEMBER
+
+  const changeType = (nextType) => {
+    setType(nextType)
+    if (nextType === CUOTA_TYPES.MEMBER) setCategory(ALL_CATEGORIES)
+  }
 
   const matching = useMemo(() => {
     const text = search.trim()
@@ -295,7 +301,7 @@ export default function PeriodCuotasTable({
           <FilterSelect
             className={FILTER_CLASS}
             value={type}
-            onChange={(event) => withPageReset(setType)(event.target.value)}
+            onChange={(event) => withPageReset(changeType)(event.target.value)}
             aria-label="Filtrar por tipo"
           >
             {TYPE_FILTERS.map((filter) => (
@@ -309,6 +315,8 @@ export default function PeriodCuotasTable({
             categories={categories}
             hasUncategorized={hasUncategorized}
             onChange={withPageReset(setCategory)}
+            disabled={categoryLocked}
+            disabledReason="Los socios no tienen categoría"
           />
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
