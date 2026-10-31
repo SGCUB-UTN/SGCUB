@@ -32,9 +32,9 @@ const SCOPES = [
     description: 'Comprobantes de cuotas, otros ingresos y devoluciones.',
   },
   {
-    value: 'cuotas',
-    label: 'Cuotas',
-    description: 'Pagos de cuotas de socios.',
+    value: 'Cobro de cuotas',
+    label: 'Cobro de cuotas',
+    description: 'Cobros de cuotas de socios.',
   },
   {
     value: 'ingresos',

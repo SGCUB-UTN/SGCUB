@@ -23,15 +23,25 @@ function openPicker(input) {
 export default function PeriodSelector({ value, onChange }) {
   const inputRef = useRef(null)
   const today = currentPeriod()
+  const isCurrent = value === today
 
   return (
     <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onChange(today)}
+        disabled={isCurrent}
+        className={`${CONTROL_CLASS} px-3 text-sm font-semibold text-primary ${isCurrent ? 'invisible' : ''}`}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">today</span>
+        Mes actual
+      </button>
       <ArrowButton icon="chevron_left" label="Período anterior" onClick={() => onChange(shiftPeriod(value, -1))} />
       <div className="relative">
         <button
           type="button"
           onClick={() => openPicker(inputRef.current)}
-          className={`${CONTROL_CLASS} min-w-44 px-3 text-sm font-semibold text-on-surface`}
+          className={`${CONTROL_CLASS} w-56 px-3 text-sm font-semibold text-on-surface`}
           aria-label={`Período: ${formatPeriod(value)}. Elegir mes y año`}
         >
           <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }} aria-hidden="true">calendar_month</span>
@@ -49,12 +59,6 @@ export default function PeriodSelector({ value, onChange }) {
         />
       </div>
       <ArrowButton icon="chevron_right" label="Período siguiente" onClick={() => onChange(shiftPeriod(value, 1))} />
-      {value !== today && (
-        <button type="button" onClick={() => onChange(today)} className={`${CONTROL_CLASS} px-3 text-sm font-semibold text-primary`}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">today</span>
-          Mes actual
-        </button>
-      )}
     </div>
   )
 }
