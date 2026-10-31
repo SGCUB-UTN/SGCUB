@@ -1,11 +1,7 @@
 import { api } from './conf'
+import { savePdfResponse } from './download'
 
 const RESUMEN_ENDPOINT = 'finanzas/resumen/'
-
-const filenameFrom = (contentDisposition) => {
-  const match = /filename="([^"]+)"/.exec(contentDisposition ?? '')
-  return match ? match[1] : 'informe-financiero.pdf'
-}
 
 const errorDetailFrom = async (requestError) => {
   const data = requestError.response?.data
@@ -34,12 +30,6 @@ export const downloadFinancialSummaryPdf = async (periodo) => {
   } catch (requestError) {
     throw await errorDetailFrom(requestError)
   }
-  const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filenameFrom(response.headers['content-disposition'])
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  const fallback = periodo ? `resumen-financiero-${periodo}.pdf` : 'resumen-financiero.pdf'
+  savePdfResponse(response, fallback)
 }

@@ -47,12 +47,15 @@ const exportCsv = (jugadores) => {
     jugador.estado?.nombre ?? '',
   ])
   const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n')
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n')
   const link = document.createElement('a')
-  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+  const content = '\uFEFF' + csv
+  link.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }))
   link.download = `padron-jugadores-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
   link.click()
+  link.remove()
   URL.revokeObjectURL(link.href)
 }
 
