@@ -1,0 +1,97 @@
+name: CI - Integración Continua
+
+on:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Django & PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: sgcub_db
+          POSTGRES_USER: sgcub_user
+          POSTGRES_PASSWORD: sgcub_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: sgcub_db
+      DB_USER: sgcub_user
+      DB_PASSWORD: sgcub_password
+      SECRET_KEY: ci-test-secret-key-do-not-use-in-production-12345
+      DEBUG: 'True'
+      COMET_MODE: mock
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'Backend/requirements.txt'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r Backend/requirements.txt
+
+      - name: Chequeo de sistema Django
+        working-directory: Backend
+        run: python manage.py check
+
+      - name: Verificar migraciones pendientes
+        working-directory: Backend
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Ejecutar pruebas automatizadas
+        working-directory: Backend
+        run: python manage.py test --parallel --noinput
+
+  frontend:
+    name: Frontend (React & Vite)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'Frontend/SGCUB/package-lock.json'
+
+      - name: Instalar dependencias
+        working-directory: Frontend/SGCUB
+        run: npm ci
+
+      - name: Compilar frontend (Vite build)
+        working-directory: Frontend/SGCUB
+        run: npm run build
+
+      - name: Validar linting (ESLint)
+        working-directory: Frontend/SGCUB
+        run: npm run lint

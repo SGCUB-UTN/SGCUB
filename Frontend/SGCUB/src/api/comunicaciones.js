@@ -6,7 +6,7 @@ export const getComunicacionesKPIs = async () => {
   try {
     const response = await api.get(`${comunicacionesEndpoint}resumen/`)
     return response.data
-  } catch (error) {
+  } catch {
     // Si el backend aún no implementó el endpoint específico de KPIs calculadas
     return {
       envios_mes: 0,

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import AnonymousUser, Group
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +24,7 @@ class AutomatizacionesAdminTests(TestCase):
     def test_admin_de_schedules_no_permite_alta_baja_ni_edicion(self):
         schedule_admin = site._registry[Schedule]
         request = RequestFactory().get("/admin/django_q/schedule/")
+        request.user = AnonymousUser()
 
         self.assertFalse(schedule_admin.has_add_permission(request))
         self.assertFalse(schedule_admin.has_delete_permission(request))
