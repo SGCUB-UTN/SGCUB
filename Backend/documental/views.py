@@ -11,7 +11,8 @@ from configuracion.services import Seccion, record_catalog_update, record_change
 
 from .models import Documento, TipoDocumento, EstadoDocumento
 from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
-from .services import build_padron_documental
+from .padron_pdf import padron_filename, render_padron_pdf
+from .services import PadronFilterError, build_padron_documental, padron_summary, parse_padron_filters
 
 @extend_schema(tags=["Documental / Documentos"], request=DocumentoSerializer, responses=DocumentoSerializer)
 @api_view(["GET", "POST"])
@@ -190,7 +191,23 @@ def alertas_count(request):
 @extend_schema(tags=["Documental / Padrón"])
 @api_view(["GET"])
 def padron_documental(request):
-    return Response(build_padron_documental())
+    padron = build_padron_documental()
+    return Response({**padron, "resumen": padron_summary(padron["personas"])})
+
+
+@extend_schema(tags=["Documental / Padrón"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def padron_documental_pdf(request):
+    try:
+        filters = parse_padron_filters(request.query_params)
+    except PadronFilterError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+    generated_at = timezone.localtime()
+    pdf = render_padron_pdf(build_padron_documental()["personas"], filters, generated_at)
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{padron_filename(generated_at)}"'
+    return response
 
 import zipfile
 import io

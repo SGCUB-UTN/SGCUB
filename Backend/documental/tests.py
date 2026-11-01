@@ -297,3 +297,54 @@ class PadronDocumentalTests(APITestCase):
 
         self.assertEqual([categoria["nombre"] for categoria in persona["categorias"]], ["Sub 12", "Sub 14"])
         self.assertIsNone(persona["socio_id"])
+
+    def reporte(self, **params):
+        return self.client.get(reverse("padron_documental_pdf"), params)
+
+    def test_el_reporte_incluye_resumen_y_documentos_filtrados(self):
+        vencido = self.jugador("71000061")
+        faltante = self.jugador("71000062")
+        self.documento(vencido.socio.persona, self.apto, dias=-2)
+        self.documento(faltante.socio.persona, self.apto)
+
+        response = self.reporte(estado="vencido", perfil="jugador", q="71000061")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("reporte-documental-", response["Content-Disposition"])
+        self.assertIn(b"Cumplimiento general", response.content)
+        self.assertIn(b"71000061", response.content)
+        self.assertNotIn(b"71000062", response.content)
+
+    def test_el_reporte_filtra_por_categoria_del_docente(self):
+        self.docente("71000071", categorias=(self.sub14,))
+        self.docente("71000072", categorias=(self.sub12,))
+
+        response = self.reporte(categoria=str(self.sub14.pk))
+
+        self.assertIn(b"71000071", response.content)
+        self.assertNotIn(b"71000072", response.content)
+
+    def test_el_reporte_rechaza_filtros_invalidos(self):
+        for params in ({"estado": "vigente"}, {"perfil": "socio"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
+            with self.subTest(params=params):
+                self.assertEqual(self.reporte(**params).status_code, 400)
+
+    def test_resume_el_cumplimiento_y_las_categorias_afectadas(self):
+        habilitado = self.jugador("71000081")
+        self.jugador("71000082")
+        docente = self.docente("71000083", categorias=(self.sub12, self.sub14))
+        for tipo in (self.apto, self.seguro):
+            self.documento(habilitado.socio.persona, tipo)
+        self.documento(docente.persona, self.seguro, dias=-1)
+
+        resumen = self.padron()["resumen"]
+
+        self.assertEqual((resumen["total"], resumen["habilitados"], resumen["inhabilitados"]), (3, 1, 2))
+        self.assertEqual(resumen["inhabilitados_por_perfil"], {"jugador": 1, "docente": 1})
+        self.assertEqual(resumen["cumplimiento"], 33.3)
+        self.assertEqual(resumen["documentos"], {"vigente": 2, "por_vencer": 0, "vencido": 1, "faltante": 3})
+        self.assertEqual(
+            [(item["categoria"], item["inhabilitados"], item["total"]) for item in resumen["categorias_afectadas"]],
+            [("Sub 12", 2, 3), ("Sub 14", 1, 1)],
+        )
