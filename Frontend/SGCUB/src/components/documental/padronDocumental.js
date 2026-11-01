@@ -41,7 +41,7 @@ export const documentRows = (personas) => personas.flatMap(({ documentos, ...per
 
 export const ALL = 'all'
 
-export const INITIAL_FILTERS = { estado: ALL, perfil: ALL, categoria: ALL_CATEGORIES, search: '' }
+export const INITIAL_FILTERS = { estado: ALL, perfil: ALL, tipo: ALL, categoria: ALL_CATEGORIES, search: '' }
 
 export const STATE_ORDER = [DOCUMENT_STATES.VENCIDO, DOCUMENT_STATES.FALTANTE, DOCUMENT_STATES.POR_VENCER, DOCUMENT_STATES.VIGENTE]
 
@@ -54,8 +54,9 @@ const matchesCategory = (row, value) => {
   return row.categorias.some((categoria) => String(categoria.categoria_id) === value)
 }
 
-export const matchesFilters = (row, { perfil, categoria, search }) => (
+export const matchesFilters = (row, { perfil, tipo, categoria, search }) => (
   (perfil === ALL || row.perfil === perfil)
+  && (tipo === ALL || String(row.tipo_documento) === tipo)
   && matchesCategory(row, categoria)
   && matchesSearch(search, [row.apellido, row.nombre, row.dni])
 )
@@ -64,12 +65,18 @@ export const filterRows = (rows, filters) => rows.filter((row) => (
   matchesFilters(row, filters) && (filters.estado === ALL || row.estado === filters.estado)
 ))
 
-export const reportParams = ({ estado, perfil, categoria, search }) => ({
+export const reportParams = ({ estado, perfil, tipo, categoria, search }) => ({
   estado: estado === ALL ? undefined : estado,
   perfil: perfil === ALL ? undefined : perfil,
+  tipo: tipo === ALL ? undefined : tipo,
   categoria: categoria === ALL_CATEGORIES ? undefined : categoria,
   q: search.trim() || undefined,
 })
+
+export const documentTypeOptions = (rows) => {
+  const types = new Map(rows.map((row) => [String(row.tipo_documento), row.tipo_documento_nombre]))
+  return [...types].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label, 'es'))
+}
 
 export const categoryOptions = (personas) => {
   const categories = new Map()

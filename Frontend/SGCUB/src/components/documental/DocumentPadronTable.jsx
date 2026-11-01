@@ -16,6 +16,7 @@ import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import DocumentStatusBadge from './DocumentStatusBadge'
 import { downloadDocumentalCsv } from './documentalCsv'
+import { openFile } from './documentFile'
 import { notifiablePersonas } from './documentNotices'
 import {
   ALL,
@@ -25,6 +26,7 @@ import {
   STATE_ORDER,
   categoryOptions,
   daysFromToday,
+  documentTypeOptions,
   formatDate,
   matchesFilters,
   personaName,
@@ -150,6 +152,16 @@ function RowActions({ row, onNotify, onUpload }) {
   const notifyLabel = notifyBlocker ?? `Notificar a ${name}`
   return (
     <div className="flex justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => openFile(row.archivo_url)}
+        disabled={!row.archivo_url}
+        className={ICON_BUTTON_CLASS}
+        aria-label={row.archivo_url ? `Ver ${row.tipo_documento_nombre} de ${name}` : 'Sin archivo cargado'}
+        title={row.archivo_url ? 'Ver documento' : 'Sin archivo cargado'}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">visibility</span>
+      </button>
       <button type="button" onClick={() => onNotify(row)} disabled={Boolean(notifyBlocker)} className={ICON_BUTTON_CLASS} aria-label={notifyLabel} title={notifyLabel}>
         <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">notifications</span>
       </button>
@@ -163,6 +175,7 @@ function RowActions({ row, onNotify, onUpload }) {
 export default function DocumentPadronTable({ rows, personas, filters, onFiltersChange, onUpload, onNotify, onNotifyPersonas }) {
   const categories = useMemo(() => categoryOptions(personas), [personas])
   const hasUncategorized = personas.some((persona) => persona.categorias.length === 0)
+  const documentTypes = useMemo(() => documentTypeOptions(rows), [rows])
 
   const matching = useMemo(() => rows.filter((row) => matchesFilters(row, filters)), [rows, filters])
   const tabs = TABS.map((tab) => ({
@@ -223,6 +236,15 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
             aria-label="Filtrar por perfil"
           >
             {PROFILE_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
+          </FilterSelect>
+          <FilterSelect
+            className={FILTER_CLASS}
+            value={filters.tipo}
+            onChange={(event) => change('tipo')(event.target.value)}
+            aria-label="Filtrar por tipo de documento"
+          >
+            <option value={ALL}>Documento: Todos</option>
+            {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
           </FilterSelect>
           <CategoryFilter
             value={filters.categoria}

@@ -10,6 +10,7 @@ import { formatDate } from '../personas/format'
 import { parseDueDate } from './dueDate'
 import { matchesSearch } from '../shared/search'
 import DocumentStatusBadge from './DocumentStatusBadge'
+import { openFile } from './documentFile'
 
 const STATUS_ORDER = { vencido: 0, por_vencer: 1, vigente: 2 }
 
@@ -27,25 +28,7 @@ const HEADER_CLASS = 'py-3 px-4'
 const SELECT_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const PRIMARY_ACTION_CLASS = 'text-primary hover:bg-primary-fixed/30'
 const DANGER_ACTION_CLASS = 'text-error hover:bg-error-container/60'
-const FILE_MISSING_MESSAGE = 'El archivo físico ya no existe o fue eliminado del servidor.'
 const compareText = new Intl.Collator('es', { sensitivity: 'base' }).compare
-
-const getMediaUrl = (path) => {
-  if (path.startsWith('http')) return path
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/'
-  return `${baseUrl.replace(/\/api\/?$/, '')}${path}`
-}
-
-const openFile = async (path) => {
-  const url = getMediaUrl(path)
-  try {
-    const response = await fetch(url, { method: 'HEAD' })
-    if (response.ok) window.open(url, '_blank')
-    else alert(FILE_MISSING_MESSAGE)
-  } catch {
-    alert(FILE_MISSING_MESSAGE)
-  }
-}
 
 function ActionButton({ icon, label, className, onClick }) {
   return (
