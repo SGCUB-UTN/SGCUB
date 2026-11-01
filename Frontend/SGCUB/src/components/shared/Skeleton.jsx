@@ -12,8 +12,8 @@ export function SkeletonBlock({ className = '', soft = false, round = false }) {
 
 export function SkeletonStatus({ label, className = '', children }) {
   return (
-    <div role="status" className={`${PULSE} ${className}`}>
-      <span className="sr-only">{label}</span>
+    <div role={label ? 'status' : undefined} className={`${PULSE} ${className}`}>
+      {label && <span className="sr-only">{label}</span>}
       {children}
     </div>
   )

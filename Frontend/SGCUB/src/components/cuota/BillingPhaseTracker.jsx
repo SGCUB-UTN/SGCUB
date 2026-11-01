@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import useEntered from '../../hooks/useEntered'
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { formatCount, formatDayMonth } from './cuotaPeriod'
 
 const SEQUENCE_MS = 220
@@ -62,17 +63,17 @@ function withCurrentStep(phases) {
 
 function PhaseSkeleton() {
   return (
-    <div className="flex flex-1 flex-col sm:flex-row gap-4 animate-pulse" aria-hidden="true">
+    <SkeletonStatus label="Cargando etapa del mes..." className="flex flex-1 flex-col sm:flex-row gap-4">
       {[0, 1, 2].map((index) => (
         <div key={index} className="flex flex-1 items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-surface-container-high" />
+          <SkeletonBlock round className="w-9 h-9 shrink-0" />
           <div className="flex flex-col gap-1.5">
-            <div className="h-3.5 w-32 rounded bg-surface-container-high" />
-            <div className="h-3 w-24 rounded bg-surface-container" />
+            <SkeletonBlock className="h-3.5 w-32" />
+            <SkeletonBlock soft className="h-3 w-24" />
           </div>
         </div>
       ))}
-    </div>
+    </SkeletonStatus>
   )
 }
 

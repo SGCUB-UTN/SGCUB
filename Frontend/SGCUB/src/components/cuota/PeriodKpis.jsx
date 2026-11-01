@@ -1,6 +1,7 @@
 import useEntered from '../../hooks/useEntered'
 import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { KpiColumn, KpiGrid } from '../shared/Kpi'
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney } from './cuotaPeriod'
 
 const plural = (count, singular, pluralForm) => `${formatCount(count)} ${count === 1 ? singular : pluralForm}`
@@ -73,20 +74,20 @@ function CollectionMeter({ total, collected, pending, rate, collectedCaption, pe
 
 function KpiSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 animate-pulse" aria-hidden="true">
+    <SkeletonStatus label="Cargando indicadores del período..." className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
       {[0, 1].map((index) => (
         <div key={index} className="flex flex-col gap-2">
-          <div className="h-3.5 w-28 rounded bg-surface-container-high" />
-          <div className="h-7 w-36 rounded bg-surface-container-high" />
-          <div className="h-3 w-24 rounded bg-surface-container" />
+          <SkeletonBlock className="h-3.5 w-28" />
+          <SkeletonBlock className="h-7 w-36" />
+          <SkeletonBlock soft className="h-3 w-24" />
         </div>
       ))}
       <div className="flex flex-col gap-2 sm:col-span-2">
-        <div className="h-3.5 w-28 rounded bg-surface-container-high" />
-        <div className="h-7 w-full rounded bg-surface-container-high" />
-        <div className="h-3 w-48 rounded bg-surface-container" />
+        <SkeletonBlock className="h-3.5 w-28" />
+        <SkeletonBlock className="h-7 w-full" />
+        <SkeletonBlock soft className="h-3 w-48" />
       </div>
-    </div>
+    </SkeletonStatus>
   )
 }
 
