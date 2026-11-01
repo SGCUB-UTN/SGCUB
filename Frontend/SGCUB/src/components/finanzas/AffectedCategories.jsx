@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import useEntered from '../../hooks/useEntered'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
+import { ROW_HOVER, WIDTH_MOTION, grown } from '../shared/chartMotion'
 import AffectedCategoriesModal from './AffectedCategoriesModal'
 
 const TOP_COUNT = 3
@@ -8,9 +10,10 @@ const LINK_BUTTON_CLASS = 'inline-flex items-center gap-1 text-sm font-semibold 
 const plural = (count) => `${formatCount(count)} ${count === 1 ? 'moroso' : 'morosos'}`
 
 function CategoryBar({ category, maxAmount }) {
+  const entered = useEntered()
   const share = maxAmount > 0 ? (Number(category.monto) / maxAmount) * 100 : 0
   return (
-    <li className="flex flex-col gap-1 min-w-0">
+    <li className={`flex flex-col gap-1 min-w-0 ${ROW_HOVER}`}>
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="min-w-0 truncate font-semibold text-on-surface" title={category.nombre}>{category.nombre}</span>
         <span className="shrink-0 text-on-surface-variant">
@@ -18,7 +21,7 @@ function CategoryBar({ category, maxAmount }) {
         </span>
       </div>
       <div className="h-2 rounded bg-surface-container-high" aria-hidden="true">
-        <div className="h-full rounded bg-error" style={{ width: `${share}%` }} />
+        <div className={`h-full rounded bg-error ${WIDTH_MOTION}`} style={{ width: grown(entered, `${share}%`) }} />
       </div>
     </li>
   )
@@ -43,7 +46,7 @@ export default function AffectedCategories({ categories }) {
       {top.length === 0 ? (
         <p className="mt-2 text-sm text-on-surface-variant">Ninguna categoría registra deuda vencida.</p>
       ) : (
-        <ol className="mt-2 flex flex-col gap-3">
+        <ol className="mt-1 flex flex-col gap-1">
           {top.map((category) => <CategoryBar key={category.nombre} category={category} maxAmount={maxAmount} />)}
         </ol>
       )}

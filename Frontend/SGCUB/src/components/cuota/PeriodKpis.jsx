@@ -1,3 +1,5 @@
+import useEntered from '../../hooks/useEntered'
+import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { KpiColumn, KpiGrid } from '../shared/Kpi'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney } from './cuotaPeriod'
 
@@ -24,6 +26,7 @@ function LegendItem({ swatchClass, label, amount, caption }) {
 }
 
 function CollectionMeter({ total, collected, pending, rate, collectedCaption, pendingCaption }) {
+  const entered = useEntered()
   const collectedShare = total > 0 ? (collected / total) * 100 : 0
   const rateLabel = rate == null ? '—' : formatPercentage(rate)
   return (
@@ -47,8 +50,8 @@ function CollectionMeter({ total, collected, pending, rate, collectedCaption, pe
         >
           {collected > 0 && (
             <div
-              className={`h-full rounded ${COLLECTED_CLASS}`}
-              style={{ width: `${collectedShare}%` }}
+              className={`h-full rounded ${COLLECTED_CLASS} ${WIDTH_MOTION}`}
+              style={{ width: grown(entered, `${collectedShare}%`) }}
               title={`Cobrado: ${formatMoney(collected)} (${rateLabel})`}
             />
           )}

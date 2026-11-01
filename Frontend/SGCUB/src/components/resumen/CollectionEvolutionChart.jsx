@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import useEntered from '../../hooks/useEntered'
 import { formatMoney, formatPercentage } from '../cuota/cuotaPeriod'
+import { HEIGHT_MOTION, grown } from '../shared/chartMotion'
 import { formatPeriod } from '../shared/periodFormat'
 import { formatCompactMoney } from './chartFormat'
 
 const CHART_HEIGHT = 220
+const STAGGER_MS = 40
 const BILLED_CLASS = 'bg-primary-fixed'
 const COLLECTED_CLASS = 'bg-primary'
 
@@ -68,6 +71,7 @@ function LegendItem({ swatchClass, label }) {
 // Overlapping bars per period: what had to come in (billed) behind what actually came in (collected)
 export default function CollectionEvolutionChart({ evolution }) {
   const [active, setActive] = useState(null)
+  const entered = useEntered()
   const max = niceMax(Math.max(0, ...evolution.flatMap((row) => [Number(row.facturado), Number(row.cobrado)])))
   const ticks = [max, max / 2, 0]
 
@@ -107,12 +111,12 @@ export default function CollectionEvolutionChart({ evolution }) {
                   />
                   <div className={`absolute inset-0 transition-opacity duration-150 ${active !== null && active !== index ? 'opacity-40' : 'opacity-100'}`}>
                     <div
-                      className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 max-w-10 rounded-t ${BILLED_CLASS} ${active === index ? 'ring-2 ring-primary/30' : ''}`}
-                      style={{ height: share(row.facturado, max) }}
+                      className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 max-w-10 rounded-t ${BILLED_CLASS} ${HEIGHT_MOTION} ${active === index ? 'ring-2 ring-primary/30' : ''}`}
+                      style={{ height: grown(entered, share(row.facturado, max)), transitionDelay: `${index * STAGGER_MS}ms` }}
                     />
                     <div
-                      className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-2/5 max-w-5 rounded-t ${COLLECTED_CLASS}`}
-                      style={{ height: share(row.cobrado, max) }}
+                      className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-2/5 max-w-5 rounded-t ${COLLECTED_CLASS} ${HEIGHT_MOTION}`}
+                      style={{ height: grown(entered, share(row.cobrado, max)), transitionDelay: `${index * STAGGER_MS + 120}ms` }}
                     />
                   </div>
                 </div>

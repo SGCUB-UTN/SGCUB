@@ -1,7 +1,9 @@
+import useEntered from '../../hooks/useEntered'
 import { formatWholeMoney } from '../cuota/cuotaPeriod'
 
 const GAP = 2
 const ACTIVE_GROWTH = 6
+const ARC_MOTION = '[transition:stroke-width_150ms,opacity_150ms,stroke-dasharray_700ms_ease-out] motion-reduce:[transition:none]'
 
 function arcsOf(segments, total, circumference) {
   let offset = 0
@@ -27,6 +29,7 @@ export default function DonutChart({
   activeKey = null,
   onActiveChange,
 }) {
+  const entered = useEntered()
   const radius = (size - stroke - ACTIVE_GROWTH) / 2
   const circumference = 2 * Math.PI * radius
   const arcs = arcsOf(segments, total, circumference)
@@ -51,12 +54,12 @@ export default function DonutChart({
             cy={size / 2}
             r={radius}
             fill="none"
-            className={`${arc.strokeClass} cursor-pointer transition-[stroke-width,opacity] duration-150`}
+            className={`${arc.strokeClass} cursor-pointer ${ARC_MOTION}`}
             style={{
               strokeWidth: arc.key === activeKey ? stroke + ACTIVE_GROWTH : stroke,
               opacity: activeKey !== null && arc.key !== activeKey ? 0.35 : 1,
+              strokeDasharray: `${entered ? Math.max(arc.length - gap, 0) : 0} ${circumference}`,
             }}
-            strokeDasharray={`${Math.max(arc.length - gap, 0)} ${circumference}`}
             strokeDashoffset={-arc.offset}
             onMouseEnter={() => onActiveChange?.(arc.key)}
             onMouseLeave={() => onActiveChange?.(null)}

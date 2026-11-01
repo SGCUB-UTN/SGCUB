@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom'
+import useEntered from '../../hooks/useEntered'
+import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { KpiGrid } from '../shared/Kpi'
 import SectionHeading from '../shared/SectionHeading'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
@@ -25,6 +27,7 @@ function BreakdownItem({ swatchClass, label, amount, tone }) {
 }
 
 function DebtKpi({ rows, total }) {
+  const entered = useEntered()
   const capital = sumBy(rows, 'capital')
   const surcharges = sumBy(rows, 'recargos')
   const capitalShare = total > 0 ? (capital / total) * 100 : 0
@@ -37,7 +40,7 @@ function DebtKpi({ rows, total }) {
       {total > 0 && (
         <>
           <div className="mt-3 flex h-2 gap-0.5" aria-hidden="true">
-            {capital > 0 && <div className="h-full rounded bg-outline-variant" style={{ width: `${capitalShare}%` }} />}
+            {capital > 0 && <div className={`h-full rounded bg-outline-variant ${WIDTH_MOTION}`} style={{ width: grown(entered, `${capitalShare}%`) }} />}
             {surcharges > 0 && <div className="h-full flex-1 rounded bg-error" />}
           </div>
           <ul className="mt-2 flex flex-col gap-1">

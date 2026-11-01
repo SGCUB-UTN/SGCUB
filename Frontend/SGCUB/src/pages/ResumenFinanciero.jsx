@@ -4,6 +4,8 @@ import { downloadFinancialSummaryPdf } from '../api/resumenFinanciero'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney, isValidPeriod } from '../components/cuota/cuotaPeriod'
 import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
+import { ROW_HOVER, WIDTH_MOTION, grown } from '../components/shared/chartMotion'
+import useEntered from '../hooks/useEntered'
 import { formatDate, getErrorMessage } from '../components/personas/format'
 import CollectionEvolutionChart from '../components/resumen/CollectionEvolutionChart'
 import IncomeOriginChart from '../components/resumen/IncomeOriginChart'
@@ -42,6 +44,7 @@ function ToggleButton({ expanded, count, controls, onToggle }) {
 }
 
 function EffectivenessKpi({ rate }) {
+  const entered = useEntered()
   const value = rate == null ? null : Number(rate)
   return (
     <div className="min-w-0 h-full flex flex-col">
@@ -56,7 +59,7 @@ function EffectivenessKpi({ rate }) {
         className="mt-auto pt-2"
       >
         <div className="h-2 rounded bg-primary-fixed overflow-hidden">
-          <div className="h-full rounded bg-primary" style={{ width: `${Math.min(value ?? 0, 100)}%` }} />
+          <div className={`h-full rounded bg-primary ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Math.min(value ?? 0, 100)}%`) }} />
         </div>
       </div>
     </div>
@@ -83,13 +86,14 @@ function CuotaKpis({ cuotas }) {
 }
 
 function PaymentMethodRows({ methods }) {
+  const entered = useEntered()
   if (!methods.medios.length) {
     return <p className="text-sm text-on-surface-variant">No hay medios de pago configurados.</p>
   }
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="flex flex-col gap-1">
       {methods.medios.map((method) => (
-        <li key={method.codigo} className="grid grid-cols-[minmax(0,8rem)_1fr] sm:grid-cols-[10rem_1fr_auto] items-center gap-x-4 gap-y-1">
+        <li key={method.codigo} className={`grid grid-cols-[minmax(0,8rem)_1fr] sm:grid-cols-[10rem_1fr_auto] items-center gap-x-4 gap-y-1 ${ROW_HOVER}`}>
           <span className="text-sm font-semibold text-on-surface truncate" title={method.nombre}>{method.nombre}</span>
           <div
             role="meter"
@@ -99,7 +103,7 @@ function PaymentMethodRows({ methods }) {
             aria-label={`${method.nombre}: ${formatPercentage(method.porcentaje)} de lo ingresado`}
             className="h-3 rounded bg-surface-container-high overflow-hidden"
           >
-            <div className="h-full rounded bg-primary" style={{ width: `${Number(method.porcentaje)}%` }} />
+            <div className={`h-full rounded bg-primary ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Number(method.porcentaje)}%`) }} />
           </div>
           <span className="col-span-2 sm:col-span-1 text-sm text-right tabular-nums text-on-surface-variant whitespace-nowrap">
             <strong className="text-on-surface">{formatPercentage(method.porcentaje)}</strong> · {formatMoney(method.monto)}
