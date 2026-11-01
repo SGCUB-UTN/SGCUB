@@ -8,6 +8,8 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import TableTabs from '../shared/TableTabs'
+import { tabPanelId } from '../shared/tabIds'
 import { matchesSearch } from '../shared/search'
 import { formatDni } from '../personas/format'
 import { CUOTA_STATES, cuotaStateBadgeClass } from '../finanzas/cuotaStates'
@@ -64,8 +66,7 @@ const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded bor
 const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
-const TAB_CLASS = 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container-low'
-const TABLE_PANEL_ID = 'period-cuotas-panel'
+const TABLE_ID = 'period-cuotas'
 
 const Icon = ({ name, size = 18 }) => (
   <span className="material-symbols-outlined" style={{ fontSize: size }} aria-hidden="true">{name}</span>
@@ -89,32 +90,6 @@ function CategoryCell({ row }) {
         </span>
       )}
     </span>
-  )
-}
-
-function CuotaTabs({ value, counts, onChange }) {
-  return (
-    <div role="tablist" aria-label="Estado de pago" className="flex gap-1 overflow-x-auto px-4 sm:px-5 border-b border-outline-variant/30">
-      {TABS.map((tab) => {
-        const active = tab.value === value
-        return (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            aria-controls={TABLE_PANEL_ID}
-            onClick={() => onChange(tab.value)}
-            className={`${TAB_CLASS} -mb-px ${active ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
-          >
-            {tab.label}
-            <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${tab.badgeClass ?? (active ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant')}`}>
-              {formatCount(counts[tab.value] ?? 0)}
-            </span>
-          </button>
-        )
-      })}
-    </div>
   )
 }
 
@@ -347,7 +322,13 @@ export default function PeriodCuotasTable({
         </div>
       </div>
 
-      <CuotaTabs value={tab} counts={tabCounts} onChange={withPageReset(setTab)} />
+      <TableTabs
+        id={TABLE_ID}
+        label="Estado de pago"
+        options={TABS.map((option) => ({ ...option, count: tabCounts[option.value] ?? 0 }))}
+        value={tab}
+        onChange={withPageReset(setTab)}
+      />
 
       {selectedRows.length > 0 && (
         <BulkActionsBar
@@ -357,7 +338,7 @@ export default function PeriodCuotasTable({
         />
       )}
 
-      <div id={TABLE_PANEL_ID} role="tabpanel" aria-label={`Cuotas: ${activeTab.label}`}>
+      <div id={tabPanelId(TABLE_ID)} role="tabpanel" aria-label={`Cuotas: ${activeTab.label}`}>
         <DataTable
           headers={(
             <>

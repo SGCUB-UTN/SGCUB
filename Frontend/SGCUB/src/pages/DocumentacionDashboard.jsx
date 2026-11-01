@@ -11,7 +11,7 @@ import DocumentacionUploadModal from '../components/documental/DocumentacionUplo
 import PadronComplianceChart from '../components/documental/PadronComplianceChart'
 import { appliesToProfile } from '../components/documental/missingDocuments'
 import { downloadDocumentalCsv } from '../components/documental/documentalCsv'
-import { bulkDocumentNotice, documentNotice } from '../components/documental/documentNotices'
+import { bulkDocumentNotice, selectionNotice } from '../components/documental/documentNotices'
 import { INITIAL_FILTERS, PROFILES, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
@@ -103,10 +103,9 @@ export default function DocumentacionDashboard() {
 
   const disabledPlayers = personas.filter((persona) => !persona.habilitado && persona.perfil === PROFILES.JUGADOR)
 
-  const notifyRow = (row) => {
-    const persona = personas.find((item) => item.clave === row.clave)
-    navigate('/comunicaciones', { state: { debtNotice: documentNotice(persona) } })
-  }
+  const notifyPersonas = (selected) => navigate('/comunicaciones', { state: { debtNotice: selectionNotice(selected) } })
+
+  const notifyRow = (row) => notifyPersonas(personas.filter((persona) => persona.clave === row.clave))
 
   const notifyDisabled = () => navigate('/comunicaciones', { state: { debtNotice: bulkDocumentNotice(disabledPlayers) } })
 
@@ -189,6 +188,7 @@ export default function DocumentacionDashboard() {
               onFiltersChange={setFilters}
               onUpload={openUpload}
               onNotify={notifyRow}
+              onNotifyPersonas={notifyPersonas}
             />
           </section>
         </>

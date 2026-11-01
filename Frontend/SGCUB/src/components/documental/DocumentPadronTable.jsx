@@ -6,6 +6,8 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import TableTabs from '../shared/TableTabs'
+import { tabPanelId } from '../shared/tabIds'
 import CategoryFilter from '../cuota/CategoryFilter'
 import { NO_CATEGORY } from '../cuota/cuotaCategories'
 import { formatCount } from '../cuota/cuotaPeriod'
@@ -13,6 +15,8 @@ import { formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import DocumentStatusBadge from './DocumentStatusBadge'
+import { downloadDocumentalCsv } from './documentalCsv'
+import { notifiablePersonas } from './documentNotices'
 import {
   ALL,
   DOCUMENT_STATES,
@@ -26,11 +30,12 @@ import {
   personaName,
 } from './padronDocumental'
 
-const TABLE_PANEL_ID = 'documental-padron-panel'
-const COLUMN_COUNT = 6
+const TABLE_ID = 'documental-padron'
+const COLUMN_COUNT = 7
 const HEADER_CLASS = 'py-3 px-4'
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const TAB_CLASS = 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container-low'
+const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
+const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600/60 disabled:opacity-50 disabled:cursor-not-allowed'
 const ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant'
 
 const TABS = [
@@ -74,28 +79,60 @@ function DueDateCell({ row }) {
   )
 }
 
-function DocumentTabs({ tabs, value, onChange }) {
+const Icon = ({ name, size = 18 }) => (
+  <span className="material-symbols-outlined" style={{ fontSize: size }} aria-hidden="true">{name}</span>
+)
+
+function SelectAllCheckbox({ rows, selectedKeys, onChange }) {
+  const selectedCount = rows.filter((row) => selectedKeys.has(row.key)).length
+  const allSelected = rows.length > 0 && selectedCount === rows.length
   return (
-    <div role="tablist" aria-label="Estado del documento" className="flex gap-1 overflow-x-auto px-4 sm:px-5 border-b border-outline-variant/30">
-      {tabs.map((tab) => {
-        const active = tab.value === value
-        return (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            aria-controls={TABLE_PANEL_ID}
-            onClick={() => onChange(tab.value)}
-            className={`${TAB_CLASS} -mb-px ${active ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
-          >
-            {tab.label}
-            <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${tab.badgeClass ?? (active ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant')}`}>
-              {formatCount(tab.count)}
-            </span>
-          </button>
-        )
-      })}
+    <input
+      type="checkbox"
+      className={CHECKBOX_CLASS}
+      checked={allSelected}
+      ref={(element) => {
+        if (element) element.indeterminate = selectedCount > 0 && !allSelected
+      }}
+      disabled={rows.length === 0}
+      onChange={() => onChange(!allSelected)}
+      aria-label={allSelected ? 'Quitar la selección de todos los documentos filtrados' : 'Seleccionar todos los documentos filtrados'}
+    />
+  )
+}
+
+function BulkActionsBar({ rows, notifiable, onNotify, onExport, onClear }) {
+  const personCount = new Set(rows.map((row) => row.clave)).size
+  const notifyTitle = notifiable.length === 0
+    ? 'Solo se notifica a jugadores activos con documentos vencidos, próximos a vencer o faltantes'
+    : 'Prepara un aviso para los jugadores de la selección. Los docentes y los documentos vigentes quedan afuera.'
+  return (
+    <div
+      role="region"
+      aria-label="Acciones sobre la selección"
+      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-sky-100 border-b border-sky-300 border-l-4 border-l-sky-600"
+    >
+      <p className="flex items-center gap-2 text-sm text-sky-900">
+        <span className="material-symbols-outlined text-sky-700" style={{ fontSize: 20 }} aria-hidden="true">check_box</span>
+        <span>
+          <strong className="font-bold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'documento seleccionado' : 'documentos seleccionados'}
+          <span className="text-sky-800"> · {plural(personCount, 'persona', 'personas')}</span>
+        </span>
+      </p>
+      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+        <button type="button" onClick={onNotify} disabled={notifiable.length === 0} title={notifyTitle} className={`${TOOL_BUTTON_CLASS} bg-sky-600 border-sky-600 text-white hover:bg-sky-700`}>
+          <Icon name="notifications" />
+          Notificar{notifiable.length > 0 && ` (${formatCount(notifiable.length)})`}
+        </button>
+        <button type="button" onClick={onExport} className={`${TOOL_BUTTON_CLASS} bg-surface-container-lowest border-sky-300 text-sky-900 hover:bg-sky-50`}>
+          <Icon name="download" />
+          Exportar CSV
+        </button>
+        <button type="button" onClick={onClear} className={`${TOOL_BUTTON_CLASS} border-transparent text-sky-800 hover:bg-sky-200/60`}>
+          <Icon name="close" />
+          Quitar selección
+        </button>
+      </div>
     </div>
   )
 }
@@ -122,7 +159,7 @@ function RowActions({ row, onNotify, onUpload }) {
   )
 }
 
-export default function DocumentPadronTable({ rows, personas, filters, onFiltersChange, onUpload, onNotify }) {
+export default function DocumentPadronTable({ rows, personas, filters, onFiltersChange, onUpload, onNotify, onNotifyPersonas }) {
   const categories = useMemo(() => categoryOptions(personas), [personas])
   const hasUncategorized = personas.some((persona) => persona.categorias.length === 0)
 
@@ -146,6 +183,23 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
     setShownFilters(filters)
     resetPage()
   }
+
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
+  const selectedRows = useMemo(() => rows.filter((row) => selectedKeys.has(row.key)), [rows, selectedKeys])
+  const notifiable = useMemo(() => notifiablePersonas(selectedRows, personas), [selectedRows, personas])
+
+  const toggleRow = (key) => setSelectedKeys((current) => {
+    const next = new Set(current)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+
+  const toggleFiltered = (select) => setSelectedKeys((current) => {
+    const next = new Set(current)
+    filtered.forEach((row) => (select ? next.add(row.key) : next.delete(row.key)))
+    return next
+  })
 
   const change = (field) => (value) => onFiltersChange({ ...filters, [field]: value })
 
@@ -178,13 +232,26 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
         </div>
       </div>
 
-      <DocumentTabs tabs={tabs} value={filters.estado} onChange={change('estado')} />
+      <TableTabs id={TABLE_ID} label="Estado del documento" options={tabs} value={filters.estado} onChange={change('estado')} />
 
-      <div id={TABLE_PANEL_ID} role="tabpanel" aria-label={`Documentos: ${activeTab.label}`}>
+      {selectedRows.length > 0 && (
+        <BulkActionsBar
+          rows={selectedRows}
+          notifiable={notifiable}
+          onNotify={() => onNotifyPersonas(notifiable)}
+          onExport={() => downloadDocumentalCsv(selectedRows)}
+          onClear={() => setSelectedKeys(new Set())}
+        />
+      )}
+
+      <div id={tabPanelId(TABLE_ID)} role="tabpanel" aria-label={`Documentos: ${activeTab.label}`}>
         <DataTable
           headers={(
             <>
-              <SortableHeader className={`${HEADER_CLASS} sm:pl-5`} etiqueta="Jugador activo / Docente" columna="person" orden={sort} onOrdenar={sortAndReset} />
+              <th className="py-3 pl-4 sm:pl-5 pr-2 w-10" scope="col">
+                <SelectAllCheckbox rows={filtered} selectedKeys={selectedKeys} onChange={toggleFiltered} />
+              </th>
+              <SortableHeader className={HEADER_CLASS} etiqueta="Jugador activo / Docente" columna="person" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Categoría" columna="category" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Documento requerido" columna="document" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
@@ -196,8 +263,17 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
           <TableMessageRow colSpan={COLUMN_COUNT} isEmpty={visibleRows.length === 0} emptyText={emptyText} />
 
           {visibleRows.map((row) => (
-            <tr key={row.key} className="hover:bg-surface-container-low/80 transition-colors">
-              <td className="py-3 px-4 sm:pl-5">
+            <tr key={row.key} className={`transition-colors ${selectedKeys.has(row.key) ? 'bg-primary/5' : 'hover:bg-surface-container-low/80'}`}>
+              <td className="py-3 pl-4 sm:pl-5 pr-2">
+                <input
+                  type="checkbox"
+                  className={CHECKBOX_CLASS}
+                  checked={selectedKeys.has(row.key)}
+                  onChange={() => toggleRow(row.key)}
+                  aria-label={`Seleccionar ${row.tipo_documento_nombre} de ${personaName(row)}`}
+                />
+              </td>
+              <td className="py-3 px-4">
                 <Link to={`${row.url_perfil}?tab=documentacion`} className="font-medium text-on-surface hover:text-primary hover:underline">
                   {personaName(row)}
                 </Link>

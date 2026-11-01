@@ -1,4 +1,4 @@
-import { DOCUMENT_STATES, formatDate } from './padronDocumental'
+import { DOCUMENT_STATES, PROFILES, formatDate } from './padronDocumental'
 
 const SUBJECT = 'Documentación pendiente en el club'
 
@@ -25,4 +25,17 @@ export const bulkDocumentNotice = (personas) => ({
   socioIds: personas.map((persona) => persona.socio_id),
   subject: SUBJECT,
   body: 'Hola, te recordamos que tenés documentación vencida o sin presentar, por lo que figurás como inhabilitado/a en el club. Podés consultar el detalle y regularizar tu situación en la secretaría del club.',
+})
+
+export const notifiablePersonas = (rows, personas) => {
+  const claves = new Set(rows
+    .filter((row) => row.perfil === PROFILES.JUGADOR && row.estado !== DOCUMENT_STATES.VIGENTE)
+    .map((row) => row.clave))
+  return personas.filter((persona) => claves.has(persona.clave))
+}
+
+export const selectionNotice = (personas) => (personas.length === 1 ? documentNotice(personas[0]) : {
+  socioIds: personas.map((persona) => persona.socio_id),
+  subject: SUBJECT,
+  body: 'Hola, te recordamos que tenés documentación vencida, próxima a vencer o sin presentar en el club. Podés consultar el detalle y regularizar tu situación en la secretaría del club.',
 })
