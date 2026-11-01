@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const TOP_URGENT_COUNT = 4
 
@@ -86,7 +87,7 @@ export default function DocumentSummarySection({ isLoading, vencidos, proximosAV
           </div>
           <Link
             to="/documental"
-            className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline shrink-0"
+            className={`${TEXT_BUTTON_CLASS} ml-auto text-sm shrink-0`}
           >
             Ver control documental
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>

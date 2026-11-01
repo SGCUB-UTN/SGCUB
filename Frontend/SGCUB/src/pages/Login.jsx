@@ -112,12 +112,12 @@ export default function Login() {
 
         <div className="text-center pt-2">
           <button
-            className="inline-flex items-center gap-1 text-primary hover:text-on-primary-container text-body-sm font-label-lg font-medium transition-colors group"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-primary hover:bg-primary/5 text-body-sm font-label-lg font-medium transition-colors cursor-pointer"
             type="button"
             onClick={() => setHelpMessage(HELP_MESSAGES.forgotPassword)}
           >
             <span className="material-symbols-outlined text-label-md">lock_reset</span>
-            <span className="group-hover:underline">¿Olvidaste tu contraseña?</span>
+            <span>¿Olvidaste tu contraseña?</span>
           </button>
         </div>
       </form>

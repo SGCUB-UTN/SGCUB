@@ -115,12 +115,12 @@ export default function ChangePassword() {
 
         <div className="text-center pt-2">
           <button
-            className="inline-flex items-center gap-1 text-primary hover:text-on-primary-container text-body-sm font-label-lg font-medium transition-colors group"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-primary hover:bg-primary/5 text-body-sm font-label-lg font-medium transition-colors cursor-pointer"
             type="button"
             onClick={isForced ? logout : () => navigate(-1)}
           >
             <span className="material-symbols-outlined text-label-md">{isForced ? 'logout' : 'arrow_back'}</span>
-            <span className="group-hover:underline">{isForced ? 'Salir' : 'Volver'}</span>
+            <span>{isForced ? 'Salir' : 'Volver'}</span>
           </button>
         </div>
       </form>

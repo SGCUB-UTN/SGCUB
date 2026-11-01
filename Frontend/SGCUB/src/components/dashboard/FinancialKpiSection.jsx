@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { formatAmount } from '../personas/format'
 import StatCard from '../shared/StatCard'
 import { overdueBreakdown } from '../finanzas/cuotaStates'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 function KpiSkeleton() {
   return (
@@ -55,7 +56,7 @@ export default function FinancialKpiSection({
         </div>
         <Link
           to="/resumen-financiero"
-          className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline shrink-0"
+          className={`${TEXT_BUTTON_CLASS} ml-auto text-sm shrink-0`}
         >
           Ver resumen financiero
           <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>

@@ -4,6 +4,7 @@ import useEntered from '../../hooks/useEntered'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney } from '../cuota/cuotaPeriod'
 import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { legendItemProps } from '../shared/donutLegend'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 import { formatPeriod } from '../shared/periodFormat'
 import { barWidth, countLabel, shareOf } from './cashFormat'
 
@@ -178,7 +179,7 @@ export default function OtherIncomeRanking({ concepts, otherIncome, period }) {
         <button
           type="button"
           onClick={() => setOpened(true)}
-          className="self-end inline-flex items-center gap-0.5 rounded text-xs font-semibold text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          className={`${TEXT_BUTTON_CLASS} self-end text-xs`}
         >
           Ver más
           <span className="material-symbols-outlined text-[16px]" aria-hidden="true">chevron_right</span>

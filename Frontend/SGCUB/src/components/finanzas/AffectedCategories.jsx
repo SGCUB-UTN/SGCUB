@@ -2,10 +2,11 @@ import { useState } from 'react'
 import useEntered from '../../hooks/useEntered'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../shared/chartMotion'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 import AffectedCategoriesModal from './AffectedCategoriesModal'
 
 const TOP_COUNT = 3
-const LINK_BUTTON_CLASS = 'inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded'
+const LINK_BUTTON_CLASS = `${TEXT_BUTTON_CLASS} text-sm`
 
 const plural = (count) => `${formatCount(count)} ${count === 1 ? 'moroso' : 'morosos'}`
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { GENERO_BADGE_CLASSES } from '../categorias/categoriaFormat'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 export default function SegmentedCategoriesSelector({
   categorias = [],
@@ -107,7 +108,7 @@ export default function SegmentedCategoriesSelector({
           <button
             type="button"
             onClick={onSelectAll}
-            className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+            className={`${TEXT_BUTTON_CLASS} text-xs`}
           >
             Seleccionar todas
           </button>
@@ -115,7 +116,7 @@ export default function SegmentedCategoriesSelector({
           <button
             type="button"
             onClick={onClearAll}
-            className="text-xs text-on-surface-variant hover:text-error transition-colors cursor-pointer"
+            className="inline-flex items-center px-2 py-1 rounded-md text-xs text-on-surface-variant hover:text-error hover:bg-error/5 transition-colors cursor-pointer"
           >
             Limpiar selección
           </button>
