@@ -243,6 +243,20 @@ class PadronDocumentalTests(APITestCase):
         self.assertCountEqual(self.estados(self.persona(data, f"jugador-{jugador.jugador_id}")), [self.apto.pk, self.seguro.pk])
         self.assertCountEqual(self.estados(self.persona(data, f"docente-{docente.docente_id}")), [self.seguro.pk, self.cv.pk])
 
+    def test_incluye_los_documentos_opcionales_cargados_sin_inhabilitar(self):
+        opcional = TipoDocumento.objects.create(nombre="Opcional test", obligatorio=False)
+        jugador = self.jugador("71000111")
+        persona = jugador.socio.persona
+        for tipo in (self.apto, self.seguro):
+            self.documento(persona, tipo)
+        self.documento(persona, opcional, dias=-5)
+
+        data = self.persona(self.padron(), f"jugador-{jugador.jugador_id}")
+        documento = next(item for item in data["documentos"] if item["tipo_documento"] == opcional.pk)
+
+        self.assertEqual((documento["estado"], documento["obligatorio"]), ("vencido", False))
+        self.assertTrue(data["habilitado"])
+
     def test_calcula_el_estado_de_cada_documento_requerido(self):
         jugador = self.jugador("71000021")
         docente = self.docente("71000022")
@@ -353,6 +367,19 @@ class PadronDocumentalTests(APITestCase):
             with self.subTest(params=params):
                 self.assertEqual(self.reporte(**params).status_code, 400)
 
+    def test_sin_obligatorios_las_categorias_afectadas_cuentan_solo_vencidos(self):
+        TipoDocumento.objects.update(obligatorio=False)
+        persona = self.jugador("71000121").socio.persona
+        self.documento(persona, self.apto, dias=-3)
+        self.documento(persona, self.seguro, dias=90)
+
+        afectadas = self.padron()["resumen"]["categorias_afectadas"]
+
+        self.assertEqual(
+            [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in afectadas],
+            [("Sub 12", 1, 0, 2)],
+        )
+
     def test_resume_el_cumplimiento_y_las_categorias_afectadas(self):
         habilitado = self.jugador("71000081")
         self.jugador("71000082")
@@ -368,6 +395,6 @@ class PadronDocumentalTests(APITestCase):
         self.assertEqual(resumen["cumplimiento"], 33.3)
         self.assertEqual(resumen["documentos"], {"vigente": 2, "por_vencer": 0, "vencido": 1, "faltante": 3})
         self.assertEqual(
-            [(item["categoria"], item["inhabilitados"], item["total"]) for item in resumen["categorias_afectadas"]],
-            [("Sub 12", 2, 3), ("Sub 14", 1, 1)],
+            [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in resumen["categorias_afectadas"]],
+            [("Sub 12", 1, 3, 6), ("Sub 14", 1, 1, 2)],
         )

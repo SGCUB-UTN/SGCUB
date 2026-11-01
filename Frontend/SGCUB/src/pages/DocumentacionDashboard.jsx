@@ -16,13 +16,13 @@ import { INITIAL_FILTERS, PROFILES, filterRows, personaName, reportParams } from
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
-import { KpiGrid } from '../components/shared/Kpi'
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../components/shared/Skeleton'
 
 const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 const TABLE_TITLE_ID = 'documental-table-title'
+const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0'
 
 const withChangeNotice = (request) => async (...args) => {
   const result = await request(...args)
@@ -175,11 +175,11 @@ export default function DocumentacionDashboard() {
           <section className={PANEL_CLASS} aria-labelledby="documental-summary-title">
             <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={HEADING_CLASS} />
             <div className={SECTION_CLASS}>
-              <KpiGrid columns={3}>
+              <div className={SUMMARY_GRID_CLASS}>
                 <PadronComplianceChart resumen={resumen} />
                 <DocumentStatusChart counts={resumen.documentos} onSelect={selectState} />
                 <DocumentAffectedCategories categories={resumen.categorias_afectadas} onSelect={selectCategory} />
-              </KpiGrid>
+              </div>
             </div>
           </section>
 

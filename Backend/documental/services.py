@@ -91,14 +91,26 @@ def latest_documents(persona_ids, tipos):
     return {(document.persona_id, document.tipo_documento_id): document for document in documents}
 
 
+def applies_to(tipo, perfil):
+    return tipo.aplica_jugador if perfil == PERFIL_JUGADOR else tipo.aplica_docente
+
+
+def serialize_document(tipo, document, today, alert_days):
+    return {
+        "tipo_documento": tipo.id_tipo_documento,
+        "tipo_documento_nombre": tipo.nombre,
+        "obligatorio": tipo.obligatorio,
+        "id_documento": document.id_documento if document else None,
+        "archivo_url": document.archivoUrl.url if document and document.archivoUrl else None,
+        "estado": document_state(document, today, alert_days),
+        "fecha_vencimiento": _local_date(document.fecha_vencimiento) if document and document.fecha_vencimiento else None,
+    }
+
+
 def build_padron_documental():
     today = timezone.localdate()
     alert_days = ConfiguracionGeneral.load().dias_alerta_documentos
-    tipos = list(TipoDocumento.objects.filter(activo=True, obligatorio=True).order_by("nombre"))
-    required_by_profile = {
-        PERFIL_JUGADOR: [tipo for tipo in tipos if tipo.aplica_jugador],
-        PERFIL_DOCENTE: [tipo for tipo in tipos if tipo.aplica_docente],
-    }
+    tipos = list(TipoDocumento.objects.filter(activo=True).order_by("-obligatorio", "nombre"))
     profiles = active_profiles()
     documents = latest_documents({profile["persona"].persona_id for profile in profiles}, tipos)
 
@@ -106,16 +118,10 @@ def build_padron_documental():
     for profile in profiles:
         persona = profile.pop("persona")
         documentos = []
-        for tipo in required_by_profile[profile["perfil"]]:
+        for tipo in tipos:
             document = documents.get((persona.persona_id, tipo.id_tipo_documento))
-            documentos.append({
-                "tipo_documento": tipo.id_tipo_documento,
-                "tipo_documento_nombre": tipo.nombre,
-                "id_documento": document.id_documento if document else None,
-                "archivo_url": document.archivoUrl.url if document and document.archivoUrl else None,
-                "estado": document_state(document, today, alert_days),
-                "fecha_vencimiento": _local_date(document.fecha_vencimiento) if document and document.fecha_vencimiento else None,
-            })
+            if applies_to(tipo, profile["perfil"]) and (tipo.obligatorio or document):
+                documentos.append(serialize_document(tipo, document, today, alert_days))
         personas.append({
             **profile,
             "clave": f"{profile['perfil']}-{profile['perfil_id']}",
@@ -124,7 +130,9 @@ def build_padron_documental():
             "apellido": persona.apellido,
             "dni": persona.dni,
             "email": persona.email or "",
-            "habilitado": not any(documento["estado"] in DISQUALIFYING_STATES for documento in documentos),
+            "habilitado": not any(
+                documento["obligatorio"] and documento["estado"] in DISQUALIFYING_STATES for documento in documentos
+            ),
             "documentos": documentos,
         })
 
@@ -191,14 +199,26 @@ def category_label(categoria):
     return f"{categoria['nombre']} ({gender})" if gender else categoria["nombre"]
 
 
-def most_affected_categories(personas, disabled):
-    labels = {categoria["categoria_id"]: category_label(categoria) for persona in personas for categoria in persona["categorias"]}
-    totals = Counter(categoria["categoria_id"] for persona in personas for categoria in persona["categorias"])
-    affected = Counter(categoria["categoria_id"] for persona in disabled for categoria in persona["categorias"])
-    return [
-        {"categoria_id": categoria_id, "categoria": labels[categoria_id], "inhabilitados": count, "total": totals[categoria_id]}
-        for categoria_id, count in sorted(affected.items(), key=lambda item: (-item[1], labels[item[0]]))
+def most_affected_categories(personas):
+    labels = {}
+    counts = {}
+    for persona in personas:
+        states = Counter(documento["estado"] for documento in persona["documentos"])
+        for categoria in persona["categorias"]:
+            labels[categoria["categoria_id"]] = category_label(categoria)
+            counts.setdefault(categoria["categoria_id"], Counter()).update(states)
+    affected = [
+        {
+            "categoria_id": categoria_id,
+            "categoria": labels[categoria_id],
+            "vencidos": states[VENCIDO],
+            "faltantes": states[FALTANTE],
+            "total": sum(states.values()),
+        }
+        for categoria_id, states in counts.items()
+        if states[VENCIDO] or states[FALTANTE]
     ]
+    return sorted(affected, key=lambda item: (-(item["vencidos"] + item["faltantes"]), item["categoria"]))
 
 
 def padron_summary(personas):
@@ -211,5 +231,5 @@ def padron_summary(personas):
         "inhabilitados_por_perfil": {perfil: sum(persona["perfil"] == perfil for persona in disabled) for perfil in PROFILES},
         "cumplimiento": round((len(personas) - len(disabled)) * 100 / len(personas), 1) if personas else 100.0,
         "documentos": {estado: document_counts[estado] for estado in DOCUMENT_STATES},
-        "categorias_afectadas": most_affected_categories(personas, disabled),
+        "categorias_afectadas": most_affected_categories(personas),
     }

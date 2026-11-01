@@ -307,7 +307,10 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
               <td className="py-3 px-4 text-sm">
                 {row.categoriasLabel || <span className="text-on-surface-variant">{NO_CATEGORY}</span>}
               </td>
-              <td className="py-3 px-4 font-medium">{row.tipo_documento_nombre}</td>
+              <td className="py-3 px-4">
+                <span className="block font-medium">{row.tipo_documento_nombre}</span>
+                {!row.obligatorio && <span className="block text-xs text-on-surface-variant">Opcional</span>}
+              </td>
               <td className="py-3 px-4 whitespace-nowrap"><DocumentStatusBadge status={row.estado} /></td>
               <td className="py-3 px-4 whitespace-nowrap"><DueDateCell row={row} /></td>
               <td className="py-3 px-4 sm:pr-5"><RowActions row={row} onNotify={onNotify} onUpload={onUpload} /></td>

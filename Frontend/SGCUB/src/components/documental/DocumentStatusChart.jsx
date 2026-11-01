@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { formatCount, formatPercentage } from '../cuota/cuotaPeriod'
 import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
@@ -29,6 +30,21 @@ export default function DocumentStatusChart({ counts, onSelect }) {
     display: formatCount(counts[segment.key]),
     share: formatPercentage(shareOf(counts[segment.key], total)),
   }))
+
+  if (total === 0) {
+    return (
+      <div className="min-w-0 h-full flex flex-col">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Resumen de documentos</h3>
+        <div className="mt-2 flex-1 flex flex-col items-center justify-center gap-2 text-center text-sm text-on-surface-variant">
+          <span className="material-symbols-outlined text-outline" style={{ fontSize: 32 }} aria-hidden="true">rule_settings</span>
+          <p>No hay documentos cargados ni documentación obligatoria configurada para jugadores activos y docentes.</p>
+          <Link to="/configuracion?tab=documentacion" className="font-semibold text-primary hover:underline">
+            Configurar documentos obligatorios
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-w-0 h-full flex flex-col">

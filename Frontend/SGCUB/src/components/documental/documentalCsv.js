@@ -5,7 +5,8 @@ const CSV_COLUMNS = [
   ['DNI', (row) => row.dni],
   ['Perfil', (row) => PROFILE_LABELS[row.perfil]],
   ['Categoría', (row) => row.categoriasLabel],
-  ['Documento requerido', (row) => row.tipo_documento_nombre],
+  ['Documento', (row) => row.tipo_documento_nombre],
+  ['Obligatorio', (row) => (row.obligatorio ? 'Sí' : 'No')],
   ['Estado', (row) => STATE_LABELS[row.estado]],
   ['Vencimiento', (row) => (row.fecha_vencimiento ? formatDate(row.fecha_vencimiento) : '')],
 ]

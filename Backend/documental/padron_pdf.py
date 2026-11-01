@@ -45,6 +45,13 @@ def format_count(count, total):
     return f"{count} ({share}%)"
 
 
+def affected_detail(item):
+    parts = [f"{item['vencidos']} vencidos"]
+    if item["faltantes"]:
+        parts.append(f"{item['faltantes']} faltantes")
+    return f"{', '.join(parts)} de {item['total']} documentos"
+
+
 def summary_lines(summary):
     documents = summary["documentos"]
     total_documents = sum(documents.values())
@@ -59,7 +66,7 @@ def summary_lines(summary):
     ]
     if summary["categorias_afectadas"]:
         lines.append("Categorías más afectadas: " + ", ".join(
-            f"{item['categoria']} ({item['inhabilitados']} de {item['total']})" for item in summary["categorias_afectadas"][:MOST_AFFECTED_LIMIT]
+            f"{item['categoria']} ({affected_detail(item)})" for item in summary["categorias_afectadas"][:MOST_AFFECTED_LIMIT]
         ))
     return lines
 
@@ -92,6 +99,10 @@ def filter_text(filters, personas):
     return " · ".join(parts)
 
 
+def document_name(documento):
+    return documento["tipo_documento_nombre"] if documento["obligatorio"] else f"{documento['tipo_documento_nombre']} (opcional)"
+
+
 def report_rows(rows, styles):
     def cell(text):
         return Paragraph(escape(str(text or "—")), styles["Normal"])
@@ -102,7 +113,7 @@ def report_rows(rows, styles):
             persona["dni"],
             PROFILE_LABELS[persona["perfil"]],
             cell(", ".join(category_label(categoria) for categoria in persona["categorias"])),
-            cell(documento["tipo_documento_nombre"]),
+            cell(document_name(documento)),
             STATE_LABELS[documento["estado"]],
             f"{documento['fecha_vencimiento']:%d/%m/%Y}" if documento["fecha_vencimiento"] else "—",
         ]
