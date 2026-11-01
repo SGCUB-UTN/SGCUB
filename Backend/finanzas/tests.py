@@ -2735,6 +2735,36 @@ class ReporteMorosidadTests(APITestCase):
 		self.assertEqual(data["alcance"], f"Categoría {categoria.nombre}")
 		self.assertEqual(data["categorias_afectadas"], [])
 
+	def test_filtra_por_categoria_con_genero(self):
+		categoria_m = Categoria.objects.create(nombre="Sub 15", anio_vigente=2026, edad_maxima=15, genero="M")
+		jugador = self.deudor_jugador("78901246")
+		jugador.jugador.categoria = categoria_m
+		jugador.jugador.save(update_fields=["categoria"])
+
+		data = self.reporte(alcance="categoria", categoria_id=categoria_m.pk)
+		self.assertEqual(data["alcance"], "Categoría Sub 15 (Masculino)")
+		self.assertEqual(data["filas"][0]["categoria_deportiva"], "Sub 15 (Masculino)")
+
+	def test_filtra_por_genero_de_categoria(self):
+		categoria_m = Categoria.objects.create(nombre="M17", anio_vigente=2026, edad_maxima=17, genero="M")
+		categoria_f = Categoria.objects.create(nombre="F17", anio_vigente=2026, edad_maxima=17, genero="F")
+		jugador_m = self.deudor_jugador("78901244")
+		jugador_m.jugador.categoria = categoria_m
+		jugador_m.jugador.save(update_fields=["categoria"])
+		jugador_f = self.deudor_jugador("78901245")
+		jugador_f.jugador.categoria = categoria_f
+		jugador_f.jugador.save(update_fields=["categoria"])
+
+		masculinas = self.reporte(tipo="jugadores", genero="M")
+		self.assertEqual([fila["socio_id"] for fila in masculinas["filas"]], [jugador_m.pk])
+		self.assertEqual(masculinas["alcance"], "Todas las masculinas")
+		self.assertEqual(masculinas["alcance_codigo"], "genero")
+
+		femeninas = self.reporte(tipo="jugadores", genero="F")
+		self.assertEqual([fila["socio_id"] for fila in femeninas["filas"]], [jugador_f.pk])
+		self.assertEqual(femeninas["alcance"], "Todas las femeninas")
+		self.assertEqual(femeninas["alcance_codigo"], "genero")
+
 	def test_categorias_afectadas_agrupan_morosos_y_ordenan_por_monto(self):
 		mayor = self.deudor_jugador("78901241").jugador.categoria
 		companero = self.deudor_jugador("78901242").jugador
@@ -2773,6 +2803,7 @@ class ReporteMorosidadTests(APITestCase):
 			{"periodo": "semanal", "referencia": "2026"},
 			{"periodo": "mensual", "referencia": "2026-13"},
 			{"periodo": "trimestral", "referencia": "2026-T5"},
+			{"genero": "X"},
 		):
 			with self.subTest(params=params):
 				response = self.client.get(reverse("reporte-morosidad"), params)
@@ -2942,6 +2973,8 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"78901240", response.content)
 		self.assertIn(b"$ 1.000,00", response.content)
+		self.assertIn(b"Tipo: Todos los socios", response.content)
+		self.assertNotIn(b"Alcance:", response.content)
 		self.assertNotIn(b"Paz, Luis", response.content)
 
 	def test_respects_selected_scope(self):
@@ -2960,6 +2993,8 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"Primera", response.content)
 		self.assertIn(b"Tipo: Solo jugadores", response.content)
+		self.assertIn(b"Alcance: Categor", response.content)
+		self.assertTrue(response.content.index(b"Tipo: Solo jugadores") < response.content.index(b"Alcance: Categor"))
 		self.assertIn(b"Anual", response.content)
 
 	def test_rejects_invalid_parameters(self):
