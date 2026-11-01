@@ -67,7 +67,7 @@ jobs:
 
       - name: Ejecutar pruebas automatizadas
         working-directory: Backend
-        run: python manage.py test --noinput
+        run: python manage.py test --parallel --noinput
 
   frontend:
     name: Frontend (React & Vite)
