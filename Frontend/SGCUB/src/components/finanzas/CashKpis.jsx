@@ -4,21 +4,53 @@ import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
 import SectionHeading from '../shared/SectionHeading'
 import { PANEL_BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS } from '../shared/panel'
+import { LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { countLabel, shareOf } from './cashFormat'
 import cashSummary from './cashSummary'
 import OtherIncomeRanking from './OtherIncomeRanking'
 
 const CORRECTIONS_PANEL_CLASS = 'min-w-0 bg-surface-container-low border border-outline-variant/50 rounded-lg overflow-hidden'
 
-function CardBody({ isLoading, error, children }) {
-  if (isLoading) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-on-surface-variant" role="status">
-        <span className="material-symbols-outlined animate-spin text-[20px]" aria-hidden="true">progress_activity</span>
-        Cargando movimientos del mes...
-      </p>
-    )
-  }
+function CompositionSkeleton() {
+  return (
+    <SkeletonStatus label="Cargando movimientos del mes..." className="flex flex-col items-center gap-5">
+      <RingSkeleton />
+      <LineSkeletons count={2} className="w-full flex flex-col gap-4" />
+    </SkeletonStatus>
+  )
+}
+
+function RankingSkeleton() {
+  return (
+    <SkeletonStatus className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <SkeletonBlock soft className="h-3.5 w-20" />
+        <SkeletonBlock className="h-6 w-28" />
+      </div>
+      <SkeletonBlock round className="h-3 w-full" />
+      <LineSkeletons count={4} />
+    </SkeletonStatus>
+  )
+}
+
+function CorrectionsSkeleton() {
+  return (
+    <SkeletonStatus className="flex flex-col divide-y divide-outline-variant/40">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+          <SkeletonBlock round className="w-5 h-5 shrink-0" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <SkeletonBlock className="h-3.5 w-2/3" />
+            <SkeletonBlock soft className="h-3 w-1/2" />
+          </div>
+        </div>
+      ))}
+    </SkeletonStatus>
+  )
+}
+
+function CardBody({ isLoading, error, skeleton, children }) {
+  if (isLoading) return skeleton
   if (error) return <p className="text-sm text-error" role="alert">No se pudieron cargar los movimientos de caja.</p>
   return children
 }
@@ -156,19 +188,19 @@ export default function CashKpis({ period, comprobantes, devoluciones, isLoading
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <KpiCard id="income-composition-title" icon="donut_large" title="Composición del ingreso">
-        <CardBody {...status}>
+        <CardBody {...status} skeleton={<CompositionSkeleton />}>
           <IncomeComposition summary={summary} />
         </CardBody>
       </KpiCard>
 
       <KpiCard id="other-income-title" icon="leaderboard" title="Tipos de otros ingresos" contained>
-        <CardBody {...status}>
+        <CardBody {...status} skeleton={<RankingSkeleton />}>
           <OtherIncomeRanking concepts={summary.concepts} otherIncome={summary.otherIncome} period={period} />
         </CardBody>
       </KpiCard>
 
       <KpiCard id="corrections-title" icon="undo" title="Correcciones y anulaciones" className={CORRECTIONS_PANEL_CLASS}>
-        <CardBody {...status}>
+        <CardBody {...status} skeleton={<CorrectionsSkeleton />}>
           <Corrections summary={summary} />
         </CardBody>
       </KpiCard>

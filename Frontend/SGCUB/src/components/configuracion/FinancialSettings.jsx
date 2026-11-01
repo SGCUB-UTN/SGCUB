@@ -3,6 +3,7 @@ import { Modal, Text } from '@mantine/core'
 import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import { CONCEPT_ORIGINS, INCOME, isOtherConcept } from '../finanzas/conceptOrigins'
 import { formatDate, getErrorMessage } from '../personas/format'
+import { TableSkeletonRows } from '../shared/Skeleton'
 import { CUOTA_FIELD_LABELS, SURCHARGE_TYPES, formatCuotaValue, formatVigencia, scheduledVersions } from './financialFields'
 import { IntegerInput, MoneyInput, PercentInput } from './formattedInputs'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, compactInputClass } from './settingsForm'
@@ -451,7 +452,7 @@ function MovementConceptsSection() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={3} className="px-6 py-4 text-sm text-on-surface-variant">Cargando conceptos...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando conceptos..." />
             )}
             {!isLoading && filtered.length === 0 && (
               <tr><td colSpan={3} className="px-6 py-4 text-sm text-on-surface-variant">No hay conceptos cargados.</td></tr>

@@ -27,6 +27,7 @@ import {
   deleteTalleIndumentaria,
 } from '../../api/personasConfig'
 import { getErrorMessage } from '../personas/format'
+import { TableSkeletonRows } from '../shared/Skeleton'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES } from './settingsForm'
 import { Field, INPUT_CLASS, IconButton, Notice, SelectInput, SettingsSection } from './settingsParts'
 
@@ -195,7 +196,7 @@ function CargosDocentesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando cargos...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando cargos..." />
             ) : cargos.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay cargos cargados.</td></tr>
             ) : (
@@ -413,7 +414,7 @@ function GeografiaSection() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+                <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando localidades..." />
               ) : localidades.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay localidades.</td></tr>
               ) : (
@@ -481,7 +482,7 @@ function GeografiaSection() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+                <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando barrios..." />
               ) : filteredBarrios.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No se encontraron barrios.</td></tr>
               ) : (
@@ -704,7 +705,7 @@ function RelacionesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando vínculos..." />
             ) : sortedRelaciones.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay relaciones configuradas.</td></tr>
             ) : (
@@ -875,7 +876,7 @@ function ObrasSocialesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando prestadores de salud..." />
             ) : sortedObras.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay obras sociales registradas.</td></tr>
             ) : (
@@ -1050,7 +1051,7 @@ function TallesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando talles..." />
             ) : sortedTalles.length === 0 ? (
               <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay talles configurados.</td></tr>
             ) : (

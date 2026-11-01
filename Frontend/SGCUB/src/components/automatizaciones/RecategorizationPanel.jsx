@@ -1,6 +1,7 @@
 import { ActionButton, ActionCard, ActionFooter, ActionNotice, ActionSummary } from './actionCardParts'
 import { RECATEGORIZATION_REVIEW_PATH } from './automationCatalog'
 import { describeWhen } from './automationSchedule'
+import { PanelStatusSkeleton } from '../shared/Skeleton'
 
 const NOTICES = {
   en_curso: {
@@ -89,7 +90,7 @@ export default function RecategorizationPanel({ execution, isLoading, error, cat
       title="Recategorización de jugadores"
       description="Asigna a cada jugador activo la categoría que le corresponde por su año de nacimiento. Los casos dudosos quedan para que los revises vos."
     >
-      {isLoading && <p className="text-base text-slate-500" role="status">Consultando la última recategorización...</p>}
+      {isLoading && <PanelStatusSkeleton label="Consultando la última recategorización..." />}
       {!isLoading && error && (
         <p className="text-base text-red-700" role="alert">No se pudo consultar la recategorización. Recargá la página para intentar de nuevo.</p>
       )}

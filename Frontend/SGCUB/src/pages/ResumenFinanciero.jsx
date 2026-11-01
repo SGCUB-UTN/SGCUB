@@ -4,6 +4,7 @@ import { downloadFinancialSummaryPdf } from '../api/resumenFinanciero'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney, isValidPeriod } from '../components/cuota/cuotaPeriod'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../components/shared/chartMotion'
+import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus } from '../components/shared/Skeleton'
 import useEntered from '../hooks/useEntered'
 import { getErrorMessage } from '../components/personas/format'
 import CollectionEvolutionChart from '../components/resumen/CollectionEvolutionChart'
@@ -195,12 +196,47 @@ const refundRows = (refunds) => [
   ...conceptRows(refunds.manuales.conceptos, 'nested', 'manual-'),
 ]
 
-function LoadingPanel() {
+function KpiBlockSkeleton() {
   return (
-    <div className={`${PANEL_CLASS} ${BODY_CLASS} flex items-center gap-2 text-on-surface-variant`} role="status">
-      <span className="material-symbols-outlined animate-spin text-[20px]" aria-hidden="true">progress_activity</span>
-      Cargando resumen financiero...
+    <div className="flex flex-col gap-2">
+      <SkeletonBlock soft className="h-3.5 w-24" />
+      <SkeletonBlock className="h-7 w-32 max-w-full" />
+      <SkeletonBlock soft className="h-3 w-20" />
     </div>
+  )
+}
+
+function SummarySkeleton() {
+  return (
+    <SkeletonStatus label="Cargando resumen financiero..." className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[fit-content(40%)_1fr] gap-5">
+        <div className={PANEL_CLASS}>
+          <HeadingSkeleton />
+          <div className={`${BODY_CLASS} flex flex-col sm:flex-row items-center gap-5`}>
+            <RingSkeleton />
+            <LineSkeletons count={3} className="w-full sm:w-48 flex flex-col gap-3" />
+          </div>
+        </div>
+        <div className={PANEL_CLASS}>
+          <HeadingSkeleton />
+          <div className={`${BODY_CLASS} grid grid-cols-1 sm:grid-cols-3 gap-6`}>
+            {Array.from({ length: 6 }, (_, index) => <KpiBlockSkeleton key={index} />)}
+          </div>
+        </div>
+      </div>
+      <div className={PANEL_CLASS}><HeadingSkeleton withAction /></div>
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton withAction />
+        <div className={`${BODY_CLASS} flex flex-col gap-4`}>
+          {[0, 1, 2].map((index) => <SkeletonBlock key={index} soft className="h-3 w-full" />)}
+        </div>
+      </div>
+      <div className={PANEL_CLASS}><HeadingSkeleton withAction /></div>
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton />
+        <div className={BODY_CLASS}><SkeletonBlock soft className="h-[220px] w-full" /></div>
+      </div>
+    </SkeletonStatus>
   )
 }
 
@@ -247,7 +283,7 @@ function ResumenFinanciero() {
         Resumen mensual
       </SectionDivider>
 
-      {isLoading && <LoadingPanel />}
+      {isLoading && <SummarySkeleton />}
       {error && (
         <p className={`${PANEL_CLASS} ${BODY_CLASS} text-error`} role="alert">
           {getErrorMessage(error, 'No se pudo cargar el resumen financiero.')}
