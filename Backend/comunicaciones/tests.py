@@ -88,6 +88,5 @@ class DespacharEnviosEmailNotificacionTest(TestCase):
             destinatario="ana@example.com",
             asunto="Aviso",
             contenido="Contenido",
-            nombreApellido="Ana Pérez",
             envio_id=envio.pk,
         )
