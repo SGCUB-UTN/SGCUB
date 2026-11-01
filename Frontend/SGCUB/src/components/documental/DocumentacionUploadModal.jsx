@@ -73,8 +73,8 @@ export default function DocumentacionUploadModal({
               <input type="date" name="fecha_emision" value={form.fecha_emision} max={shiftDate(form.fecha_vencimiento, -1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
             </div>
             <div>
-              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento{requiresDueDate && ' *'}</label>
-              <input type="date" name="fecha_vencimiento" required={requiresDueDate} disabled={noDueDate} value={form.fecha_vencimiento} min={noDueDate ? undefined : shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none disabled:cursor-not-allowed disabled:opacity-50" />
+              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento{!noDueDate && ' *'}</label>
+              <input type="date" name="fecha_vencimiento" required={!noDueDate} disabled={noDueDate} value={form.fecha_vencimiento} min={noDueDate ? undefined : shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none disabled:cursor-not-allowed disabled:opacity-50" />
               <label className={`mt-2 flex items-center gap-2 text-sm text-on-surface-variant ${requiresDueDate ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                 <input type="checkbox" name="sin_vencimiento" checked={noDueDate} disabled={requiresDueDate} onChange={onChange} className="w-4 h-4 accent-primary cursor-pointer disabled:cursor-not-allowed shrink-0" />
                 Sin vencimiento
