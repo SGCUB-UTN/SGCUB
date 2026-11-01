@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
