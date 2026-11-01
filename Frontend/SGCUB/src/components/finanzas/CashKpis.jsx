@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { formatMoney, formatPercentage, formatWholeMoney } from '../cuota/cuotaPeriod'
 import DonutChart from '../shared/DonutChart'
+import { legendItemProps } from '../shared/donutLegend'
 import SectionHeading from '../shared/SectionHeading'
 import { PANEL_BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS } from '../shared/panel'
 import { countLabel, shareOf } from './cashFormat'
@@ -36,9 +38,9 @@ function KpiCard({ id, icon, title, className = PANEL_CLASS, contained = false, 
   )
 }
 
-function LegendRow({ swatchClass, label, amount, count, total }) {
+function LegendRow({ swatchClass, label, amount, count, total, interaction }) {
   return (
-    <li className="flex items-start gap-2.5 min-w-0">
+    <li {...interaction} className={`${interaction.className} flex items-start gap-2.5 min-w-0`}>
       <span className={`mt-1.5 w-2.5 h-2.5 shrink-0 rounded-sm ${swatchClass}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-3">
@@ -54,6 +56,7 @@ function LegendRow({ swatchClass, label, amount, count, total }) {
 }
 
 function IncomeComposition({ summary }) {
+  const [activeKey, setActiveKey] = useState(null)
   const total = summary.income.amount
   const parts = [
     { key: 'cuotas', label: 'Cobro de cuotas', ...summary.cuotas, swatchClass: 'bg-primary', strokeClass: 'stroke-primary' },
@@ -61,7 +64,8 @@ function IncomeComposition({ summary }) {
   ]
   const segments = parts.map((part) => ({
     ...part,
-    title: `${part.label}: ${formatMoney(part.amount)} (${formatPercentage(shareOf(part.amount, total))})`,
+    display: formatWholeMoney(part.amount),
+    share: formatPercentage(shareOf(part.amount, total)),
   }))
   const description = parts.map((part) => `${part.label} ${formatPercentage(shareOf(part.amount, total))}`).join(', ')
 
@@ -73,10 +77,20 @@ function IncomeComposition({ summary }) {
         caption="Total ingresado"
         label={`Composición del ingreso: ${description}`}
         emptyLabel="Sin ingresos en el período"
+        activeKey={activeKey}
+        onActiveChange={setActiveKey}
       />
-      <ul className="w-full flex flex-col gap-3">
+      <ul className="w-full flex flex-col gap-2">
         {parts.map((part) => (
-          <LegendRow key={part.key} swatchClass={part.swatchClass} label={part.label} amount={part.amount} count={part.count} total={total} />
+          <LegendRow
+            key={part.key}
+            swatchClass={part.swatchClass}
+            label={part.label}
+            amount={part.amount}
+            count={part.count}
+            total={total}
+            interaction={legendItemProps(part.key, activeKey, setActiveKey)}
+          />
         ))}
       </ul>
     </div>
