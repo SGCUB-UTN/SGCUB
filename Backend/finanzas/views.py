@@ -351,7 +351,7 @@ def comprobante_list(request):
 	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+	).prefetch_related("pago__items_pago").annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():

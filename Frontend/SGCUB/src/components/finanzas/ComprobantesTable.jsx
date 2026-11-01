@@ -136,7 +136,7 @@ function ComprobantesTable({
         socioLabel: socioName(comprobante.socio),
         concept: comprobante.es_ingreso ? comprobante.concepto : 'Cobro de cuotas',
         subConcept: receiptDetail(comprobante, refunded),
-        paymentMethod: 'Ver comprobante',
+        paymentMethod: comprobante.medios_de_pago || '—',
         amount: Number(comprobante.monto_total ?? 0),
         isPositive: true,
         isAnulado: comprobante.estado === 'Anulado',
@@ -301,7 +301,7 @@ function ComprobantesTable({
             )}
             <button
               type="button"
-              onClick={() => downloadCashMovementsCsv(sorted, period)}
+              onClick={() => downloadCashMovementsCsv(sorted, period, scope)}
               disabled={isLoading || Boolean(error) || sorted.length === 0}
               title="Exportar movimientos filtrados"
               aria-label="Exportar movimientos filtrados"
