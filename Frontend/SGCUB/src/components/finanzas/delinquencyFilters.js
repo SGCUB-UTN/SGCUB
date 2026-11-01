@@ -7,7 +7,7 @@ export const PERIOD_TYPES = [
 export const PLAYERS = 'jugadores'
 
 export const AFFILIATIONS = [
-  { value: 'todos', label: 'Socios y jugadores' },
+  { value: 'todos', label: 'Todos los socios' },
   { value: 'socios', label: 'Solo socios' },
   { value: PLAYERS, label: 'Solo jugadores' },
 ]

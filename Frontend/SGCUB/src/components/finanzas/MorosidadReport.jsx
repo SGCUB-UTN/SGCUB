@@ -109,6 +109,10 @@ function MorosidadReport({ reporte, isLoading, error }) {
     return <p className="py-12 text-center text-on-surface-variant">Elegí los filtros para generar el reporte.</p>
   }
 
+  const scopeLabel = reporte.alcance_codigo === 'categoria' || reporte.alcance_codigo === 'genero'
+    ? reporte.alcance
+    : reporte.tipo
+
   return (
     <div className={`flex flex-col gap-5 transition-opacity ${isLoading ? 'opacity-60' : ''}`} aria-busy={isLoading}>
       <section className={PANEL_CLASS} aria-labelledby="morosidad-kpis-title">
@@ -119,7 +123,7 @@ function MorosidadReport({ reporte, isLoading, error }) {
           className={HEADING_CLASS}
           actions={(
             <p className="text-sm text-on-surface-variant">
-              {reporte.alcance} · {reporte.tipo} · {reporte.periodo} · Actualizado el {reporte.fecha}
+              {scopeLabel} · {reporte.periodo} · Actualizado el {reporte.fecha}
             </p>
           )}
         />

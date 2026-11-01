@@ -26,6 +26,14 @@ function MorosidadFilters({ filters, onChange, categorias }) {
     [categorias],
   )
 
+  const handleCategoryChange = (value) => {
+    if (value && value !== ALL_CATEGORIES) {
+      onChange({ tipo: PLAYERS, categoriaId: value })
+    } else {
+      onChange({ categoriaId: '' })
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-4" role="group" aria-label="Filtros del reporte">
       <div className={GROUP_CLASS}>
@@ -79,13 +87,13 @@ function MorosidadFilters({ filters, onChange, categorias }) {
         >
           {AFFILIATIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </FilterSelect>
-        {filters.tipo === PLAYERS && (
+        {filters.tipo !== 'socios' && (
           <CategoryFilter
             value={filters.categoriaId || ALL_CATEGORIES}
             categories={categoryOptions}
             hasUncategorized={false}
-            genderGroups={false}
-            onChange={(value) => onChange({ categoriaId: value === ALL_CATEGORIES ? '' : value })}
+            genderGroups
+            onChange={handleCategoryChange}
           />
         )}
       </div>
