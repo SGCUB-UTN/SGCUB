@@ -17,7 +17,8 @@ import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 
 import useMovimientosCaja from '../hooks/useMovimientosCaja'
 import useRegisterPayment from '../hooks/useRegisterPayment'
-import { ErrorFile, LoadingFile } from '../components/personas/FileStatus'
+import { ErrorFile } from '../components/personas/FileStatus'
+import { PanelSkeleton } from '../components/shared/Skeleton'
 import { isActiveStatus } from '../components/personas/format'
 
 const SIN_SOCIO = { loading: false, socio: null, cuenta: null, error: null }
@@ -82,7 +83,7 @@ function Caja() {
         )}
       />
 
-      {carga.loading && socioId && <LoadingFile text="Cargando formulario de pago..." />}
+      {carga.loading && socioId && <PanelSkeleton label="Cargando formulario de pago..." />}
       {!carga.loading && socioId && (carga.error || !carga.socio || !carga.cuenta) && (
         <ErrorFile
           message={carga.error || 'No se encontró la cuenta corriente.'}
