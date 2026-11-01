@@ -290,6 +290,21 @@ class PadronDocumentalTests(APITestCase):
         self.assertFalse(self.persona(data, f"jugador-{vencido.jugador_id}")["habilitado"])
         self.assertFalse(self.persona(data, f"jugador-{faltante.jugador_id}")["habilitado"])
 
+    def test_informa_el_archivo_del_documento_si_tiene(self):
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        jugador = self.jugador("71000091")
+        with override_settings(MEDIA_ROOT=media_root):
+            con_archivo = self.documento(jugador.socio.persona, self.apto)
+            con_archivo.archivoUrl.save("apto.pdf", ContentFile(b"%PDF-1.4"), save=True)
+            self.documento(jugador.socio.persona, self.seguro)
+
+            documentos = self.persona(self.padron(), f"jugador-{jugador.jugador_id}")["documentos"]
+
+        archivos = {documento["tipo_documento"]: documento["archivo_url"] for documento in documentos}
+        self.assertTrue(archivos[self.apto.pk].endswith(".pdf"))
+        self.assertIsNone(archivos[self.seguro.pk])
+
     def test_el_docente_lista_todas_sus_categorias(self):
         docente = self.docente("71000051", categorias=(self.sub14, self.sub12))
 
@@ -307,7 +322,7 @@ class PadronDocumentalTests(APITestCase):
         self.documento(vencido.socio.persona, self.apto, dias=-2)
         self.documento(faltante.socio.persona, self.apto)
 
-        response = self.reporte(estado="vencido", perfil="jugador", q="71000061")
+        response = self.reporte(estado="vencido", perfil="jugador", tipo=str(self.apto.pk), q="71000061")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
@@ -315,6 +330,14 @@ class PadronDocumentalTests(APITestCase):
         self.assertIn(b"Cumplimiento general", response.content)
         self.assertIn(b"71000061", response.content)
         self.assertNotIn(b"71000062", response.content)
+
+    def test_el_reporte_filtra_por_tipo_de_documento(self):
+        self.jugador("71000101")
+
+        response = self.reporte(tipo=str(self.apto.pk))
+
+        self.assertIn(b"Apto test", response.content)
+        self.assertNotIn(b"Seguro test", response.content)
 
     def test_el_reporte_filtra_por_categoria_del_docente(self):
         self.docente("71000071", categorias=(self.sub14,))
@@ -326,7 +349,7 @@ class PadronDocumentalTests(APITestCase):
         self.assertNotIn(b"71000072", response.content)
 
     def test_el_reporte_rechaza_filtros_invalidos(self):
-        for params in ({"estado": "aprobado"}, {"perfil": "socio"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
+        for params in ({"estado": "aprobado"}, {"perfil": "socio"}, {"tipo": "apto"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
             with self.subTest(params=params):
                 self.assertEqual(self.reporte(**params).status_code, 400)
 

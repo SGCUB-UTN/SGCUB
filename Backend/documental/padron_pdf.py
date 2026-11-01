@@ -73,11 +73,18 @@ def category_filter_label(categoria, personas):
     return labels.get(int(categoria), "Sin coincidencias")
 
 
+def document_type_label(tipo, personas):
+    labels = {documento["tipo_documento"]: documento["tipo_documento_nombre"] for persona in personas for documento in persona["documentos"]}
+    return labels.get(tipo, "Sin coincidencias")
+
+
 def filter_text(filters, personas):
     parts = [
         f"Documentos: {FILTER_STATE_LABELS[filters['estado']]}",
         f"Perfil: {FILTER_PROFILE_LABELS[filters['perfil']]}",
     ]
+    if filters["tipo"]:
+        parts.append(f"Tipo: {document_type_label(filters['tipo'], personas)}")
     if filters["categoria"]:
         parts.append(f"Categoría: {category_filter_label(filters['categoria'], personas)}")
     if filters["q"].strip():

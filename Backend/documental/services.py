@@ -86,7 +86,7 @@ def active_profiles():
 
 def latest_documents(persona_ids, tipos):
     documents = Documento.objects.filter(persona_id__in=persona_ids, tipo_documento__in=tipos).only(
-        "id_documento", "persona_id", "tipo_documento_id", "fecha_vencimiento"
+        "id_documento", "persona_id", "tipo_documento_id", "fecha_vencimiento", "archivoUrl"
     ).order_by("id_documento")
     return {(document.persona_id, document.tipo_documento_id): document for document in documents}
 
@@ -112,6 +112,7 @@ def build_padron_documental():
                 "tipo_documento": tipo.id_tipo_documento,
                 "tipo_documento_nombre": tipo.nombre,
                 "id_documento": document.id_documento if document else None,
+                "archivo_url": document.archivoUrl.url if document and document.archivoUrl else None,
                 "estado": document_state(document, today, alert_days),
                 "fecha_vencimiento": _local_date(document.fecha_vencimiento) if document and document.fecha_vencimiento else None,
             })
@@ -144,18 +145,21 @@ def matches_search(query, fields):
 def parse_padron_filters(params):
     estado = params.get("estado") or None
     perfil = params.get("perfil") or None
+    tipo = params.get("tipo") or None
     categoria = params.get("categoria") or None
     if estado and estado not in FILTERABLE_STATES:
         raise PadronFilterError(f"El estado debe ser uno de: {', '.join(FILTERABLE_STATES)}.")
     if perfil and perfil not in PROFILES:
         raise PadronFilterError(f"El perfil debe ser uno de: {', '.join(PROFILES)}.")
+    if tipo and not tipo.isdigit():
+        raise PadronFilterError("El tipo de documento debe ser un número.")
     if categoria and categoria != NO_CATEGORY:
         gender = categoria.removeprefix(GENDER_PREFIX) if categoria.startswith(GENDER_PREFIX) else None
         if gender is not None and gender not in GENDER_LABELS:
             raise PadronFilterError("El género de la categoría debe ser M o F.")
         if gender is None and not categoria.isdigit():
             raise PadronFilterError("La categoría debe ser un número, none o gender:M/F.")
-    return {"estado": estado, "perfil": perfil, "categoria": categoria, "q": params.get("q", "")}
+    return {"estado": estado, "perfil": perfil, "tipo": int(tipo) if tipo else None, "categoria": categoria, "q": params.get("q", "")}
 
 
 def category_matches(persona, categoria):
@@ -169,7 +173,7 @@ def category_matches(persona, categoria):
     return any(item["categoria_id"] == int(categoria) for item in categorias)
 
 
-def filter_document_rows(personas, estado=None, perfil=None, categoria=None, q=""):
+def filter_document_rows(personas, estado=None, perfil=None, tipo=None, categoria=None, q=""):
     return [
         (persona, documento)
         for persona in personas
@@ -177,7 +181,8 @@ def filter_document_rows(personas, estado=None, perfil=None, categoria=None, q="
         and category_matches(persona, categoria)
         and matches_search(q, [persona["apellido"], persona["nombre"], persona["dni"]])
         for documento in persona["documentos"]
-        if not estado or documento["estado"] == estado
+        if (not estado or documento["estado"] == estado)
+        and (not tipo or documento["tipo_documento"] == tipo)
     ]
 
 
