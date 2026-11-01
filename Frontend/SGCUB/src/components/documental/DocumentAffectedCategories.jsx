@@ -23,7 +23,7 @@ function CategoryBar({ category, onSelect }) {
             {` de ${formatCount(category.total)} · ${formatPercentage(share)}`}
           </span>
         </span>
-        <span className="block h-2 rounded bg-surface-container-high" aria-hidden="true">
+        <span className="block h-2 rounded bg-emerald-600" aria-hidden="true">
           <span className={`block h-full rounded bg-error ${WIDTH_MOTION}`} style={{ width: grown(entered, `${share}%`) }} />
         </span>
       </button>
