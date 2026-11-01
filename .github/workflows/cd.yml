@@ -1,0 +1,65 @@
+name: CD - Entrega Continua
+
+# Se ejecuta al mergear un Pull Request a main (para GitHub un merge es un evento push)
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-containers:
+    name: Validar construcción de imágenes Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir imagen Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Backend
+          push: false
+          tags: sgcub-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Construir imagen Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Frontend/SGCUB
+          push: false
+          tags: sgcub-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job de despliegue: listo para activar cuando definamos el servidor
+  deploy:
+    name: Despliegue en Servidor / Club
+    needs: build-containers
+    runs-on: ubuntu-latest
+    # Activación: cambiar a 'true' (o remover este if) una vez cargados los Secrets en el repo:
+    # (Settings -> Secrets and variables -> Actions: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY)
+    if: false
+    steps:
+      - name: Desplegar vía SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            cd ~/SGCUB
+            git pull origin main
+            docker compose down
+            docker compose up -d --build
+
