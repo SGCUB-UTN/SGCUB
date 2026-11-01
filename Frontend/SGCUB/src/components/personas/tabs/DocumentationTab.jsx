@@ -8,6 +8,7 @@ import PersonaDocumentsTable from '../../documental/PersonaDocumentsTable'
 import { SectionEmpty } from '../../shared/FlushSection'
 import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { KpiColumn, KpiGrid } from '../../shared/Kpi'
+import { ListSkeleton } from '../../shared/Skeleton'
 
 const getEmptyUploadForm = () => ({
   tipo_documento: '',
@@ -188,7 +189,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     }
   }
 
-  if (loading) return <div className="text-base text-on-surface-variant">Cargando documentación...</div>
+  if (loading) return <ListSkeleton label="Cargando documentación..." rows={4} />
 
   const sections = [
     { value: ACTIVE, id: 'documentos-vigentes-title', icon: 'description', title: 'Vigentes', count: documentosActivos.length },

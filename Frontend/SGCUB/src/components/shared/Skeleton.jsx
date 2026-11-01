@@ -65,6 +65,42 @@ export function LineSkeletons({ count = 3, className = 'flex flex-col gap-3' }) 
   )
 }
 
+export function TitleSkeleton({ label }) {
+  return (
+    <SkeletonStatus label={label} className="flex flex-col gap-1.5 py-0.5">
+      <SkeletonBlock className="h-4 w-48" />
+      <SkeletonBlock soft className="h-3 w-64 max-w-full" />
+    </SkeletonStatus>
+  )
+}
+
+export function TextSkeleton({ label, lines = 5 }) {
+  return (
+    <SkeletonStatus label={label} className="flex flex-col gap-2.5">
+      {Array.from({ length: lines }, (_, index) => (
+        <SkeletonBlock key={index} soft className={`h-3.5 ${CELL_WIDTHS[index % CELL_WIDTHS.length]}`} />
+      ))}
+    </SkeletonStatus>
+  )
+}
+
+export function ListSkeleton({ label, rows = 3, avatar = false, className = '' }) {
+  return (
+    <SkeletonStatus label={label} className={`flex flex-col divide-y divide-outline-variant/20 ${className}`}>
+      {Array.from({ length: rows }, (_, index) => (
+        <div key={index} className="flex items-center gap-3 py-3">
+          {avatar && <SkeletonBlock round className="w-9 h-9 shrink-0" />}
+          <div className="flex flex-1 flex-col gap-1.5 min-w-0">
+            <SkeletonBlock className={`h-3.5 ${CELL_WIDTHS[index % CELL_WIDTHS.length]}`} />
+            <SkeletonBlock soft className="h-3 w-1/3" />
+          </div>
+          <SkeletonBlock soft className="h-4 w-20 shrink-0" />
+        </div>
+      ))}
+    </SkeletonStatus>
+  )
+}
+
 export function PanelStatusSkeleton({ label }) {
   return (
     <SkeletonStatus label={label} className="flex flex-col gap-3">
@@ -91,6 +127,34 @@ export function PanelSkeleton({ label, fields = 6 }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {Array.from({ length: fields }, (_, index) => <FieldSkeleton key={index} />)}
       </div>
+    </SkeletonStatus>
+  )
+}
+
+function InputSkeleton() {
+  return (
+    <div className="flex flex-col gap-2">
+      <SkeletonBlock soft className="h-3.5 w-28" />
+      <SkeletonBlock className="h-11 w-full" />
+    </div>
+  )
+}
+
+export function FormSkeleton({ label, sections = 2 }) {
+  return (
+    <SkeletonStatus label={label} className="max-w-5xl mx-auto w-full flex flex-col gap-6 pb-8">
+      <div className="flex flex-col gap-3 mt-2">
+        <SkeletonBlock soft className="h-4 w-56" />
+        <SkeletonBlock className="h-7 w-72 max-w-full" />
+      </div>
+      {Array.from({ length: sections }, (_, section) => (
+        <div key={section} className="bg-surface-container-lowest rounded-xl shadow-sm p-6 flex flex-col gap-5">
+          <SkeletonBlock className="h-5 w-48" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {Array.from({ length: 6 }, (_, index) => <InputSkeleton key={index} />)}
+          </div>
+        </div>
+      ))}
     </SkeletonStatus>
   )
 }

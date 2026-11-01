@@ -11,6 +11,7 @@ import { AuthorizerSelect, OptionCard, SUBMIT_BUTTON_CLASS } from './formParts'
 import RegisterPaymentModal from './RegisterPaymentModal'
 import { availableToRefund, reversalOf } from './refunds'
 import { FULL_CREDIT_NOTE, NEVER_RECEIVED, OTHER_SOCIO, REVERSAL_OUTCOMES, opensPayment } from './reversalOutcomes'
+import ReceiptSkeleton from './ReceiptSkeleton'
 
 const REASON_MAX_LENGTH = 180
 
@@ -266,7 +267,7 @@ function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
       centered
       size="lg"
     >
-      {load.loading && <p className="text-sm text-on-surface-variant">Cargando comprobante...</p>}
+      {load.loading && <ReceiptSkeleton />}
       {load.error && <p className="text-sm text-error" role="alert">{load.error}</p>}
       {detalle && stage === DONE && <ReversalDone detalle={detalle} creditNote={creditNote} onClose={onClose} />}
       {detalle && stage !== DONE && (

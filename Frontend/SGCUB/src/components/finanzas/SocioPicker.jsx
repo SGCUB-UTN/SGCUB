@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import useSocio from '../../hooks/useSocio'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
+import { ListSkeleton } from '../shared/Skeleton'
 
 const MAX_RESULTS = 8
 
@@ -116,7 +117,7 @@ function SocioPicker({
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-on-surface-variant">Cargando socios...</p>}
+      {isLoading && <ListSkeleton label="Cargando socios..." rows={2} avatar className="max-w-2xl" />}
       {error && <p className="text-sm text-error" role="alert">No se pudieron cargar los socios.</p>}
 
       {!compact && results.length > 0 && <ResultsList results={results} onSelect={onSelect} className="max-w-2xl overflow-hidden" />}

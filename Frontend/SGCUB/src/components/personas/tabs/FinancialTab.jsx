@@ -18,6 +18,7 @@ import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useRevertPayment from '../../../hooks/useRevertPayment'
 import useSocioFinances from '../../../hooks/useSocioFinances'
+import { SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../../shared/Skeleton'
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
 
@@ -166,7 +167,23 @@ export function FinancialStatement({ socio, finances }) {
   }, [cuotas, becas])
 
   if (loading) {
-    return <div className="py-16 flex flex-col items-center gap-3 text-on-surface-variant"><span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span><p>Cargando estado de cuenta...</p></div>
+    return (
+      <SkeletonStatus label="Cargando estado de cuenta..." className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="flex flex-col gap-2">
+              <SkeletonBlock soft className="h-3.5 w-28" />
+              <SkeletonBlock className="h-7 w-36" />
+            </div>
+          ))}
+        </div>
+        <table className="w-full">
+          <tbody>
+            <TableSkeletonRows colSpan={5} rows={4} animated={false} />
+          </tbody>
+        </table>
+      </SkeletonStatus>
+    )
   }
 
   if (error) {

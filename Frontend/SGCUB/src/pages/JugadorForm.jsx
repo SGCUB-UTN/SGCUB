@@ -19,6 +19,7 @@ import useEstados from '../hooks/useEstados'
 import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
+import { FormSkeleton } from '../components/shared/Skeleton'
 
 const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
 
@@ -414,14 +415,7 @@ function JugadorForm() {
     )
   }
 
-  if (!formulario) {
-    return (
-      <div className="max-w-5xl mx-auto w-full py-16 flex flex-col items-center gap-3 text-on-surface-variant">
-        <span className="material-symbols-outlined text-xl animate-spin">progress_activity</span>
-        <p className="text-sm">Cargando datos del jugador...</p>
-      </div>
-    )
-  }
+  if (!formulario) return <FormSkeleton label="Cargando datos del jugador..." sections={3} />
 
   const nombreJugador = editando ? `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() : ''
   const dniConError = Boolean(errores.dni) || Boolean(socioDuplicado) || Boolean(jugadorDelSocio)
