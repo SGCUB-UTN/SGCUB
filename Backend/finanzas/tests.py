@@ -64,6 +64,7 @@ from .services import (
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
+	create_credit_note,
 	create_manual_refund,
 	register_income,
 	create_cuota,
@@ -2798,8 +2799,8 @@ class ResumenFinancieroTests(APITestCase):
 			("Bufet", "Efectivo", "10.00"),
 		):
 			register_income(self.socio.pk, concepto, [{"medio_de_pago": medio, "monto": Decimal(monto)}], Decimal(monto))
-		anulado, _ = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
-		revert_payment(anulado.pk, "Carga duplicada", "Tesorera")
+		pago_anulado, self.comprobante_anulado = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
+		revert_payment(pago_anulado.pk, "Carga duplicada", "Tesorera")
 		create_manual_refund(self.socio.pk, "Transferencia de más", Decimal("180.00"), "Transferencia", "Tesorera")
 
 	def resumen(self, **params):
@@ -2846,13 +2847,43 @@ class ResumenFinancieroTests(APITestCase):
 		self.assertEqual(montos["Efectivo"], Decimal("480.00"))
 		self.assertEqual(montos["BilleteraVirtual"], Decimal("0.00"))
 
-	def test_ingresos_extra_y_devoluciones_se_detallan_sin_restar(self):
+	def test_otros_ingresos_y_devoluciones_se_resumen_por_tipo_sin_restar(self):
+		create_credit_note(self.comprobante_anulado.pk, Decimal("100.00"), "Efectivo", "Carga duplicada", "Tesorera")
+
 		data = self.resumen().data
 
 		self.assertEqual(data["ingresos_extra"]["total"], Decimal("380.00"))
-		self.assertEqual(len(data["ingresos_extra"]["movimientos"]), 4)
-		self.assertEqual(data["devoluciones"]["total"], Decimal("180.00"))
-		self.assertEqual(data["devoluciones"]["movimientos"][0]["codigo"], "DEV-X 00000001")
+		self.assertEqual(
+			[(row["nombre"], row["monto"], row["porcentaje"]) for row in data["ingresos_extra"]["conceptos"]],
+			[
+				("Venta de indumentaria", Decimal("300.00"), Decimal("78.9")),
+				("Donación", Decimal("50.00"), Decimal("13.2")),
+				("Rifa", Decimal("20.00"), Decimal("5.3")),
+				("Bufet", Decimal("10.00"), Decimal("2.6")),
+			],
+		)
+		self.assertEqual(data["devoluciones"], {
+			"total": Decimal("280.00"),
+			"notas_credito": {"monto": Decimal("100.00"), "porcentaje": Decimal("35.7"), "cantidad": 1},
+			"manuales": {
+				"monto": Decimal("180.00"),
+				"porcentaje": Decimal("64.3"),
+				"cantidad": 1,
+				"conceptos": [{"nombre": "Transferencia de más", "monto": Decimal("180.00"), "cantidad": 1, "porcentaje": Decimal("64.3")}],
+			},
+		})
+
+	def test_agrupa_los_conceptos_por_su_nombre_sin_el_detalle(self):
+		for detalle, monto in (("Rifa de fin de año", "40.00"), ("Alquiler de cancha", "60.00")):
+			register_income(self.socio.pk, f"Otro ingreso · {detalle}", [{"medio_de_pago": "Efectivo", "monto": Decimal(monto)}], Decimal(monto))
+		create_manual_refund(self.socio.pk, "Otra devolución · Cobro duplicado", Decimal("20.00"), "Efectivo", "Tesorera")
+
+		data = self.resumen().data
+
+		otro = next(row for row in data["ingresos_extra"]["conceptos"] if row["nombre"] == "Otro ingreso")
+		self.assertEqual((otro["monto"], otro["cantidad"]), (Decimal("100.00"), 2))
+		self.assertEqual([row["nombre"] for row in data["devoluciones"]["manuales"]["conceptos"]], ["Transferencia de más", "Otra devolución"])
+		self.assertIn("Otro ingreso", [row["nombre"] for row in data["ingresos"]["origen"]])
 
 	def test_evolucion_de_los_ultimos_doce_periodos(self):
 		evolucion = self.resumen().data["evolucion"]
@@ -2878,7 +2909,7 @@ class ResumenFinancieroTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
 		self.assertIn(f"resumen-financiero-{self.periodo}.pdf", response["Content-Disposition"])
-		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
+		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"Devoluciones manuales", b"Transferencia de m", b"Evoluci"):
 			with self.subTest(texto=texto):
 				self.assertIn(texto, response.content)
 

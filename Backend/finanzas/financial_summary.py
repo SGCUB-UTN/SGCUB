@@ -14,14 +14,17 @@ from .models import (
     ItemCuota,
     ItemPago,
     MedioPago,
+    TipoDevolucionChoices,
     TipoMovimientoChoices,
 )
 from .period_summary import period_summary
-from .services import parse_period, pending_amounts, receipt_code, refund_code
+from .services import parse_period, pending_amounts
 
 ZERO = Decimal("0.00")
 CUOTAS_LABEL = "Cuotas"
 OTHERS_LABEL = "Otros"
+NO_CONCEPT = "Sin concepto"
+CONCEPT_DETAIL_SEPARATOR = " · "
 # Extra income concepts shown on their own in the origin chart; the rest are grouped as "Otros"
 TOP_CONCEPTS = 2
 EVOLUTION_MONTHS = 12
@@ -33,9 +36,24 @@ def percentage(part, total):
     return (part * 100 / total).quantize(Decimal("0.1"))
 
 
-def socio_name(account):
-    person = account.socio.persona
-    return {"socio_id": account.socio_id, "numero_socio": account.socio.numero_socio, "nombre": person.nombre, "apellido": person.apellido}
+def concept_group(concept):
+    return (concept or "").split(CONCEPT_DETAIL_SEPARATOR)[0].strip() or NO_CONCEPT
+
+
+def concept_breakdown(rows, total):
+    groups = {}
+    for row in rows:
+        name = concept_group(row["concepto"])
+        group = groups.setdefault(name.lower(), {"nombre": name, "monto": ZERO, "cantidad": 0})
+        group["monto"] += row["monto"]
+        group["cantidad"] += 1
+    ranked = sorted(groups.values(), key=lambda group: (-group["monto"], group["nombre"]))
+    return [{**group, "porcentaje": percentage(group["monto"], total)} for group in ranked]
+
+
+def amount_share(rows, total):
+    amount = sum((row["monto"] for row in rows), ZERO)
+    return {"monto": amount, "porcentaje": percentage(amount, total), "cantidad": len(rows)}
 
 
 def month_receipts(first_day):
@@ -48,10 +66,7 @@ def month_receipts(first_day):
 
 
 def income_origin(cuotas_total, extra_rows, total):
-    by_concept = {}
-    for row in extra_rows:
-        by_concept[row["concepto"]] = by_concept.get(row["concepto"], ZERO) + row["monto"]
-    ranked = sorted(by_concept.items(), key=lambda pair: pair[1], reverse=True)
+    ranked = [(group["nombre"], group["monto"]) for group in concept_breakdown(extra_rows, total)]
     segments = [(CUOTAS_LABEL, cuotas_total), *ranked[:TOP_CONCEPTS]]
     others = sum((amount for _, amount in ranked[TOP_CONCEPTS:]), ZERO)
     if others:
@@ -65,22 +80,8 @@ def income_origin(cuotas_total, extra_rows, total):
 
 
 def extra_income_rows(receipts):
-    incomes = (
-        receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.INGRESO)
-        .select_related("pago__movimiento__cuenta_corriente__socio__persona")
-        .order_by("fecha_emision", "numero")
-    )
-    return [
-        {
-            "comprobante_id": receipt.pk,
-            "codigo": receipt_code(receipt),
-            "fecha": receipt.fecha_emision,
-            "socio": socio_name(receipt.pago.movimiento.cuenta_corriente),
-            "concepto": receipt.pago.movimiento.concepto,
-            "monto": receipt.monto_total,
-        }
-        for receipt in incomes
-    ]
+    incomes = receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.INGRESO).select_related("pago__movimiento")
+    return [{"concepto": receipt.pago.movimiento.concepto, "monto": receipt.monto_total} for receipt in incomes]
 
 
 def payment_method_rows(receipts, total):
@@ -104,28 +105,17 @@ def payment_method_rows(receipts, total):
     return sorted(rows, key=lambda row: (-row["monto"], row["nombre"]))
 
 
-def refund_rows(first_day):
-    refunds = (
-        Devolucion.objects.filter(fecha__year=first_day.year, fecha__month=first_day.month)
-        .select_related("cuenta_corriente__socio__persona", "comprobante_anulado")
-        .order_by("fecha", "pk")
+def refunds_summary(first_day):
+    refunds = list(
+        Devolucion.objects.filter(fecha__year=first_day.year, fecha__month=first_day.month).values("tipo", "concepto", "monto")
     )
-    names = dict(MedioPago.objects.values_list("codigo", "nombre"))
-    return [
-        {
-            "devolucion_id": refund.pk,
-            "codigo": refund_code(refund),
-            "tipo": refund.tipo,
-            "tipo_nombre": refund.get_tipo_display(),
-            "fecha": refund.fecha,
-            "socio": socio_name(refund.cuenta_corriente),
-            "concepto": refund.concepto,
-            "monto": refund.monto,
-            "medio_de_pago": names.get(refund.medio_de_pago, refund.medio_de_pago),
-            "comprobante_anulado": receipt_code(refund.comprobante_anulado) if refund.comprobante_anulado_id else None,
-        }
-        for refund in refunds
-    ]
+    total = sum((row["monto"] for row in refunds), ZERO)
+    manual = [row for row in refunds if row["tipo"] == TipoDevolucionChoices.MANUAL]
+    return {
+        "total": total,
+        "notas_credito": amount_share([row for row in refunds if row["tipo"] == TipoDevolucionChoices.NOTA_CREDITO], total),
+        "manuales": {**amount_share(manual, total), "conceptos": concept_breakdown(manual, total)},
+    }
 
 
 def cuota_kpis(period):
@@ -197,7 +187,6 @@ def financial_summary(period):
     extra = extra_income_rows(receipts)
     extra_total = sum((row["monto"] for row in extra), ZERO)
     total = cuotas_total + extra_total
-    refunds = refund_rows(first_day)
     return {
         "periodo": first_day.strftime(PERIOD_FORMAT),
         **debt_overview(),
@@ -208,8 +197,8 @@ def financial_summary(period):
             "origen": income_origin(cuotas_total, extra, total),
         },
         "cuotas": cuota_kpis(first_day.strftime(PERIOD_FORMAT)),
-        "ingresos_extra": {"total": extra_total, "movimientos": extra},
+        "ingresos_extra": {"total": extra_total, "conceptos": concept_breakdown(extra, extra_total)},
         "medios_de_pago": {"total": total, "medios": payment_method_rows(receipts, total)},
-        "devoluciones": {"total": sum((row["monto"] for row in refunds), ZERO), "movimientos": refunds},
+        "devoluciones": refunds_summary(first_day),
         "evolucion": collection_evolution(first_day),
     }

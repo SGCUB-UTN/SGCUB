@@ -3,13 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { downloadFinancialSummaryPdf } from '../api/resumenFinanciero'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney, isValidPeriod } from '../components/cuota/cuotaPeriod'
-import ComprobanteDetailModal from '../components/finanzas/ComprobanteDetailModal'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../components/shared/chartMotion'
 import useEntered from '../hooks/useEntered'
-import { formatDate, getErrorMessage } from '../components/personas/format'
+import { getErrorMessage } from '../components/personas/format'
 import CollectionEvolutionChart from '../components/resumen/CollectionEvolutionChart'
 import IncomeOriginChart from '../components/resumen/IncomeOriginChart'
-import DataTable from '../components/shared/DataTable'
 import { KpiColumn, KpiGrid } from '../components/shared/Kpi'
 import PageHeader from '../components/shared/PageHeader'
 import SectionDivider from '../components/shared/SectionDivider'
@@ -19,27 +17,56 @@ import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
 
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded text-sm font-semibold text-on-surface bg-surface-container-lowest hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
-const TOGGLE_BUTTON_CLASS = 'inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent'
+const TOGGLE_BUTTON_CLASS = 'inline-flex items-center justify-center w-8 h-8 rounded-md text-primary hover:bg-primary/5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 
-const socioLabel = (socio) => `${socio.apellido}, ${socio.nombre}`
-
-function TotalLabel({ amount, negative = false }) {
+function TotalLabel({ amount }) {
   return (
     <span className="text-sm text-on-surface-variant">
-      Total:{' '}
-      <strong className={`text-base tabular-nums ${negative && Number(amount) > 0 ? 'text-error' : 'text-on-surface'}`}>
-        {negative && Number(amount) > 0 ? '−' : ''}{formatMoney(amount)}
-      </strong>
+      Total: <strong className="text-base tabular-nums text-on-surface">{formatMoney(amount)}</strong>
     </span>
   )
 }
 
-function ToggleButton({ expanded, count, controls, onToggle }) {
+function ToggleButton({ expanded, controls, label }) {
+  const action = `${expanded ? 'Ocultar' : 'Desplegar'} ${label}`
   return (
-    <button type="button" onClick={onToggle} aria-expanded={expanded} aria-controls={controls} disabled={!count} className={TOGGLE_BUTTON_CLASS}>
-      {expanded ? 'Ocultar' : `Desplegar (${count})`}
-      <span className={`material-symbols-outlined text-[18px] transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      aria-label={action}
+      title={action}
+      className={TOGGLE_BUTTON_CLASS}
+    >
+      <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 22 }} aria-hidden="true">expand_more</span>
     </button>
+  )
+}
+
+function CollapsibleSection({ id, icon, title, total, label, expanded, isEmpty, emptyText, onToggle, children }) {
+  const contentId = `${id}-content`
+  return (
+    <section className={PANEL_CLASS} aria-labelledby={`${id}-title`}>
+      <div onClick={onToggle}>
+        <SectionHeading
+          id={`${id}-title`}
+          icon={icon}
+          title={title}
+          className={`${expanded ? HEADING_CLASS : 'px-4 sm:px-5'} cursor-pointer transition-colors hover:bg-surface-container`}
+          actions={(
+            <>
+              <TotalLabel amount={total} />
+              <ToggleButton expanded={expanded} controls={contentId} label={label} />
+            </>
+          )}
+        />
+      </div>
+      {expanded && (
+        <div id={contentId}>
+          {isEmpty ? <p className="px-4 sm:px-5 py-4 text-sm text-on-surface-variant">{emptyText}</p> : children}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -114,79 +141,59 @@ function PaymentMethodRows({ methods }) {
   )
 }
 
-function ExtraIncomeTable({ movements, onOpen }) {
+const BREAKDOWN_CELL_Y = 'py-2.5'
+const BREAKDOWN_CELL_X = 'px-4 sm:px-5'
+
+function BreakdownRow({ label, porcentaje, monto, variant = 'row' }) {
+  const strong = variant === 'total'
+  const nested = variant === 'nested'
+  const labelTone = strong ? 'font-bold text-on-surface' : nested ? 'font-normal text-on-surface-variant' : 'font-semibold text-on-surface'
   return (
-    <DataTable
-      tableClassName="min-w-[680px]"
-      headers={(
-        <>
-          <th className="py-2.5 px-4" scope="col">Comprobante</th>
-          <th className="py-2.5 px-4" scope="col">Fecha</th>
-          <th className="py-2.5 px-4" scope="col">Socio</th>
-          <th className="py-2.5 px-4" scope="col">Concepto</th>
-          <th className="py-2.5 px-4 text-right" scope="col">Monto</th>
-        </>
-      )}
-    >
-      {movements.map((movement) => (
-        <tr
-          key={movement.comprobante_id}
-          tabIndex={0}
-          role="button"
-          onClick={() => onOpen(movement.comprobante_id)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              onOpen(movement.comprobante_id)
-            }
-          }}
-          className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
-        >
-          <td className="py-2.5 px-4 font-semibold text-primary whitespace-nowrap">{movement.codigo}</td>
-          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
-          <td className="py-2.5 px-4 text-on-surface">{socioLabel(movement.socio)}</td>
-          <td className="py-2.5 px-4 text-on-surface">{movement.concepto}</td>
-          <td className="py-2.5 px-4 text-right font-semibold tabular-nums text-emerald-700 whitespace-nowrap">+ {formatMoney(movement.monto)}</td>
-        </tr>
-      ))}
-    </DataTable>
+    <tr className={strong ? 'bg-surface-container-low' : 'border-t border-outline-variant/30'}>
+      <th scope="row" className={`${BREAKDOWN_CELL_Y} pr-4 sm:pr-5 ${nested ? 'pl-10 sm:pl-11' : 'pl-4 sm:pl-5'} text-left ${labelTone}`}>
+        {label}
+      </th>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} w-28 text-right tabular-nums ${strong ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}>
+        {formatPercentage(porcentaje)}
+      </td>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} w-44 text-right tabular-nums text-on-surface whitespace-nowrap ${strong ? 'font-bold' : nested ? '' : 'font-semibold'}`}>
+        {formatMoney(monto)}
+      </td>
+    </tr>
   )
 }
 
-function RefundsTable({ movements }) {
+function BreakdownTable({ label, total, rows }) {
   return (
-    <DataTable
-      tableClassName="min-w-[760px]"
-      headers={(
-        <>
-          <th className="py-2.5 px-4" scope="col">Comprobante</th>
-          <th className="py-2.5 px-4" scope="col">Fecha</th>
-          <th className="py-2.5 px-4" scope="col">Socio</th>
-          <th className="py-2.5 px-4" scope="col">Concepto</th>
-          <th className="py-2.5 px-4" scope="col">Medio</th>
-          <th className="py-2.5 px-4 text-right" scope="col">Monto</th>
-        </>
-      )}
-    >
-      {movements.map((movement) => (
-        <tr key={movement.devolucion_id}>
-          <td className="py-2.5 px-4 whitespace-nowrap">
-            <span className="block font-semibold text-on-surface">{movement.codigo}</span>
-            <span className="block text-xs text-on-surface-variant">{movement.tipo_nombre}</span>
-          </td>
-          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
-          <td className="py-2.5 px-4 text-on-surface">{socioLabel(movement.socio)}</td>
-          <td className="py-2.5 px-4 text-on-surface">
-            {movement.concepto}
-            {movement.comprobante_anulado && <span className="block text-xs text-on-surface-variant">Sobre {movement.comprobante_anulado}</span>}
-          </td>
-          <td className="py-2.5 px-4 text-on-surface-variant whitespace-nowrap">{movement.medio_de_pago}</td>
-          <td className="py-2.5 px-4 text-right font-semibold tabular-nums text-error whitespace-nowrap">− {formatMoney(movement.monto)}</td>
+    <table className="w-full text-sm">
+      <thead className="sr-only">
+        <tr>
+          <th scope="col">Tipo</th>
+          <th scope="col">Porcentaje</th>
+          <th scope="col">Monto</th>
         </tr>
-      ))}
-    </DataTable>
+      </thead>
+      <tbody>
+        <BreakdownRow label={label} porcentaje={100} monto={total} variant="total" />
+        {rows.map(({ key, ...row }) => <BreakdownRow key={key} {...row} />)}
+      </tbody>
+    </table>
   )
 }
+
+const conceptRows = (concepts, variant, prefix = '') => concepts.map((concept) => ({
+  key: `${prefix}${concept.nombre}`,
+  label: concept.nombre,
+  porcentaje: concept.porcentaje,
+  monto: concept.monto,
+  variant,
+}))
+
+const refundRows = (refunds) => [
+  { key: 'notas-credito', label: 'Notas de crédito', porcentaje: refunds.notas_credito.porcentaje, monto: refunds.notas_credito.monto },
+  { key: 'manuales', label: 'Devoluciones manuales', porcentaje: refunds.manuales.porcentaje, monto: refunds.manuales.monto },
+  ...conceptRows(refunds.manuales.conceptos, 'nested', 'manual-'),
+]
 
 function LoadingPanel() {
   return (
@@ -201,11 +208,10 @@ function ResumenFinanciero() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
   const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
-  const { data, isLoading, error, reload } = useResumenFinanciero(period)
+  const { data, isLoading, error } = useResumenFinanciero(period)
   const [expanded, setExpanded] = useState({ incomes: false, refunds: false })
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
-  const [comprobanteId, setComprobanteId] = useState(null)
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
   const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }))
@@ -266,25 +272,23 @@ function ResumenFinanciero() {
             </section>
           </div>
 
-          <section className={PANEL_CLASS} aria-labelledby="extra-income-title">
-            <SectionHeading
-              id="extra-income-title"
-              icon="point_of_sale"
-              title="Movimientos de ingresos extra (no incluye cuotas)"
-              className={expanded.incomes ? HEADING_CLASS : 'px-4 sm:px-5'}
-              actions={(
-                <>
-                  <TotalLabel amount={data.ingresos_extra.total} />
-                  <ToggleButton expanded={expanded.incomes} count={data.ingresos_extra.movimientos.length} controls="extra-income-list" onToggle={() => toggle('incomes')} />
-                </>
-              )}
+          <CollapsibleSection
+            id="extra-income"
+            icon="point_of_sale"
+            title="Otros ingresos"
+            total={data.ingresos_extra.total}
+            label="otros ingresos"
+            expanded={expanded.incomes}
+            isEmpty={data.ingresos_extra.conceptos.length === 0}
+            emptyText="No hubo otros ingresos en el período."
+            onToggle={() => toggle('incomes')}
+          >
+            <BreakdownTable
+              label="Otros ingresos"
+              total={data.ingresos_extra.total}
+              rows={conceptRows(data.ingresos_extra.conceptos, 'row')}
             />
-            {expanded.incomes && (
-              <div id="extra-income-list">
-                <ExtraIncomeTable movements={data.ingresos_extra.movimientos} onOpen={setComprobanteId} />
-              </div>
-            )}
-          </section>
+          </CollapsibleSection>
 
           <section className={PANEL_CLASS} aria-labelledby="payment-methods-title">
             <SectionHeading
@@ -299,28 +303,22 @@ function ResumenFinanciero() {
             </div>
           </section>
 
-          <section className={PANEL_CLASS} aria-labelledby="refunds-title">
-            <SectionHeading
-              id="refunds-title"
-              icon="currency_exchange"
-              title="Devoluciones y ajustes"
-              className={expanded.refunds ? HEADING_CLASS : 'px-4 sm:px-5'}
-              actions={(
-                <>
-                  <TotalLabel amount={data.devoluciones.total} negative />
-                  <ToggleButton expanded={expanded.refunds} count={data.devoluciones.movimientos.length} controls="refunds-list" onToggle={() => toggle('refunds')} />
-                </>
-              )}
-            />
-            {expanded.refunds && (
-              <div id="refunds-list">
-                <RefundsTable movements={data.devoluciones.movimientos} />
-                <p className="px-4 sm:px-5 py-3 border-t border-outline-variant/30 text-sm text-on-surface-variant">
-                  Las devoluciones no restan de los ingresos: el dinero devuelto nunca se registró como ingreso o salió de un comprobante anulado.
-                </p>
-              </div>
-            )}
-          </section>
+          <CollapsibleSection
+            id="refunds"
+            icon="currency_exchange"
+            title="Devoluciones"
+            total={data.devoluciones.total}
+            label="devoluciones"
+            expanded={expanded.refunds}
+            isEmpty={Number(data.devoluciones.total) === 0}
+            emptyText="No hubo devoluciones en el período."
+            onToggle={() => toggle('refunds')}
+          >
+            <BreakdownTable label="Devoluciones" total={data.devoluciones.total} rows={refundRows(data.devoluciones)} />
+            <p className="px-4 sm:px-5 py-3 border-t border-outline-variant/30 text-sm text-on-surface-variant">
+              Las devoluciones no restan de los ingresos: el dinero devuelto nunca se registró como ingreso o salió de un comprobante anulado.
+            </p>
+          </CollapsibleSection>
 
           <SectionDivider>Contexto histórico</SectionDivider>
 
@@ -333,12 +331,6 @@ function ResumenFinanciero() {
         </div>
       )}
 
-      <ComprobanteDetailModal
-        comprobanteId={comprobanteId}
-        opened={Boolean(comprobanteId)}
-        onClose={() => setComprobanteId(null)}
-        onChanged={reload}
-      />
     </div>
   )
 }
