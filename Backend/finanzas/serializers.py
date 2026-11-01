@@ -70,6 +70,7 @@ def socio_data(socio):
         "nombre": socio.persona.nombre,
         "apellido": socio.persona.apellido,
         "dni": socio.persona.dni,
+        "telefono": socio.persona.telefono,
     }
 
 

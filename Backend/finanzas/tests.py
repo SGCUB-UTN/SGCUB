@@ -2409,6 +2409,17 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(comprobantes[0]["estado"], "Anulado")
 		self.assertEqual(comprobantes[0]["motivo_anulacion"], "Se cargó dos veces")
 
+	def test_lista_y_detalle_incluyen_telefono_del_socio(self):
+		self.socio.persona.telefono = "2215556677"
+		self.socio.persona.save()
+		detalle = self.pagar("2500.00")
+		comprobantes, _ = self.list_comprobantes()
+		self.assertEqual(comprobantes[0]["socio"]["telefono"], "2215556677")
+
+		response = self.client.get(reverse("comprobante-detail", args=[detalle["comprobante_id"]]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["socio"]["telefono"], "2215556677")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 
@@ -2515,6 +2526,13 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		response = self.client.get(reverse("comprobante-pdf", args=[999999]))
 
 		self.assertEqual(response.status_code, 404)
+
+	def test_recibo_pdf_incluye_telefono_si_esta_cargado(self):
+		self.socio.persona.telefono = "2215556677"
+		self.socio.persona.save()
+		detalle = self.pagar("2500.00")
+		response = self.descargar(detalle["numero"])
+		self.assertIn(b"2215556677", response.content)
 
 	def test_formato_de_importes(self):
 		self.assertEqual(format_amount(Decimal("1234567.5")), "$ 1.234.567,50")

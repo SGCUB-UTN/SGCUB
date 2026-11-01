@@ -1,3 +1,4 @@
+import os
 from io import BytesIO
 from xml.sax.saxutils import escape
 
@@ -6,8 +7,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer
 
+from configuracion.models import ConfiguracionGeneral
 from configuracion.services import club_details, club_name
 
 from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
@@ -81,12 +83,34 @@ def methods_table(methods):
     )
 
 
+def get_club_logo_flowable(max_width=40 * mm, max_height=20 * mm):
+    try:
+        config = ConfiguracionGeneral.load()
+        if config.club_logo and hasattr(config.club_logo, "path") and os.path.exists(config.club_logo.path):
+            ext = os.path.splitext(config.club_logo.path)[1].lower()
+            if ext in [".png", ".jpg", ".jpeg"]:
+                img = Image(config.club_logo.path)
+                aspect = img.imageHeight / float(img.imageWidth)
+                w = min(max_width, max_height / aspect)
+                h = w * aspect
+                img.drawWidth = w
+                img.drawHeight = h
+                return img
+    except Exception:
+        pass
+    return None
+
+
 def render_document(title, number, issued, socio, notes, sections, footer):
     """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
     styles = document_styles()
     socio = socio or {}
     number_str = f"{number:08d}" if isinstance(number, int) else str(number)
-    story = [
+    logo = get_club_logo_flowable()
+    story = []
+    if logo is not None:
+        story += [logo, Spacer(1, 3 * mm)]
+    story += [
         Paragraph(escape(club_name()), styles["subtitle"]),
         *([Paragraph(escape(details), styles["subtitle"])] if (details := club_details()) else []),
         Paragraph(f"{title} - N° {number_str}", styles["title"]),
@@ -95,14 +119,20 @@ def render_document(title, number, issued, socio, notes, sections, footer):
     ]
     for note in notes:
         story += [Spacer(1, 4 * mm), Paragraph(escape(note), styles["cancelled"])]
+
+    socio_headers = ["Apellido y nombre", "DNI", "N° de socio"]
+    socio_row = [f"{socio.get('apellido', '')}, {socio.get('nombre', '')}", socio.get("dni", ""), str(socio.get("numero_socio", ""))]
+    col_widths = [WIDTH * 0.5, WIDTH * 0.25, WIDTH * 0.25]
+    if socio.get("telefono"):
+        socio_headers.append("Teléfono")
+        socio_row.append(str(socio.get("telefono")))
+        col_widths = [WIDTH * 0.4, WIDTH * 0.2, WIDTH * 0.2, WIDTH * 0.2]
+
     story += [
         Paragraph("Socio", styles["section"]),
         table(
-            [
-                ["Apellido y nombre", "DNI", "N° de socio"],
-                [f"{socio.get('apellido', '')}, {socio.get('nombre', '')}", socio.get("dni", ""), str(socio.get("numero_socio", ""))],
-            ],
-            [WIDTH * 0.5, WIDTH * 0.25, WIDTH * 0.25],
+            [socio_headers, socio_row],
+            col_widths,
         ),
     ]
     for heading, content in sections:
