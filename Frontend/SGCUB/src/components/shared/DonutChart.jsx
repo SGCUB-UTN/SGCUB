@@ -28,6 +28,7 @@ export default function DonutChart({
   centerValue,
   activeKey = null,
   onActiveChange,
+  onSelect,
 }) {
   const entered = useEntered()
   const radius = (size - stroke - ACTIVE_GROWTH) / 2
@@ -63,6 +64,7 @@ export default function DonutChart({
             strokeDashoffset={-arc.offset}
             onMouseEnter={() => onActiveChange?.(arc.key)}
             onMouseLeave={() => onActiveChange?.(null)}
+            onClick={onSelect ? () => onSelect(arc.key) : undefined}
           />
         ))}
       </svg>

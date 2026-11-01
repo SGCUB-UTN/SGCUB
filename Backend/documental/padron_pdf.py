@@ -31,7 +31,7 @@ COLUMN_SHARES = (0.24, 0.10, 0.10, 0.20, 0.16, 0.10, 0.10)
 HEADERS = ["Jugador activo / Docente", "DNI", "Perfil", "Categoría", "Documento requerido", "Estado", "Vencimiento"]
 STATE_LABELS = {VIGENTE: "Vigente", POR_VENCER: "Próximo a vencer", VENCIDO: "Vencido", FALTANTE: "Faltante"}
 PROFILE_LABELS = {PERFIL_JUGADOR: "Jugador activo", PERFIL_DOCENTE: "Docente"}
-FILTER_STATE_LABELS = {None: "Todos los documentos", VENCIDO: "Vencidos", POR_VENCER: "Próximos a vencer", FALTANTE: "Faltantes"}
+FILTER_STATE_LABELS = {None: "Todos los documentos", VENCIDO: "Vencidos", POR_VENCER: "Próximos a vencer", FALTANTE: "Faltantes", VIGENTE: "Vigentes"}
 FILTER_PROFILE_LABELS = {None: "Todos", PERFIL_JUGADOR: "Jugadores activos", PERFIL_DOCENTE: "Docentes"}
 FILTER_GENDER_LABELS = {"M": "Todas las masculinas", "F": "Todas las femeninas"}
 

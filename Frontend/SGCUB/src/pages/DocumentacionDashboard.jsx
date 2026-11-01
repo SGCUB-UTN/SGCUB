@@ -121,10 +121,14 @@ export default function DocumentacionDashboard() {
     }
   }
 
-  const selectCategory = (categoriaId) => {
-    setFilters({ ...INITIAL_FILTERS, categoria: String(categoriaId) })
+  const showTable = (nextFilters) => {
+    setFilters(nextFilters)
     document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  const selectCategory = (categoriaId) => showTable({ ...INITIAL_FILTERS, categoria: String(categoriaId) })
+
+  const selectState = (estado) => showTable({ ...filters, estado })
 
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
@@ -173,7 +177,7 @@ export default function DocumentacionDashboard() {
             <div className={SECTION_CLASS}>
               <KpiGrid columns={3}>
                 <PadronComplianceChart resumen={resumen} />
-                <DocumentStatusChart counts={resumen.documentos} />
+                <DocumentStatusChart counts={resumen.documentos} onSelect={selectState} />
                 <DocumentAffectedCategories categories={resumen.categorias_afectadas} onSelect={selectCategory} />
               </KpiGrid>
             </div>

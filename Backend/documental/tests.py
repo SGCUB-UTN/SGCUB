@@ -326,7 +326,7 @@ class PadronDocumentalTests(APITestCase):
         self.assertNotIn(b"71000072", response.content)
 
     def test_el_reporte_rechaza_filtros_invalidos(self):
-        for params in ({"estado": "vigente"}, {"perfil": "socio"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
+        for params in ({"estado": "aprobado"}, {"perfil": "socio"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
             with self.subTest(params=params):
                 self.assertEqual(self.reporte(**params).status_code, 400)
 

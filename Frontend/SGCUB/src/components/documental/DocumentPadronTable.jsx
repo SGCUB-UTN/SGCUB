@@ -43,6 +43,7 @@ const TABS = [
   { value: DOCUMENT_STATES.VENCIDO, label: 'Vencidos', emptyText: 'No hay documentos vencidos.', badgeClass: 'bg-error-container text-on-error-container' },
   { value: DOCUMENT_STATES.POR_VENCER, label: 'Próximos a vencer', emptyText: 'No hay documentos próximos a vencer.', badgeClass: 'bg-amber-100 text-amber-800' },
   { value: DOCUMENT_STATES.FALTANTE, label: 'Faltantes', emptyText: 'No hay documentos faltantes.' },
+  { value: DOCUMENT_STATES.VIGENTE, label: 'Vigentes', emptyText: 'No hay documentos vigentes.' },
 ]
 
 const PROFILE_FILTERS = [
