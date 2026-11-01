@@ -29,7 +29,7 @@ export default function PadronComplianceChart({ resumen }) {
   return (
     <div className="min-w-0 h-full flex flex-col">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Resumen del padrón</h3>
-      <div className="mt-2 flex items-center gap-4">
+      <div className="mt-2 flex-1 flex items-center gap-4">
         <DonutChart
           segments={segments}
           total={resumen.total}

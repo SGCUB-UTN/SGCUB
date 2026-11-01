@@ -3,7 +3,7 @@ import { formatCount, formatPercentage } from '../cuota/cuotaPeriod'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { shareOf } from '../finanzas/cashFormat'
 
-const LIST_HEIGHT_CLASS = 'max-h-[13.5rem]'
+const LIST_HEIGHT_CLASS = 'max-h-[10.75rem]'
 
 function CategoryBar({ category, onSelect }) {
   const entered = useEntered()

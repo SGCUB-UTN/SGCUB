@@ -27,7 +27,7 @@ export default function DocumentStatusChart({ counts }) {
   return (
     <div className="min-w-0 h-full flex flex-col">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Resumen de documentos</h3>
-      <div className="mt-2 flex items-center gap-4">
+      <div className="mt-2 flex-1 flex items-center gap-4">
         <DonutChart
           segments={segments}
           total={total}
