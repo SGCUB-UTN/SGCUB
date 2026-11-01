@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES, NO_CATEGORY_VALUE, findGender } from '../cuota/cuotaCategories'
+import { ALL_CATEGORIES, NO_CATEGORY_VALUE, findGender } from '../shared/categoryFilters'
 import { matchesSearch } from '../shared/search'
 
 export const DOCUMENT_STATES = {

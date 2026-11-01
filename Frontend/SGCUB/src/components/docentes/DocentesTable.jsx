@@ -7,6 +7,8 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import CategoryFilter from '../shared/CategoryFilter'
+import { ALL_CATEGORIES, NO_CATEGORY_VALUE } from '../shared/categoryFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
@@ -15,6 +17,17 @@ import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
+const GENDER_PREFIX = 'gender:'
+
+const matchesDocenteCategory = (docenteCategorias, value) => {
+  if (value === ALL_CATEGORIES) return true
+  if (value === NO_CATEGORY_VALUE) return docenteCategorias.length === 0
+  if (value.startsWith(GENDER_PREFIX)) {
+    const gender = value.slice(GENDER_PREFIX.length)
+    return docenteCategorias.some((item) => item.genero === gender)
+  }
+  return docenteCategorias.some((item) => String(item.categoria_id) === value)
+}
 
 const fullName = (docente) =>
   [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido].filter(Boolean).join(' ')
@@ -33,9 +46,25 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [cargo, setCargo] = useState('todos')
-  const [category, setCategory] = useState('todas')
+  const [category, setCategory] = useState(ALL_CATEGORIES)
 
   const docentes = useMemo(() => data ?? [], [data])
+
+  const categoryOptions = useMemo(
+    () => categorias
+      .filter((item) => item.categoria_id)
+      .map((item) => ({
+        value: String(item.categoria_id),
+        name: item.nombre,
+        gender: item.genero ?? '',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true })),
+    [categorias],
+  )
+  const hasUncategorized = useMemo(
+    () => docentes.some((docente) => (categoriasPorDocente[docente.docente_id] ?? []).length === 0),
+    [docentes, categoriasPorDocente],
+  )
 
   const availableCargos = useMemo(
     () => cargosDe(Object.values(categoriasPorDocente).flat()).sort(),
@@ -47,7 +76,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
     return docentes.filter((docente) => {
       const docenteCategorias = categoriasPorDocente[docente.docente_id] ?? []
       if (cargo !== 'todos' && !cargosDe(docenteCategorias).includes(cargo)) return false
-      if (category !== 'todas' && !docenteCategorias.some((item) => String(item.categoria_id) === category)) return false
+      if (!matchesDocenteCategory(docenteCategorias, category)) return false
       if (status === 'activo' && !esActivo(docente)) return false
       if (status === 'baja' && esActivo(docente)) return false
       if (!text) return true
@@ -83,15 +112,12 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
             <option value="todos">Cargo: Todos</option>
             {availableCargos.map((item) => <option key={item} value={item}>{item}</option>)}
           </FilterSelect>
-          <FilterSelect
-            className={FILTER_CLASS}
+          <CategoryFilter
             value={category}
-            onChange={(event) => withPageReset(setCategory)(event.target.value)}
-            aria-label="Filtrar por categoría"
-          >
-            <option value="todas">Categoría: Todas</option>
-            {categorias.map((item) => <option key={item.categoria_id} value={item.categoria_id}>{item.nombre}</option>)}
-          </FilterSelect>
+            categories={categoryOptions}
+            hasUncategorized={hasUncategorized}
+            onChange={withPageReset(setCategory)}
+          />
           <FilterSelect
             className={FILTER_CLASS}
             value={status}

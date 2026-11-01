@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import FilterSelect from '../shared/FilterSelect'
-import CategoryFilter from '../cuota/CategoryFilter'
-import { ALL_CATEGORIES } from '../cuota/cuotaCategories'
+import CategoryFilter from '../shared/CategoryFilter'
+import { ALL_CATEGORIES } from '../shared/categoryFilters'
 import {
   AFFILIATIONS,
   PERIOD_TYPES,
