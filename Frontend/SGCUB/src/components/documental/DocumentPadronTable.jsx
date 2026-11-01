@@ -6,10 +6,9 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
-import TableTabs from '../shared/TableTabs'
-import { tabPanelId } from '../shared/tabIds'
 import CategoryFilter from '../cuota/CategoryFilter'
 import { NO_CATEGORY } from '../cuota/cuotaCategories'
+import { formatCount } from '../cuota/cuotaPeriod'
 import { formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
@@ -26,16 +25,17 @@ import {
   personaName,
 } from './padronDocumental'
 
-const TABLE_ID = 'documental-padron'
+const TABLE_PANEL_ID = 'documental-padron-panel'
 const COLUMN_COUNT = 6
 const HEADER_CLASS = 'py-3 px-4'
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
+const TAB_CLASS = 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container-low'
 const ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-on-surface-variant'
 
 const TABS = [
   { value: ALL, label: 'Todos los documentos', emptyText: 'No hay documentos obligatorios para jugadores activos ni docentes.' },
-  { value: DOCUMENT_STATES.VENCIDO, label: 'Vencidos', emptyText: 'No hay documentos vencidos.' },
-  { value: DOCUMENT_STATES.POR_VENCER, label: 'Próximos a vencer', emptyText: 'No hay documentos próximos a vencer.' },
+  { value: DOCUMENT_STATES.VENCIDO, label: 'Vencidos', emptyText: 'No hay documentos vencidos.', badgeClass: 'bg-error-container text-on-error-container' },
+  { value: DOCUMENT_STATES.POR_VENCER, label: 'Próximos a vencer', emptyText: 'No hay documentos próximos a vencer.', badgeClass: 'bg-amber-100 text-amber-800' },
   { value: DOCUMENT_STATES.FALTANTE, label: 'Faltantes', emptyText: 'No hay documentos faltantes.' },
 ]
 
@@ -72,6 +72,32 @@ function DueDateCell({ row }) {
         <span className="block text-xs font-semibold text-amber-700">{days === 0 ? 'Vence hoy' : `Vence en ${plural(days, 'día', 'días')}`}</span>
       )}
     </>
+  )
+}
+
+function DocumentTabs({ tabs, value, onChange }) {
+  return (
+    <div role="tablist" aria-label="Estado del documento" className="flex gap-1 overflow-x-auto px-4 sm:px-5 border-b border-outline-variant/30">
+      {tabs.map((tab) => {
+        const active = tab.value === value
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={TABLE_PANEL_ID}
+            onClick={() => onChange(tab.value)}
+            className={`${TAB_CLASS} -mb-px ${active ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
+          >
+            {tab.label}
+            <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${tab.badgeClass ?? (active ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant')}`}>
+              {formatCount(tab.count)}
+            </span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -152,9 +178,9 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
         )}
       </div>
 
-      <TableTabs id={TABLE_ID} label="Estado del documento" options={tabs} value={filters.estado} onChange={change('estado')} />
+      <DocumentTabs tabs={tabs} value={filters.estado} onChange={change('estado')} />
 
-      <div id={tabPanelId(TABLE_ID)} role="tabpanel" aria-label={`Documentos: ${activeTab.label}`}>
+      <div id={TABLE_PANEL_ID} role="tabpanel" aria-label={`Documentos: ${activeTab.label}`}>
         <DataTable
           headers={(
             <>

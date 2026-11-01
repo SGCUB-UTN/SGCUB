@@ -3,11 +3,13 @@ import { formatCount, formatPercentage } from '../cuota/cuotaPeriod'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { shareOf } from '../finanzas/cashFormat'
 
+const LIST_HEIGHT_CLASS = 'max-h-[13.5rem]'
+
 function CategoryBar({ category, onSelect }) {
   const entered = useEntered()
   const share = shareOf(category.inhabilitados, category.total)
   return (
-    <li className="flex">
+    <li className="flex shrink-0">
       <button
         type="button"
         onClick={() => onSelect(category.categoria_id)}
@@ -36,7 +38,7 @@ export default function DocumentAffectedCategories({ categories, onSelect }) {
       {categories.length === 0 ? (
         <p className="mt-2 text-sm text-on-surface-variant">Ninguna categoría tiene jugadores o docentes inhabilitados.</p>
       ) : (
-        <ol className="mt-1 flex flex-col gap-1" aria-label="Inhabilitados por categoría">
+        <ol className={`mt-1 -mx-2 pl-2 pr-3 flex flex-col gap-1 overflow-y-auto thin-scroll ${LIST_HEIGHT_CLASS}`} aria-label="Inhabilitados por categoría">
           {categories.map((category) => <CategoryBar key={category.categoria_id} category={category} onSelect={onSelect} />)}
         </ol>
       )}

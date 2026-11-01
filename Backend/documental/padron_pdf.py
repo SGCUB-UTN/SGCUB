@@ -25,6 +25,7 @@ from .services import (
 )
 
 PAGE_SIZE = landscape(A4)
+MOST_AFFECTED_LIMIT = 5
 MARGIN = 15 * mm
 COLUMN_SHARES = (0.24, 0.10, 0.10, 0.20, 0.16, 0.10, 0.10)
 HEADERS = ["Jugador activo / Docente", "DNI", "Perfil", "Categoría", "Documento requerido", "Estado", "Vencimiento"]
@@ -58,7 +59,7 @@ def summary_lines(summary):
     ]
     if summary["categorias_afectadas"]:
         lines.append("Categorías más afectadas: " + ", ".join(
-            f"{item['categoria']} ({item['inhabilitados']} de {item['total']})" for item in summary["categorias_afectadas"]
+            f"{item['categoria']} ({item['inhabilitados']} de {item['total']})" for item in summary["categorias_afectadas"][:MOST_AFFECTED_LIMIT]
         ))
     return lines
 

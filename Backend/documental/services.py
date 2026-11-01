@@ -28,7 +28,6 @@ PROFILES = (PERFIL_JUGADOR, PERFIL_DOCENTE)
 NO_CATEGORY = "none"
 GENDER_PREFIX = "gender:"
 GENDER_LABELS = {"M": "Masc.", "F": "Fem."}
-MOST_AFFECTED_LIMIT = 5
 
 
 class PadronFilterError(ValueError):
@@ -193,7 +192,7 @@ def most_affected_categories(personas, disabled):
     affected = Counter(categoria["categoria_id"] for persona in disabled for categoria in persona["categorias"])
     return [
         {"categoria_id": categoria_id, "categoria": labels[categoria_id], "inhabilitados": count, "total": totals[categoria_id]}
-        for categoria_id, count in sorted(affected.items(), key=lambda item: (-item[1], labels[item[0]]))[:MOST_AFFECTED_LIMIT]
+        for categoria_id, count in sorted(affected.items(), key=lambda item: (-item[1], labels[item[0]]))
     ]
 
 
