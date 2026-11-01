@@ -114,12 +114,11 @@ export default function Comunicaciones() {
     const envios_mes = kpis?.envios_mes ?? 0
 
     return {
-      envios_mes: kpis?.envios_mes ?? 0,
+      envios_mes,
       mensajes_entregados: kpis?.mensajes_entregados ?? 0,
       tasa_entrega: tasa,
       canales_activos_texto: 'Email corporativo y WhatsApp',
       sin_contacto: sinContactoCount,
-      envios_mes: envios_mes,
     }
   }, [kpis, excluidos, socios])
 

@@ -8,13 +8,6 @@ import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 
-const DATE_LABEL = new Date().toLocaleDateString('es-AR', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-
 export default function Principal() {
   const { openPayment } = useRegisterPayment()
   const [movimientoAbierto, setMovimientoAbierto] = useState(false)

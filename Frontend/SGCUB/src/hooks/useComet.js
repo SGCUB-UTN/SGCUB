@@ -65,6 +65,8 @@ export function useCometLogs(params = {}) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const paramsKey = JSON.stringify(params)
+
   const cargar = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -75,7 +77,8 @@ export function useCometLogs(params = {}) {
     } finally {
       setIsLoading(false)
     }
-  }, [JSON.stringify(params)])  // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey])
 
   useEffect(() => {
     cargar()
