@@ -2,14 +2,27 @@ import io
 import shutil
 import tempfile
 import zipfile
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from padron.models import Persona
+from padron.models import (
+    ESTADO_ADMINISTRATIVO_INACTIVO,
+    ESTADO_DEPORTIVO_INACTIVO,
+    Categoria,
+    Docente,
+    DocenteCategoria,
+    EstadoAdministrativo,
+    EstadoDeportivo,
+    Jugador,
+    Persona,
+    Socio,
+)
 
 from .models import Documento, EstadoDocumento, TipoDocumento
 
@@ -157,3 +170,130 @@ class DescargaZipTests(APITestCase):
 
     def test_rechaza_un_alcance_desconocido(self):
         self.assertEqual(self.descargar(alcance="otros").status_code, 400)
+
+
+class PadronDocumentalTests(APITestCase):
+    def setUp(self):
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="administrativo"))
+        TipoDocumento.objects.update(obligatorio=False)
+        self.apto = TipoDocumento.objects.create(nombre="Apto test", obligatorio=True, aplica_docente=False)
+        self.seguro = TipoDocumento.objects.create(nombre="Seguro test", obligatorio=True)
+        self.cv = TipoDocumento.objects.create(nombre="CV test", obligatorio=True, aplica_jugador=False)
+        self.sub12 = Categoria.objects.create(nombre="Sub 12")
+        self.sub14 = Categoria.objects.create(nombre="Sub 14")
+        self.vigente = EstadoDocumento.objects.get(nombre="Vigente")
+
+    def jugador(self, dni, activo=True):
+        jugador = Jugador.objects.create(
+            socio=Socio.objects.create(persona=Persona.objects.create(nombre="Jugador", apellido=dni, dni=dni)),
+            categoria=self.sub12,
+        )
+        if not activo:
+            jugador.estado = EstadoDeportivo.objects.get_or_create(nombre=ESTADO_DEPORTIVO_INACTIVO)[0]
+            jugador.save()
+        return jugador
+
+    def docente(self, dni, categorias=(), activo=True):
+        docente = Docente.objects.create(persona=Persona.objects.create(nombre="Docente", apellido=dni, dni=dni))
+        for categoria in categorias:
+            DocenteCategoria.objects.create(docente=docente, categoria=categoria)
+        if not activo:
+            docente.estado = EstadoAdministrativo.objects.get_or_create(nombre=ESTADO_ADMINISTRATIVO_INACTIVO)[0]
+            docente.save()
+        return docente
+
+    def documento(self, persona, tipo, dias=None):
+        vencimiento = None
+        if dias is not None:
+            vencimiento = timezone.make_aware(datetime.combine(timezone.localdate() + timedelta(days=dias), time(12)))
+        return Documento.objects.create(
+            persona=persona, tipo_documento=tipo, estado_documento=self.vigente, fecha_vencimiento=vencimiento
+        )
+
+    def padron(self):
+        response = self.client.get(reverse("padron_documental"))
+        self.assertEqual(response.status_code, 200)
+        return response.data
+
+    def persona(self, data, clave):
+        return next(persona for persona in data["personas"] if persona["clave"] == clave)
+
+    def estados(self, persona):
+        return {documento["tipo_documento"]: documento["estado"] for documento in persona["documentos"]}
+
+    def test_incluye_solo_jugadores_y_docentes_activos(self):
+        jugador = self.jugador("71000001")
+        docente = self.docente("71000002")
+        self.jugador("71000003", activo=False)
+        self.docente("71000004", activo=False)
+        Socio.objects.create(persona=Persona.objects.create(nombre="Socio", apellido="Pleno", dni="71000005"))
+
+        claves = [persona["clave"] for persona in self.padron()["personas"]]
+
+        self.assertCountEqual(claves, [f"jugador-{jugador.jugador_id}", f"docente-{docente.docente_id}"])
+
+    def test_exige_solo_los_tipos_obligatorios_y_habilitados_de_cada_perfil(self):
+        TipoDocumento.objects.create(nombre="Opcional test", obligatorio=False)
+        TipoDocumento.objects.create(nombre="Deshabilitado test", obligatorio=True, activo=False)
+        jugador = self.jugador("71000011")
+        docente = self.docente("71000012")
+
+        data = self.padron()
+
+        self.assertCountEqual(self.estados(self.persona(data, f"jugador-{jugador.jugador_id}")), [self.apto.pk, self.seguro.pk])
+        self.assertCountEqual(self.estados(self.persona(data, f"docente-{docente.docente_id}")), [self.seguro.pk, self.cv.pk])
+
+    def test_calcula_el_estado_de_cada_documento_requerido(self):
+        jugador = self.jugador("71000021")
+        docente = self.docente("71000022")
+        persona_jugador = jugador.socio.persona
+        self.documento(persona_jugador, self.apto, dias=-1)
+        self.documento(persona_jugador, self.seguro, dias=5)
+        self.documento(docente.persona, self.seguro)
+
+        data = self.padron()
+
+        self.assertEqual(self.estados(self.persona(data, f"jugador-{jugador.jugador_id}")), {
+            self.apto.pk: "vencido",
+            self.seguro.pk: "por_vencer",
+        })
+        self.assertEqual(self.estados(self.persona(data, f"docente-{docente.docente_id}")), {
+            self.seguro.pk: "vigente",
+            self.cv.pk: "faltante",
+        })
+
+    def test_usa_el_ultimo_documento_cargado_de_cada_tipo(self):
+        jugador = self.jugador("71000031")
+        persona = jugador.socio.persona
+        self.documento(persona, self.apto, dias=-10)
+        ultimo = self.documento(persona, self.apto, dias=200)
+
+        documento = self.persona(self.padron(), f"jugador-{jugador.jugador_id}")["documentos"][0]
+
+        self.assertEqual(documento["id_documento"], ultimo.pk)
+        self.assertEqual(documento["estado"], "vigente")
+        self.assertEqual(documento["fecha_vencimiento"], timezone.localdate() + timedelta(days=200))
+
+    def test_un_documento_por_vencer_habilita_y_uno_vencido_o_faltante_no(self):
+        habilitado = self.jugador("71000041")
+        vencido = self.jugador("71000042")
+        faltante = self.jugador("71000043")
+        for jugador, dias_apto in ((habilitado, 3), (vencido, -3), (faltante, None)):
+            persona = jugador.socio.persona
+            self.documento(persona, self.seguro)
+            if dias_apto is not None:
+                self.documento(persona, self.apto, dias=dias_apto)
+
+        data = self.padron()
+
+        self.assertTrue(self.persona(data, f"jugador-{habilitado.jugador_id}")["habilitado"])
+        self.assertFalse(self.persona(data, f"jugador-{vencido.jugador_id}")["habilitado"])
+        self.assertFalse(self.persona(data, f"jugador-{faltante.jugador_id}")["habilitado"])
+
+    def test_el_docente_lista_todas_sus_categorias(self):
+        docente = self.docente("71000051", categorias=(self.sub14, self.sub12))
+
+        persona = self.persona(self.padron(), f"docente-{docente.docente_id}")
+
+        self.assertEqual([categoria["nombre"] for categoria in persona["categorias"]], ["Sub 12", "Sub 14"])
+        self.assertIsNone(persona["socio_id"])

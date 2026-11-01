@@ -11,6 +11,7 @@ from configuracion.services import Seccion, record_catalog_update, record_change
 
 from .models import Documento, TipoDocumento, EstadoDocumento
 from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
+from .services import build_padron_documental
 
 @extend_schema(tags=["Documental / Documentos"], request=DocumentoSerializer, responses=DocumentoSerializer)
 @api_view(["GET", "POST"])
@@ -184,6 +185,12 @@ def alertas_count(request):
         "vencidos": vencidos,
         "proximos": proximos
     })
+
+
+@extend_schema(tags=["Documental / Padrón"])
+@api_view(["GET"])
+def padron_documental(request):
+    return Response(build_padron_documental())
 
 import zipfile
 import io
