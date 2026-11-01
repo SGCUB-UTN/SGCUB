@@ -13,7 +13,7 @@ import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import SectionDivider from '../components/shared/SectionDivider'
-import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
+import { currentPeriod } from '../components/shared/periodFormat'
 
 import useMovimientosCaja from '../hooks/useMovimientosCaja'
 import useRegisterPayment from '../hooks/useRegisterPayment'

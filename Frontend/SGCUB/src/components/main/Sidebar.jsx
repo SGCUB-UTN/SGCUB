@@ -71,13 +71,6 @@ export default function Sidebar({ collapsed, onToggle }) {
     }));
   }, [personasActive, finanzasActive, comunicacionesActive, cometActive, adminActive]);
 
-  const toggleSection = (sectionKey) => {
-    setOpenSections((current) => ({
-      ...current,
-      [sectionKey]: !current[sectionKey],
-    }));
-  };
-
   return (
     <aside className={`app-sidebar ${claseEstado}`}>
       <div className="app-sidebar-content">

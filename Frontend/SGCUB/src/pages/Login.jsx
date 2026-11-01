@@ -37,6 +37,7 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
+    setHelpMessage('')
     setIsSubmitting(true)
     try {
       await login(dni, password)
@@ -87,6 +88,16 @@ export default function Login() {
           >
             <span className="material-symbols-outlined text-error text-title-md">error</span>
             <p className="text-body-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        {helpMessage && (
+          <div
+            className="bg-surface-container-high text-on-surface px-3 py-2.5 rounded-lg border border-outline-variant/40 flex items-center gap-2"
+            role="status"
+          >
+            <span className="material-symbols-outlined text-primary text-title-md">info</span>
+            <p className="text-body-sm font-medium">{helpMessage}</p>
           </div>
         )}
 

@@ -95,4 +95,3 @@ jobs:
       - name: Validar linting (ESLint)
         working-directory: Frontend/SGCUB
         run: npm run lint
-        continue-on-error: true
