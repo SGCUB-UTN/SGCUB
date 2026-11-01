@@ -20,7 +20,8 @@ export default function DocumentacionUploadModal({
   onChange, 
   tipos, 
   isEditing,
-  error
+  error,
+  subtitle
 }) {
   const fileInputRef = useRef(null)
 
@@ -56,7 +57,10 @@ export default function DocumentacionUploadModal({
       onClick={handleBackdropClick}
     >
       <div className="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-lg shadow-xl flex flex-col gap-space-md max-h-[90vh] overflow-y-auto">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface">{isEditing ? 'Editar documentación' : 'Cargar nueva documentación'}</h3>
+        <div>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface">{isEditing ? 'Editar documentación' : 'Cargar nueva documentación'}</h3>
+          {subtitle && <p className="mt-1 text-sm text-on-surface-variant">{subtitle}</p>}
+        </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>
             <label className="block text-label-sm text-outline uppercase mb-1">Tipo de Documento</label>

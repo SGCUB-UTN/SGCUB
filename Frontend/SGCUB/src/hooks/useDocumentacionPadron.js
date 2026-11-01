@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getPadronDocumental } from '../api/documentacion'
+import { getPadronDocumental, getTiposDocumento } from '../api/documentacion'
 import { documentRows } from '../components/documental/padronDocumental'
 
 const EMPTY_PERSONAS = []
+const EMPTY_TIPOS = []
 
 export default function useDocumentacionPadron() {
   const [load, setLoad] = useState({ data: null, error: null })
+  const [tipos, setTipos] = useState(EMPTY_TIPOS)
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -15,6 +17,14 @@ export default function useDocumentacionPadron() {
       .catch((error) => active && setLoad((current) => ({ data: current.data, error })))
     return () => { active = false }
   }, [version])
+
+  useEffect(() => {
+    let active = true
+    getTiposDocumento()
+      .then((data) => active && setTipos(data))
+      .catch((error) => console.error('Error cargando tipos de documento:', error))
+    return () => { active = false }
+  }, [])
 
   const reload = useCallback(() => setVersion((current) => current + 1), [])
 
@@ -31,6 +41,7 @@ export default function useDocumentacionPadron() {
     error: load.error,
     personas,
     rows,
+    tipos,
     resumen: load.data?.resumen ?? null,
     diasAlerta: load.data?.dias_alerta ?? null,
     reload,

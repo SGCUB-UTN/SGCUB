@@ -1,4 +1,5 @@
-import { findGender } from '../cuota/cuotaCategories'
+import { ALL_CATEGORIES, NO_CATEGORY_VALUE, findGender } from '../cuota/cuotaCategories'
+import { matchesSearch } from '../shared/search'
 
 export const DOCUMENT_STATES = {
   VIGENTE: 'vigente',
@@ -28,3 +29,40 @@ export const documentRows = (personas) => personas.flatMap(({ documentos, ...per
     categoriasLabel,
   }))
 })
+
+export const ALL = 'all'
+
+export const INITIAL_FILTERS = { estado: ALL, perfil: ALL, categoria: ALL_CATEGORIES, search: '' }
+
+export const STATE_ORDER = [DOCUMENT_STATES.VENCIDO, DOCUMENT_STATES.FALTANTE, DOCUMENT_STATES.POR_VENCER, DOCUMENT_STATES.VIGENTE]
+
+const GENDER_PREFIX = 'gender:'
+
+const matchesCategory = (row, value) => {
+  if (value === ALL_CATEGORIES) return true
+  if (value === NO_CATEGORY_VALUE) return row.categorias.length === 0
+  if (value.startsWith(GENDER_PREFIX)) return row.categorias.some((categoria) => categoria.genero === value.slice(GENDER_PREFIX.length))
+  return row.categorias.some((categoria) => String(categoria.categoria_id) === value)
+}
+
+export const matchesFilters = (row, { perfil, categoria, search }) => (
+  (perfil === ALL || row.perfil === perfil)
+  && matchesCategory(row, categoria)
+  && matchesSearch(search, [row.apellido, row.nombre, row.dni])
+)
+
+export const categoryOptions = (personas) => {
+  const categories = new Map()
+  personas.forEach((persona) => persona.categorias.forEach((categoria) => {
+    categories.set(categoria.categoria_id, { value: String(categoria.categoria_id), name: categoria.nombre, gender: categoria.genero })
+  }))
+  return [...categories.values()].sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }))
+}
+
+export const daysFromToday = (date) => {
+  const [year, month, day] = date.split('-').map(Number)
+  const today = new Date()
+  return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000)
+}
+
+export const formatDate = (date) => date.split('-').reverse().join('/')
