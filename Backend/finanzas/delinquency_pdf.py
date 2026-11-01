@@ -70,15 +70,20 @@ def render_delinquency_pdf(report):
 
     width = PAGE_SIZE[0] - 2 * MARGIN
     rows = report["filas"]
-    tipo = report.get("tipo", "Todos")
+    tipo = report.get("tipo", "Todos los socios")
     periodo = report.get("periodo", "Todos los períodos")
+    header_parts = [
+        f"Generado el {report['fecha']:%d/%m/%Y %H:%M}",
+        f"Tipo: {tipo}",
+    ]
+    if report.get("alcance_codigo") != "activos":
+        header_parts.append(f"Alcance: {report['alcance']}")
+    header_parts.append(f"Período: {periodo}")
+
     story = [
         Paragraph(escape(club_name()), subtitle),
         Paragraph("Reporte de morosidad", title),
-        Paragraph(escape(
-            f"Generado el {report['fecha']:%d/%m/%Y %H:%M} · Alcance: {report['alcance']} · "
-            f"Tipo: {tipo} · Período: {periodo}"
-        ), subtitle),
+        Paragraph(escape(" · ".join(header_parts)), subtitle),
         Spacer(1, 2 * mm),
         Paragraph(escape(summary_text(report)), styles["Normal"]),
         Spacer(1, 6 * mm),

@@ -14,6 +14,7 @@ import { Notice } from '../components/configuracion/settingsParts'
 import UnsavedChangesGuard from '../components/configuracion/UnsavedChangesGuard'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PageHeader from '../components/shared/PageHeader'
+import { SkeletonStatus, TabsSkeleton } from '../components/shared/Skeleton'
 import useConfiguracion from '../hooks/useConfiguracion'
 
 const savedMessage = (result) => {
@@ -69,7 +70,11 @@ export default function Configuracion() {
         )}
       />
 
-      {config.isLoading && <p className="text-base text-on-surface-variant">Cargando configuración...</p>}
+      {config.isLoading && (
+        <SkeletonStatus label="Cargando configuración...">
+          <TabsSkeleton tabs={5} />
+        </SkeletonStatus>
+      )}
       {config.error && <Notice tone="error">No se pudo cargar la configuración. Recargá la página para volver a intentar.</Notice>}
       {notice.message && <Notice tone={notice.tone}>{notice.message}</Notice>}
 

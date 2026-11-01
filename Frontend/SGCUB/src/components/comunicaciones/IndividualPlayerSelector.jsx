@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatDni, formatPhone } from '../personas/format'
 import { matchesSearch } from '../shared/search'
+import { ListSkeleton } from '../shared/Skeleton'
 
 export default function IndividualPlayerSelector({
   socios = [],
@@ -86,8 +87,8 @@ export default function IndividualPlayerSelector({
         {isDropdownOpen && (
           <ul className="absolute z-30 left-0 right-0 top-full mt-1 bg-surface-container-lowest rounded-lg shadow-lg border border-outline-variant/30 max-h-60 overflow-y-auto divide-y divide-outline-variant/20">
             {isLoading ? (
-              <li className="p-3 text-sm text-on-surface-variant text-center">
-                Cargando socios del servidor...
+              <li className="px-3">
+                <ListSkeleton label="Cargando socios del servidor..." rows={3} avatar />
               </li>
             ) : socios.length === 0 ? (
               <li className="p-4 text-sm text-on-surface-variant text-center">

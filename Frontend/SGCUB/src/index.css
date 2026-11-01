@@ -52,6 +52,13 @@
   --color-on-secondary-fixed-variant: #004b73;
   --color-surface-container-highest: #d3e4fe;
   --color-on-tertiary-fixed-variant: #3f465c;
+  --color-chart-income: #059669;
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #1baf7a;
+  --color-chart-4: #eda100;
+  --color-chart-5: #e87ba4;
+  --color-chart-6: #008300;
 
   /* Variables legacy usadas en sidebar.css y main-layout.css */
   --surface: var(--color-surface);
@@ -122,6 +129,13 @@ html.dark {
   --color-inverse-surface: #e5e7eb;
   --color-inverse-on-surface: #181b20;
   --color-inverse-primary: #006493;
+
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-5: #d55181;
+  --color-chart-6: #008300;
 
   /* Adaptación automática de paletas auxiliares (slate, emerald, amber, red, sky, pink) en modo oscuro */
   --color-slate-50: #1f2329;

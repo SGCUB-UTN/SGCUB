@@ -4,6 +4,7 @@ import { getCuotaTaskRun } from '../../api/cuotas'
 import LogDownloadButton from '../automatizaciones/LogDownloadButton'
 import { formatPeriod } from '../shared/periodFormat'
 import { formatDateTime } from './cuotaPeriod'
+import { TextSkeleton } from '../shared/Skeleton'
 
 const EMPTY = { runId: null, data: null, error: null }
 
@@ -62,7 +63,7 @@ export default function TaskRunLogModal({ run, onClose }) {
         <div className="flex flex-col gap-4">
           <RunDetails run={detail ?? run} />
           <p className="text-sm text-on-surface border-l-2 border-primary pl-3">{run.resumen}</p>
-          {!detail && !current.error && <p className="text-sm text-on-surface-variant">Cargando registro…</p>}
+          {!detail && !current.error && <TextSkeleton label="Cargando registro…" />}
           {current.error && <p className="text-sm text-error">No se pudo cargar el registro de la ejecución.</p>}
           {detail && (
             <>

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
+import logging
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
@@ -38,6 +39,8 @@ CATEGORY_UPDATE_TASK = "padron.services.pasr_de_anio_vigente_a_categoria"
 CATEGORY_UPDATE_TASK_NAME = "Actualizar las categorías al nuevo año"
 CATEGORY_GENDER_LABELS = {**dict(Categoria.GENERO_CHOICES), "": "Sin género"}
 NO_AGE_LIMIT = 99
+
+logger = logging.getLogger(__name__)
 
 
 class RecategorizationInProgress(Exception):
@@ -325,7 +328,10 @@ def recategorization_task_hook(task):
 
 
 def run_recategorization(execution_id):
-    execution = RecategorizacionEjecucion.objects.get(pk=execution_id)
+    execution = RecategorizacionEjecucion.objects.filter(pk=execution_id).first()
+    if not execution:
+        logger.warning("Recategorización omitida: la ejecución %s no existe.", execution_id)
+        return
     try:
         _process_execution(execution)
     except Exception as error:

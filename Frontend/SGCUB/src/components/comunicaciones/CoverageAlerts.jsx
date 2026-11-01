@@ -1,3 +1,5 @@
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
+
 export default function CoverageAlerts({
   validCount = 157,
   totalCount = 162,
@@ -50,7 +52,7 @@ export default function CoverageAlerts({
           <button
             type="button"
             onClick={onOpenExcluidos}
-            className="text-xs text-primary hover:underline font-bold whitespace-nowrap cursor-pointer shrink-0"
+            className={`${TEXT_BUTTON_CLASS} text-xs whitespace-nowrap shrink-0`}
           >
             Ver lista de excluidos
           </button>

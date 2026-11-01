@@ -18,6 +18,7 @@ import { ALL_CATEGORIES, NO_CATEGORY, categoryMatches, categoryOptions, findGend
 import { SecondaryButton } from '../personas/tabs/parts'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
+import { TextSkeleton } from '../shared/Skeleton'
 import {
   CUOTA_TYPES,
   cuotaTypeBadgeClass,
@@ -181,8 +182,10 @@ function CuotaDetailRow({ row, onPay, onAssignBenefit, onEdit, onDelete, onChang
   if (!detail.cuota) {
     return (
       <tr className="bg-surface-container-low/60">
-        <td colSpan={COLUMN_COUNT} className={`py-4 px-4 sm:px-5 text-sm ${detail.error ? 'text-error' : 'text-on-surface-variant'}`} role={detail.error ? 'alert' : 'status'}>
-          {detail.error ? 'No se pudo cargar el detalle de la cuota.' : 'Cargando detalle...'}
+        <td colSpan={COLUMN_COUNT} className="py-4 px-4 sm:px-5 text-sm">
+          {detail.error
+            ? <p className="text-error" role="alert">No se pudo cargar el detalle de la cuota.</p>
+            : <TextSkeleton label="Cargando detalle..." lines={4} />}
         </td>
       </tr>
     )
@@ -231,6 +234,12 @@ export default function PeriodCuotasTable({
   const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
   const hasUncategorized = rows.some((row) => !row.categoria_id)
+  const categoryLocked = type === CUOTA_TYPES.MEMBER
+
+  const changeType = (nextType) => {
+    setType(nextType)
+    if (nextType === CUOTA_TYPES.MEMBER) setCategory(ALL_CATEGORIES)
+  }
 
   const matching = useMemo(() => {
     const text = search.trim()
@@ -295,7 +304,7 @@ export default function PeriodCuotasTable({
           <FilterSelect
             className={FILTER_CLASS}
             value={type}
-            onChange={(event) => withPageReset(setType)(event.target.value)}
+            onChange={(event) => withPageReset(changeType)(event.target.value)}
             aria-label="Filtrar por tipo"
           >
             {TYPE_FILTERS.map((filter) => (
@@ -309,6 +318,8 @@ export default function PeriodCuotasTable({
             categories={categories}
             hasUncategorized={hasUncategorized}
             onChange={withPageReset(setCategory)}
+            disabled={categoryLocked}
+            disabledReason="Los socios no tienen categoría"
           />
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">

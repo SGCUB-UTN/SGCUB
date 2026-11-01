@@ -29,7 +29,7 @@ const TONES = {
     name: 'group-hover:text-primary',
     document: 'text-on-surface',
     badge: 'bg-secondary-fixed text-on-secondary-fixed',
-    loadMore: 'text-primary',
+    loadMore: 'text-primary hover:bg-primary/5',
   },
   error: {
     icon: 'bg-error-container text-error',
@@ -38,7 +38,7 @@ const TONES = {
     name: 'group-hover:text-error',
     document: 'text-error',
     badge: 'bg-error-container text-error',
-    loadMore: 'text-error',
+    loadMore: 'text-error hover:bg-error/5',
   },
 }
 
@@ -147,8 +147,9 @@ export default function DocumentAlertTable({ title, icon, tone = 'warning', docu
         <div className="p-space-md bg-surface-container-low flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">Mostrando {limit} de {filteredRows.length}</span>
           <button
+            type="button"
             onClick={() => setLimit(limit + PAGE_SIZE)}
-            className={`text-sm font-semibold hover:underline cursor-pointer ${style.loadMore}`}
+            className={`px-2 py-1 rounded-md text-sm font-semibold transition-colors cursor-pointer ${style.loadMore}`}
           >
             Cargar más ↓
           </button>

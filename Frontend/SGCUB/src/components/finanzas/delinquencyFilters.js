@@ -4,15 +4,12 @@ export const PERIOD_TYPES = [
   { value: 'anual', label: 'Anual' },
 ]
 
-export const SCOPES = [
-  { value: 'activos', label: 'Todos los socios' },
-  { value: 'categoria', label: 'Categoría' },
-]
+export const PLAYERS = 'jugadores'
 
 export const AFFILIATIONS = [
-  { value: 'todos', label: 'Socios y jugadores' },
+  { value: 'todos', label: 'Todos los socios' },
   { value: 'socios', label: 'Solo socios' },
-  { value: 'jugadores', label: 'Solo jugadores' },
+  { value: PLAYERS, label: 'Solo jugadores' },
 ]
 
 const YEARS_BACK = 4
@@ -26,16 +23,21 @@ export const defaultReference = (periodType, today = new Date()) => {
   return String(year)
 }
 
-export const referenceOptions = (periodType, today = new Date()) => {
+export const QUARTERS = [1, 2, 3, 4].map((quarter) => ({ value: quarter, label: `${quarter}° trimestre` }))
+
+export const yearOptions = (today = new Date()) => {
   const year = today.getFullYear()
-  const years = Array.from({ length: YEARS_BACK + 1 }, (_, index) => year - index)
-  if (periodType === 'anual') return years.map((value) => ({ value: String(value), label: String(value) }))
-  return years.flatMap((value) => {
-    const lastQuarter = value === year ? currentQuarter(today) : 4
-    return Array.from({ length: lastQuarter }, (_, index) => lastQuarter - index)
-      .map((quarter) => ({ value: `${value}-T${quarter}`, label: `${quarter}° trimestre ${value}` }))
-  })
+  return Array.from({ length: YEARS_BACK + 1 }, (_, index) => String(year - index))
 }
+
+export const lastQuarterOf = (year, today = new Date()) => (Number(year) === today.getFullYear() ? currentQuarter(today) : 4)
+
+export const parseQuarterReference = (reference) => {
+  const [year, quarter] = String(reference).split('-T')
+  return { year, quarter: Number(quarter) }
+}
+
+export const quarterReference = (year, quarter) => `${year}-T${Math.min(quarter, lastQuarterOf(year))}`
 
 export const profilePath = (row) => (
   row.jugador_id

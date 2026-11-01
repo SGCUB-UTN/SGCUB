@@ -4,6 +4,7 @@ import { ActionButton, ActionNotice } from '../components/automatizaciones/actio
 import RecategorizationResults from '../components/automatizaciones/RecategorizationResults'
 import PageHeader from '../components/shared/PageHeader'
 import useRecategorization from '../hooks/useRecategorization'
+import { ListSkeleton } from '../components/shared/Skeleton'
 
 const AUTOMATIONS_PATH = '/automatizaciones'
 
@@ -70,11 +71,7 @@ export default function RecategorizacionRevision() {
           )}
         />
 
-        {isLoading && (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-base text-slate-500" role="status">
-            Cargando la recategorización...
-          </p>
-        )}
+        {isLoading && <ListSkeleton label="Cargando la recategorización..." rows={4} className="rounded-xl border border-slate-200 bg-white px-4" />}
         {!isLoading && error && (
           <ActionNotice tone="error" icon="error">
             No se pudo cargar la recategorización. Recargá la página para intentar de nuevo.

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from io import BytesIO
 from xml.sax.saxutils import escape
 
@@ -14,6 +15,7 @@ from .pdf_utils import format_amount, table
 
 PAGE_SIZE = A4
 MARGIN = 15 * mm
+FULL_SHARE = Decimal("100.0")
 MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
@@ -28,10 +30,6 @@ def period_label(period):
 
 def format_percentage(value):
     return "—" if value is None else f"{value}%".replace(".", ",")
-
-
-def socio_label(socio):
-    return f"N° {socio['numero_socio'] or '—'} · {socio['apellido']}, {socio['nombre']}"
 
 
 def kpi_table(pairs, width):
@@ -55,11 +53,19 @@ def render_financial_summary_pdf(summary):
     section_style = ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=8, spaceAfter=3)
     width = PAGE_SIZE[0] - 2 * MARGIN
     label = period_label(summary["periodo"])
+    sub_row_style = ParagraphStyle("Subfila", parent=styles["Normal"], leftIndent=4 * mm, textColor=colors.HexColor("#5f6368"))
     income = summary["ingresos"]
     cuotas = summary["cuotas"]
+    refunds = summary["devoluciones"]
 
-    def cell(text):
-        return Paragraph(escape(text or "—"), styles["Normal"])
+    def cell(text, style=styles["Normal"]):
+        return Paragraph(escape(text or "—"), style)
+
+    def share_row(label, share):
+        return [cell(label), format_percentage(share["porcentaje"]), format_amount(share["monto"])]
+
+    def concept_row(row, style=styles["Normal"]):
+        return [cell(row["nombre"], style), format_percentage(row["porcentaje"]), format_amount(row["monto"])]
 
     story = [
         Paragraph(escape(club_name()), subtitle_style),
@@ -86,17 +92,14 @@ def render_financial_summary_pdf(summary):
             ("Volumen (pagas / generadas)", f"{cuotas['pagas']} / {cuotas['generadas']}"),
             ("Recargos aplicados", format_amount(cuotas["recargos"])),
         ], width),
-        Paragraph("Ingresos extra (no incluye cuotas)", section_style),
+        Paragraph("Otros ingresos", section_style),
         detail_table(
-            ["Comprobante", "Fecha", "Socio", "Concepto", "Monto"],
-            [
-                [row["codigo"], row["fecha"].strftime("%d/%m/%Y"), cell(socio_label(row["socio"])), cell(row["concepto"]), format_amount(row["monto"])]
-                for row in summary["ingresos_extra"]["movimientos"]
-            ],
-            (0.16, 0.14, 0.26, 0.26, 0.18),
+            ["Concepto", "Porcentaje", "Monto"],
+            [concept_row(row) for row in summary["ingresos_extra"]["conceptos"]],
+            (0.5, 0.2, 0.3),
             width,
-            ["Total", "", "", "", format_amount(summary["ingresos_extra"]["total"])],
-            "No hubo ingresos extra en el período.",
+            ["Total", format_percentage(FULL_SHARE), format_amount(summary["ingresos_extra"]["total"])],
+            "No hubo otros ingresos en el período.",
         ),
         Paragraph("Ingresos por medio de pago", section_style),
         detail_table(
@@ -109,22 +112,17 @@ def render_financial_summary_pdf(summary):
             width,
             ["Total ingresado", "", format_amount(summary["medios_de_pago"]["total"])],
         ),
-        Paragraph("Devoluciones y ajustes (no restan de los ingresos)", section_style),
+        Paragraph("Devoluciones (no restan de los ingresos)", section_style),
         detail_table(
-            ["Comprobante", "Fecha", "Socio", "Concepto", "Monto"],
+            ["Tipo", "Porcentaje", "Monto"],
             [
-                [
-                    row["codigo"],
-                    timezone.localtime(row["fecha"]).strftime("%d/%m/%Y"),
-                    cell(socio_label(row["socio"])),
-                    cell(row["concepto"]),
-                    format_amount(row["monto"]),
-                ]
-                for row in summary["devoluciones"]["movimientos"]
-            ],
-            (0.17, 0.13, 0.26, 0.26, 0.18),
+                share_row("Notas de crédito", refunds["notas_credito"]),
+                share_row("Devoluciones manuales", refunds["manuales"]),
+                *[concept_row(row, sub_row_style) for row in refunds["manuales"]["conceptos"]],
+            ] if refunds["total"] else [],
+            (0.5, 0.2, 0.3),
             width,
-            ["Total", "", "", "", format_amount(summary["devoluciones"]["total"])],
+            ["Total", format_percentage(FULL_SHARE), format_amount(refunds["total"])],
             "No hubo devoluciones en el período.",
         ),
         Paragraph("Evolución anual de cobranza (cuotas)", section_style),

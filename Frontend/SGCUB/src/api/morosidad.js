@@ -3,9 +3,13 @@ import { savePdfResponse } from './download'
 
 const reportEndpoint = 'finanzas/morosidad/'
 
-const buildReportParams = ({ alcance, tipo, periodo, referencia, categoriaId }) => {
-  const params = { alcance, tipo, periodo, referencia }
-  if (alcance === 'categoria') params.categoria_id = categoriaId
+const buildReportParams = ({ tipo, periodo, referencia, categoriaId }) => {
+  const isGender = typeof categoriaId === 'string' && categoriaId.startsWith('gender:')
+  const byCategory = tipo === 'jugadores' && Boolean(categoriaId) && !isGender
+  const byGender = tipo === 'jugadores' && isGender
+  const params = { alcance: byCategory ? 'categoria' : 'activos', tipo, periodo, referencia }
+  if (byCategory) params.categoria_id = categoriaId
+  if (byGender) params.genero = categoriaId.replace('gender:', '')
   return params
 }
 

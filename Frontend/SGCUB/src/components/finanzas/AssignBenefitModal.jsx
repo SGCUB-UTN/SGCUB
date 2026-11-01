@@ -8,15 +8,16 @@ import { formatPeriod } from '../shared/periodFormat'
 import BenefitForm from './BenefitForm'
 import { isOpen } from './benefitMath'
 import QuickDiscountForm from './QuickDiscountForm'
+import { TitleSkeleton } from '../shared/Skeleton'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
 const MODAL_Z_INDEX = 300
 
-function HeaderMessage({ icon, tone = 'text-on-surface-variant', spin = false, children }) {
+function HeaderMessage({ icon, tone = 'text-on-surface-variant', children }) {
   return (
     <span className={`flex items-center gap-2 text-base font-normal ${tone}`} role={tone === 'text-error' ? 'alert' : 'status'}>
-      <span className={`material-symbols-outlined text-[20px] ${spin ? 'animate-spin' : ''}`} aria-hidden="true">{icon}</span>
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>
       {children}
     </span>
   )
@@ -47,7 +48,7 @@ function AssignBenefitModal({ opened, socioId, cuotaId, onClose, onSuccess }) {
   const cuota = quick ? load.cuenta?.cuotas?.find((item) => item.cuota_id === cuotaId) ?? null : null
 
   const statusMessage = loading
-    ? <HeaderMessage icon="progress_activity" spin>Cargando estado de cuenta...</HeaderMessage>
+    ? <TitleSkeleton label="Cargando estado de cuenta..." />
     : <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
 
   const quickTitle = (

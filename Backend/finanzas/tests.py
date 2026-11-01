@@ -64,6 +64,7 @@ from .services import (
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
+	create_credit_note,
 	create_manual_refund,
 	register_income,
 	create_cuota,
@@ -856,6 +857,22 @@ class DevolucionesManualesTests(APITestCase):
 		self.assertEqual(len(response.data), 1)
 		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)
 
+	def test_lista_filtrando_por_periodo(self):
+		octubre = self.devolver().data
+		septiembre = self.devolver().data
+		Devolucion.objects.filter(pk=septiembre["devolucion_id"]).update(
+			fecha=timezone.make_aware(datetime(2026, 9, 15, 12, 0)),
+		)
+		Devolucion.objects.filter(pk=octubre["devolucion_id"]).update(
+			fecha=timezone.make_aware(datetime(2026, 10, 15, 12, 0)),
+		)
+
+		response = self.client.get(reverse("devolucion-list"), {"periodo": "2026-09"})
+		invalido = self.client.get(reverse("devolucion-list"), {"periodo": "septiembre"})
+
+		self.assertEqual([item["devolucion_id"] for item in response.data], [septiembre["devolucion_id"]])
+		self.assertEqual(invalido.status_code, 400)
+
 
 class BecaModeloTests(TestCase):
 	def setUp(self):
@@ -1427,6 +1444,18 @@ class ReversionPagoTests(PagoTestBase):
 		response = self.client.get(reverse("comprobante-list"), {"socio_id": self.socio.pk})
 
 		self.assertEqual([item["socio"]["socio_id"] for item in response.data], [self.socio.pk])
+
+	def test_lista_los_comprobantes_del_periodo(self):
+		pago = self.pagar([self.agosto], "1000.00").data["comprobante"]
+		_, ingreso = register_income(self.socio.pk, "Donación", [{"medio_de_pago": "Efectivo", "monto": Decimal("10.00")}], Decimal("10.00"))
+		Comprobante.objects.filter(pk=pago["comprobante_id"]).update(fecha_emision=date(2026, 9, 10))
+		Comprobante.objects.filter(pk=ingreso.pk).update(fecha_emision=date(2026, 10, 5))
+
+		response = self.client.get(reverse("comprobante-list"), {"periodo": "2026-10"})
+		invalido = self.client.get(reverse("comprobante-list"), {"periodo": "2026-13"})
+
+		self.assertEqual([item["comprobante_id"] for item in response.data], [ingreso.pk])
+		self.assertEqual(invalido.status_code, 400)
 
 	def test_un_ingreso_posterior_no_impide_revertir_el_pago(self):
 		pago = self.pagar([self.agosto], "1000.00").data["pago"]
@@ -2367,6 +2396,19 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(socio["dni"], "80000001")
 		self.assertEqual(socio["apellido"], "Prueba")
 
+	def test_annulled_receipt_lists_its_reason(self):
+		receipt = self.pagar("2500.00")
+		self.client.post(
+			reverse("revertir-pago", args=[receipt["pago"]]),
+			{"motivo": "Se cargó dos veces", "responsable": "Tesorera"},
+			format="json",
+		)
+
+		comprobantes, _ = self.list_comprobantes()
+
+		self.assertEqual(comprobantes[0]["estado"], "Anulado")
+		self.assertEqual(comprobantes[0]["motivo_anulacion"], "Se cargó dos veces")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 
@@ -2693,6 +2735,36 @@ class ReporteMorosidadTests(APITestCase):
 		self.assertEqual(data["alcance"], f"Categoría {categoria.nombre}")
 		self.assertEqual(data["categorias_afectadas"], [])
 
+	def test_filtra_por_categoria_con_genero(self):
+		categoria_m = Categoria.objects.create(nombre="Sub 15", anio_vigente=2026, edad_maxima=15, genero="M")
+		jugador = self.deudor_jugador("78901246")
+		jugador.jugador.categoria = categoria_m
+		jugador.jugador.save(update_fields=["categoria"])
+
+		data = self.reporte(alcance="categoria", categoria_id=categoria_m.pk)
+		self.assertEqual(data["alcance"], "Categoría Sub 15 (Masculino)")
+		self.assertEqual(data["filas"][0]["categoria_deportiva"], "Sub 15 (Masculino)")
+
+	def test_filtra_por_genero_de_categoria(self):
+		categoria_m = Categoria.objects.create(nombre="M17", anio_vigente=2026, edad_maxima=17, genero="M")
+		categoria_f = Categoria.objects.create(nombre="F17", anio_vigente=2026, edad_maxima=17, genero="F")
+		jugador_m = self.deudor_jugador("78901244")
+		jugador_m.jugador.categoria = categoria_m
+		jugador_m.jugador.save(update_fields=["categoria"])
+		jugador_f = self.deudor_jugador("78901245")
+		jugador_f.jugador.categoria = categoria_f
+		jugador_f.jugador.save(update_fields=["categoria"])
+
+		masculinas = self.reporte(tipo="jugadores", genero="M")
+		self.assertEqual([fila["socio_id"] for fila in masculinas["filas"]], [jugador_m.pk])
+		self.assertEqual(masculinas["alcance"], "Todas las masculinas")
+		self.assertEqual(masculinas["alcance_codigo"], "genero")
+
+		femeninas = self.reporte(tipo="jugadores", genero="F")
+		self.assertEqual([fila["socio_id"] for fila in femeninas["filas"]], [jugador_f.pk])
+		self.assertEqual(femeninas["alcance"], "Todas las femeninas")
+		self.assertEqual(femeninas["alcance_codigo"], "genero")
+
 	def test_categorias_afectadas_agrupan_morosos_y_ordenan_por_monto(self):
 		mayor = self.deudor_jugador("78901241").jugador.categoria
 		companero = self.deudor_jugador("78901242").jugador
@@ -2731,6 +2803,7 @@ class ReporteMorosidadTests(APITestCase):
 			{"periodo": "semanal", "referencia": "2026"},
 			{"periodo": "mensual", "referencia": "2026-13"},
 			{"periodo": "trimestral", "referencia": "2026-T5"},
+			{"genero": "X"},
 		):
 			with self.subTest(params=params):
 				response = self.client.get(reverse("reporte-morosidad"), params)
@@ -2757,8 +2830,8 @@ class ResumenFinancieroTests(APITestCase):
 			("Bufet", "Efectivo", "10.00"),
 		):
 			register_income(self.socio.pk, concepto, [{"medio_de_pago": medio, "monto": Decimal(monto)}], Decimal(monto))
-		anulado, _ = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
-		revert_payment(anulado.pk, "Carga duplicada", "Tesorera")
+		pago_anulado, self.comprobante_anulado = register_income(self.socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
+		revert_payment(pago_anulado.pk, "Carga duplicada", "Tesorera")
 		create_manual_refund(self.socio.pk, "Transferencia de más", Decimal("180.00"), "Transferencia", "Tesorera")
 
 	def resumen(self, **params):
@@ -2805,13 +2878,43 @@ class ResumenFinancieroTests(APITestCase):
 		self.assertEqual(montos["Efectivo"], Decimal("480.00"))
 		self.assertEqual(montos["BilleteraVirtual"], Decimal("0.00"))
 
-	def test_ingresos_extra_y_devoluciones_se_detallan_sin_restar(self):
+	def test_otros_ingresos_y_devoluciones_se_resumen_por_tipo_sin_restar(self):
+		create_credit_note(self.comprobante_anulado.pk, Decimal("100.00"), "Efectivo", "Carga duplicada", "Tesorera")
+
 		data = self.resumen().data
 
 		self.assertEqual(data["ingresos_extra"]["total"], Decimal("380.00"))
-		self.assertEqual(len(data["ingresos_extra"]["movimientos"]), 4)
-		self.assertEqual(data["devoluciones"]["total"], Decimal("180.00"))
-		self.assertEqual(data["devoluciones"]["movimientos"][0]["codigo"], "DEV-X 00000001")
+		self.assertEqual(
+			[(row["nombre"], row["monto"], row["porcentaje"]) for row in data["ingresos_extra"]["conceptos"]],
+			[
+				("Venta de indumentaria", Decimal("300.00"), Decimal("78.9")),
+				("Donación", Decimal("50.00"), Decimal("13.2")),
+				("Rifa", Decimal("20.00"), Decimal("5.3")),
+				("Bufet", Decimal("10.00"), Decimal("2.6")),
+			],
+		)
+		self.assertEqual(data["devoluciones"], {
+			"total": Decimal("280.00"),
+			"notas_credito": {"monto": Decimal("100.00"), "porcentaje": Decimal("35.7"), "cantidad": 1},
+			"manuales": {
+				"monto": Decimal("180.00"),
+				"porcentaje": Decimal("64.3"),
+				"cantidad": 1,
+				"conceptos": [{"nombre": "Transferencia de más", "monto": Decimal("180.00"), "cantidad": 1, "porcentaje": Decimal("64.3")}],
+			},
+		})
+
+	def test_agrupa_los_conceptos_por_su_nombre_sin_el_detalle(self):
+		for detalle, monto in (("Rifa de fin de año", "40.00"), ("Alquiler de cancha", "60.00")):
+			register_income(self.socio.pk, f"Otro ingreso · {detalle}", [{"medio_de_pago": "Efectivo", "monto": Decimal(monto)}], Decimal(monto))
+		create_manual_refund(self.socio.pk, "Otra devolución · Cobro duplicado", Decimal("20.00"), "Efectivo", "Tesorera")
+
+		data = self.resumen().data
+
+		otro = next(row for row in data["ingresos_extra"]["conceptos"] if row["nombre"] == "Otro ingreso")
+		self.assertEqual((otro["monto"], otro["cantidad"]), (Decimal("100.00"), 2))
+		self.assertEqual([row["nombre"] for row in data["devoluciones"]["manuales"]["conceptos"]], ["Transferencia de más", "Otra devolución"])
+		self.assertIn("Otro ingreso", [row["nombre"] for row in data["ingresos"]["origen"]])
 
 	def test_evolucion_de_los_ultimos_doce_periodos(self):
 		evolucion = self.resumen().data["evolucion"]
@@ -2837,7 +2940,7 @@ class ResumenFinancieroTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
 		self.assertIn(f"resumen-financiero-{self.periodo}.pdf", response["Content-Disposition"])
-		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"DEV-X 00000001", b"Evoluci"):
+		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"Devoluciones manuales", b"Transferencia de m", b"Evoluci"):
 			with self.subTest(texto=texto):
 				self.assertIn(texto, response.content)
 
@@ -2870,6 +2973,8 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"78901240", response.content)
 		self.assertIn(b"$ 1.000,00", response.content)
+		self.assertIn(b"Tipo: Todos los socios", response.content)
+		self.assertNotIn(b"Alcance:", response.content)
 		self.assertNotIn(b"Paz, Luis", response.content)
 
 	def test_respects_selected_scope(self):
@@ -2888,6 +2993,8 @@ class ReporteMorosidadPdfTests(APITestCase):
 		self.assertIn(b"Mora, Rosa", response.content)
 		self.assertIn(b"Primera", response.content)
 		self.assertIn(b"Tipo: Solo jugadores", response.content)
+		self.assertIn(b"Alcance: Categor", response.content)
+		self.assertTrue(response.content.index(b"Tipo: Solo jugadores") < response.content.index(b"Alcance: Categor"))
 		self.assertIn(b"Anual", response.content)
 
 	def test_rejects_invalid_parameters(self):

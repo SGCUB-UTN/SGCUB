@@ -11,6 +11,7 @@ import DesgloseComprobante from './DesgloseComprobante'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
 import { availableToRefund, reversalOf } from './refunds'
+import ReceiptSkeleton from './ReceiptSkeleton'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
@@ -103,7 +104,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 
   return (
     <Modal opened={opened} onClose={onClose} title="Detalle del comprobante" centered size="lg">
-      {state.loading && <p className="text-sm text-on-surface-variant">Cargando comprobante...</p>}
+      {state.loading && <ReceiptSkeleton />}
       {state.error && <p className="text-sm text-error" role="alert">{state.error}</p>}
       {detalle && (
         <div className="flex flex-col gap-4">

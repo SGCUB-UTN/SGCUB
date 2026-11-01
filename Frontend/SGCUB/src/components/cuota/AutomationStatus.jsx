@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import TaskRunList from './TaskRunList'
 import { formatDateTime } from './cuotaPeriod'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const HISTORY_ID = 'automation-history'
-const TOGGLE_BUTTON_CLASS = 'inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 shrink-0'
+const TOGGLE_BUTTON_CLASS = `${TEXT_BUTTON_CLASS} text-sm shrink-0`
 
 const latestRun = (runs) => runs.reduce((latest, run) => (run.fecha_inicio > latest.fecha_inicio ? run : latest))
 
@@ -47,8 +48,8 @@ export default function AutomationStatus({ runs, isLoading, error, onOpenLog }) 
           aria-controls={HISTORY_ID}
           className={`${TOGGLE_BUTTON_CLASS} self-start sm:self-auto`}
         >
-          <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 18 }} aria-hidden="true">expand_more</span>
           {expanded ? 'Ocultar historial' : 'Ver historial completo'}
+          <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 18 }} aria-hidden="true">expand_more</span>
         </button>
       </div>
       {expanded && (

@@ -3,6 +3,7 @@ import { Modal, Text } from '@mantine/core'
 import { getHistorialConfiguracion } from '../../api/configuracion'
 import { CUOTA_FIELD_LABELS, formatCuotaValue, formatVigencia } from './financialFields'
 import { Notice } from './settingsParts'
+import { TableSkeletonRows } from '../shared/Skeleton'
 
 const HISTORY_SECTIONS = [
   { value: '', label: 'Todas' },
@@ -102,9 +103,7 @@ function HistoryContent({ versions, initialSection }) {
             </tr>
           </thead>
           <tbody>
-            {load.loading && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-on-surface-variant">Cargando historial...</td></tr>
-            )}
+            {load.loading && <TableSkeletonRows colSpan={5} rows={4} label="Cargando historial..." />}
             {!load.loading && entries.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-6 text-center text-on-surface-variant">No hay cambios registrados en esta sección.</td></tr>
             )}

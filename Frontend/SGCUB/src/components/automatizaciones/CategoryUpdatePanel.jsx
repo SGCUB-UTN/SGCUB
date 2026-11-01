@@ -1,5 +1,6 @@
 import { ActionButton, ActionCard, ActionSummary } from './actionCardParts'
 import { describeWhen } from './automationSchedule'
+import { PanelStatusSkeleton } from '../shared/Skeleton'
 
 const lastRunLabel = (run) => (run
   ? <>{describeWhen(run.fecha)}<span className="font-normal text-slate-600"> · por {run.ejecutado_por}</span></>
@@ -12,7 +13,7 @@ export default function CategoryUpdatePanel({ status, isLoading, error, canRun, 
       title="Actualizar categorías al nuevo año"
       description={'Pasa las categorías al año en curso y actualiza el nombre de las infantiles (por ejemplo, "2015" pasa a "2016"). Se hace una vez por año, antes de la recategorización.'}
     >
-      {isLoading && <p className="text-base text-slate-500" role="status">Consultando el año de las categorías...</p>}
+      {isLoading && <PanelStatusSkeleton label="Consultando el año de las categorías..." />}
       {!isLoading && error && (
         <p className="text-base text-red-700" role="alert">No se pudo consultar el año de las categorías. Recargá la página para intentar de nuevo.</p>
       )}

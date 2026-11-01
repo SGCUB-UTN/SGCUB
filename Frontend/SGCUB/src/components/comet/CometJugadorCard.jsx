@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useCometJugadorEstado, useExportarJugadorAComet } from '../../hooks/useComet'
 import CometModoBadge from './CometModoBadge'
 import { useCometStatus } from '../../hooks/useComet'
+import { TextSkeleton } from '../shared/Skeleton'
 
 function formatearFecha(iso) {
   if (!iso) return '—'
@@ -111,12 +112,7 @@ export default function CometJugadorCard({ jugador }) {
         </div>
 
         <div className="p-5 flex flex-col gap-4">
-          {isLoading && (
-            <div className="flex items-center gap-2 text-on-surface-variant">
-              <span className="material-symbols-outlined text-[18px] animate-spin" aria-hidden="true">progress_activity</span>
-              <span className="text-sm">Consultando estado en COMET...</span>
-            </div>
-          )}
+          {isLoading && <TextSkeleton label="Consultando estado en COMET..." lines={3} />}
 
           {!isLoading && error && (
             <div className="bg-error-container/30 border border-error/40 rounded p-3 text-sm">

@@ -1,0 +1,1 @@
+export const TEXT_BUTTON_CLASS = 'inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold text-primary transition-colors cursor-pointer hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent'

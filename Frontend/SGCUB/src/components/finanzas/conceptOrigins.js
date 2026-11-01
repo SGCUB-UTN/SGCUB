@@ -10,3 +10,5 @@ export const CONCEPT_ORIGINS = [
 export const PROTECTED_CONCEPTS = ['Otro ingreso', 'Otra devolución']
 
 export const isOtherConcept = (name) => PROTECTED_CONCEPTS.includes(name)
+
+export const conceptGroup = (concept) => String(concept ?? '').split(' · ')[0].trim() || 'Sin concepto'

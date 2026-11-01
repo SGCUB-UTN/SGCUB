@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { formatDni } from '../personas/format'
 import SortableHeader from '../shared/SortableHeader'
 import { DECISION_STYLES, RESULT_TYPES, categoryName } from './recategorization'
+import { TableSkeletonRows } from '../shared/Skeleton'
 
 const HEADER_CELL_CLASS = 'px-4 py-3'
 const MISSING_BIRTH_DATE = 'sin_fecha_nacimiento'
@@ -187,10 +188,12 @@ export default function RecategorizationResultsTable({ type, rows, isLoading, er
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {(isLoading || error || rows.length === 0) ? (
+          {isLoading ? (
+            <TableSkeletonRows colSpan={columns.length} label="Cargando resultados..." />
+          ) : (error || rows.length === 0) ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-500" role={isLoading ? 'status' : undefined}>
-                {isLoading ? 'Cargando resultados...' : error ? 'No se pudieron cargar los resultados.' : EMPTY_TEXT[type]}
+              <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-500">
+                {error ? 'No se pudieron cargar los resultados.' : EMPTY_TEXT[type]}
               </td>
             </tr>
           ) : rows.map((result) => (

@@ -1,5 +1,11 @@
 import { Fragment } from 'react'
+import useEntered from '../../hooks/useEntered'
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { formatCount, formatDayMonth } from './cuotaPeriod'
+
+const SEQUENCE_MS = 220
+const STEP_MOTION = 'transition-[opacity,translate] duration-500 ease-out motion-reduce:transition-none'
+const LINE_MOTION = 'transition-transform duration-500 ease-out motion-reduce:transition-none'
 
 const DONE = 'done'
 const PENDING = 'pending'
@@ -57,17 +63,57 @@ function withCurrentStep(phases) {
 
 function PhaseSkeleton() {
   return (
-    <div className="flex flex-1 flex-col sm:flex-row gap-4 animate-pulse" aria-hidden="true">
+    <SkeletonStatus label="Cargando etapa del mes..." className="flex flex-1 flex-col sm:flex-row gap-4">
       {[0, 1, 2].map((index) => (
         <div key={index} className="flex flex-1 items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-surface-container-high" />
+          <SkeletonBlock round className="w-9 h-9 shrink-0" />
           <div className="flex flex-col gap-1.5">
-            <div className="h-3.5 w-32 rounded bg-surface-container-high" />
-            <div className="h-3 w-24 rounded bg-surface-container" />
+            <SkeletonBlock className="h-3.5 w-32" />
+            <SkeletonBlock soft className="h-3 w-24" />
           </div>
         </div>
       ))}
-    </div>
+    </SkeletonStatus>
+  )
+}
+
+function PhaseSteps({ steps }) {
+  const entered = useEntered()
+  return (
+    <ol aria-labelledby="billing-phase-title" className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 sm:gap-0 min-w-0">
+      {steps.map((phase, index) => {
+        const style = STATUS_STYLES[phase.visualStatus]
+        const doneColors = phase.status === DONE ? DONE_COLORS[phase.key] : null
+        const isLast = index === steps.length - 1
+        return (
+          <Fragment key={phase.key}>
+            <li
+              className={`flex items-center gap-3 min-w-0 sm:shrink-0 ${STEP_MOTION} ${entered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-3'}`}
+              style={{ transitionDelay: `${index * 2 * SEQUENCE_MS}ms` }}
+              aria-current={phase.visualStatus === CURRENT ? 'step' : undefined}
+            >
+              <span className={`w-9 h-9 shrink-0 rounded-full border-2 flex items-center justify-center ${doneColors?.circle ?? style.circle}`} aria-hidden="true">
+                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{style.icon}</span>
+              </span>
+              <span className="flex flex-col min-w-0">
+                <span className={`text-sm font-semibold leading-tight ${style.label}`}>
+                  {PHASE_TITLES[phase.key] ?? phase.key}
+                  <span className="sr-only">{`, ${STATUS_DESCRIPTIONS[phase.visualStatus]}`}</span>
+                </span>
+                <span className="text-xs text-on-surface-variant tabular-nums">{phaseCaption(phase)}</span>
+              </span>
+            </li>
+            {!isLast && (
+              <li
+                role="presentation"
+                className={`hidden sm:block flex-1 min-w-6 h-0.5 mx-4 rounded-full origin-left ${LINE_MOTION} ${entered ? 'scale-x-100' : 'scale-x-0'} ${doneColors?.line ?? 'bg-outline-variant'}`}
+                style={{ transitionDelay: `${(index * 2 + 1) * SEQUENCE_MS}ms` }}
+              />
+            )}
+          </Fragment>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -80,40 +126,7 @@ export default function BillingPhaseTracker({ phases, isLoading, error }) {
       {!isLoading && error && steps.length === 0 && (
         <p className="text-sm text-error">No se pudo cargar la fase del período.</p>
       )}
-      {steps.length > 0 && (
-        <ol aria-labelledby="billing-phase-title" className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 sm:gap-0 min-w-0">
-          {steps.map((phase, index) => {
-            const style = STATUS_STYLES[phase.visualStatus]
-            const doneColors = phase.status === DONE ? DONE_COLORS[phase.key] : null
-            const isLast = index === steps.length - 1
-            return (
-              <Fragment key={phase.key}>
-                <li
-                  className="flex items-center gap-3 min-w-0 sm:shrink-0"
-                  aria-current={phase.visualStatus === CURRENT ? 'step' : undefined}
-                >
-                  <span className={`w-9 h-9 shrink-0 rounded-full border-2 flex items-center justify-center ${doneColors?.circle ?? style.circle}`} aria-hidden="true">
-                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{style.icon}</span>
-                  </span>
-                  <span className="flex flex-col min-w-0">
-                    <span className={`text-sm font-semibold leading-tight ${style.label}`}>
-                      {PHASE_TITLES[phase.key] ?? phase.key}
-                      <span className="sr-only">{`, ${STATUS_DESCRIPTIONS[phase.visualStatus]}`}</span>
-                    </span>
-                    <span className="text-xs text-on-surface-variant tabular-nums">{phaseCaption(phase)}</span>
-                  </span>
-                </li>
-                {!isLast && (
-                  <li
-                    role="presentation"
-                    className={`hidden sm:block flex-1 min-w-6 h-0.5 mx-4 rounded-full ${doneColors?.line ?? 'bg-outline-variant'}`}
-                  />
-                )}
-              </Fragment>
-            )
-          })}
-        </ol>
-      )}
+      {steps.length > 0 && <PhaseSteps steps={steps} />}
     </div>
   )
 }

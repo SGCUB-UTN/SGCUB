@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const TOP_URGENT_COUNT = 4
 
@@ -39,17 +41,17 @@ function UrgentDocRow({ doc, getTypeName, tone, badgeLabel }) {
 
 function DocListSkeleton() {
   return (
-    <div className="flex flex-col divide-y divide-outline-variant/20 animate-pulse">
+    <SkeletonStatus label="Cargando casos urgentes..." className="flex flex-col divide-y divide-outline-variant/20">
       {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className="flex items-center justify-between gap-3 py-3 px-4">
           <div className="flex flex-col gap-1.5 flex-1">
-            <div className="h-4 w-3/5 bg-surface-container-high rounded" />
-            <div className="h-3 w-2/5 bg-surface-container-high rounded" />
+            <SkeletonBlock className="h-4 w-3/5" />
+            <SkeletonBlock soft className="h-3 w-2/5" />
           </div>
-          <div className="h-6 w-24 bg-surface-container-high rounded-full shrink-0" />
+          <SkeletonBlock round className="h-6 w-24 shrink-0" />
         </div>
       ))}
-    </div>
+    </SkeletonStatus>
   )
 }
 
@@ -86,7 +88,7 @@ export default function DocumentSummarySection({ isLoading, vencidos, proximosAV
           </div>
           <Link
             to="/documental"
-            className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline shrink-0"
+            className={`${TEXT_BUTTON_CLASS} ml-auto text-sm shrink-0`}
           >
             Ver control documental
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>

@@ -403,11 +403,13 @@ class ComprobanteListSerializer(ComprobanteSerializer):
     es_ingreso = serializers.SerializerMethodField()
     concepto = serializers.SerializerMethodField()
     monto_devuelto = serializers.SerializerMethodField()
+    motivo_anulacion = serializers.CharField(source="pago.motivo_anulacion", read_only=True)
+    medios_de_pago = serializers.SerializerMethodField()
 
     class Meta(ComprobanteSerializer.Meta):
         fields = [
             "comprobante_id", "pago", "codigo", "fecha_emision", "numero", "monto_total", "estado",
-            "socio", "es_ingreso", "concepto", "monto_devuelto",
+            "socio", "es_ingreso", "concepto", "monto_devuelto", "motivo_anulacion", "medios_de_pago",
         ]
 
     def get_codigo(self, obj):
@@ -428,6 +430,17 @@ class ComprobanteListSerializer(ComprobanteSerializer):
     def get_monto_devuelto(self, obj):
         annotated = getattr(obj, "monto_devuelto", None)
         return annotated if annotated is not None else refunded_amount(obj)
+
+    def get_medios_de_pago(self, obj):
+        pago = getattr(obj, "pago", None)
+        if not pago:
+            return ""
+        labels = self.context.get("medios_pago_labels")
+        if labels is None:
+            labels = dict(MedioPago.objects.values_list("codigo", "nombre"))
+            self.context["medios_pago_labels"] = labels
+        names = [labels.get(item.medio_de_pago, item.medio_de_pago) for item in pago.items_pago.all()]
+        return ", ".join(dict.fromkeys(names))
 
 
 class ComprobanteDetalleSerializer(ComprobanteListSerializer):

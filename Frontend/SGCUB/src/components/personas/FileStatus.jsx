@@ -1,12 +1,8 @@
 import { Link } from 'react-router-dom'
+import { DetailSkeleton } from '../shared/Skeleton'
 
 export function LoadingFile({ text }) {
-  return (
-    <div className="w-full py-16 flex flex-col items-center gap-3 text-on-surface-variant">
-      <span className="material-symbols-outlined text-[28px] animate-spin">progress_activity</span>
-      <p className="text-base">{text}</p>
-    </div>
-  )
+  return <DetailSkeleton label={text} />
 }
 
 export function ErrorFile({ message, backTo, backText }) {

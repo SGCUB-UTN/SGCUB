@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const PROCESOS_ESTATICOS = [
   {
@@ -67,7 +68,7 @@ export default function ProcessStatusSection() {
           </div>
           <Link
             to="/automatizaciones"
-            className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline shrink-0"
+            className={`${TEXT_BUTTON_CLASS} ml-auto text-sm shrink-0`}
           >
             Ver automatizaciones
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>

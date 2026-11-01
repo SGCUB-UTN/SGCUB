@@ -13,8 +13,12 @@ SCOPE_LABELS = {
     "activos": "Todos los socios",
     "categoria": "Categoría",
 }
+GENDER_LABELS = {
+    "M": "Todas las masculinas",
+    "F": "Todas las femeninas",
+}
 AFFILIATION_LABELS = {
-    "todos": "Socios y jugadores",
+    "todos": "Todos los socios",
     "socios": "Solo socios",
     "jugadores": "Solo jugadores",
 }
@@ -86,6 +90,12 @@ def parse_delinquency_params(query_params):
     if scope == "categoria":
         params["category_id"] = parse_positive_int(query_params.get("categoria_id"), "Debe indicar una categoría válida.")
 
+    genero = query_params.get("genero", "").strip().upper()
+    if genero:
+        if genero not in GENDER_LABELS:
+            raise ReporteMorosidadInvalidoError("El género debe ser M o F.")
+        params["genero"] = genero
+
     period_type = query_params.get("periodo", "").strip().lower()
     if period_type:
         if period_type not in PERIOD_LABELS:
@@ -94,7 +104,7 @@ def parse_delinquency_params(query_params):
     return params
 
 
-def filter_socios(scope, category_id=None, affiliation="todos"):
+def filter_socios(scope, category_id=None, affiliation="todos", genero=None):
     socios = Socio.objects.select_related(
         "persona",
         "estado_administrativo",
@@ -104,6 +114,8 @@ def filter_socios(scope, category_id=None, affiliation="todos"):
 
     if scope == "categoria":
         socios = socios.filter(jugador__categoria_id=category_id)
+    if genero:
+        socios = socios.filter(jugador__categoria__genero=genero)
 
     if affiliation == "socios":
         socios = socios.filter(jugador__isnull=True)
@@ -132,6 +144,14 @@ def count_by_state(cuotas, state):
     return sum(1 for cuota in cuotas if cuota.estado_cuota == state)
 
 
+def format_category_label(category):
+    if not category:
+        return NO_CATEGORY
+    if category.genero:
+        return f"{category.nombre} ({category.get_genero_display()})"
+    return category.nombre
+
+
 def report_row(socio, cuotas, pending, today):
     player = getattr(socio, "jugador", None)
     debt = sum((pending[cuota.pk] for cuota in cuotas), Decimal("0.00"))
@@ -147,7 +167,7 @@ def report_row(socio, cuotas, pending, today):
         "apellido": socio.persona.apellido,
         "dni": socio.persona.dni,
         "tipo": PLAYER_TYPE if player else SOCIO_TYPE,
-        "categoria_deportiva": player.categoria.nombre if player and player.categoria else NO_CATEGORY,
+        "categoria_deportiva": format_category_label(player.categoria) if player else NO_CATEGORY,
         "monto_adeudado": debt,
         "capital": debt - late_fees,
         "recargos": late_fees,
@@ -175,11 +195,13 @@ def delinquency_percentage(delinquent, roster):
     return (Decimal(delinquent * 100) / Decimal(roster)).quantize(Decimal("0.1"))
 
 
-def scope_label(scope, category_id=None, **_):
+def scope_label(scope, category_id=None, genero=None, **_):
     if scope == "categoria":
         category = Categoria.objects.filter(pk=category_id).first()
         if category:
-            return f"Categoría {category.nombre}"
+            return f"Categoría {format_category_label(category)}"
+    if genero in GENDER_LABELS:
+        return GENDER_LABELS[genero]
     return SCOPE_LABELS[scope]
 
 
@@ -205,7 +227,7 @@ def delinquency_report(scope, period=None, **filters):
         "filas": rows,
         "fecha": timezone.localtime(),
         "alcance": scope_label(scope, **filters),
-        "alcance_codigo": scope,
+        "alcance_codigo": "genero" if filters.get("genero") else scope,
         "tipo": AFFILIATION_LABELS[filters.get("affiliation", "todos")],
         "periodo": period["label"] if period else "Todos los períodos",
         "sin_cuenta": without_account,

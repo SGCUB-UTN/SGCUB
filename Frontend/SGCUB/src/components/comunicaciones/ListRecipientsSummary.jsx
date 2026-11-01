@@ -1,3 +1,5 @@
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
+
 export default function ListRecipientsSummary({ validCount, totalCount, excludedCount, onOpenExcluidos }) {
   const coveragePercent = totalCount > 0 ? ((validCount / totalCount) * 100).toFixed(1) : 0
 
@@ -31,7 +33,7 @@ export default function ListRecipientsSummary({ validCount, totalCount, excluded
           <button
             type="button"
             onClick={onOpenExcluidos}
-            className="text-xs text-primary hover:underline font-bold whitespace-nowrap cursor-pointer shrink-0"
+            className={`${TEXT_BUTTON_CLASS} text-xs whitespace-nowrap shrink-0`}
           >
             Ver lista de excluidos
           </button>

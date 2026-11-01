@@ -8,13 +8,14 @@ import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { BenefitButton } from '../personas/HeaderPersona'
 import PagoForm from './PagoForm'
 import SocioPicker from './SocioPicker'
+import { TitleSkeleton } from '../shared/Skeleton'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
-function HeaderMessage({ icon, tone = 'text-on-surface-variant', spin = false, children }) {
+function HeaderMessage({ icon, tone = 'text-on-surface-variant', children }) {
   return (
     <p className={`flex items-center gap-2 h-10 text-base ${tone}`} role={tone === 'text-error' ? 'alert' : 'status'}>
-      <span className={`material-symbols-outlined text-[20px] ${spin ? 'animate-spin' : ''}`} aria-hidden="true">{icon}</span>
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>
       {children}
     </p>
   )
@@ -78,7 +79,7 @@ function RegisterPaymentModal({
       )
     }
     if (!socioId) return <SocioPicker compact excludedId={excludedSocioId} onSelect={(socio) => setSocioId(socio.socio_id)} />
-    if (loading) return <HeaderMessage icon="progress_activity" spin>Cargando estado de cuenta...</HeaderMessage>
+    if (loading) return <TitleSkeleton label="Cargando estado de cuenta..." />
     if (!loaded) {
       return <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
     }

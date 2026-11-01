@@ -2,16 +2,21 @@ import { Link } from 'react-router-dom'
 import { formatAmount } from '../personas/format'
 import StatCard from '../shared/StatCard'
 import { overdueBreakdown } from '../finanzas/cuotaStates'
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
-function KpiSkeleton() {
+function KpiSkeleton({ label }) {
   return (
-    <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs animate-pulse">
+    <SkeletonStatus
+      label={label}
+      className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-4 flex items-center justify-between gap-3 shadow-xs"
+    >
       <div className="flex flex-col gap-2 flex-1">
-        <div className="h-4 w-3/5 bg-surface-container-high rounded" />
-        <div className="h-7 w-2/5 bg-surface-container-high rounded" />
+        <SkeletonBlock className="h-4 w-3/5" />
+        <SkeletonBlock className="h-7 w-2/5" />
       </div>
-      <div className="w-10 h-10 rounded-full bg-surface-container-high shrink-0" />
-    </div>
+      <SkeletonBlock round className="w-10 h-10 shrink-0" />
+    </SkeletonStatus>
   )
 }
 
@@ -55,7 +60,7 @@ export default function FinancialKpiSection({
         </div>
         <Link
           to="/resumen-financiero"
-          className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline shrink-0"
+          className={`${TEXT_BUTTON_CLASS} ml-auto text-sm shrink-0`}
         >
           Ver resumen financiero
           <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
@@ -64,7 +69,9 @@ export default function FinancialKpiSection({
 
       <div className="p-space-lg bg-surface-container-low grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {isLoading ? (
-          Array.from({ length: 4 }).map((_, index) => <KpiSkeleton key={index} />)
+          Array.from({ length: 4 }).map((_, index) => (
+            <KpiSkeleton key={index} label={index === 0 ? 'Cargando indicadores financieros...' : undefined} />
+          ))
         ) : (
           <>
             <KpiLink to="/resumen-financiero" ariaLabel="Ver resumen financiero">

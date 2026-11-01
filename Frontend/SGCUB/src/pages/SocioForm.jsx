@@ -12,6 +12,7 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import { CAMPOS_OBLIGATORIOS, FORM_INICIAL, claseInput, enfocarCampo, socioAFormulario, validar } from '../components/socios/socioForm'
 import { Campo, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConFlecha } from '../components/socios/SocioFormFields'
+import { FormSkeleton } from '../components/shared/Skeleton'
 
 const CAMPOS_BLOQUEADOS_PERSONA = ['nombre', 'apellido', 'fecha_nacimiento', 'genero', 'genero_otro']
 
@@ -187,14 +188,7 @@ function SocioForm() {
   const iconoDni = busqueda.buscando ? 'progress_activity' : dniConError ? 'warning' : personaEncontrada ? 'check_circle' : 'fingerprint'
   const colorIconoDni = dniConError ? 'text-error' : personaEncontrada ? 'text-[#00875a]' : 'text-outline'
 
-  if (cargando) {
-    return (
-      <div className="max-w-5xl mx-auto w-full py-16 flex flex-col items-center gap-3 text-on-surface-variant">
-        <span className="material-symbols-outlined text-xl animate-spin">progress_activity</span>
-        <p className="text-sm">Cargando datos del socio...</p>
-      </div>
-    )
-  }
+  if (cargando) return <FormSkeleton label="Cargando datos del socio..." />
 
   if (errorCarga) {
     return (

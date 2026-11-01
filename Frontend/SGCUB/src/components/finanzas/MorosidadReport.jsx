@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router-dom'
+import useEntered from '../../hooks/useEntered'
+import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { KpiGrid } from '../shared/Kpi'
+import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../shared/Skeleton'
 import SectionHeading from '../shared/SectionHeading'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import AffectedCategories from './AffectedCategories'
@@ -25,6 +28,7 @@ function BreakdownItem({ swatchClass, label, amount, tone }) {
 }
 
 function DebtKpi({ rows, total }) {
+  const entered = useEntered()
   const capital = sumBy(rows, 'capital')
   const surcharges = sumBy(rows, 'recargos')
   const capitalShare = total > 0 ? (capital / total) * 100 : 0
@@ -37,7 +41,7 @@ function DebtKpi({ rows, total }) {
       {total > 0 && (
         <>
           <div className="mt-3 flex h-2 gap-0.5" aria-hidden="true">
-            {capital > 0 && <div className="h-full rounded bg-outline-variant" style={{ width: `${capitalShare}%` }} />}
+            {capital > 0 && <div className={`h-full rounded bg-outline-variant ${WIDTH_MOTION}`} style={{ width: grown(entered, `${capitalShare}%`) }} />}
             {surcharges > 0 && <div className="h-full flex-1 rounded bg-error" />}
           </div>
           <ul className="mt-2 flex flex-col gap-1">
@@ -64,6 +68,36 @@ function MorosidadKpis({ reporte }) {
   )
 }
 
+function ReportSkeleton() {
+  return (
+    <SkeletonStatus label="Consultando cuentas..." className="flex flex-col gap-5">
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton withAction />
+        <div className={`${SECTION_CLASS} grid grid-cols-1 sm:grid-cols-3 gap-6`}>
+          <div className="flex flex-col gap-3">
+            <SkeletonBlock soft className="h-3.5 w-40" />
+            <SkeletonBlock className="h-7 w-36" />
+            <SkeletonBlock round className="h-2 w-full" />
+          </div>
+          <div className="flex items-center gap-4">
+            <RingSkeleton size={120} stroke={16} />
+            <LineSkeletons count={2} className="flex-1 flex flex-col gap-3" />
+          </div>
+          <LineSkeletons count={3} className="flex flex-col gap-4" />
+        </div>
+      </div>
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton withAction />
+        <table className="w-full">
+          <tbody>
+            <TableSkeletonRows colSpan={6} animated={false} />
+          </tbody>
+        </table>
+      </div>
+    </SkeletonStatus>
+  )
+}
+
 function MorosidadReport({ reporte, isLoading, error }) {
   const navigate = useNavigate()
 
@@ -71,8 +105,13 @@ function MorosidadReport({ reporte, isLoading, error }) {
     return <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">{error}</p>
   }
   if (!reporte) {
-    return <p className="py-12 text-center text-on-surface-variant">{isLoading ? 'Consultando cuentas...' : 'Elegí los filtros para generar el reporte.'}</p>
+    if (isLoading) return <ReportSkeleton />
+    return <p className="py-12 text-center text-on-surface-variant">Elegí los filtros para generar el reporte.</p>
   }
+
+  const scopeLabel = reporte.alcance_codigo === 'categoria' || reporte.alcance_codigo === 'genero'
+    ? reporte.alcance
+    : reporte.tipo
 
   return (
     <div className={`flex flex-col gap-5 transition-opacity ${isLoading ? 'opacity-60' : ''}`} aria-busy={isLoading}>
@@ -84,7 +123,7 @@ function MorosidadReport({ reporte, isLoading, error }) {
           className={HEADING_CLASS}
           actions={(
             <p className="text-sm text-on-surface-variant">
-              {reporte.alcance} · {reporte.tipo} · {reporte.periodo} · Actualizado el {reporte.fecha}
+              {scopeLabel} · {reporte.periodo} · Actualizado el {reporte.fecha}
             </p>
           )}
         />
