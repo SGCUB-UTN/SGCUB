@@ -34,10 +34,18 @@ PROFILE_LABELS = {PERFIL_JUGADOR: "Jugador activo", PERFIL_DOCENTE: "Docente"}
 FILTER_STATE_LABELS = {None: "Todos los documentos", VENCIDO: "Vencidos", POR_VENCER: "Próximos a vencer", FALTANTE: "Faltantes", VIGENTE: "Vigentes"}
 FILTER_PROFILE_LABELS = {None: "Todos", PERFIL_JUGADOR: "Jugadores activos", PERFIL_DOCENTE: "Docentes"}
 FILTER_GENDER_LABELS = {"M": "Todas las masculinas", "F": "Todas las femeninas"}
+STATE_SLUGS = {
+    VENCIDO: "vencidos",
+    POR_VENCER: "por-vencer",
+    FALTANTE: "faltantes",
+    VIGENTE: "vigentes",
+}
 
 
-def padron_filename(generated_at):
-    return f"reporte-documental-{generated_at:%Y%m%d-%H%M}.pdf"
+def padron_filename(generated_at, estado=None):
+    slug = STATE_SLUGS.get(estado)
+    prefix = f"reporte-documental-{slug}" if slug else "reporte-documental"
+    return f"{prefix}-{generated_at:%Y%m%d-%H%M}.pdf"
 
 
 def format_count(count, total):

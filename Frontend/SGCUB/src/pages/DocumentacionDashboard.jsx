@@ -149,7 +149,7 @@ export default function DocumentacionDashboard() {
               <ExportMenu
                 disabled={!resumen}
                 isExporting={isExporting}
-                onCsv={() => downloadDocumentalCsv(filterRows(rows, filters))}
+                onCsv={() => downloadDocumentalCsv(filterRows(rows, filters), filters.estado)}
                 onPdf={exportPdf}
               />
             </div>

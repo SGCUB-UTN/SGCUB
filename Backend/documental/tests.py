@@ -340,10 +340,17 @@ class PadronDocumentalTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertIn("reporte-documental-", response["Content-Disposition"])
+        self.assertIn("reporte-documental-vencidos-", response["Content-Disposition"])
         self.assertIn(b"Cumplimiento general", response.content)
         self.assertIn(b"71000061", response.content)
         self.assertNotIn(b"71000062", response.content)
+
+    def test_el_nombre_del_reporte_refleja_el_estado(self):
+        self.assertIn("reporte-documental-vencidos-", self.reporte(estado="vencido")["Content-Disposition"])
+        self.assertIn("reporte-documental-por-vencer-", self.reporte(estado="por_vencer")["Content-Disposition"])
+        self.assertIn("reporte-documental-faltantes-", self.reporte(estado="faltante")["Content-Disposition"])
+        self.assertIn("reporte-documental-vigentes-", self.reporte(estado="vigente")["Content-Disposition"])
+        self.assertIn("reporte-documental-2", self.reporte()["Content-Disposition"])
 
     def test_el_reporte_filtra_por_tipo_de_documento(self):
         self.jugador("71000101")

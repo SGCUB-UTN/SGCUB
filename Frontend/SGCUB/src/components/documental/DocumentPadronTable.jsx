@@ -262,7 +262,7 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
           rows={selectedRows}
           notifiable={notifiable}
           onNotify={() => onNotifyPersonas(notifiable)}
-          onExport={() => downloadDocumentalCsv(selectedRows)}
+          onExport={() => downloadDocumentalCsv(selectedRows, filters.estado)}
           onClear={() => setSelectedKeys(new Set())}
         />
       )}
