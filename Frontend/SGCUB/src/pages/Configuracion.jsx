@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import ClubSettings from '../components/configuracion/ClubSettings'
 import CommunicationSettings from '../components/configuracion/CommunicationSettings'
 import ConfigurationHistoryModal from '../components/configuracion/ConfigurationHistoryModal'
@@ -33,6 +34,7 @@ const revertedMessage = (version) => {
 
 export default function Configuracion() {
   const config = useConfiguracion()
+  const [searchParams] = useSearchParams()
   const [history, setHistory] = useState({ opened: false, section: '' })
   const [saveOpened, setSaveOpened] = useState(false)
   const [notice, setNotice] = useState({ tone: 'success', message: '' })
@@ -80,6 +82,7 @@ export default function Configuracion() {
 
       {isReady && (
         <PersonTabs
+          defaultTab={searchParams.get('tab') ?? undefined}
           tabs={[
             {
               id: 'finanzas',

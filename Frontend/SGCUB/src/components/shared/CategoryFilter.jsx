@@ -9,7 +9,7 @@ import {
   findGender,
   genderFilterValue,
   selectedCategory,
-} from './cuotaCategories'
+} from './categoryFilters'
 
 const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full sm:w-auto pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const GENDER_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-9 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed'

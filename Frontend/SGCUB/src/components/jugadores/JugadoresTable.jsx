@@ -8,6 +8,8 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
+import CategoryFilter from '../shared/CategoryFilter'
+import { ALL_CATEGORIES, NO_CATEGORY_VALUE } from '../shared/categoryFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
@@ -15,6 +17,17 @@ import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 6
+const GENDER_PREFIX = 'gender:'
+
+const matchesCategory = (jugador, value) => {
+  if (value === ALL_CATEGORIES) return true
+  const cat = jugador.categoria
+  if (value === NO_CATEGORY_VALUE) return !cat?.categoria_id
+  if (value.startsWith(GENDER_PREFIX)) {
+    return Boolean(cat?.categoria_id) && cat.genero === value.slice(GENDER_PREFIX.length)
+  }
+  return String(cat?.categoria_id) === value
+}
 
 const isActive = (jugador) => {
   const estado = (jugador.estado?.nombre ?? '').toLowerCase()
@@ -71,14 +84,30 @@ const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('todas')
+  const [category, setCategory] = useState(ALL_CATEGORIES)
 
   const jugadores = useMemo(() => data ?? [], [data])
+
+  const categoryOptions = useMemo(
+    () => categorias
+      .filter((item) => item.categoria_id)
+      .map((item) => ({
+        value: String(item.categoria_id),
+        name: item.nombre,
+        gender: item.genero ?? '',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true })),
+    [categorias],
+  )
+  const hasUncategorized = useMemo(
+    () => jugadores.some((jugador) => !jugador.categoria?.categoria_id),
+    [jugadores],
+  )
 
   const filtered = useMemo(() => {
     const text = search.trim()
     return jugadores.filter((jugador) => {
-      if (category !== 'todas' && String(jugador.categoria?.categoria_id) !== category) return false
+      if (!matchesCategory(jugador, category)) return false
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
       if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
@@ -106,15 +135,12 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             placeholder="Filtrar por DNI, Nombre o Apellido..."
             label="Filtrar jugadores"
           />
-          <FilterSelect
-            className={FILTER_CLASS}
+          <CategoryFilter
             value={category}
-            onChange={(event) => withPageReset(setCategory)(event.target.value)}
-            aria-label="Filtrar por categoría"
-          >
-            <option value="todas">Categoría: Todas</option>
-            {categorias.map((item) => <option key={item.categoria_id} value={item.categoria_id}>{item.nombre}</option>)}
-          </FilterSelect>
+            categories={categoryOptions}
+            hasUncategorized={hasUncategorized}
+            onChange={withPageReset(setCategory)}
+          />
           <FilterSelect
             className={FILTER_CLASS}
             value={status}
