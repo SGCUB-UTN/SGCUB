@@ -17,6 +17,7 @@ import {
   ALL,
   DOCUMENT_STATES,
   PROFILES,
+  PROFILE_LABELS,
   STATE_ORDER,
   categoryOptions,
   daysFromToday,
@@ -44,8 +45,6 @@ const PROFILE_FILTERS = [
   { value: PROFILES.DOCENTE, label: 'Docentes' },
   { value: PROFILES.JUGADOR, label: 'Jugadores activos' },
 ]
-
-const PROFILE_LABELS = { [PROFILES.JUGADOR]: 'Jugador activo', [PROFILES.DOCENTE]: 'Docente' }
 
 const SORT_VALUES = {
   person: (row) => personaName(row),
@@ -101,17 +100,21 @@ function DocumentTabs({ tabs, value, onChange }) {
   )
 }
 
+const notifyBlockReason = (row) => {
+  if (row.perfil === PROFILES.DOCENTE) return 'Los docentes no se pueden notificar'
+  if (row.estado === DOCUMENT_STATES.VIGENTE) return 'El documento está vigente'
+  return null
+}
+
 function RowActions({ row, onNotify, onUpload }) {
   const name = personaName(row)
-  const isTeacher = row.perfil === PROFILES.DOCENTE
-  const notifyLabel = isTeacher ? 'Los docentes no se pueden notificar' : `Notificar a ${name}`
+  const notifyBlocker = notifyBlockReason(row)
+  const notifyLabel = notifyBlocker ?? `Notificar a ${name}`
   return (
     <div className="flex justify-end gap-1">
-      {onNotify && (
-        <button type="button" onClick={() => onNotify(row)} disabled={isTeacher} className={ICON_BUTTON_CLASS} aria-label={notifyLabel} title={notifyLabel}>
-          <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">notifications</span>
-        </button>
-      )}
+      <button type="button" onClick={() => onNotify(row)} disabled={Boolean(notifyBlocker)} className={ICON_BUTTON_CLASS} aria-label={notifyLabel} title={notifyLabel}>
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">notifications</span>
+      </button>
       <button type="button" onClick={() => onUpload(row)} className={ICON_BUTTON_CLASS} aria-label={`Cargar ${row.tipo_documento_nombre} de ${name}`} title="Cargar documento">
         <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">upload_file</span>
       </button>
@@ -119,7 +122,7 @@ function RowActions({ row, onNotify, onUpload }) {
   )
 }
 
-export default function DocumentPadronTable({ rows, personas, filters, onFiltersChange, onUpload, onNotify, toolbarActions }) {
+export default function DocumentPadronTable({ rows, personas, filters, onFiltersChange, onUpload, onNotify }) {
   const categories = useMemo(() => categoryOptions(personas), [personas])
   const hasUncategorized = personas.some((persona) => persona.categorias.length === 0)
 
@@ -173,9 +176,6 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
             onChange={change('categoria')}
           />
         </div>
-        {toolbarActions && (
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">{toolbarActions}</div>
-        )}
       </div>
 
       <DocumentTabs tabs={tabs} value={filters.estado} onChange={change('estado')} />

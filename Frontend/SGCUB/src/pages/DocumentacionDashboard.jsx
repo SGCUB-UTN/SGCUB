@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { createDocumento, updateDocumento } from '../api/documentacion'
+import { useNavigate } from 'react-router-dom'
+import { Menu } from '@mantine/core'
+import { createDocumento, downloadPadronDocumentalPdf, updateDocumento } from '../api/documentacion'
 import useDocumentacionPadron from '../hooks/useDocumentacionPadron'
 import useDocumentUploadForm from '../hooks/useDocumentUploadForm'
 import DocumentAffectedCategories from '../components/documental/DocumentAffectedCategories'
@@ -8,7 +10,10 @@ import DocumentStatusChart from '../components/documental/DocumentStatusChart'
 import DocumentacionUploadModal from '../components/documental/DocumentacionUploadModal'
 import PadronComplianceChart from '../components/documental/PadronComplianceChart'
 import { appliesToProfile } from '../components/documental/missingDocuments'
-import { INITIAL_FILTERS, personaName } from '../components/documental/padronDocumental'
+import { downloadDocumentalCsv } from '../components/documental/documentalCsv'
+import { bulkDocumentNotice, documentNotice } from '../components/documental/documentNotices'
+import { INITIAL_FILTERS, PROFILES, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
+import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
 import { KpiGrid } from '../components/shared/Kpi'
@@ -27,6 +32,25 @@ const withChangeNotice = (request) => async (...args) => {
 
 const saveNew = withChangeNotice(createDocumento)
 const saveEdit = withChangeNotice(updateDocumento)
+
+const MenuIcon = ({ name }) => <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">{name}</span>
+
+function ExportMenu({ disabled, isExporting, onCsv, onPdf }) {
+  return (
+    <Menu position="bottom-end" shadow="md" width={260} disabled={disabled || isExporting}>
+      <Menu.Target>
+        <SecondaryButton icon={isExporting ? 'progress_activity' : 'file_download'} disabled={disabled || isExporting}>
+          {isExporting ? 'Generando PDF...' : 'Exportar reporte'}
+        </SecondaryButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>Con los filtros de la tabla</Menu.Label>
+        <Menu.Item icon={<MenuIcon name="table_view" />} onClick={onCsv}>Listado en CSV</Menu.Item>
+        <Menu.Item icon={<MenuIcon name="picture_as_pdf" />} onClick={onPdf}>Reporte en PDF con resumen</Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  )
+}
 
 function DashboardSkeleton() {
   return (
@@ -59,7 +83,10 @@ function DashboardSkeleton() {
 }
 
 export default function DocumentacionDashboard() {
+  const navigate = useNavigate()
   const { isLoading, error, personas, rows, tipos, resumen } = useDocumentacionPadron()
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
   const [filters, setFilters] = useState(INITIAL_FILTERS)
   const [uploadRow, setUploadRow] = useState(null)
   const upload = useDocumentUploadForm({ tipos, create: saveNew, update: saveEdit })
@@ -74,6 +101,27 @@ export default function DocumentacionDashboard() {
     upload.openNew(row.persona_id, row.tipo_documento)
   }
 
+  const disabledPlayers = personas.filter((persona) => !persona.habilitado && persona.perfil === PROFILES.JUGADOR)
+
+  const notifyRow = (row) => {
+    const persona = personas.find((item) => item.clave === row.clave)
+    navigate('/comunicaciones', { state: { debtNotice: documentNotice(persona) } })
+  }
+
+  const notifyDisabled = () => navigate('/comunicaciones', { state: { debtNotice: bulkDocumentNotice(disabledPlayers) } })
+
+  const exportPdf = async () => {
+    setExportError('')
+    setIsExporting(true)
+    try {
+      await downloadPadronDocumentalPdf(reportParams(filters))
+    } catch {
+      setExportError('No se pudo generar el PDF del reporte.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const selectCategory = (categoriaId) => {
     setFilters({ ...INITIAL_FILTERS, categoria: String(categoriaId) })
     document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -81,12 +129,35 @@ export default function DocumentacionDashboard() {
 
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
-      <div className="flex flex-col gap-1 max-w-3xl">
-        <PageHeader breadcrumb={[{ label: 'Documental' }]} title="Control Documental" />
-        <p className="font-body-md text-body-md text-on-surface-variant">
+      <div className="flex flex-col gap-1">
+        <PageHeader
+          breadcrumb={[{ label: 'Documental' }]}
+          title="Control Documental"
+          actions={(
+            <div className="flex flex-wrap items-center gap-2.5">
+              <PrimaryButton
+                icon="notifications"
+                onClick={notifyDisabled}
+                disabled={disabledPlayers.length === 0}
+                title="Prepara un aviso para los jugadores activos inhabilitados. Los docentes no se pueden notificar."
+              >
+                Notificar a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
+              </PrimaryButton>
+              <ExportMenu
+                disabled={!resumen}
+                isExporting={isExporting}
+                onCsv={() => downloadDocumentalCsv(filterRows(rows, filters))}
+                onPdf={exportPdf}
+              />
+            </div>
+          )}
+        />
+        <p className="max-w-3xl font-body-md text-body-md text-on-surface-variant">
           Seguimiento de la documentación obligatoria de jugadores activos y docentes del club.
         </p>
       </div>
+
+      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
 
       {error && !resumen && (
         <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">
@@ -117,6 +188,7 @@ export default function DocumentacionDashboard() {
               filters={filters}
               onFiltersChange={setFilters}
               onUpload={openUpload}
+              onNotify={notifyRow}
             />
           </section>
         </>

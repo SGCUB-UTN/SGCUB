@@ -13,6 +13,15 @@ export const PROFILES = {
   DOCENTE: 'docente',
 }
 
+export const PROFILE_LABELS = { [PROFILES.JUGADOR]: 'Jugador activo', [PROFILES.DOCENTE]: 'Docente' }
+
+export const STATE_LABELS = {
+  [DOCUMENT_STATES.VIGENTE]: 'Vigente',
+  [DOCUMENT_STATES.POR_VENCER]: 'Próximo a vencer',
+  [DOCUMENT_STATES.VENCIDO]: 'Vencido',
+  [DOCUMENT_STATES.FALTANTE]: 'Faltante',
+}
+
 export const categoryLabel = (categoria) => {
   const gender = findGender(categoria.genero)
   return gender ? `${categoria.nombre} (${gender.shortLabel})` : categoria.nombre
@@ -50,6 +59,17 @@ export const matchesFilters = (row, { perfil, categoria, search }) => (
   && matchesCategory(row, categoria)
   && matchesSearch(search, [row.apellido, row.nombre, row.dni])
 )
+
+export const filterRows = (rows, filters) => rows.filter((row) => (
+  matchesFilters(row, filters) && (filters.estado === ALL || row.estado === filters.estado)
+))
+
+export const reportParams = ({ estado, perfil, categoria, search }) => ({
+  estado: estado === ALL ? undefined : estado,
+  perfil: perfil === ALL ? undefined : perfil,
+  categoria: categoria === ALL_CATEGORIES ? undefined : categoria,
+  q: search.trim() || undefined,
+})
 
 export const categoryOptions = (personas) => {
   const categories = new Map()
