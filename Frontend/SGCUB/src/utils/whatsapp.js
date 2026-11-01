@@ -65,7 +65,7 @@ export function formatWhatsAppPhone(phone) {
 /**
  * Genera el texto del mensaje para enviar el comprobante por WhatsApp.
  */
-export function buildWhatsAppMessage({ socio, comprobanteCodigo, montoTotal, clubNombre }) {
+export function buildWhatsAppMessage({ comprobanteCodigo, montoTotal, clubNombre }) {
   const nombreClub = clubNombre || 'Club Universitario de Berisso'
   const codigo = comprobanteCodigo ? ` (${comprobanteCodigo})` : ''
   const monto = montoTotal != null ? ` por un monto de ${formatAmount(montoTotal)}` : ''
