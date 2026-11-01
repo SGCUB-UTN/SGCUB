@@ -60,6 +60,7 @@ Q_CLUSTER = {
     'workers': 4,              # Número de procesos concurrentes
     'timeout': 600,            # Segundos máximos antes de matar una tarea colgada
     'retry': 660,              # Segundos para reintentar si el worker falla
+    'max_attempts': 3,         # Evita bucles infinitos si una tarea falla repetidamente
     'catch_up': False,
     'queue_limit': 50,         # Límite de tareas en cola
     'orm': 'default',          # Usa la base de datos configurada en Django como broker
