@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from '@mantine/core'
 import { getComprobante } from '../../api/comprobantes'
+import { getConfiguracionGeneral } from '../../api/configuracion'
 import { revertirPago } from '../../api/pagos'
 import useMediosPago from '../../hooks/useMediosPago'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
@@ -9,6 +10,7 @@ import { formatAmount, formatDate, formatDni } from '../personas/format'
 import AuthorizationModal from './AuthorizationModal'
 import DesgloseComprobante from './DesgloseComprobante'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
+import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
 import { availableToRefund, reversalOf } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
@@ -55,6 +57,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
   const [state, setState] = useState({ loading: true, error: '', data: null })
   const [action, setAction] = useState(null)
   const [justReverted, setJustReverted] = useState(false)
+  const [clubConfig, setClubConfig] = useState(null)
   const { openPayment } = useRegisterPayment()
   const { openReversal } = useRevertPayment()
   const { methodLabel } = useMediosPago()
@@ -64,7 +67,10 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
     .catch(() => setState({ loading: false, error: 'No se pudo cargar el detalle del comprobante.', data: null })), [comprobanteId])
 
   useEffect(() => {
-    if (opened && comprobanteId) load()
+    if (opened && comprobanteId) {
+      load()
+      getConfiguracionGeneral().then(setClubConfig).catch(() => {})
+    }
   }, [opened, comprobanteId, load])
 
   const detalle = state.data
@@ -127,7 +133,10 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
           {detalle.socio && (
             <div className="p-3 rounded-lg bg-surface-container-low">
               <p className="text-sm text-on-surface-variant">Socio</p>
-              <p className="font-semibold text-on-surface">{detalle.socio.apellido}, {detalle.socio.nombre} · DNI {formatDni(detalle.socio.dni)} · Socio N° {detalle.socio.numero_socio}</p>
+              <p className="font-semibold text-on-surface">
+                {detalle.socio.apellido}, {detalle.socio.nombre} · DNI {formatDni(detalle.socio.dni)} · Socio N° {detalle.socio.numero_socio}
+                {detalle.socio.telefono ? ` · Tel. ${detalle.socio.telefono}` : ''}
+              </p>
             </div>
           )}
 
@@ -163,25 +172,35 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
             </div>
           )}
 
-          <div className="pt-3 border-t border-outline-variant/30 flex flex-wrap gap-2">
-            <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
+          <div className="pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
             {detalle.revertible && (
-              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
+              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40 mr-auto`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
             )}
             {anulado && !isIncome && available > 0 && (
-              <button type="button" onClick={registerAgain} className={`${ACTION_BUTTON_CLASS} border-primary/40 text-primary hover:bg-primary/5`}>
+              <button type="button" onClick={registerAgain} className={`${ACTION_BUTTON_CLASS} border-primary/40 text-primary hover:bg-primary/5 mr-auto`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">payments</span>
                 Volver a cobrar
               </button>
             )}
             {anulado && available > 0 && (
-              <button type="button" onClick={() => setAction('creditNote')} className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low`}>
+              <button type="button" onClick={() => setAction('creditNote')} className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low mr-auto`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">currency_exchange</span>
                 Emitir nota de crédito
               </button>
+            )}
+
+            <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
+            {!anulado && (
+              <WhatsAppComprobanteButton
+                socio={detalle.socio}
+                comprobanteId={detalle.comprobante_id}
+                comprobanteCodigo={detalle.codigo}
+                montoTotal={detalle.monto_total}
+                clubNombre={clubConfig?.club_nombre}
+              />
             )}
           </div>
         </div>
