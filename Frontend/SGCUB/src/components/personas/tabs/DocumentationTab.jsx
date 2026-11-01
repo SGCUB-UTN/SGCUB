@@ -19,6 +19,7 @@ const getEmptyUploadForm = (tipoDocumento = '') => ({
   borrar_archivo: false,
   fecha_emision: new Date().toISOString().split('T')[0],
   fecha_vencimiento: '',
+  sin_vencimiento: false,
 })
 
 const addMonths = (date, months) => {
@@ -74,8 +75,11 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   ))
   const missingTipos = findMissingDocumentTypes(tipos, documentosActivos, personaType)
 
+  const findTipo = (tipoId) => tipos.find(t => String(t.id_tipo_documento) === String(tipoId))
+  const requiresDueDate = (tipoId) => Boolean(findTipo(tipoId)?.requiere_vencimiento)
+
   const suggestedDueDate = (form) => {
-    const tipo = tipos.find(t => String(t.id_tipo_documento) === String(form.tipo_documento))
+    const tipo = findTipo(form.tipo_documento)
     return tipo?.vigencia_meses && form.fecha_emision ? addMonths(form.fecha_emision, tipo.vigencia_meses) : ''
   }
 
@@ -94,6 +98,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
       borrar_archivo: false,
       fecha_emision: doc.fecha_emision ? doc.fecha_emision.split('T')[0] : '',
       fecha_vencimiento: doc.fecha_vencimiento ? doc.fecha_vencimiento.split('T')[0] : '',
+      sin_vencimiento: !doc.fecha_vencimiento && !requiresDueDate(doc.tipo_documento),
     })
     setSaveError(null)
     setUploadModalOpen(true)
@@ -123,14 +128,17 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     const { name, value, type, files, checked } = e.target
     if (type === 'file') {
       setUploadForm(prev => ({ ...prev, archivo: files.length > 0 ? files[0] : null }))
+    } else if (name === 'sin_vencimiento') {
+      setUploadForm(prev => ({ ...prev, sin_vencimiento: checked, fecha_vencimiento: checked ? '' : suggestedDueDate(prev) }))
     } else if (type === 'checkbox') {
       setUploadForm(prev => ({ ...prev, [name]: checked }))
     } else {
       setUploadForm(prev => {
         const next = { ...prev, [name]: value }
+        if (name === 'tipo_documento' && requiresDueDate(value)) next.sin_vencimiento = false
         // The due date follows the type's default validity until the user types a different one
         const followsSuggestion = !prev.fecha_vencimiento || prev.fecha_vencimiento === suggestedDueDate(prev)
-        if ((name === 'tipo_documento' || name === 'fecha_emision') && followsSuggestion) {
+        if ((name === 'tipo_documento' || name === 'fecha_emision') && followsSuggestion && !next.sin_vencimiento) {
           next.fecha_vencimiento = suggestedDueDate(next)
         }
         return next
