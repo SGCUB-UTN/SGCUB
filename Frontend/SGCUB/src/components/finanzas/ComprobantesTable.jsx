@@ -8,7 +8,7 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import TableTabs from '../shared/TableTabs'
 import { tabId, tabPanelId } from '../shared/tabIds'
-import { PANEL_CLASS } from '../shared/panel'
+import { PANEL_CLASS, PANEL_HEADING_CLASS } from '../shared/panel'
 import { formatPeriod } from '../shared/periodFormat'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
@@ -20,11 +20,13 @@ import { descargarComprobantePdf } from '../../api/comprobantes'
 import { buildWhatsAppMessage, openWhatsAppChat } from '../../utils/whatsapp'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const HEADER_CLASS = 'py-2.5 px-4'
-const CELL_CLASS = 'py-2.5 px-4'
-const ICON_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer'
-const WHATSAPP_ICON_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 transition-colors cursor-pointer'
-const WHATSAPP_DISABLED_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded-lg border border-outline-variant/30 text-on-surface-variant/30 cursor-not-allowed'
+const HEADER_CLASS = 'py-3 px-4'
+const CELL_CLASS = 'py-3 px-4'
+const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
+const ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
+const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+const WHATSAPP_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60'
+const WHATSAPP_DISABLED_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant/30 text-on-surface-variant/30 cursor-not-allowed'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
 const TABS_ID = 'comprobantes-scope'
@@ -118,7 +120,6 @@ function ComprobantesTable({
   const [mainFilter, setMainFilter] = useState(ALL)
   const [conceptFilter, setConceptFilter] = useState(ALL)
   const filters = SCOPE_FILTERS[scope]
-  const scopeDescription = SCOPES.find((option) => option.value === scope).description
 
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
@@ -274,8 +275,55 @@ function ComprobantesTable({
         id="comprobantes-title"
         icon="receipt_long"
         title="Movimientos y comprobantes de caja"
-        className="px-4 sm:px-5"
+        className={PANEL_HEADING_CLASS}
       />
+
+      <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/20 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+          <TableSearchInput
+            value={search}
+            onChange={withPageReset(setSearch)}
+            placeholder="Comprobante, socio, DNI o concepto"
+            label="Filtrar movimientos y comprobantes"
+          />
+          <FilterSelect
+            className={FILTER_CLASS}
+            value={mainFilter}
+            onChange={(event) => withPageReset(setMainFilter)(event.target.value)}
+            aria-label={`Filtrar por ${filters.label.toLowerCase()}`}
+          >
+            <option value={ALL}>{filters.label}: Todos</option>
+            {filters.options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </FilterSelect>
+          {filters.conceptLabel && (
+            <FilterSelect
+              className={FILTER_CLASS}
+              value={conceptFilter}
+              onChange={(event) => withPageReset(setConceptFilter)(event.target.value)}
+              aria-label={`Filtrar por ${filters.conceptLabel.toLowerCase()}`}
+            >
+              <option value={ALL}>{filters.conceptLabel}: Todos</option>
+              {conceptOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </FilterSelect>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
+          <button
+            type="button"
+            onClick={() => downloadCashMovementsCsv(sorted, period, scope)}
+            disabled={isLoading || Boolean(error) || sorted.length === 0}
+            title="Exporta los movimientos que se ven con la búsqueda y los filtros actuales"
+            className={EXPORT_BUTTON_CLASS}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">file_download</span>
+            Exportar listado
+          </button>
+        </div>
+      </div>
 
       <TableTabs
         id={TABS_ID}
@@ -286,64 +334,16 @@ function ComprobantesTable({
       />
 
       <div id={tabPanelId(TABS_ID)} role="tabpanel" aria-labelledby={tabId(TABS_ID, scope)}>
-        <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/30 flex flex-col gap-3">
-          {scopeDescription && <p className="text-sm text-on-surface-variant">{scopeDescription}</p>}
-
-          <div className="flex flex-wrap items-center gap-4">
-            <TableSearchInput
-              value={search}
-              onChange={withPageReset(setSearch)}
-              placeholder="Buscar por comprobante, socio, DNI o concepto..."
-              label="Filtrar movimientos y comprobantes"
-            />
-            <FilterSelect
-              className={FILTER_CLASS}
-              value={mainFilter}
-              onChange={(event) => withPageReset(setMainFilter)(event.target.value)}
-              aria-label={`Filtrar por ${filters.label.toLowerCase()}`}
-            >
-              <option value={ALL}>{filters.label}: Todos</option>
-              {filters.options.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </FilterSelect>
-            {filters.conceptLabel && (
-              <FilterSelect
-                className={FILTER_CLASS}
-                value={conceptFilter}
-                onChange={(event) => withPageReset(setConceptFilter)(event.target.value)}
-                aria-label={`Filtrar por ${filters.conceptLabel.toLowerCase()}`}
-              >
-                <option value={ALL}>{filters.conceptLabel}: Todos</option>
-                {conceptOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </FilterSelect>
-            )}
-            <button
-              type="button"
-              onClick={() => downloadCashMovementsCsv(sorted, period, scope)}
-              disabled={isLoading || Boolean(error) || sorted.length === 0}
-              title="Exportar movimientos filtrados"
-              aria-label="Exportar movimientos filtrados"
-              className="inline-flex items-center justify-center h-10 w-10 shrink-0 p-2 border border-outline-variant rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">download</span>
-            </button>
-          </div>
-        </div>
-
         <DataTable
           tableClassName="min-w-[820px]"
-          headerCase="title"
           headers={(
             <>
-              <SortableHeader className={HEADER_CLASS} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={`${HEADER_CLASS} sm:pl-5`} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
               <th className={HEADER_CLASS} scope="col">Concepto</th>
               <SortableHeader className={HEADER_CLASS} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
-              <th className={`${HEADER_CLASS} text-center`} scope="col">Acciones</th>
+              <th className={`${HEADER_CLASS} sm:pr-5 text-right`} scope="col">Acciones</th>
             </>
           )}
         >
@@ -368,11 +368,11 @@ function ComprobantesTable({
               onKeyDown={(event) => handleKeyDown(event, item)}
               tabIndex={0}
               role="button"
-              className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+              className="hover:bg-surface-container-low/80 focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
             >
-              <td className={`${CELL_CLASS} whitespace-nowrap`}>
+              <td className={`${CELL_CLASS} sm:pl-5 whitespace-nowrap`}>
                 <span className="block font-semibold text-primary">{item.refCode}</span>
-                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${item.badgeClass}`}>
+                <span className={`${BADGE_CLASS} mt-1 ${item.badgeClass}`}>
                   {item.badgeLabel}
                 </span>
               </td>
@@ -407,8 +407,8 @@ function ComprobantesTable({
                 {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
                 {formatAmount(item.amount)}
               </td>
-              <td className={`${CELL_CLASS} text-center`}>
-                <div className="flex items-center justify-center gap-1.5">
+              <td className={`${CELL_CLASS} sm:pr-5 text-right`}>
+                <div className="flex items-center justify-end gap-1.5">
                   {item.kind === 'comprobante' && !item.isAnulado && (
                     <button
                       type="button"

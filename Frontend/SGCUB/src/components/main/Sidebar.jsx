@@ -180,7 +180,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <span className="app-sidebar-label font-body-md text-body-md">Documental</span>
                 </div>
                 {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
-                  <span className="font-label-sm flex items-center gap-1">
+                  <span className="app-sidebar-badges font-label-sm flex items-center gap-1">
                     {alertas.vencidos > 0 && (
                       <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
                     )}

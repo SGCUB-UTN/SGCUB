@@ -2,6 +2,7 @@ import { formatCount } from '../cuota/cuotaPeriod'
 import { tabId, tabPanelId } from './tabIds'
 
 const ARROW_STEPS = { ArrowRight: 1, ArrowLeft: -1 }
+const TAB_CLASS = 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 -mb-px text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container-low'
 
 export default function TableTabs({ id, label, options, value, onChange, className = '' }) {
   const handleKeyDown = (event, index) => {
@@ -14,7 +15,7 @@ export default function TableTabs({ id, label, options, value, onChange, classNa
   }
 
   return (
-    <div role="tablist" aria-label={label} className={`flex gap-6 overflow-x-auto px-4 sm:px-5 border-b border-outline-variant/30 bg-surface-container-low ${className}`}>
+    <div role="tablist" aria-label={label} className={`flex gap-1 overflow-x-auto px-4 sm:px-5 border-b border-outline-variant/30 ${className}`}>
       {options.map((option, index) => {
         const active = option.value === value
         return (
@@ -29,11 +30,11 @@ export default function TableTabs({ id, label, options, value, onChange, classNa
             title={option.description}
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`inline-flex items-center gap-2 h-11 border-b-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 ${active ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:border-outline-variant'}`}
+            className={`${TAB_CLASS} ${active ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
           >
             {option.label}
             {option.count != null && (
-              <span className={`min-w-6 px-1.5 rounded-full text-xs text-center tabular-nums ${active ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+              <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${option.badgeClass ?? (active ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant')}`}>
                 {formatCount(option.count)}
               </span>
             )}

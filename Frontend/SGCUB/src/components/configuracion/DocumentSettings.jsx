@@ -78,7 +78,7 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
         <div className="flex min-w-0 flex-col gap-0.5">
           <label htmlFor="tipo-obligatorio" className="text-sm font-semibold text-on-surface cursor-pointer">Obligatorio</label>
           <p id="tipo-obligatorio-descripcion" className="text-sm text-on-surface-variant">
-            Forma parte de la documentación que la persona tiene que presentar.
+            Forma parte de la documentación que la persona tiene que presentar. Si no está cargado, figura como faltante en su ficha.
           </p>
         </div>
       </div>

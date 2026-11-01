@@ -9,12 +9,9 @@ import useOrdenTabla from '../../hooks/useOrdenTabla'
 import { formatDate } from '../personas/format'
 import { parseDueDate } from './dueDate'
 import { matchesSearch } from '../shared/search'
+import DocumentStatusBadge from './DocumentStatusBadge'
+import { openFile } from './documentFile'
 
-const STATUS_LABELS = {
-  vigente: { label: 'Vigente / Aprobado', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-600' },
-  por_vencer: { label: 'Por vencer', badge: 'bg-amber-50 text-amber-700 border border-amber-200', dot: 'bg-amber-600' },
-  vencido: { label: 'Vencido', badge: 'bg-error-container text-error border border-error/20', dot: 'bg-error' },
-}
 const STATUS_ORDER = { vencido: 0, por_vencer: 1, vigente: 2 }
 
 const SORT_VALUES = {
@@ -31,25 +28,7 @@ const HEADER_CLASS = 'py-3 px-4'
 const SELECT_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const PRIMARY_ACTION_CLASS = 'text-primary hover:bg-primary-fixed/30'
 const DANGER_ACTION_CLASS = 'text-error hover:bg-error-container/60'
-const FILE_MISSING_MESSAGE = 'El archivo físico ya no existe o fue eliminado del servidor.'
 const compareText = new Intl.Collator('es', { sensitivity: 'base' }).compare
-
-const getMediaUrl = (path) => {
-  if (path.startsWith('http')) return path
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/'
-  return `${baseUrl.replace(/\/api\/?$/, '')}${path}`
-}
-
-const openFile = async (path) => {
-  const url = getMediaUrl(path)
-  try {
-    const response = await fetch(url, { method: 'HEAD' })
-    if (response.ok) window.open(url, '_blank')
-    else alert(FILE_MISSING_MESSAGE)
-  } catch {
-    alert(FILE_MISSING_MESSAGE)
-  }
-}
 
 function ActionButton({ icon, label, className, onClick }) {
   return (
@@ -126,37 +105,31 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
           isEmpty={sortedRows.length === 0}
           emptyText="No hay documentos que coincidan con los filtros."
         />
-        {sortedRows.map(doc => {
-          const statusStyle = STATUS_LABELS[doc.status]
-          return (
-            <tr key={doc.id_documento} className={`hover:bg-surface-container-low/80 transition-colors ${isHistory ? 'opacity-75' : ''}`}>
-              <td className="py-3 px-4 pl-6 font-medium text-base">{doc.typeName}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{formatDate(doc.fecha_emision)}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{doc.fecha_vencimiento ? formatDate(doc.fecha_vencimiento) : 'Sin vencimiento'}</td>
-              <td className="py-3 px-4">
-                {isHistory ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">Histórico</span>
-                ) : (
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-sm font-semibold ${statusStyle?.badge ?? ''}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${statusStyle?.dot ?? ''}`} />
-                    {statusStyle?.label ?? 'Desconocido'}
-                  </span>
+        {sortedRows.map(doc => (
+          <tr key={doc.id_documento} className={`hover:bg-surface-container-low/80 transition-colors ${isHistory ? 'opacity-75' : ''}`}>
+            <td className="py-3 px-4 pl-6 font-medium text-base">{doc.typeName}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDate(doc.fecha_emision)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">{doc.fecha_vencimiento ? formatDate(doc.fecha_vencimiento) : 'Sin vencimiento'}</td>
+            <td className="py-3 px-4">
+              {isHistory ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">Histórico</span>
+              ) : (
+                <DocumentStatusBadge status={doc.status} />
+              )}
+            </td>
+            <td className="py-3 px-4 pr-6">
+              <div className="flex items-center justify-end gap-1">
+                {doc.archivoUrl && (
+                  <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />
                 )}
-              </td>
-              <td className="py-3 px-4 pr-6">
-                <div className="flex items-center justify-end gap-1">
-                  {doc.archivoUrl && (
-                    <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />
-                  )}
-                  {!isHistory && (
-                    <ActionButton icon="edit" label={`Editar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onEdit(doc)} />
-                  )}
-                  <ActionButton icon="delete" label={`Eliminar ${doc.typeName}`} className={DANGER_ACTION_CLASS} onClick={() => onDelete(doc)} />
-                </div>
-              </td>
-            </tr>
-          )
-        })}
+                {!isHistory && (
+                  <ActionButton icon="edit" label={`Editar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onEdit(doc)} />
+                )}
+                <ActionButton icon="delete" label={`Eliminar ${doc.typeName}`} className={DANGER_ACTION_CLASS} onClick={() => onDelete(doc)} />
+              </div>
+            </td>
+          </tr>
+        ))}
       </DataTable>
     </div>
   )

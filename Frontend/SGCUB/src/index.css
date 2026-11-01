@@ -281,3 +281,35 @@ html.dark .comunicaciones-table-scroll::-webkit-scrollbar-thumb {
 .comunicaciones-table-scroll::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+
+html.dark .thin-scroll {
+  scrollbar-color: #475569 #17243a;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.thin-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+html.dark .thin-scroll::-webkit-scrollbar-track {
+  background: #17243a;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+html.dark .thin-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+}

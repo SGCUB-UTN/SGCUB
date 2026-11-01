@@ -20,7 +20,8 @@ export default function DocumentacionUploadModal({
   onChange, 
   tipos, 
   isEditing,
-  error
+  error,
+  subtitle
 }) {
   const fileInputRef = useRef(null)
 
@@ -41,7 +42,8 @@ export default function DocumentacionUploadModal({
   if (!isOpen) return null;
 
   const requiresDueDate = Boolean(tipos.find(t => String(t.id_tipo_documento) === String(form.tipo_documento))?.requiere_vencimiento)
-  const hasInvalidDates = Boolean(form.fecha_emision && form.fecha_vencimiento && form.fecha_vencimiento <= form.fecha_emision)
+  const noDueDate = Boolean(form.sin_vencimiento) && !requiresDueDate
+  const hasInvalidDates =Boolean(form.fecha_emision && form.fecha_vencimiento && form.fecha_vencimiento <= form.fecha_emision)
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -55,7 +57,10 @@ export default function DocumentacionUploadModal({
       onClick={handleBackdropClick}
     >
       <div className="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-lg shadow-xl flex flex-col gap-space-md max-h-[90vh] overflow-y-auto">
-        <h3 className="font-headline-sm text-headline-sm text-on-surface">{isEditing ? 'Editar documentación' : 'Cargar nueva documentación'}</h3>
+        <div>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface">{isEditing ? 'Editar documentación' : 'Cargar nueva documentación'}</h3>
+          {subtitle && <p className="mt-1 text-sm text-on-surface-variant">{subtitle}</p>}
+        </div>
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
           <div>
             <label className="block text-label-sm text-outline uppercase mb-1">Tipo de Documento</label>
@@ -72,8 +77,12 @@ export default function DocumentacionUploadModal({
               <input type="date" name="fecha_emision" value={form.fecha_emision} max={shiftDate(form.fecha_vencimiento, -1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
             </div>
             <div>
-              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento{requiresDueDate && ' *'}</label>
-              <input type="date" name="fecha_vencimiento" required={requiresDueDate} value={form.fecha_vencimiento} min={shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none" />
+              <label className="block text-label-sm text-outline uppercase mb-1">Fecha Vencimiento{!noDueDate && ' *'}</label>
+              <input type="date" name="fecha_vencimiento" required={!noDueDate} disabled={noDueDate} value={form.fecha_vencimiento} min={noDueDate ? undefined : shiftDate(form.fecha_emision, 1)} onChange={onChange} className="w-full h-10 px-3 rounded-lg bg-surface-container-low border-none cursor-pointer focus:ring-2 focus:ring-primary-container outline-none disabled:cursor-not-allowed disabled:opacity-50" />
+              <label className={`mt-2 flex items-center gap-2 text-sm text-on-surface-variant ${requiresDueDate ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                <input type="checkbox" name="sin_vencimiento" checked={noDueDate} disabled={requiresDueDate} onChange={onChange} className="w-4 h-4 accent-primary cursor-pointer disabled:cursor-not-allowed shrink-0" />
+                Sin vencimiento
+              </label>
             </div>
             {hasInvalidDates && (
               <p className="col-span-2 -mt-2 text-sm text-error" role="alert">{INVALID_DATES_MESSAGE}</p>

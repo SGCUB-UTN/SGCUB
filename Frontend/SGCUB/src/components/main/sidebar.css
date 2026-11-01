@@ -110,6 +110,10 @@
   color: var(--primary, #006493);
 }
 
+.app-sidebar-section--active .app-sidebar-badges .material-symbols-outlined {
+  color: inherit;
+}
+
 .app-sidebar-group > summary {
   display: flex;
   align-items: center;
