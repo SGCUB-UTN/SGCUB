@@ -7,7 +7,7 @@ import ContactModal from '../components/jugadores/ContactModal'
 import FilaContacto from '../components/jugadores/FilaContacto'
 import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
-import { ErrorFile, LoadingFile } from '../components/personas/FileStatus'
+import { ErrorFile } from '../components/personas/FileStatus'
 import { formatDate, formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
 import { SelectMultiple, SelectSimple } from '../components/shared/DropDownMenu'
 import PageHeader from '../components/shared/PageHeader'
@@ -19,6 +19,7 @@ import useDocentes from '../hooks/useDocentes'
 import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
+import { FormSkeleton } from '../components/shared/Skeleton'
 
 const CAMPOS_ASIGNACION = ['cargo', 'categorias']
 
@@ -459,7 +460,7 @@ function DocenteForm() {
     }
   }
 
-  if (cargando) return <LoadingFile text="Cargando datos del docente..." />
+  if (cargando) return <FormSkeleton label="Cargando datos del docente..." />
   if (errorCarga) return <ErrorFile message={errorCarga} backTo="/padron/docentes" backText="Volver a docentes" />
 
   const rutaVolver = editando ? `/padron/docentes/${id}` : '/padron/docentes'

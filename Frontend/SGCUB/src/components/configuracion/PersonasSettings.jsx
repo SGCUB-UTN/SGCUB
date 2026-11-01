@@ -27,43 +27,10 @@ import {
   deleteTalleIndumentaria,
 } from '../../api/personasConfig'
 import { getErrorMessage } from '../personas/format'
+import { TableSkeletonRows } from '../shared/Skeleton'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES } from './settingsForm'
 import { Field, INPUT_CLASS, IconButton, Notice, SelectInput, SettingsSection } from './settingsParts'
-
-export const talleSortKey = (nombre) => {
-  const name = (nombre || '').trim().toUpperCase()
-  if (/^\d+$/.test(name)) {
-    return [0, parseInt(name, 10), '']
-  }
-  const letterRanks = {
-    XXXS: 1, XXS: 2, XS: 3, S: 4, M: 5, L: 6,
-    XL: 7, XXL: 8, '2XL': 8, XXXL: 9, '3XL': 9, '4XL': 10,
-  }
-  if (letterRanks[name]) {
-    return [1, letterRanks[name], '']
-  }
-  return [2, 0, name]
-}
-
-export const compareTalles = (a, b) => {
-  const nameA = typeof a === 'string' ? a : a?.nombre || a?.valor || ''
-  const nameB = typeof b === 'string' ? b : b?.nombre || b?.valor || ''
-  const [typeA, valA, strA] = talleSortKey(nameA)
-  const [typeB, valB, strB] = talleSortKey(nameB)
-  if (typeA !== typeB) return typeA - typeB
-  if (valA !== valB) return valA - valB
-  return strA.localeCompare(strB, 'es')
-}
-
-export const compareObrasSociales = (a, b) => {
-  const nameA = typeof a === 'string' ? a : a?.nombre || ''
-  const nameB = typeof b === 'string' ? b : b?.nombre || ''
-  const aSin = nameA.trim().toLowerCase() === 'sin obra social'
-  const bSin = nameB.trim().toLowerCase() === 'sin obra social'
-  if (aSin && !bSin) return -1
-  if (!aSin && bSin) return 1
-  return nameA.localeCompare(nameB, 'es', { sensitivity: 'base' })
-}
+import { compareObrasSociales, compareTalles } from './personasSettingsSort'
 
 function InUseBadge({ inUse }) {
   if (!inUse) return <span className="text-xs text-on-surface-variant font-normal">—</span>
@@ -195,7 +162,7 @@ function CargosDocentesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando cargos...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando cargos..." />
             ) : cargos.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay cargos cargados.</td></tr>
             ) : (
@@ -413,7 +380,7 @@ function GeografiaSection() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+                <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando localidades..." />
               ) : localidades.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay localidades.</td></tr>
               ) : (
@@ -481,7 +448,7 @@ function GeografiaSection() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+                <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando barrios..." />
               ) : filteredBarrios.length === 0 ? (
                 <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No se encontraron barrios.</td></tr>
               ) : (
@@ -704,7 +671,7 @@ function RelacionesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando vínculos..." />
             ) : sortedRelaciones.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay relaciones configuradas.</td></tr>
             ) : (
@@ -875,7 +842,7 @@ function ObrasSocialesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando prestadores de salud..." />
             ) : sortedObras.length === 0 ? (
               <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay obras sociales registradas.</td></tr>
             ) : (
@@ -1050,7 +1017,7 @@ function TallesSection() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">Cargando...</td></tr>
+              <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando talles..." />
             ) : sortedTalles.length === 0 ? (
               <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay talles configurados.</td></tr>
             ) : (

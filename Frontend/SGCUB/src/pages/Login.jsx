@@ -37,6 +37,7 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
+    setHelpMessage('')
     setIsSubmitting(true)
     try {
       await login(dni, password)
@@ -90,6 +91,16 @@ export default function Login() {
           </div>
         )}
 
+        {helpMessage && (
+          <div
+            className="bg-surface-container-high text-on-surface px-3 py-2.5 rounded-lg border border-outline-variant/40 flex items-center gap-2"
+            role="status"
+          >
+            <span className="material-symbols-outlined text-primary text-title-md">info</span>
+            <p className="text-body-sm font-medium">{helpMessage}</p>
+          </div>
+        )}
+
         <div className="pt-1">
           <button
             className="w-full h-11 bg-primary hover:bg-primary/90 active:scale-[0.99] text-on-primary font-headline-sm text-headline-sm rounded-lg flex items-center justify-center gap-2 shadow-md transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-80"
@@ -112,12 +123,12 @@ export default function Login() {
 
         <div className="text-center pt-2">
           <button
-            className="inline-flex items-center gap-1 text-primary hover:text-on-primary-container text-body-sm font-label-lg font-medium transition-colors group"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-primary hover:bg-primary/5 text-body-sm font-label-lg font-medium transition-colors cursor-pointer"
             type="button"
             onClick={() => setHelpMessage(HELP_MESSAGES.forgotPassword)}
           >
             <span className="material-symbols-outlined text-label-md">lock_reset</span>
-            <span className="group-hover:underline">¿Olvidaste tu contraseña?</span>
+            <span>¿Olvidaste tu contraseña?</span>
           </button>
         </div>
       </form>

@@ -30,14 +30,16 @@ export const exportarNominaCSV = (docentes, categoriasPorDocente = {}) => {
     esActivo(docente) ? 'Activo' : 'De baja',
   ])
   const csv = [encabezados, ...filas]
-    .map((fila) => fila.map((celda) => `"${String(celda).replace(/"/g, '""')}"`).join(','))
-    .join('\n')
+    .map((fila) => fila.map((celda) => `"${String(celda).replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n')
 
   const enlace = document.createElement('a')
-  const contenido = csv
+  const contenido = '\uFEFF' + csv
   enlace.href = URL.createObjectURL(new Blob([contenido], { type: 'text/csv;charset=utf-8;' }))
   enlace.download = `nomina-docentes-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(enlace)
   enlace.click()
+  enlace.remove()
   URL.revokeObjectURL(enlace.href)
 }
 

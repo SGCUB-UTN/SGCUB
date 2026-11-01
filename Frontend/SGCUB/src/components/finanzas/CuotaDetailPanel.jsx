@@ -7,6 +7,7 @@ import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
 import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { ListSkeleton } from '../shared/Skeleton'
 
 const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm'
 
@@ -220,12 +221,7 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
   return (
     <div className={`${className} flex flex-col gap-2 min-w-0`} role="region" aria-label="Comprobantes asociados">
       <h4 className={CARD_TITLE_CLASS}>Comprobantes asociados</h4>
-      {receipts.loading && (
-        <p className="flex items-center gap-2 text-base text-on-surface-variant" role="status">
-          <span className="material-symbols-outlined text-[20px] animate-spin" aria-hidden="true">progress_activity</span>
-          Cargando comprobantes...
-        </p>
-      )}
+      {receipts.loading && <ListSkeleton label="Cargando comprobantes..." rows={2} />}
       {receipts.error && <p className="text-sm text-error" role="alert">{receipts.error}</p>}
       {!receipts.loading && !receipts.error && (receipts.items.length ? (
         <ul className="flex flex-col divide-y divide-outline-variant/20">

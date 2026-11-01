@@ -1,4 +1,4 @@
-import { yearsSince, isActiveStatus, formatDni, formatDate, formatPhone, yearsText } from '../format'
+import { yearsSince, formatDni, formatDate, formatPhone, yearsText } from '../format'
 import { Field, RecordSection } from './parts'
 import { EditButton } from '../HeaderPersona'
 

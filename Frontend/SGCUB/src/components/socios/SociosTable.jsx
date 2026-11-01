@@ -44,14 +44,16 @@ const exportCsv = (socios) => {
     socio.estado_administrativo_nombre ?? '',
   ])
   const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n')
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n')
 
   const link = document.createElement('a')
-  const content = '﻿' + csv
+  const content = '\uFEFF' + csv
   link.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }))
   link.download = `padron-socios-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
   link.click()
+  link.remove()
   URL.revokeObjectURL(link.href)
 }
 

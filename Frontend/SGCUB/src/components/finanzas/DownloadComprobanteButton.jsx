@@ -4,7 +4,7 @@ import { descargarDevolucionPdf } from '../../api/devoluciones'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { SUBMIT_BUTTON_CLASS } from './formParts'
 
-function DownloadComprobanteButtom({
+function DownloadComprobanteButton({
   comprobanteId,
   devolucionId,
   variant = 'secondary',
@@ -54,4 +54,4 @@ function DownloadComprobanteButtom({
   )
 }
 
-export default DownloadComprobanteButtom
+export default DownloadComprobanteButton

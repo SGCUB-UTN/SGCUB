@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
+import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import { bindPhone } from '../socios/socioForm'
@@ -307,7 +308,7 @@ export default function ContactModal({
                   type="button"
                   onClick={quitarSeleccion}
                   disabled={saving}
-                  className="font-semibold text-primary hover:underline cursor-pointer"
+                  className={TEXT_BUTTON_CLASS}
                 >
                   Cambiar
                 </button>

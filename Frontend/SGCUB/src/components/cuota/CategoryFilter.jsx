@@ -11,7 +11,7 @@ import {
   selectedCategory,
 } from './cuotaCategories'
 
-const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full sm:w-auto pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary'
+const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full sm:w-auto pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const GENDER_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-9 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed'
 const GENDER_BUTTON_STYLES = {
   M: { idle: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100', active: 'bg-sky-600 text-white border-sky-600' },
@@ -33,7 +33,15 @@ function OptionButton({ label, selected, onSelect }) {
   )
 }
 
-export default function CategoryFilter({ value, categories, hasUncategorized, onChange }) {
+export default function CategoryFilter({
+  value,
+  categories,
+  hasUncategorized,
+  onChange,
+  disabled = false,
+  disabledReason,
+  genderGroups = true,
+}) {
   const [opened, setOpened] = useState(false)
   const [gender, setGender] = useState(null)
   const selected = selectedCategory(value, categories)
@@ -52,9 +60,17 @@ export default function CategoryFilter({ value, categories, hasUncategorized, on
   }
 
   return (
-    <Popover opened={opened} onChange={setOpened} position="bottom-start" shadow="md" width={300} withinPortal>
+    <Popover opened={opened && !disabled} onChange={setOpened} position="bottom-start" shadow="md" width={300} withinPortal>
       <Popover.Target>
-        <button type="button" onClick={toggle} aria-haspopup="dialog" aria-expanded={opened} className={TRIGGER_CLASS}>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={disabled}
+          title={disabled ? disabledReason : undefined}
+          aria-haspopup="dialog"
+          aria-expanded={opened && !disabled}
+          className={TRIGGER_CLASS}
+        >
           <span className="text-on-surface-variant">Categoría:</span>
           <span className="truncate">{selected.label}</span>
           {selectedGender && value !== genderFilterValue(selectedGender.value) && (
@@ -88,11 +104,13 @@ export default function CategoryFilter({ value, categories, hasUncategorized, on
 
           {activeGender ? (
             <div className="flex flex-col max-h-64 overflow-y-auto">
-              <OptionButton
-                label={activeGender.allLabel}
-                selected={value === genderFilterValue(activeGender.value)}
-                onSelect={() => select(genderFilterValue(activeGender.value))}
-              />
+              {genderGroups && (
+                <OptionButton
+                  label={activeGender.allLabel}
+                  selected={value === genderFilterValue(activeGender.value)}
+                  onSelect={() => select(genderFilterValue(activeGender.value))}
+                />
+              )}
               {categories.filter((category) => category.gender === activeGender.value).map((category) => (
                 <OptionButton
                   key={category.value}

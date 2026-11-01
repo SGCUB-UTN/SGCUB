@@ -27,15 +27,17 @@ export function SettingsSection({ icon, title, description, extra, flush = false
   return (
     <section className="-mx-6 first:-mt-3 last:-mb-6">
       <header className="border-y border-outline-variant/30 bg-surface-container-low px-6 py-3">
-        {/* The actions share the row of the title, on the right; the description goes below */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="flex min-w-0 items-center gap-2 text-base font-semibold text-on-surface">
-            <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">{icon}</span>
-            {title}
-          </h3>
-          {extra}
+        {/* The actions go on the right, centered on the whole block of the title and its description */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="flex min-w-0 items-center gap-2 text-base font-semibold text-on-surface">
+              <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">{icon}</span>
+              {title}
+            </h3>
+            {description && <p className="mt-0.5 text-xs text-on-surface-variant">{description}</p>}
+          </div>
+          {extra && <div className="ml-auto flex shrink-0 items-center gap-2">{extra}</div>}
         </div>
-        {description && <p className="mt-0.5 text-xs text-on-surface-variant">{description}</p>}
       </header>
       <div className={flush ? 'flex flex-col' : 'flex flex-col gap-6 px-6 py-6'}>{children}</div>
     </section>

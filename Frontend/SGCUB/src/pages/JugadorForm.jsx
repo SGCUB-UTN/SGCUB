@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
 import { getObrasSociales, getTallesIndumentaria, postObraSocial } from '../api/personasConfig'
-import { compareObrasSociales, compareTalles } from '../components/configuracion/PersonasSettings'
+import { compareObrasSociales, compareTalles } from '../components/configuracion/personasSettingsSort'
 import { putSocio } from '../api/socios'
 import { categoriaAdmiteEdad } from '../components/categorias/categoriaFormat'
 import ContactModal from '../components/jugadores/ContactModal'
@@ -12,13 +12,14 @@ import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shar
 import { formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
 import PageHeader from '../components/shared/PageHeader'
 import { CAMPOS_OBLIGATORIOS, FORM_INICIAL, claseInput, enfocarCampo, socioAFormulario, validar } from '../components/socios/socioForm'
-import { Campo, InputConIcono, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConAlta, SelectConFlecha } from '../components/socios/SocioFormFields'
+import { Campo, SeccionDatosPersonales, SeccionDomicilio, SeccionTitulo, SelectConAlta, SelectConFlecha } from '../components/socios/SocioFormFields'
 import usePersonaSearchDNI, { campoBloqueadoPorSocio } from '../hooks/usePersonaSearchDNI'
 import useCategorias from '../hooks/useCategorias'
 import useEstados from '../hooks/useEstados'
 import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
+import { FormSkeleton } from '../components/shared/Skeleton'
 
 const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
 
@@ -414,14 +415,7 @@ function JugadorForm() {
     )
   }
 
-  if (!formulario) {
-    return (
-      <div className="max-w-5xl mx-auto w-full py-16 flex flex-col items-center gap-3 text-on-surface-variant">
-        <span className="material-symbols-outlined text-xl animate-spin">progress_activity</span>
-        <p className="text-sm">Cargando datos del jugador...</p>
-      </div>
-    )
-  }
+  if (!formulario) return <FormSkeleton label="Cargando datos del jugador..." sections={3} />
 
   const nombreJugador = editando ? `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() : ''
   const dniConError = Boolean(errores.dni) || Boolean(socioDuplicado) || Boolean(jugadorDelSocio)

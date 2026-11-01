@@ -1,3 +1,4 @@
+import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { formatDayMonthTime } from './cuotaPeriod'
 
 const TASK_ICONS = {
@@ -34,9 +35,9 @@ export default function TaskRunList({ runs, isLoading, error, onOpenLog }) {
   if (!runs) {
     if (isLoading) {
       return (
-        <div className="flex flex-col gap-3 animate-pulse" aria-hidden="true">
-          {[0, 1].map((index) => <div key={index} className="h-12 rounded bg-surface-container" />)}
-        </div>
+        <SkeletonStatus label="Cargando historial de automatizaciones..." className="flex flex-col gap-3">
+          {[0, 1].map((index) => <SkeletonBlock key={index} soft className="h-12" />)}
+        </SkeletonStatus>
       )
     }
     return <p className="text-sm text-error">{error ? 'No se pudo cargar el historial de automatizaciones.' : ''}</p>

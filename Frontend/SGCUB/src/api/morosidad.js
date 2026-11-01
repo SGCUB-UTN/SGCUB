@@ -1,19 +1,16 @@
 import { api } from './conf'
+import { savePdfResponse } from './download'
 
 const reportEndpoint = 'finanzas/morosidad/'
 
-const buildReportParams = ({ alcance, q, categoria, socioIds, socioId }) => {
-  const params = { alcance }
-  if (q) params.q = q
-  if (categoria) params.categoria = categoria
-  if (socioIds?.length) params.socio_ids = socioIds.join(',')
-  if (socioId) params.socio_id = socioId
+const buildReportParams = ({ tipo, periodo, referencia, categoriaId }) => {
+  const isGender = typeof categoriaId === 'string' && categoriaId.startsWith('gender:')
+  const byCategory = tipo === 'jugadores' && Boolean(categoriaId) && !isGender
+  const byGender = tipo === 'jugadores' && isGender
+  const params = { alcance: byCategory ? 'categoria' : 'activos', tipo, periodo, referencia }
+  if (byCategory) params.categoria_id = categoriaId
+  if (byGender) params.genero = categoriaId.replace('gender:', '')
   return params
-}
-
-const filenameFrom = (contentDisposition) => {
-  const match = /filename="([^"]+)"/.exec(contentDisposition ?? '')
-  return match ? match[1] : 'reporte-morosidad.pdf'
 }
 
 const errorDetailFrom = async (requestError) => {
@@ -39,12 +36,5 @@ export const downloadDelinquencyPdf = async (filters) => {
   } catch (requestError) {
     throw await errorDetailFrom(requestError)
   }
-  const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filenameFrom(response.headers['content-disposition'])
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  savePdfResponse(response, 'reporte-morosidad.pdf')
 }

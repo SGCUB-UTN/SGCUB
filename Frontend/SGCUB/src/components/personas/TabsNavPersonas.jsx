@@ -1,9 +1,18 @@
 import { useState } from 'react'
 import StatusBadge from '../shared/StatusBadge'
 
-export default function PersonTabs({ tabs = [], defaultTab }) {
-  const [activeTabId, setActiveTabId] = useState(defaultTab ?? tabs[0]?.id)
+const DEFAULT_TONE = { text: 'text-primary', hover: 'hover:text-primary', indicator: 'bg-primary' }
+const DEFAULT_PANEL_CLASS = 'bg-surface-container-lowest rounded-b-xl shadow-sm p-6 pt-3 [--inset:1.5rem]'
+
+export default function PersonTabs({ tabs = [], defaultTab, value, onChange, panelClassName = DEFAULT_PANEL_CLASS }) {
+  const [internalTabId, setInternalTabId] = useState(defaultTab ?? tabs[0]?.id)
+  const activeTabId = value ?? internalTabId
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
+
+  const selectTab = (tabId) => {
+    setInternalTabId(tabId)
+    onChange?.(tabId)
+  }
 
   return (
     <div>
@@ -13,6 +22,7 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
       >
         {tabs.map((tab) => {
           const isSelected = tab.id === activeTab?.id
+          const tone = tab.tone ?? DEFAULT_TONE
           return (
             <button
               key={tab.id}
@@ -21,9 +31,9 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
               role="tab"
               aria-selected={isSelected}
               aria-controls={`panel-${tab.id}`}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={`relative inline-flex items-center gap-2 px-4 py-3 text-base focus:outline-none transition-colors cursor-pointer whitespace-nowrap ${
-                isSelected ? 'text-primary font-semibold' : 'text-on-surface-variant hover:text-primary'
+                isSelected ? `${tone.text} font-semibold` : `text-on-surface-variant ${tone.hover}`
               }`}
             >
               <span className="material-symbols-outlined text-[20px]">{tab.icon}</span>
@@ -32,7 +42,7 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
                 <StatusBadge key={index}
                  badge={badge} />
               ))}
-              <span className={`absolute bottom-0 left-0 right-0 h-0.5 rounded-t ${isSelected ? 'bg-primary' : 'bg-transparent'}`} />
+              <span className={`absolute bottom-0 left-0 right-0 h-0.5 rounded-t ${isSelected ? tone.indicator : 'bg-transparent'}`} />
             </button>
           )
         })}
@@ -43,7 +53,7 @@ export default function PersonTabs({ tabs = [], defaultTab }) {
           id={`panel-${activeTab.id}`}
           role="tabpanel"
           aria-labelledby={`tab-${activeTab.id}`}
-          className="bg-surface-container-lowest rounded-b-xl shadow-sm p-6 pt-3 [--inset:1.5rem]"
+          className={panelClassName}
         >
           {activeTab.content}
         </div>

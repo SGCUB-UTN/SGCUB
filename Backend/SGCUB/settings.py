@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,6 +61,7 @@ Q_CLUSTER = {
     'workers': 4,              # Número de procesos concurrentes
     'timeout': 600,            # Segundos máximos antes de matar una tarea colgada
     'retry': 660,              # Segundos para reintentar si el worker falla
+    'max_attempts': 3,         # Evita bucles infinitos si una tarea falla repetidamente
     'catch_up': False,
     'queue_limit': 50,         # Límite de tareas en cola
     'orm': 'default',          # Usa la base de datos configurada en Django como broker
@@ -253,3 +255,9 @@ LOGGING = {
         },
     },
 }
+
+# Optimización de velocidad para tests automatizados
+if "test" in sys.argv:
+    PASSWORD_HASHERS = [
+        "django.contrib.auth.hashers.MD5PasswordHasher",
+    ]

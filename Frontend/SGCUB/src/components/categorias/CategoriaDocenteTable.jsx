@@ -6,7 +6,8 @@ function CategoriaDocenteTable({ docenteCategorias, onRemove }) {
 
   return (
     <DataTable
-      className="border border-outline-variant/30 rounded-lg"
+      className="bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm"
+      headerCase="title"
       headers={(
         <>
           <th className="py-3 px-4 pl-6 w-28 whitespace-nowrap" scope="col">N° Legajo</th>

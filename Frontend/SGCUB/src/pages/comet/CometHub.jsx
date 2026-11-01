@@ -37,7 +37,7 @@ function SeccionCard({ to, icon, titulo, descripcion }) {
 export default function CometHub() {
   // Usamos una sección cualquiera solo para detectar si el backend está OK.
   // El modo lo devuelve el backend en cada respuesta; acá usamos un default.
- const { error } = useCometCompeticiones()
+  useCometCompeticiones()
   const { status } = useCometStatus()
   const modo = status?.modo ?? null
 

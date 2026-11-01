@@ -12,12 +12,15 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from .admin import UsuarioChangeForm, UsuarioCreationForm
-from .roles import ADMINISTRADOR, ROLE_PERMISSIONS
+from .roles import ADMINISTRADOR, ROLE_PERMISSIONS, sync_roles
 
 User = get_user_model()
 
 
 class RolesTests(TestCase):
+    def setUp(self):
+        sync_roles()
+
     def test_every_role_exists_after_migrate(self):
         expected = set(ROLE_PERMISSIONS) | {ADMINISTRADOR}
         self.assertTrue(expected.issubset(set(Group.objects.values_list("name", flat=True))))
@@ -129,6 +132,7 @@ class AuthEndpointsTests(APITestCase):
         self.assertFalse(response.data["must_change_password"])
 
     def test_me_lists_every_permission_for_administrador(self):
+        sync_roles()
         self.user.groups.set([Group.objects.get(name=ADMINISTRADOR)])
         self.client.force_authenticate(self.user)
 

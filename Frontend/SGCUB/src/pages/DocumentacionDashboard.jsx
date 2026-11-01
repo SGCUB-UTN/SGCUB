@@ -3,6 +3,7 @@ import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 import DocumentAlertTable from '../components/documental/DocumentAlertTable'
 import { parseDueDate } from '../components/documental/dueDate'
+import { HeadingSkeleton, SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../components/shared/Skeleton'
 
 export default function DocumentacionDashboard() {
   const { documentosActivos: documentos, isLoading, getNombreTipo } = useDocumentacion(null, true)
@@ -24,7 +25,27 @@ export default function DocumentacionDashboard() {
 
   const validCount = activeDocs.length - expiredDocs.length
 
-  if (isLoading) return <div className="p-space-lg text-on-surface-variant">Cargando dashboard documental...</div>
+  if (isLoading) {
+    return (
+      <SkeletonStatus label="Cargando dashboard documental..." className="w-full flex flex-col gap-5 pb-8">
+        <SkeletonBlock soft className="h-4 w-56 mt-2" />
+        <SkeletonBlock className="h-7 w-72 max-w-full" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((index) => <SkeletonBlock key={index} className="h-24 rounded-lg" />)}
+        </div>
+        {[0, 1].map((panel) => (
+          <div key={panel} className="bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden">
+            <HeadingSkeleton withAction />
+            <table className="w-full">
+              <tbody>
+                <TableSkeletonRows colSpan={4} rows={3} animated={false} />
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </SkeletonStatus>
+    )
+  }
 
   return (
     <div className="flex flex-col w-full gap-space-xl pb-space-xl">
