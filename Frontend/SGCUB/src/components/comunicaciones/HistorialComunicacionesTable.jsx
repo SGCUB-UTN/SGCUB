@@ -1,293 +1,279 @@
 import { useMemo, useState } from 'react'
+import { SecondaryButton } from '../personas/tabs/parts'
 import DataTable from '../shared/DataTable'
+import FilterSelect from '../shared/FilterSelect'
+import { PANEL_CLASS } from '../shared/panel'
+import SectionHeading from '../shared/SectionHeading'
+import SortableHeader from '../shared/SortableHeader'
+import StatusBadge from '../shared/StatusBadge'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
-import usePagination from '../../hooks/usePagination'
-import DetalleNotificacionModal from './DetalleNotificacionModal'
-import { matchesSearch } from '../shared/search'
+import TableTabs from '../shared/TableTabs'
 
-export default function HistorialComunicacionesTable({
-  notificaciones = [],
-  isLoading = false,
-  error = null,
-  onRefresh,
-}) {
+const ESTADO_BADGES = {
+  ENVIADA: { label: 'Enviada', tono: 'exito', icon: 'check_circle' },
+  PROGRAMADA: { label: 'Programada', tono: 'alerta', icon: 'schedule' },
+  FALLIDA: { label: 'Fallida', tono: 'error', icon: 'error' },
+}
+
+const CANAL_OPTIONS = [
+  { value: '', label: 'Todos los canales' },
+  { value: 'MAIL', label: 'Correo electrónico' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
+]
+
+function formatFechaHora(iso) {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    return `${fecha} · ${hora}`
+  } catch {
+    return iso
+  }
+}
+
+export default function HistorialComunicacionesTable({ notificaciones = [], onViewDetail }) {
   const [search, setSearch] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState('TODOS')
-  const [selectedNotificacion, setSelectedNotificacion] = useState(null)
-  const [isDetalleOpen, setIsDetalleOpen] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('TODAS')
+  const [canalFilter, setCanalFilter] = useState('')
+  const [orden, setOrden] = useState({ columna: 'fecha_creacion', direccion: 'desc' })
+  const [page, setPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
 
-  // Filtrado reactivo por término y estado
-  const filteredRows = useMemo(() => {
-    const query = search.trim()
-    return notificaciones.filter((item) => {
-      // Filtro de estado
-      if (filtroEstado !== 'TODOS') {
-        const est = (item.estado || '').toUpperCase()
-        if (filtroEstado === 'ENVIADA' && est !== 'ENVIADA') return false
-        if (filtroEstado === 'FALLIDA' && est !== 'FALLIDA') return false
-        if (filtroEstado === 'PROGRAMADA' && est !== 'PROGRAMADA') return false
+  const counts = useMemo(() => {
+    const enviadas = notificaciones.filter((n) => n.estado === 'ENVIADA').length
+    const fallidas = notificaciones.filter((n) => n.estado === 'FALLIDA').length
+    return {
+      TODAS: notificaciones.length,
+      ENVIADA: enviadas,
+      FALLIDA: fallidas,
+    }
+  }, [notificaciones])
+
+  const tabOptions = useMemo(
+    () => [
+      { value: 'TODAS', label: 'Todas', count: counts.TODAS },
+      { value: 'ENVIADA', label: 'Enviadas', count: counts.ENVIADA },
+      { value: 'FALLIDA', label: 'Fallidas', count: counts.FALLIDA },
+    ],
+    [counts]
+  )
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return notificaciones.filter((notif) => {
+      if (statusFilter !== 'TODAS' && notif.estado !== statusFilter) {
+        return false
       }
-
-      // Filtro de búsqueda
+      const envios = notif.envios || []
+      if (canalFilter && !envios.some((e) => e.canal === canalFilter)) {
+        return false
+      }
       if (!query) return true
-      return matchesSearch(query, [item.titulo, item.asunto, item.contenido])
+      const matchText =
+        (notif.titulo || '').toLowerCase().includes(query) ||
+        (notif.asunto || '').toLowerCase().includes(query) ||
+        (notif.contenido || '').toLowerCase().includes(query) ||
+        envios.some(
+          (e) =>
+            (e.socio_nombre || '').toLowerCase().includes(query) ||
+            (e.socio_dni || '').toLowerCase().includes(query) ||
+            (e.destinatario_contacto || '').toLowerCase().includes(query)
+        )
+      return matchText
     })
-  }, [notificaciones, search, filtroEstado])
+  }, [notificaciones, search, statusFilter, canalFilter])
 
-  const { visibleRows, withPageReset, paginationProps } = usePagination(filteredRows, 15)
+  const sorted = useMemo(() => {
+    const copy = [...filtered]
+    const factor = orden.direccion === 'asc' ? 1 : -1
+    copy.sort((a, b) => {
+      if (orden.columna === 'fecha_creacion') {
+        return (new Date(a.fecha_creacion || 0) - new Date(b.fecha_creacion || 0)) * factor
+      }
+      if (orden.columna === 'asunto') {
+        const textA = (a.asunto || a.titulo || '').toLowerCase()
+        const textB = (b.asunto || b.titulo || '').toLowerCase()
+        return textA.localeCompare(textB, 'es') * factor
+      }
+      if (orden.columna === 'destinatarios') {
+        return ((a.envios?.length || 0) - (b.envios?.length || 0)) * factor
+      }
+      if (orden.columna === 'estado') {
+        return (a.estado || '').localeCompare(b.estado || '', 'es') * factor
+      }
+      return 0
+    })
+    return copy
+  }, [filtered, orden])
 
-  // Determinar canales involucrados
-  const getCanalesInvolucrados = (item) => {
-    const envios = item.envios || []
-    const canalesSet = new Set(envios.map((e) => (e.canal || '').toUpperCase()))
-    if (canalesSet.size === 0) {
-      return ['WHATSAPP', 'MAIL']
-    }
-    return Array.from(canalesSet)
-  }
+  const totalPages = Math.max(1, Math.ceil(sorted.length / rowsPerPage))
+  const currentPage = Math.min(page, totalPages)
+  const paginated = sorted.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
 
-  const getEstadoBadge = (estado) => {
-    const est = (estado || '').toUpperCase()
-    if (est === 'ENVIADA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-          <span className="material-symbols-outlined text-[13px]">check_circle</span>
-          Enviada
-        </span>
-      )
-    }
-    if (est === 'FALLIDA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-error/10 text-error border border-error/20">
-          <span className="material-symbols-outlined text-[13px]">error</span>
-          Fallida
-        </span>
-      )
-    }
-    if (est === 'PROGRAMADA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
-          <span className="material-symbols-outlined text-[13px]">schedule</span>
-          Programada
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-surface-container text-on-surface border border-outline-variant/30">
-        {estado || 'ENVIADA'}
-      </span>
-    )
-  }
-
-  const handleOpenDetalle = (item) => {
-    setSelectedNotificacion(item)
-    setIsDetalleOpen(true)
+  const handleSort = (columna) => {
+    setOrden((current) => ({
+      columna,
+      direccion: current.columna === columna && current.direccion === 'asc' ? 'desc' : 'asc',
+    }))
+    setPage(1)
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Barra de Filtros, Búsqueda y Botón Refrescar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/30 shadow-xs">
-        {/* Pills de Estado */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {[
-            { id: 'TODOS', label: 'Todos', count: notificaciones.length },
-            {
-              id: 'ENVIADA',
-              label: 'Enviadas',
-              count: notificaciones.filter((n) => (n.estado || '').toUpperCase() === 'ENVIADA').length,
-            },
-            {
-              id: 'PROGRAMADA',
-              label: 'Programadas',
-              count: notificaciones.filter((n) => (n.estado || '').toUpperCase() === 'PROGRAMADA').length,
-            },
-            {
-              id: 'FALLIDA',
-              label: 'Fallidas',
-              count: notificaciones.filter((n) => (n.estado || '').toUpperCase() === 'FALLIDA').length,
-            },
-          ].map((tab) => {
-            const isActive = filtroEstado === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => withPageReset(setFiltroEstado)(tab.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  isActive
-                    ? 'bg-primary text-on-primary shadow-xs'
-                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                    isActive ? 'bg-on-primary/20 text-on-primary' : 'bg-surface-container-highest text-on-surface'
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Input de Búsqueda y Refrescar */}
-        <div className="flex items-center gap-2">
-          <TableSearchInput
-            value={search}
-            onChange={withPageReset(setSearch)}
-            placeholder="Buscar por título o contenido..."
-            label="Buscar notificaciones"
-            className="sm:w-64"
-          />
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              title="Refrescar historial"
-              className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low text-on-surface transition-colors cursor-pointer shrink-0"
+    <section className={PANEL_CLASS} aria-labelledby="historial-comunicaciones-title">
+      <SectionHeading
+        id="historial-comunicaciones-title"
+        icon="history"
+        title="Historial de notificaciones"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterSelect
+              etiqueta="Canal:"
+              value={canalFilter}
+              onChange={(event) => {
+                setCanalFilter(event.target.value)
+                setPage(1)
+              }}
+              className="bg-surface-container-low border border-outline-variant/40 rounded text-sm text-on-surface"
             >
-              <span className="material-symbols-outlined text-[20px]">refresh</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Tabla Principal */}
-      <section className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden">
-        <DataTable
-          className="min-w-full"
-          tableClassName="min-w-[800px]"
-          headers={(
-            <>
-              <th className="px-4 py-3 font-semibold" scope="col">Fecha / Hora</th>
-              <th className="px-4 py-3 font-semibold" scope="col">Título y Asunto</th>
-              <th className="px-4 py-3 font-semibold" scope="col">Canales</th>
-              <th className="px-4 py-3 font-semibold text-center" scope="col">Destinatarios</th>
-              <th className="px-4 py-3 font-semibold" scope="col">Estado</th>
-            </>
-          )}
-        >
-          <TableMessageRow
-            colSpan={5}
-            isLoading={isLoading}
-            isEmpty={visibleRows.length === 0}
-            error={error}
-            loadingText="Cargando historial de notificaciones..."
-            errorText="No se pudo obtener el historial de notificaciones desde el backend."
-            emptyText="No hay notificaciones enviadas registradas con los filtros seleccionados."
-          />
-
-          {!isLoading &&
-            !error &&
-            visibleRows.map((item) => {
-              const canales = getCanalesInvolucrados(item)
-              const enviosCount = item.envios?.length || item.destinatarios_count || 1
-              const fecha = item.fecha_creacion
-                ? new Date(item.fecha_creacion).toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : 'Reciente'
-
-              return (
-                <tr
-                  key={item.id}
-                  onClick={() => handleOpenDetalle(item)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      handleOpenDetalle(item)
-                    }
-                  }}
-                  tabIndex={0}
-                  aria-label={`Ver detalle de ${item.titulo || item.asunto || 'notificación oficial'}`}
-                  className="cursor-pointer hover:bg-surface-container-low/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary transition-colors"
-                >
-                  {/* Fecha */}
-                  <td className="px-4 py-3 text-on-surface-variant font-medium whitespace-nowrap">
-                    {fecha}
-                  </td>
-
-                  {/* Título y Mensaje */}
-                  <td className="px-4 py-3 max-w-xs">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm text-on-surface line-clamp-1">
-                        {item.titulo || item.asunto || 'Notificación oficial'}
-                      </span>
-                      {item.asunto && item.asunto !== item.titulo && (
-                        <span className="text-xs text-on-surface-variant line-clamp-1">
-                          Asunto: {item.asunto}
-                        </span>
-                      )}
-                      {item.contenido && (
-                        <p className="text-xs text-on-surface-variant/75 line-clamp-1 mt-0.5 font-normal">
-                          {item.contenido}
-                        </p>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Canales */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {canales.includes('WHATSAPP') && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
-                          title="Difundido por WhatsApp"
-                        >
-                          <span className="material-symbols-outlined text-[13px]">chat</span>
-                          WhatsApp
-                        </span>
-                      )}
-                      {canales.includes('MAIL') && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/10 text-sky-700 border border-sky-500/20"
-                          title="Difundido por Correo Electrónico"
-                        >
-                          <span className="material-symbols-outlined text-[13px]">mail</span>
-                          Email
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Cantidad Destinatarios */}
-                  <td className="px-4 py-3 text-center">
-                    <div className="inline-flex flex-col items-center">
-                      <span className="text-sm font-bold text-primary">{enviosCount}</span>
-                      <span className="text-[10px] text-on-surface-variant font-medium">contactos</span>
-                    </div>
-                  </td>
-
-                  {/* Estado */}
-                  <td className="px-4 py-3 whitespace-nowrap">{getEstadoBadge(item.estado)}</td>
-                </tr>
-              )
-            })}
-        </DataTable>
-
-        {/* Paginación */}
-        {!isLoading && !error && filteredRows.length > 0 && (
-          <div className="border-t border-outline-variant/20 p-2">
-            <TablePagination id="comunicaciones-rows-per-page" {...paginationProps} />
+              {CANAL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </FilterSelect>
+            <TableSearchInput
+              value={search}
+              onChange={(val) => {
+                setSearch(val)
+                setPage(1)
+              }}
+              label="Buscar en historial de notificaciones"
+              placeholder="Buscar por asunto, socio o contacto..."
+              className="w-64 sm:w-72"
+            />
           </div>
-        )}
-      </section>
-
-      {/* Modal de Detalle */}
-      <DetalleNotificacionModal
-        isOpen={isDetalleOpen}
-        onClose={() => setIsDetalleOpen(false)}
-        notificacion={selectedNotificacion}
+        }
       />
-    </div>
+
+      <TableTabs
+        id="historial-comunicaciones-tabs"
+        label="Filtrar notificaciones por estado"
+        options={tabOptions}
+        value={statusFilter}
+        onChange={(id) => {
+          setStatusFilter(id)
+          setPage(1)
+        }}
+      />
+
+      <DataTable
+        headers={
+          <>
+            <SortableHeader className="py-3 px-4" etiqueta="Fecha y hora" columna="fecha_creacion" orden={orden} onOrdenar={handleSort} />
+            <SortableHeader className="py-3 px-4" etiqueta="Asunto y mensaje" columna="asunto" orden={orden} onOrdenar={handleSort} />
+            <th scope="col" className="py-3 px-4">Canales</th>
+            <SortableHeader className="py-3 px-4" etiqueta="Destinatarios" columna="destinatarios" orden={orden} onOrdenar={handleSort} />
+            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={orden} onOrdenar={handleSort} />
+            <th scope="col" className="py-3 px-4 text-right">Acciones</th>
+          </>
+        }
+      >
+        <TableMessageRow
+          colSpan={6}
+          isEmpty={paginated.length === 0}
+          emptyText={
+            notificaciones.length === 0
+              ? 'Todavía no se registraron notificaciones enviadas.'
+              : 'No se encontraron notificaciones con los filtros aplicados.'
+          }
+        />
+        {paginated.map((notif) => {
+          const envios = notif.envios || []
+          const total = envios.length
+          const exitosos = envios.filter((e) => e.estado === 'ENVIADA').length
+          const fallidos = envios.filter((e) => e.estado === 'FALLIDA').length
+          const canales = [...new Set(envios.map((e) => e.canal))]
+          const badge = ESTADO_BADGES[notif.estado] || {
+            label: notif.estado || 'Enviada',
+            tono: 'neutral',
+            icon: 'info',
+          }
+
+          return (
+            <tr key={notif.id} className="hover:bg-surface-container-low/50 transition-colors">
+              <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
+                {formatFechaHora(notif.fecha_creacion)}
+              </td>
+              <td className="py-3.5 px-4 max-w-md">
+                <p className="font-semibold text-on-surface truncate">
+                  {notif.asunto || notif.titulo || 'Sin asunto'}
+                </p>
+                <p className="text-xs text-on-surface-variant truncate mt-0.5">
+                  {notif.contenido || '—'}
+                </p>
+              </td>
+              <td className="py-3.5 px-4 whitespace-nowrap">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {canales.length === 0 && <span className="text-xs text-on-surface-variant">—</span>}
+                  {canales.includes('MAIL') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-medium">
+                      <span className="material-symbols-outlined text-[14px]" aria-hidden="true">mail</span>
+                      Email
+                    </span>
+                  )}
+                  {canales.includes('WHATSAPP') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-success/10 text-success text-xs font-medium">
+                      <span className="material-symbols-outlined text-[14px]" aria-hidden="true">chat</span>
+                      WhatsApp
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="py-3.5 px-4 whitespace-nowrap">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-semibold text-on-surface tabular-nums">
+                    {total} {total === 1 ? 'envío' : 'envíos'}
+                  </span>
+                  {total > 0 && (
+                    <span className="text-on-surface-variant tabular-nums">
+                      ({exitosos} ok{fallidos > 0 ? ` · ${fallidos} fallido${fallidos === 1 ? '' : 's'}` : ''})
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="py-3.5 px-4 whitespace-nowrap">
+                <StatusBadge badge={badge} />
+              </td>
+              <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                <SecondaryButton
+                  type="button"
+                  icon="visibility"
+                  onClick={() => onViewDetail?.(notif)}
+                >
+                  Ver detalle
+                </SecondaryButton>
+              </td>
+            </tr>
+          )
+        })}
+      </DataTable>
+
+      {sorted.length > 0 && (
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          rowsPerPage={rowsPerPage}
+          onPageChange={setPage}
+          onRowsPerPageChange={(newSize) => {
+            setRowsPerPage(newSize)
+            setPage(1)
+          }}
+        />
+      )}
+    </section>
   )
 }

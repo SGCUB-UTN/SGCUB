@@ -1,186 +1,213 @@
-import DataTable from '../shared/DataTable'
-import { formatPhone } from '../personas/format'
+import { useMemo, useState } from 'react'
+import { formatDni, formatPhone } from '../personas/format'
+import { SecondaryButton } from '../personas/tabs/parts'
+import StatusBadge from '../shared/StatusBadge'
+import TableSearchInput from '../shared/TableSearchInput'
+import TableTabs from '../shared/TableTabs'
+
+const ESTADO_BADGES = {
+  ENVIADA: { label: 'Enviada', tono: 'exito', icon: 'check_circle' },
+  PROGRAMADA: { label: 'Programada', tono: 'alerta', icon: 'schedule' },
+  FALLIDA: { label: 'Fallida', tono: 'error', icon: 'error' },
+}
 
 export default function DetalleNotificacionModal({ isOpen, onClose, notificacion }) {
+  const [search, setSearch] = useState('')
+  const [tab, setTab] = useState('TODOS')
+
+  const envios = useMemo(() => notificacion?.envios || [], [notificacion])
+
+  const counts = useMemo(() => {
+    const exitosos = envios.filter((e) => e.estado === 'ENVIADA').length
+    const fallidos = envios.filter((e) => e.estado === 'FALLIDA').length
+    return {
+      TODOS: envios.length,
+      ENVIADA: exitosos,
+      FALLIDA: fallidos,
+    }
+  }, [envios])
+
+  const filteredEnvios = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return envios.filter((e) => {
+      if (tab !== 'TODOS' && e.estado !== tab) return false
+      if (!q) return true
+      return (
+        (e.socio_nombre || '').toLowerCase().includes(q) ||
+        (e.socio_dni || '').toLowerCase().includes(q) ||
+        (e.destinatario_contacto || '').toLowerCase().includes(q) ||
+        (e.canal || '').toLowerCase().includes(q)
+      )
+    })
+  }, [envios, tab, search])
+
   if (!isOpen || !notificacion) return null
 
-  const envios = notificacion.envios || []
-  const enviosExitosos = envios.filter((e) => e.estado === 'ENVIADA' || e.estado === 'RECIBIDO' || e.estado === 'LEIDO').length
-  const enviosFallidos = envios.filter((e) => e.estado === 'FALLIDA').length
-  const enviosProgramados = envios.filter((e) => e.estado === 'PROGRAMADA').length
-
-  const getCanalBadge = (canal) => {
-    const c = (canal || '').toUpperCase()
-    if (c === 'WHATSAPP') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-          <span className="material-symbols-outlined text-[14px]">chat</span>
-          WhatsApp
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-700 border border-sky-500/20">
-        <span className="material-symbols-outlined text-[14px]">mail</span>
-        Email
-      </span>
-    )
+  const badge = ESTADO_BADGES[notificacion.estado] || {
+    label: notificacion.estado || 'Enviada',
+    tono: 'neutral',
+    icon: 'info',
   }
 
-  const getEstadoBadge = (estado) => {
-    const est = (estado || '').toUpperCase()
-    if (est === 'ENVIADA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-          <span className="material-symbols-outlined text-[13px]">check_circle</span>
-          Enviada
-        </span>
-      )
+  let fechaStr = '—'
+  if (notificacion.fecha_creacion) {
+    try {
+      const d = new Date(notificacion.fecha_creacion)
+      fechaStr = `${d.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })} a las ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`
+    } catch {
+      fechaStr = notificacion.fecha_creacion
     }
-    if (est === 'FALLIDA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-error/10 text-error border border-error/20">
-          <span className="material-symbols-outlined text-[13px]">error</span>
-          Fallida
-        </span>
-      )
-    }
-    if (est === 'PROGRAMADA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
-          <span className="material-symbols-outlined text-[13px]">schedule</span>
-          Programada
-        </span>
-      )
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-surface-container text-on-surface border border-outline-variant/30">
-        {estado}
-      </span>
-    )
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-on-surface/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl max-w-3xl w-full p-6 shadow-xl flex flex-col gap-5 max-h-[90vh] overflow-hidden">
-        {/* Encabezado */}
-        <div className="flex items-start justify-between pb-3 border-b border-outline-variant/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]">mark_email_read</span>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="detalle-notif-modal-title"
+    >
+      <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-outline-variant/40 bg-surface-container-low flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <StatusBadge badge={badge} />
+              <span className="text-xs text-on-surface-variant tabular-nums">{fechaStr}</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-on-surface">
-                  {notificacion.titulo || notificacion.asunto || 'Notificación oficial'}
-                </h3>
-                {getEstadoBadge(notificacion.estado)}
-              </div>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Despachado el{' '}
-                {notificacion.fecha_creacion
-                  ? new Date(notificacion.fecha_creacion).toLocaleString('es-AR')
-                  : 'Fecha no registrada'}
-              </p>
-            </div>
+            <h2 id="detalle-notif-modal-title" className="text-lg font-bold text-on-surface truncate">
+              {notificacion.asunto || notificacion.titulo || 'Detalle de notificación'}
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer p-1"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer shrink-0"
+            aria-label="Cerrar detalle"
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
           </button>
         </div>
 
-        {/* Resumen de Métricas del Envío */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-surface-container-low rounded-lg p-3 flex flex-col">
-            <span className="text-xs font-medium text-on-surface-variant uppercase">Destinatarios</span>
-            <span className="text-xl font-bold text-on-surface mt-1">{envios.length || 1}</span>
+        <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-5">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
+              Mensaje enviado
+            </h3>
+            <div className="p-4 rounded-lg bg-surface-container-low border border-outline-variant/40 text-sm text-on-surface whitespace-pre-wrap leading-relaxed">
+              {notificacion.contenido || '—'}
+            </div>
           </div>
-          <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-lg p-3 flex flex-col">
-            <span className="text-xs font-medium text-emerald-700 uppercase">Entregados / Enviados</span>
-            <span className="text-xl font-bold text-emerald-700 mt-1">{enviosExitosos || envios.length}</span>
-          </div>
-          <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-3 flex flex-col">
-            <span className="text-xs font-medium text-amber-700 uppercase">Programados</span>
-            <span className="text-xl font-bold text-amber-700 mt-1">{enviosProgramados}</span>
-          </div>
-          <div className="bg-error/5 border border-error/15 rounded-lg p-3 flex flex-col">
-            <span className="text-xs font-medium text-error uppercase">Fallidos</span>
-            <span className="text-xl font-bold text-error mt-1">{enviosFallidos}</span>
-          </div>
-        </div>
 
-        {/* Contenido del Mensaje */}
-        <div className="flex flex-col gap-1.5 bg-surface-container-low/60 rounded-lg p-4 border border-outline-variant/20">
-          <div className="flex items-center justify-between text-xs font-semibold text-on-surface-variant">
-            <span>Asunto: {notificacion.asunto || notificacion.titulo || 'Sin asunto'}</span>
-          </div>
-          <p className="text-sm text-on-surface whitespace-pre-wrap mt-1 leading-relaxed">
-            {notificacion.contenido || 'Sin contenido de mensaje.'}
-          </p>
-        </div>
-
-        {/* Tabla de Estados de Cada Envío Individual */}
-        <div className="flex flex-col gap-2 flex-1 min-h-0">
-          <h4 className="text-sm font-bold text-on-surface flex items-center justify-between">
-            <span>Detalle de envíos individuales ({envios.length})</span>
-            {enviosFallidos > 0 && (
-              <span className="text-xs text-error font-medium flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px]">warning</span>
-                {enviosFallidos} fallos registrados
+          <div className="border border-outline-variant/40 rounded-lg overflow-hidden bg-surface-container-lowest">
+            <div className="px-4 py-3 bg-surface-container-low border-b border-outline-variant/40 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-on-surface">
+                Destinatarios y envíos ({envios.length})
               </span>
-            )}
-          </h4>
+              <TableSearchInput
+                value={search}
+                onChange={setSearch}
+                label="Filtrar destinatario"
+                placeholder="Filtrar destinatario..."
+                className="w-56"
+              />
+            </div>
 
-          <div className="comunicaciones-table-scroll overflow-auto border border-outline-variant/30 rounded-lg max-h-[300px]">
-            {envios.length === 0 ? (
-              <p className="p-4 text-center text-xs text-on-surface-variant">
-                No se registraron detalles individuales para este envío masivo.
-              </p>
-            ) : (
-              <DataTable
-                headers={(
-                  <>
-                    <th className="py-3 px-4" scope="col">Canal</th>
-                    <th className="py-3 px-4" scope="col">Contacto / Destinatario</th>
-                    <th className="py-3 px-4" scope="col">Estado</th>
-                    <th className="py-3 px-4" scope="col">Fecha</th>
-                    <th className="py-3 px-4" scope="col">Detalle</th>
-                  </>
-                )}
-              >
-                  {envios.map((envio) => (
-                    <tr key={envio.id} className="hover:bg-surface-container-low transition-colors">
-                      <td className="py-3 px-4">{getCanalBadge(envio.canal)}</td>
-                      <td className="py-3 px-4 font-medium text-on-surface whitespace-nowrap">
-                        {formatPhone(envio.destinatario_contacto)}
-                      </td>
-                      <td className="py-3 px-4">{getEstadoBadge(envio.estado)}</td>
-                      <td className="py-3 px-4 text-on-surface-variant">
-                        {envio.fecha_envio
-                          ? new Date(envio.fecha_envio).toLocaleTimeString('es-AR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-on-surface-variant">
-                        {envio.detalle_fallo ? (
-                          <span className="text-error font-medium">{envio.detalle_fallo}</span>
-                        ) : (
-                          <span className="text-on-surface-variant/70">Correcto</span>
-                        )}
-                      </td>
+            <TableTabs
+              id="detalle-notificacion-tabs"
+              label="Filtrar destinatarios por resultado"
+              options={[
+                { value: 'TODOS', label: 'Todos', count: counts.TODOS },
+                { value: 'ENVIADA', label: 'Entregados', count: counts.ENVIADA },
+                { value: 'FALLIDA', label: 'Fallidos', count: counts.FALLIDA },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
+
+            <div className="max-h-72 overflow-y-auto">
+              {filteredEnvios.length === 0 ? (
+                <p className="p-8 text-center text-sm text-on-surface-variant">
+                  No hay envíos para mostrar con el filtro seleccionado.
+                </p>
+              ) : (
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-surface-container-low/60 border-b border-outline-variant/30 text-xs uppercase tracking-wider font-semibold text-on-surface-variant">
+                      <th scope="col" className="py-2.5 px-4">Destinatario</th>
+                      <th scope="col" className="py-2.5 px-4">Canal</th>
+                      <th scope="col" className="py-2.5 px-4">Contacto</th>
+                      <th scope="col" className="py-2.5 px-4">Resultado</th>
                     </tr>
-                  ))}
-              </DataTable>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/20">
+                    {filteredEnvios.map((envio) => {
+                      const isMail = envio.canal === 'MAIL'
+                      const contactoRaw = envio.destinatario_contacto || ''
+                      const contactoDisplay = isMail
+                        ? contactoRaw || 'Sin correo'
+                        : formatPhone(contactoRaw) || 'Sin teléfono'
+                      const envioBadge = ESTADO_BADGES[envio.estado] || {
+                        label: envio.estado || 'Enviado',
+                        tono: 'neutral',
+                        icon: 'info',
+                      }
+
+                      return (
+                        <tr key={envio.id}>
+                          <td className="py-2.5 px-4">
+                            <p className="font-semibold text-on-surface">
+                              {envio.socio_nombre || `Socio #${envio.socio}`}
+                            </p>
+                            {envio.socio_dni && (
+                              <p className="text-xs text-on-surface-variant tabular-nums">
+                                DNI {formatDni(envio.socio_dni)}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            {isMail ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-medium">
+                                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">mail</span>
+                                Email
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-success/10 text-success text-xs font-medium">
+                                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">chat</span>
+                                WhatsApp
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-xs text-on-surface font-mono break-all">
+                            {contactoDisplay}
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <div className="flex flex-col items-start gap-1">
+                              <StatusBadge badge={envioBadge} />
+                              {envio.detalle_fallo && (
+                                <span className="text-[11px] text-error leading-snug max-w-xs">
+                                  {envio.detalle_fallo}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
 
+        <div className="px-6 py-3.5 border-t border-outline-variant/40 bg-surface-container-low flex justify-end">
+          <SecondaryButton type="button" onClick={onClose}>
+            Cerrar
+          </SecondaryButton>
+        </div>
       </div>
     </div>
   )
