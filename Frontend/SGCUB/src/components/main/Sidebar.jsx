@@ -342,9 +342,6 @@ export default function Sidebar({ collapsed, onToggle }) {
           <span className="app-sidebar-toggle-label">{collapsed ? 'Mostrar menú' : 'Contraer menú'}</span>
           <span className="material-symbols-outlined text-[18px]">keyboard_double_arrow_left</span>
         </button>
-        <div className="app-sidebar-version">
-          <p className="font-label-sm text-label-sm text-on-surface-variant">SGCUB - Sistema Interno</p>
-        </div>
       </div>
     </aside>
   );
