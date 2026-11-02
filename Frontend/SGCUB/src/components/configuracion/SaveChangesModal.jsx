@@ -4,7 +4,7 @@ import { getImpactoConfiguracionFinanciera } from '../../api/configuracion'
 import { getAutorizantes } from '../../api/usuarios'
 import { getErrorMessage } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
-import { CUOTA_FIELD_LABELS, formatCuotaValue, upcomingPeriods } from './financialFields'
+import { CUOTA_FIELD_LABELS, exemptChangeRows, formatCuotaValue, upcomingPeriods } from './financialFields'
 import { generalChangeRows } from './generalFields'
 import { BUTTON_CLASSES } from './settingsForm'
 import { Field, Notice, SelectInput } from './settingsParts'
@@ -69,6 +69,18 @@ function ImpactNote({ period }) {
   )
 }
 
+function ExemptionNote() {
+  return (
+    <p className="flex items-start gap-2 text-base text-sky-900" role="status">
+      <span className="material-symbols-outlined shrink-0 text-[20px] text-sky-700" aria-hidden="true">info</span>
+      <span>
+        <strong>Categorías exentas:</strong> a los jugadores de las categorías que pasan a estar exentas se les anulan las cuotas impagas
+        de los meses siguientes; a los de las que dejan de estarlo se les generan las cuotas. Las cuotas pagas no cambian.
+      </span>
+    </p>
+  )
+}
+
 // Section title inside the table; the line above divides it from the previous section
 function SectionRow({ title, first }) {
   return (
@@ -91,7 +103,7 @@ function ChangeRow({ label, before, after }) {
 
 function ChangesSummary({ config, period }) {
   const { changes, draft, financiera: current } = config
-  const immediate = generalChangeRows(config)
+  const immediate = [...generalChangeRows(config), ...exemptChangeRows(config)]
   const hasFinancial = changes.financiera.length > 0
   return (
     <div className="flex flex-col gap-3">
@@ -122,6 +134,7 @@ function ChangesSummary({ config, period }) {
         </table>
       </div>
       {hasFinancial && <ImpactNote period={period} />}
+      {changes.exentas.length > 0 && <ExemptionNote />}
     </div>
   )
 }
