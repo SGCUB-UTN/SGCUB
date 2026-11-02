@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { SecondaryButton } from '../personas/tabs/parts'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import { PANEL_CLASS } from '../shared/panel'
@@ -248,14 +247,18 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
               <td className="py-3.5 px-4 whitespace-nowrap">
                 <StatusBadge badge={badge} />
               </td>
-              <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                <SecondaryButton
+              <td className="py-2 px-4 whitespace-nowrap text-right">
+                <button
                   type="button"
-                  icon="visibility"
                   onClick={() => onViewDetail?.(notif)}
+                  title="Ver detalle"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container text-xs font-medium text-on-surface transition-colors cursor-pointer"
                 >
-                  Ver detalle
-                </SecondaryButton>
+                  <span className="material-symbols-outlined text-[16px] text-on-surface-variant" aria-hidden="true">
+                    visibility
+                  </span>
+                  <span>Ver detalle</span>
+                </button>
               </td>
             </tr>
           )
