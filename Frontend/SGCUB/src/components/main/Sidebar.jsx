@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import PermissionGate from '../../auth/PermissionGate';
 import { PERMISSIONS } from '../../auth/permissions';
 import StatusBadge from '../shared/StatusBadge';
@@ -74,18 +74,9 @@ export default function Sidebar({ collapsed, onToggle }) {
   return (
     <aside className={`app-sidebar ${claseEstado}`}>
       <div className="app-sidebar-content">
-        <div className="app-sidebar-brand">
-          <Link to="/" className="app-sidebar-brand-inner" aria-label="Ir al inicio">
-            <img alt="Escudo C.U.B." className="app-sidebar-logo object-contain shrink-0" src="/escudo-sin-fondo.png" />
-            <div className="app-sidebar-brand-copy">
-              <span className="app-sidebar-brand-name text-on-surface">C.U.B.</span>
-              <span className="app-sidebar-brand-subtitle text-on-surface-variant">Club Univ. Berisso</span>
-            </div>
-          </Link>
-        </div>
         <div className="app-sidebar-scroll">
           <nav className="app-sidebar-nav">
-            <NavLink end to="/" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded transition-colors text-base font-semibold ${isActive ? 'app-sidebar-link--active' : ''}`}>
+            <NavLink end to="/" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-base font-semibold ${isActive ? 'app-sidebar-link--active' : ''}`}>
               <div className="flex items-center gap-space-sm">
                 <span className="material-symbols-outlined text-[20px]">grid_view</span>
                 <span className="app-sidebar-label text-base">Inicio</span>
