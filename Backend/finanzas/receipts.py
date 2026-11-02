@@ -7,10 +7,10 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from configuracion.models import ConfiguracionGeneral
-from configuracion.services import club_details, club_name
+from configuracion.services import address_text, club_details, club_name
 
 from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
 from .pdf_utils import format_amount, table
@@ -59,6 +59,24 @@ def document_styles():
         "normal": styles["Normal"],
         "title": ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2),
         "subtitle": ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368")),
+        "club_name": ParagraphStyle(
+            "ClubNombre",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=2,
+            textColor=colors.HexColor("#5f6368"),
+        ),
+        "club_details": ParagraphStyle(
+            "ClubDetalles",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            alignment=2,
+            textColor=colors.HexColor("#5f6368"),
+        ),
         "section": ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4),
         "cancelled": ParagraphStyle("Anulado", parent=styles["Heading2"], textColor=colors.HexColor("#b3261e")),
     }
@@ -83,7 +101,7 @@ def methods_table(methods):
     )
 
 
-def get_club_logo_flowable(max_width=40 * mm, max_height=20 * mm):
+def get_club_logo_flowable(max_width=35 * mm, max_height=20 * mm):
     try:
         config = ConfiguracionGeneral.load()
         if config.club_logo and hasattr(config.club_logo, "path") and os.path.exists(config.club_logo.path):
@@ -101,18 +119,63 @@ def get_club_logo_flowable(max_width=40 * mm, max_height=20 * mm):
     return None
 
 
+def get_club_header_flowable(styles):
+    """Club identity: logo on the left, name & CUIT on top right, address & phone below."""
+    config = ConfiguracionGeneral.load()
+    logo = get_club_logo_flowable()
+
+    name_text = escape(config.club_nombre or "Club Universitario de Berisso")
+    cuit_text = f" · CUIT {escape(config.club_cuit)}" if config.club_cuit else ""
+    line_1 = f"{name_text}{cuit_text}"
+
+    addr_parts = []
+    if (domicilio := address_text(config.club_domicilio)):
+        addr_parts.append(domicilio)
+    if config.club_telefono:
+        addr_parts.append(f"Tel. {config.club_telefono}")
+    if config.club_email:
+        addr_parts.append(config.club_email)
+    addr_line = " · ".join(escape(part) for part in addr_parts)
+
+    info_paragraphs = [Paragraph(line_1, styles["club_name"])]
+    if addr_line:
+        info_paragraphs.append(Paragraph(addr_line, styles["club_details"]))
+
+    if logo is not None:
+        logo_col_width = logo.drawWidth + 6 * mm
+        header_table = Table(
+            [[logo, info_paragraphs]],
+            colWidths=[logo_col_width, WIDTH - logo_col_width],
+        )
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (0, 0), "LEFT"),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        return header_table
+
+    return info_paragraphs
+
+
 def render_document(title, number, issued, socio, notes, sections, footer):
     """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
     styles = document_styles()
     socio = socio or {}
     number_str = f"{number:08d}" if isinstance(number, int) else str(number)
-    logo = get_club_logo_flowable()
+
+    header = get_club_header_flowable(styles)
     story = []
-    if logo is not None:
-        story += [logo, Spacer(1, 3 * mm)]
+    if isinstance(header, list):
+        story.extend(header)
+    else:
+        story.append(header)
+
     story += [
-        Paragraph(escape(club_name()), styles["subtitle"]),
-        *([Paragraph(escape(details), styles["subtitle"])] if (details := club_details()) else []),
+        Spacer(1, 4 * mm),
         Paragraph(f"{title} - N° {number_str}", styles["title"]),
         Paragraph(escape(f"Documento no válido como factura · Fecha de emisión: {issued:%d/%m/%Y}"), styles["subtitle"]),
         Spacer(1, 4 * mm),

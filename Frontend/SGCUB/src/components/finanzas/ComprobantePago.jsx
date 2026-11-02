@@ -15,18 +15,6 @@ function formatClubAddress(cfg) {
   return [calleYNumero, pisoDepto, barrio, localidad].filter(Boolean).join(', ')
 }
 
-function formatClubDetails(cfg) {
-  if (!cfg) return ''
-  const address = formatClubAddress(cfg)
-  const parts = [
-    cfg.club_cuit ? `CUIT ${cfg.club_cuit}` : '',
-    address,
-    cfg.club_telefono ? `Tel. ${cfg.club_telefono}` : '',
-    cfg.club_email || '',
-  ]
-  return parts.filter(Boolean).join(' · ')
-}
-
 function ComprobantePago({
   socio,
   detalle,
@@ -55,7 +43,7 @@ function ComprobantePago({
 
   const socioCompleto = { ...(socio || {}), ...(detalle?.socio || {}) }
   const clubNombre = clubConfig?.club_nombre || 'Club Universitario de Berisso'
-  const clubDetalles = formatClubDetails(clubConfig)
+  const clubAddress = formatClubAddress(clubConfig)
   const codigoComprobante = detalle?.codigo ?? (numero ? `X ${String(numero).padStart(8, '0')}` : 'Pendiente')
   const comprobanteId = detalle?.comprobante_id
   const socioPhone = socioCompleto.telefono || socioCompleto.persona?.telefono || ''
@@ -76,36 +64,52 @@ function ComprobantePago({
 
       {/* Recibo formal con datos del club configurados */}
       <div className="border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm">
-        {/* Encabezado del Club */}
-        <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/50">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              {clubConfig?.club_logo ? (
+        {/* Encabezado institucional: Club a la izquierda, Comprobante a la derecha */}
+        <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            {/* Lado izquierdo: Identidad y datos del Club */}
+            <div className="flex items-start gap-4 min-w-0">
+              {clubConfig?.club_logo && (
                 <img
                   src={clubConfig.club_logo}
                   alt={clubNombre}
-                  className="h-14 w-14 object-contain rounded-lg border border-outline-variant/30 bg-surface p-1 shrink-0"
+                  className="h-16 w-auto max-w-[130px] max-h-16 object-contain rounded-lg border border-outline-variant/30 bg-surface p-1 shrink-0"
                 />
-              ) : (
-                <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-2xl">receipt_long</span>
-                </div>
               )}
-              <div className="min-w-0">
-                <h3 className="font-bold text-lg text-on-surface leading-tight truncate">{clubNombre}</h3>
-                {clubDetalles && (
-                  <p className="text-xs text-on-surface-variant mt-0.5 break-words">{clubDetalles}</p>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <h3 className="font-bold text-xl text-on-surface leading-tight">{clubNombre}</h3>
+                {clubConfig?.club_cuit && (
+                  <p className="text-xs text-on-surface-variant font-medium">
+                    <span className="text-on-surface-variant/70">CUIT:</span> {clubConfig.club_cuit}
+                  </p>
+                )}
+                {clubAddress && (
+                  <p className="text-xs text-on-surface-variant">
+                    <span className="text-on-surface-variant/70">Dirección:</span> {clubAddress}
+                  </p>
+                )}
+                {(clubConfig?.club_telefono || clubConfig?.club_email) && (
+                  <p className="text-xs text-on-surface-variant">
+                    {clubConfig?.club_telefono && (
+                      <span><span className="text-on-surface-variant/70">Tel:</span> {clubConfig.club_telefono}</span>
+                    )}
+                    {clubConfig?.club_telefono && clubConfig?.club_email && <span className="mx-1.5 opacity-40">·</span>}
+                    {clubConfig?.club_email && <span>{clubConfig.club_email}</span>}
+                  </p>
                 )}
               </div>
             </div>
 
-            <div className="sm:text-right shrink-0">
-              <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase bg-primary/10 text-primary">
-                Recibo {detalle?.tipo || 'X'}
-              </span>
-              <p className="text-lg font-extrabold text-on-surface tracking-tight mt-1">{codigoComprobante}</p>
-              <p className="text-xs text-on-surface-variant">Emisión: {fecha}</p>
-              <p className="text-[11px] text-on-surface-variant/80 mt-0.5">Documento no válido como factura</p>
+            {/* Lado derecho: Tarjeta de Comprobante / Recibo */}
+            <div className="bg-surface rounded-xl border border-outline-variant/40 p-3.5 sm:text-right shrink-0 sm:min-w-[210px] shadow-xs">
+              <div className="sm:flex sm:justify-end mb-1">
+                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20">
+                  Recibo {detalle?.tipo || 'X'}
+                </span>
+              </div>
+              <p className="text-xl font-bold font-mono text-on-surface tracking-tight">{codigoComprobante}</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Fecha: {fecha}</p>
+              <p className="text-[11px] text-on-surface-variant/70 mt-1 italic">Documento no válido como factura</p>
             </div>
           </div>
         </div>
