@@ -467,8 +467,9 @@ class CategoriaSerializer(serializers.ModelSerializer):
             "edad_maxima",
             "genero",
             "tipo",
+            "exenta_cuota",
         ]
-        read_only_fields = ["categoria_id"]
+        read_only_fields = ["categoria_id", "exenta_cuota"]
 
     def validate_nombre(self, value):
         value = value.strip()
