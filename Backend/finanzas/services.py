@@ -233,6 +233,18 @@ def create_or_update_player_current_cuota(socio_id):
     return results[0] if results else None
 
 
+@transaction.atomic
+def update_category_exemption(category, exempt, user=None):
+    category.exenta_cuota = exempt
+    category.save(update_fields=["exenta_cuota"])
+    socio_ids = list(category.jugadores.values_list("socio_id", flat=True))
+    if exempt:
+        return annul_exempt_cuotas(socio_ids, user=user)
+    for socio_id in socio_ids:
+        create_or_update_player_current_cuota(socio_id)
+    return 0
+
+
 def schedule_exemption_sync(socio_id, previous_category, category):
     if previous_category.exenta_cuota != category.exenta_cuota:
         transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))

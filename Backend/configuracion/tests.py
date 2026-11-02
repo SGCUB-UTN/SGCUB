@@ -15,7 +15,8 @@ from documental.models import TipoDocumento
 from finanzas.delinquency import delinquency_report
 from finanzas.delinquency_pdf import render_delinquency_pdf
 from finanzas.models import ConfiguracionFinanciera, CuentaCorriente, Cuota, EstadoCuotaChoices, ItemCuota, MedioPago, MovimientoCuenta
-from padron.models import Localidad, Persona, Socio
+from finanzas.services import create_or_update_player_current_cuota
+from padron.models import Categoria, Jugador, Localidad, Persona, Socio
 
 from .models import ConfiguracionGeneral, HistorialConfiguracion
 
@@ -173,6 +174,77 @@ class ConfiguracionGeneralTests(APITestCase):
             ("Finanzas", "Medio de pago Transferencia · Habilitado", "Sí", "No"),
             ("Documentacion", "Tipo de documento DNI · Vigencia (meses)", "", "60"),
         })
+
+
+class CategoriasExentasTests(APITestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(username="admin")
+        self.client.force_authenticate(user=self.usuario)
+        self.categoria = Categoria.objects.create(nombre="M15", anio_vigente=2026, edad_maxima=15, genero="M")
+        persona = Persona.objects.create(nombre="Juan", apellido="Pérez", dni="81000001")
+        self.socio = Socio.objects.create(persona=persona)
+        Jugador.objects.create(socio=self.socio, categoria=self.categoria)
+
+    def guardar(self, cambios, responsable="Marta Ruiz"):
+        return self.client.post(
+            reverse("configuracion-guardar"),
+            {"responsable": responsable, "categorias_exentas": cambios},
+            format="json",
+        )
+
+    def periodos(self):
+        return list(
+            Cuota.objects.filter(movimiento__cuenta_corriente__socio=self.socio)
+            .order_by("periodo")
+            .values_list("periodo", flat=True)
+        )
+
+    def test_marcar_categoria_exenta_anula_cuotas_futuras_y_registra_historial(self):
+        create_or_update_player_current_cuota(self.socio.pk)
+        self.assertEqual(len(self.periodos()), 3)
+
+        response = self.guardar({str(self.categoria.pk): True})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["cuotas_anuladas"], 2)
+        self.categoria.refresh_from_db()
+        self.assertTrue(self.categoria.exenta_cuota)
+        self.assertEqual(self.periodos(), [timezone.localdate().strftime("%Y-%m")])
+        cambio = HistorialConfiguracion.objects.get()
+        self.assertEqual(cambio.seccion, "Finanzas")
+        self.assertEqual(cambio.campo, "Categoría exenta de pago · M15 (Masculino)")
+        self.assertEqual((cambio.valor_anterior, cambio.valor_nuevo, cambio.responsable), ("No", "Sí", "Marta Ruiz"))
+
+    def test_desmarcar_categoria_exenta_genera_las_cuotas(self):
+        self.categoria.exenta_cuota = True
+        self.categoria.save()
+
+        response = self.guardar({str(self.categoria.pk): False})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(self.periodos()), 3)
+
+    def test_sin_cambios_reales_no_guarda(self):
+        response = self.guardar({str(self.categoria.pk): False})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertFalse(HistorialConfiguracion.objects.exists())
+
+    def test_valida_las_categorias(self):
+        for cambios in ({"9999": True}, {"abc": True}, {str(self.categoria.pk): "si"}):
+            with self.subTest(cambios=cambios):
+                response = self.guardar(cambios)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("categorias_exentas", response.data)
+        self.categoria.refresh_from_db()
+        self.assertFalse(self.categoria.exenta_cuota)
+
+    def test_exige_responsable(self):
+        response = self.guardar({str(self.categoria.pk): True}, responsable="")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("responsable", response.data)
 
 
 class AplicacionDeLaConfiguracionTests(APITestCase):
