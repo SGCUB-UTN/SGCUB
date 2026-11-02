@@ -159,11 +159,15 @@ export const router = createBrowserRouter([
           },
           {
             path: 'comunicaciones',
+            element: <HistorialComunicaciones />,
+          },
+          {
+            path: 'comunicaciones/nuevo',
             element: <Comunicaciones />,
           },
           {
             path: 'comunicaciones/historial',
-            element: <HistorialComunicaciones />,
+            element: <Navigate to="/comunicaciones" replace />,
           },
           {
             path: 'reportes',
