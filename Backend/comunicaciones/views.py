@@ -1,17 +1,120 @@
 import logging
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view
-from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from .services import enviar_email_individual
+from rest_framework.response import Response
+
+from configuracion.models import ConfiguracionGeneral
+from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
+
 from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion
 from .serializers import EnvioNotificacionSerializer, NotificacionSerializer
+from .services import despachar_envios_email_notificacion, enviar_email_individual
 
 logger = logging.getLogger(__name__)
+
+
+@extend_schema(
+    tags=["Comunicaciones / Resumen"],
+    summary="Resumen e indicadores de comunicaciones",
+    description="Devuelve métricas reales de envíos, tasa de entrega, cobertura de contacto del padrón activo y configuración del remitente.",
+)
+@api_view(["GET"])
+def resumen_comunicaciones(request):
+    now = timezone.localtime()
+    notificaciones_qs = Notificacion.objects.all()
+    notificaciones_mes_qs = notificaciones_qs.filter(
+        fecha_creacion__year=now.year,
+        fecha_creacion__month=now.month,
+    )
+
+    envios_qs = EnvioNotificacion.objects.all()
+    envios_mes_qs = envios_qs.filter(
+        notificacion__fecha_creacion__year=now.year,
+        notificacion__fecha_creacion__month=now.month,
+    )
+
+    total_envios = envios_qs.count()
+    envios_exitosos = envios_qs.filter(estado=EstadoNotificacion.ENVIADA).count()
+    envios_fallidos = envios_qs.filter(estado=EstadoNotificacion.FALLIDA).count()
+
+    envios_mes_exitosos = envios_mes_qs.filter(estado=EstadoNotificacion.ENVIADA).count()
+    envios_mes_fallidos = envios_mes_qs.filter(estado=EstadoNotificacion.FALLIDA).count()
+
+    tasa_entrega = round((envios_exitosos / total_envios) * 100, 1) if total_envios > 0 else 0.0
+
+    socios_activos = Socio.objects.select_related("persona", "estado_administrativo").filter(
+        estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO
+    )
+    padron_total = socios_activos.count()
+    con_email_q = Q(persona__email__isnull=False) & ~Q(persona__email="") & Q(persona__email__contains="@")
+    con_telefono_q = Q(persona__telefono__isnull=False) & ~Q(persona__telefono="")
+
+    con_email = socios_activos.filter(con_email_q).count()
+    con_telefono = socios_activos.filter(con_telefono_q).count()
+    con_ambos = socios_activos.filter(con_email_q & con_telefono_q).count()
+    sin_contacto = socios_activos.exclude(con_email_q | con_telefono_q).count()
+
+    configuracion = ConfiguracionGeneral.load()
+    default_from = getattr(settings, "DEFAULT_FROM_EMAIL", "") or ""
+    smtp_host = getattr(settings, "EMAIL_HOST", "") or ""
+    smtp_user = getattr(settings, "EMAIL_HOST_USER", "") or ""
+    smtp_pass = getattr(settings, "EMAIL_HOST_PASSWORD", "") or ""
+
+    return Response(
+        {
+            "envios_mes": notificaciones_mes_qs.count(),
+            "notificaciones_totales": notificaciones_qs.count(),
+            "notificaciones_enviadas": notificaciones_qs.filter(estado=EstadoNotificacion.ENVIADA).count(),
+            "notificaciones_fallidas": notificaciones_qs.filter(estado=EstadoNotificacion.FALLIDA).count(),
+            "mensajes_entregados": envios_exitosos,
+            "mensajes_entregados_mes": envios_mes_exitosos,
+            "mensajes_fallidos": envios_fallidos,
+            "mensajes_fallidos_mes": envios_mes_fallidos,
+            "mensajes_totales": total_envios,
+            "tasa_entrega": tasa_entrega,
+            "por_canal": {
+                "mail_enviados": envios_qs.filter(
+                    canal=CanalNotificacion.MAIL, estado=EstadoNotificacion.ENVIADA
+                ).count(),
+                "mail_fallidos": envios_qs.filter(
+                    canal=CanalNotificacion.MAIL, estado=EstadoNotificacion.FALLIDA
+                ).count(),
+                "whatsapp_enviados": envios_qs.filter(
+                    canal=CanalNotificacion.WHATSAPP, estado=EstadoNotificacion.ENVIADA
+                ).count(),
+                "whatsapp_fallidos": envios_qs.filter(
+                    canal=CanalNotificacion.WHATSAPP, estado=EstadoNotificacion.FALLIDA
+                ).count(),
+            },
+            "cobertura": {
+                "padron_total": padron_total,
+                "con_email": con_email,
+                "con_telefono": con_telefono,
+                "con_ambos": con_ambos,
+                "sin_email": max(0, padron_total - con_email),
+                "sin_telefono": max(0, padron_total - con_telefono),
+                "sin_contacto": sin_contacto,
+            },
+            "sin_contacto": sin_contacto,
+            "remitente": {
+                "club_nombre": configuracion.club_nombre,
+                "nombre_remitente": configuracion.email_nombre_remitente or configuracion.club_nombre,
+                "email_remitente": default_from,
+                "email_secretaria": configuracion.club_email or default_from,
+                "firma": configuracion.email_firma,
+                "smtp_host": smtp_host,
+                "smtp_configurado": bool(smtp_host and smtp_user and smtp_pass),
+            },
+        }
+    )
     
 @extend_schema(
     tags=["Comunicaciones / Opciones"],
@@ -113,17 +216,15 @@ def notificacion_list_create(request):
         except ValidationError as exc:
             return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
 
-        # Despachar correos vía Brevo SMTP
+        # Despachar correos vía SMTP (.env) y actualizar estado real
+        copia_secretaria = bool(request.data.get("copia_secretaria", False))
         try:
-            from django_q.tasks import async_task
-            async_task("comunicaciones.services.despachar_envios_email_notificacion", notificacion.id)
-        except Exception:
-            try:
-                from .services import despachar_envios_email_notificacion
-                despachar_envios_email_notificacion(notificacion.id)
-            except Exception:
-                pass
+            despachar_envios_email_notificacion(notificacion.id, copia_secretaria=copia_secretaria)
+            notificacion.refresh_from_db()
+        except Exception as exc:
+            logger.error("Error al despachar envíos de notificación %s: %s", notificacion.id, exc)
 
+        notificacion = Notificacion.objects.prefetch_related("envios__socio__persona").get(pk=notificacion.pk)
         return Response(NotificacionSerializer(notificacion).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

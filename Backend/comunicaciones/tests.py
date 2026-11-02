@@ -90,3 +90,30 @@ class DespacharEnviosEmailNotificacionTest(TestCase):
             contenido="Contenido",
             envio_id=envio.pk,
         )
+
+    def test_actualiza_estado_notificacion_a_fallida_si_todos_los_envios_fallan(self):
+        persona = Persona.objects.create(
+            nombre="Juan",
+            apellido="Gómez",
+            dni="11223344",
+            email="",
+            telefono="",
+        )
+        socio = Socio.objects.create(persona=persona)
+        notificacion = Notificacion.objects.create(
+            titulo="Aviso",
+            contenido="Contenido",
+            estado=EstadoNotificacion.ENVIADA,
+        )
+        EnvioNotificacion.objects.create(
+            notificacion=notificacion,
+            socio=socio,
+            canal=CanalNotificacion.MAIL,
+        )
+
+        from .services import despachar_envios_email_notificacion
+
+        despachar_envios_email_notificacion(notificacion.pk)
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.estado, EstadoNotificacion.FALLIDA)
+
