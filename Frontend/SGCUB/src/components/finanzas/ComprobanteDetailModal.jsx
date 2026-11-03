@@ -42,7 +42,18 @@ function CreditNotes({ detalle, methodLabel }) {
               {formatDate(note.fecha)} · {methodLabel(note.medio_de_pago)} · Responsable: {note.responsable}
             </p>
           </div>
-          <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
+          <div className="flex items-center gap-2 shrink-0">
+            <WhatsAppComprobanteButton
+              socio={detalle.socio}
+              devolucionId={note.devolucion_id}
+              comprobanteCodigo={note.codigo}
+              montoTotal={note.monto}
+              tipo="nota_credito"
+              label="WhatsApp"
+              className="h-9 px-3 text-xs min-w-0"
+            />
+            <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
+          </div>
         </div>
       ))}
       <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
@@ -196,16 +207,16 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
             )}
 
             <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
-            {!anulado && (
-              <WhatsAppComprobanteButton
-                socio={detalle.socio}
-                comprobanteId={detalle.comprobante_id}
-                comprobanteCodigo={detalle.codigo}
-                montoTotal={detalle.monto_total}
-                clubNombre={clubConfig?.club_nombre}
-                comprobanteRef={comprobanteRef}
-              />
-            )}
+            <WhatsAppComprobanteButton
+              socio={detalle.socio}
+              comprobanteId={detalle.comprobante_id}
+              comprobanteCodigo={detalle.codigo}
+              montoTotal={detalle.monto_total}
+              clubNombre={clubConfig?.club_nombre}
+              comprobanteRef={comprobanteRef}
+              tipo={anulado ? 'anulado' : 'comprobante'}
+              label={anulado ? 'WhatsApp (anulado)' : 'WhatsApp'}
+            />
           </div>
         </div>
       )}

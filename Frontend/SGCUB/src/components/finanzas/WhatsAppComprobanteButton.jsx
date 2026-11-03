@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { descargarComprobantePdf, obtenerComprobanteImagenBlob } from '../../api/comprobantes'
+import { descargarDevolucionPdf, obtenerDevolucionImagenBlob } from '../../api/devoluciones'
 import {
   buildWhatsAppMessage,
   copyReceiptBlobToClipboard,
@@ -19,13 +20,15 @@ function WhatsAppIcon({ className = 'w-4 h-4' }) {
 function WhatsAppComprobanteButton({
   socio,
   comprobanteId,
+  devolucionId,
   comprobanteCodigo,
   montoTotal,
   clubNombre,
+  tipo = 'comprobante',
   comprobanteRef,
   autoDownload = true,
   variant = 'primary',
-  label = 'Enviar por WhatsApp',
+  label = 'WhatsApp',
   className = '',
 }) {
   const [procesando, setProcesando] = useState(false)
@@ -33,6 +36,8 @@ function WhatsAppComprobanteButton({
   const phone = socio?.telefono || socio?.persona?.telefono || ''
   const hasPhone = Boolean(phone && String(phone).trim().length >= 6)
   const formattedPhone = hasPhone ? formatWhatsAppPhone(phone) : null
+  const targetId = comprobanteId ?? devolucionId
+  const isRefund = Boolean(devolucionId)
 
   useEffect(() => {
     if (!toast) return
@@ -44,17 +49,32 @@ function WhatsAppComprobanteButton({
     if (!hasPhone || procesando) return
 
     setProcesando(true)
+    const effectiveTipo = tipo || (isRefund ? 'devolucion' : 'comprobante')
     const message = buildWhatsAppMessage({
       socio,
       comprobanteCodigo,
       montoTotal,
       clubNombre,
+      tipo: effectiveTipo,
     })
 
     let imagenCopiada = false
 
-    // 1. Prioridad: Obtener la imagen PNG del mismo PDF oficial generado por el backend
-    if (comprobanteId) {
+    // 1. Prioridad: Obtener la imagen PNG del PDF oficial generado por el backend
+    if (devolucionId) {
+      try {
+        const blob = await obtenerDevolucionImagenBlob(devolucionId)
+        await copyReceiptBlobToClipboard(blob)
+        imagenCopiada = true
+        setToast({
+          type: 'success',
+          title: '¡Comprobante copiado al portapapeles!',
+          description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+        })
+      } catch (err) {
+        console.warn('No se pudo obtener/copiar la imagen de la devolución desde el backend:', err)
+      }
+    } else if (comprobanteId) {
       try {
         const blob = await obtenerComprobanteImagenBlob(comprobanteId)
         await copyReceiptBlobToClipboard(blob)
@@ -85,9 +105,13 @@ function WhatsAppComprobanteButton({
     }
 
     // 3. Si no se pudo copiar al portapapeles (por permisos o error), descargamos el PDF de respaldo:
-    if (!imagenCopiada && autoDownload && comprobanteId) {
+    if (!imagenCopiada && autoDownload && targetId) {
       try {
-        await descargarComprobantePdf(comprobanteId)
+        if (devolucionId) {
+          await descargarDevolucionPdf(devolucionId)
+        } else {
+          await descargarComprobantePdf(comprobanteId)
+        }
         setToast({
           type: 'info',
           title: 'Comprobante descargado',
@@ -106,7 +130,7 @@ function WhatsAppComprobanteButton({
     ? `Enviar comprobante al socio por WhatsApp (${phone})`
     : 'El socio no tiene un teléfono registrado'
 
-  const baseClass = 'inline-flex items-center gap-2 px-4 h-10 rounded-md font-semibold text-sm transition-colors'
+  const baseClass = 'inline-flex items-center justify-center gap-2 px-4 h-10 min-w-[125px] rounded-md font-semibold text-sm transition-colors whitespace-nowrap shrink-0'
   const primaryClass = hasPhone
     ? 'bg-[#25D366] hover:bg-[#20ba5a] text-white shadow-sm cursor-pointer'
     : 'bg-[#25D366]/40 text-white/80 cursor-not-allowed opacity-60'

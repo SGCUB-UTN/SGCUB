@@ -8,6 +8,7 @@ import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
+import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import SocioPicker from './SocioPicker'
 import { PaymentRow } from './PagoForm'
 import { INCOME, MANUAL_REFUND, isOtherConcept } from './conceptOrigins'
@@ -86,9 +87,16 @@ function DevolucionRegistrada({ devolucion, onBack }) {
         </div>
       </section>
 
-      <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
-        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
         <SecondaryButton icon="arrow_back" onClick={onBack}>Volver</SecondaryButton>
+        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+        <WhatsAppComprobanteButton
+          socio={devolucion.socio}
+          devolucionId={devolucion.devolucion_id}
+          comprobanteCodigo={devolucion.codigo}
+          montoTotal={devolucion.monto}
+          tipo="devolucion"
+        />
       </div>
     </div>
   )

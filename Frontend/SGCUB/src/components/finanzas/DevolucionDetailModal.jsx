@@ -1,6 +1,7 @@
 import { Modal } from '@mantine/core'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
+import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 
 function Row({ label, children }) {
   return (
@@ -52,7 +53,16 @@ function DevolucionDetailModal({ devolucion, opened, onClose }) {
             : 'Registra dinero devuelto que nunca se contó como ingreso. No modifica la deuda ni los ingresos.'}
         </p>
 
-        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+          <WhatsAppComprobanteButton
+            socio={devolucion.socio}
+            devolucionId={devolucion.devolucion_id}
+            comprobanteCodigo={devolucion.codigo}
+            montoTotal={devolucion.monto}
+            tipo={isCreditNote ? 'nota_credito' : 'devolucion'}
+          />
+        </div>
       </div>
     </Modal>
   )

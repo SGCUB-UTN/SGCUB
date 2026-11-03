@@ -66,11 +66,20 @@ export function formatWhatsAppPhone(phone) {
 /**
  * Genera el texto del mensaje para enviar el comprobante por WhatsApp.
  */
-export function buildWhatsAppMessage({ comprobanteCodigo, montoTotal, clubNombre }) {
+export function buildWhatsAppMessage({ comprobanteCodigo, montoTotal, clubNombre, tipo = 'comprobante' }) {
   const nombreClub = clubNombre || 'Club Universitario de Berisso'
   const codigo = comprobanteCodigo ? ` (${comprobanteCodigo})` : ''
   const monto = montoTotal != null ? ` por un monto de ${formatAmount(montoTotal)}` : ''
 
+  if (tipo === 'nota_credito') {
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos la nota de crédito${codigo}${monto}. ¡Muchas gracias!`
+  }
+  if (tipo === 'devolucion') {
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de la devolución${codigo}${monto}. ¡Muchas gracias!`
+  }
+  if (tipo === 'anulado') {
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante anulado${codigo}. Saludos cordiales.`
+  }
   return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de tu pago${codigo}${monto}. ¡Muchas gracias!`
 }
 

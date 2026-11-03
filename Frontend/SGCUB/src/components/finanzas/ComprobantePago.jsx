@@ -186,7 +186,9 @@ function ComprobantePago({
       </div>
 
       {/* Acciones */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+        <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>
+        <DownloadComprobanteButton comprobanteId={comprobanteId} />
         <WhatsAppComprobanteButton
           socio={socioCompleto}
           comprobanteId={comprobanteId}
@@ -195,8 +197,6 @@ function ComprobantePago({
           clubNombre={clubNombre}
           comprobanteRef={comprobanteRef}
         />
-        <DownloadComprobanteButton comprobanteId={comprobanteId} />
-        <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>
       </div>
     </div>
   )
