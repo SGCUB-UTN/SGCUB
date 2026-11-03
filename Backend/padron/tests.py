@@ -1943,7 +1943,12 @@ class SaludosCumpleanosTest(TestCase):
         from unittest.mock import patch
         from django.utils import timezone
         from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+        from configuracion.models import ConfiguracionGeneral
         from padron.tasks import send_scheduled_birthday_greetings
+
+        config = ConfiguracionGeneral.load()
+        config.notificar_cumpleanos = True
+        config.save()
 
         hoy = timezone.localdate()
         p1 = Persona.objects.create(

@@ -17,6 +17,10 @@ def send_scheduled_birthday_greetings(today=None):
     """
     today = today or timezone.localdate()
     config = ConfiguracionGeneral.load()
+    if not config.notificar_cumpleanos:
+        logger.info("Saludos de cumpleaños desactivados en Configuración")
+        return {"cumpleanieros": 0, "despachados": 0, "motivo": "notificar_cumpleanos desactivado"}
+
     club = config.club_nombre
 
     socios_cumple = list(
