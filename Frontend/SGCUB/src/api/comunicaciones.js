@@ -12,6 +12,11 @@ export const getHistorialNotificaciones = async () => {
   return response.data
 }
 
+export const getNotificacionById = async (id) => {
+  const response = await api.get(`${comunicacionesEndpoint}notificacion/${id}/`)
+  return response.data
+}
+
 export const postEnviarNotificacion = async (payload) => {
   const notificacionBody = {
     titulo: payload.titulo || payload.asunto || 'Notificación institucional',

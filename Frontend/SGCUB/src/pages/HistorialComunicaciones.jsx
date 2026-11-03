@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getComunicacionesKPIs, getHistorialNotificaciones } from '../api/comunicaciones'
 import { getSocios } from '../api/socios'
 import ComunicacionesKPIs from '../components/comunicaciones/ComunicacionesKPIs'
-import DetalleNotificacionModal from '../components/comunicaciones/DetalleNotificacionModal'
 import ExcludedListModal from '../components/comunicaciones/ExcludedListModal'
 import HistorialComunicacionesTable from '../components/comunicaciones/HistorialComunicacionesTable'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
@@ -59,7 +58,6 @@ export default function HistorialComunicaciones() {
   const [kpis, setKpis] = useState(null)
   const [notificaciones, setNotificaciones] = useState([])
   const [socios, setSocios] = useState([])
-  const [selectedNotificacion, setSelectedNotificacion] = useState(null)
   const [isExcludedOpen, setIsExcludedOpen] = useState(false)
   const [flashResult, setFlashResult] = useState(initialFlash)
 
@@ -191,7 +189,7 @@ export default function HistorialComunicaciones() {
             <SecondaryButton
               type="button"
               icon="visibility"
-              onClick={() => setSelectedNotificacion(flashResult)}
+              onClick={() => navigate(`/comunicaciones/${flashResult.id}`)}
             >
               Ver detalle
             </SecondaryButton>
@@ -226,16 +224,10 @@ export default function HistorialComunicaciones() {
           />
           <HistorialComunicacionesTable
             notificaciones={notificaciones}
-            onViewDetail={(notif) => setSelectedNotificacion(notif)}
+            onViewDetail={(notif) => navigate(`/comunicaciones/${notif.id}`)}
           />
         </>
       )}
-
-      <DetalleNotificacionModal
-        isOpen={Boolean(selectedNotificacion)}
-        onClose={() => setSelectedNotificacion(null)}
-        notificacion={selectedNotificacion}
-      />
 
       <ExcludedListModal
         isOpen={isExcludedOpen}

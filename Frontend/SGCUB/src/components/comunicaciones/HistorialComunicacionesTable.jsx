@@ -203,7 +203,11 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
           }
 
           return (
-            <tr key={notif.id} className="hover:bg-surface-container-low/50 transition-colors">
+            <tr
+              key={notif.id}
+              onClick={() => onViewDetail?.(notif)}
+              className="hover:bg-surface-container-low/50 transition-colors cursor-pointer"
+            >
               <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
                 {formatFechaHora(notif.fecha_creacion)}
               </td>
