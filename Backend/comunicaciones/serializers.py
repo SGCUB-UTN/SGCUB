@@ -54,6 +54,8 @@ class EnvioNotificacionSerializer(serializers.ModelSerializer):
 class NotificacionSerializer(serializers.ModelSerializer):
     envios = EnvioNotificacionSerializer(many=True, read_only=True)
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    usuario_nombre = serializers.SerializerMethodField()
+    usuario_email = serializers.CharField(source="usuario.email", read_only=True, default="")
 
     class Meta:
         model = Notificacion
@@ -64,7 +66,24 @@ class NotificacionSerializer(serializers.ModelSerializer):
             "contenido",
             "estado",
             "estado_display",
+            "usuario",
+            "usuario_nombre",
+            "usuario_email",
             "fecha_creacion",
             "envios",
         ]
-        read_only_fields = ["id", "estado_display", "fecha_creacion", "envios"]
+        read_only_fields = [
+            "id",
+            "estado_display",
+            "usuario",
+            "usuario_nombre",
+            "usuario_email",
+            "fecha_creacion",
+            "envios",
+        ]
+
+    def get_usuario_nombre(self, obj):
+        if not obj.usuario:
+            return ""
+        nombre = f"{obj.usuario.first_name} {obj.usuario.last_name}".strip()
+        return nombre or obj.usuario.username

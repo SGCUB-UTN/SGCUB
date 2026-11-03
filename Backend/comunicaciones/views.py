@@ -184,9 +184,12 @@ def opciones_comunicacion(request):
 @api_view(["GET", "POST"])
 def notificacion_list_create(request):
     if request.method == "GET":
-        notificaciones = Notificacion.objects.prefetch_related(
-            "envios__socio__persona"
-        ).all().order_by("-fecha_creacion")
+        notificaciones = (
+            Notificacion.objects.select_related("usuario")
+            .prefetch_related("envios__socio__persona")
+            .all()
+            .order_by("-fecha_creacion")
+        )
         serializer = NotificacionSerializer(notificaciones, many=True)
         return Response(serializer.data)
 
@@ -201,7 +204,8 @@ def notificacion_list_create(request):
 
         try:
             with transaction.atomic():
-                notificacion = serializer.save()
+                user = request.user if getattr(request, "user", None) and request.user.is_authenticated else None
+                notificacion = serializer.save(usuario=user)
                 for index, item in enumerate(envios_data):
                     if not isinstance(item, dict):
                         raise ValidationError(
@@ -224,7 +228,11 @@ def notificacion_list_create(request):
         except Exception as exc:
             logger.error("Error al despachar envíos de notificación %s: %s", notificacion.id, exc)
 
-        notificacion = Notificacion.objects.prefetch_related("envios__socio__persona").get(pk=notificacion.pk)
+        notificacion = (
+            Notificacion.objects.select_related("usuario")
+            .prefetch_related("envios__socio__persona")
+            .get(pk=notificacion.pk)
+        )
         return Response(NotificacionSerializer(notificacion).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -266,7 +274,7 @@ def notificacion_list_create(request):
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
 def notificacion_detail(request, pk):
     notificacion = get_object_or_404(
-        Notificacion.objects.prefetch_related("envios__socio__persona"), pk=pk
+        Notificacion.objects.select_related("usuario").prefetch_related("envios__socio__persona"), pk=pk
     )
 
     if request.method == "GET":

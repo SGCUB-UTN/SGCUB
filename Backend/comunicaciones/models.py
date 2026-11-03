@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -22,6 +23,13 @@ class Notificacion(models.Model):
         max_length=20,
         choices=EstadoNotificacion.choices,
         default=EstadoNotificacion.ENVIADA,
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notificaciones_creadas",
     )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
