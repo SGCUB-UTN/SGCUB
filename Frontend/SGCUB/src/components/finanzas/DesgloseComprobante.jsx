@@ -1,7 +1,9 @@
 import { formatAmount } from '../personas/format'
 
-function DesgloseComprobante({ detalle }) {
+function DesgloseComprobante({ detalle, flat = false }) {
   const periodos = detalle?.periodos ?? []
+  const sectionClass = flat ? '' : 'border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest'
+  const gutter = flat ? 'px-5' : 'px-3'
 
   const renderPeriodoLabel = (periodo) => {
     if (!periodo) return '—'
@@ -14,11 +16,11 @@ function DesgloseComprobante({ detalle }) {
   // An income receipt is the same as a payment one, with the concept instead of the periods
   if (detalle?.es_ingreso) {
     return (
-      <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
-        <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">
+      <section className={sectionClass}>
+        <div className={`${gutter} py-2 bg-surface-container-low border-b border-outline-variant/30`}>
           <h3 className="font-semibold text-on-surface">Concepto</h3>
         </div>
-        <div className="flex justify-between gap-3 p-3">
+        <div className={`flex justify-between gap-3 ${gutter} py-3`}>
           <strong className="text-on-surface text-sm break-words">{detalle.concepto}</strong>
           <span className="font-semibold text-on-surface text-sm">{formatAmount(detalle.monto_total)}</span>
         </div>
@@ -27,14 +29,14 @@ function DesgloseComprobante({ detalle }) {
   }
 
   return (
-    <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
-      <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">
+    <section className={sectionClass}>
+      <div className={`${gutter} py-2 bg-surface-container-low border-b border-outline-variant/30`}>
         <h3 className="font-semibold text-on-surface">Períodos abonados</h3>
       </div>
       <div className="divide-y divide-outline-variant/20">
-        {periodos.length === 0 && <p className="px-3 py-2 text-sm text-on-surface-variant">Sin períodos imputados.</p>}
+        {periodos.length === 0 && <p className={`${gutter} py-2 text-sm text-on-surface-variant`}>Sin períodos imputados.</p>}
         {periodos.map((periodo) => (
-          <div key={periodo.cuota_id} className="p-3">
+          <div key={periodo.cuota_id} className={`${gutter} py-3`}>
             <div className="flex justify-between items-center mb-1.5">
               <strong className="text-on-surface text-sm">{renderPeriodoLabel(periodo.periodo)}</strong>
               <span className="font-semibold text-on-surface text-sm">{formatAmount(periodo.monto_aplicado)}</span>

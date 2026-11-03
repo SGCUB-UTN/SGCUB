@@ -105,7 +105,7 @@ function ComprobantePago({
             </div>
 
             {/* Lado derecho: Tarjeta de Comprobante / Recibo */}
-            <div className="bg-surface rounded-xl border border-outline-variant/40 p-3.5 sm:text-right shrink-0 sm:min-w-[210px] shadow-xs">
+            <div className="sm:text-right shrink-0 sm:min-w-[210px]">
               <div className="sm:flex sm:justify-end mb-1">
                 <span className="inline-block px-2.5 py-0.5 rounded text-xs font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20">
                   Recibo {detalle?.tipo || 'X'}
@@ -144,32 +144,34 @@ function ComprobantePago({
         </div>
 
         {/* Desglose de cuotas y conceptos */}
-        <div className="p-5 border-b border-outline-variant/30">
+        <div className="border-b border-outline-variant/30">
           {detalle ? (
-            <DesgloseComprobante detalle={detalle} />
+            <DesgloseComprobante detalle={detalle} flat />
           ) : (
-            <p className="p-3 bg-surface-container-low rounded-lg text-sm text-on-surface-variant">
+            <p className="px-5 py-4 text-sm text-on-surface-variant">
               El pago quedó registrado. Podés consultar el desglose completo en el listado de comprobantes.
             </p>
           )}
         </div>
 
         {/* Medios de pago y Total */}
-        <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/30">
-          <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">Detalle del cobro</p>
-          <div className="divide-y divide-outline-variant/20 border border-outline-variant/30 rounded-xl overflow-hidden bg-surface">
+        <section className="border-b border-outline-variant/30">
+          <div className="px-5 py-2 bg-surface-container-low border-b border-outline-variant/30">
+            <h3 className="font-semibold text-on-surface">Detalle del cobro</h3>
+          </div>
+          <div className="divide-y divide-outline-variant/20">
             {medios.map((medio, index) => (
-              <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-4 py-2.5 text-sm">
+              <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-5 py-2.5 text-sm">
                 <span className="text-on-surface-variant">{medio.medio}</span>
                 <strong className="text-on-surface">{formatAmount(medio.monto)}</strong>
               </div>
             ))}
-            <div className="flex justify-between items-center gap-4 px-4 py-3 bg-surface-container-low/70">
-              <strong className="text-on-surface font-semibold">Total abonado</strong>
-              <strong className="text-xl font-bold text-primary">{formatAmount(montoTotal)}</strong>
-            </div>
           </div>
-        </div>
+          <div className="flex justify-between items-center gap-4 px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low/70">
+            <strong className="text-on-surface font-semibold">Total abonado</strong>
+            <strong className="text-xl font-bold text-primary">{formatAmount(montoTotal)}</strong>
+          </div>
+        </section>
 
         {/* Observación si existe */}
         {observacion && (
