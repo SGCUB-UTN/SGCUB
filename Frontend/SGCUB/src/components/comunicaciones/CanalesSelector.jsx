@@ -45,7 +45,7 @@ export default function CanalesSelector({ canales, setCanales, remitente }) {
 
         <div
           aria-disabled="true"
-          className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-outline-variant/30 bg-surface-container/50 opacity-65 cursor-not-allowed select-none"
+          className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-outline-variant/30 bg-surface-container/50 opacity-65 cursor-default select-none"
         >
           <div className="flex items-center gap-3 min-w-0">
             <input
@@ -53,7 +53,7 @@ export default function CanalesSelector({ canales, setCanales, remitente }) {
               disabled
               checked={false}
               readOnly
-              className="w-4 h-4 rounded cursor-not-allowed shrink-0"
+              className="w-4 h-4 rounded cursor-default shrink-0"
             />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
