@@ -30,8 +30,8 @@ class MockCometClient(BaseCometClient):
             {
                 "id": self._id("mock"),
                 "documento": "20000000",
-                "nombres": "Falopa",
-                "apellidos": "Papaap",
+                "nombres": "Test",
+                "apellidos": "Test",
                 "modo": "mock",
             },
         ]
