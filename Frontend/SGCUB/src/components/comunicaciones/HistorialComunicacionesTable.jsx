@@ -23,14 +23,14 @@ const CANAL_OPTIONS = [
 ]
 
 function formatFechaHora(iso) {
-  if (!iso) return '—'
+  if (!iso) return { fecha: '—', hora: null }
   try {
     const d = new Date(iso)
     const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
     const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-    return `${fecha} · ${hora}`
+    return { fecha, hora }
   } catch {
-    return iso
+    return { fecha: iso, hora: null }
   }
 }
 
@@ -172,11 +172,11 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
       <DataTable
         headers={
           <>
+            <SortableHeader className="py-3 px-3 w-28 whitespace-nowrap" etiqueta="Fecha" columna="fecha_creacion" orden={orden} onOrdenar={handleSort} />
             <SortableHeader className="py-3 px-4" etiqueta="Asunto y mensaje" columna="asunto" orden={orden} onOrdenar={handleSort} />
-            <SortableHeader className="py-3 px-4" etiqueta="Fecha y hora" columna="fecha_creacion" orden={orden} onOrdenar={handleSort} />
-            <th scope="col" className="py-3 px-4">Canales</th>
-            <SortableHeader className="py-3 px-4" etiqueta="Destinatarios" columna="destinatarios" orden={orden} onOrdenar={handleSort} />
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={orden} onOrdenar={handleSort} />
+            <th scope="col" className="py-3 px-3 w-28 whitespace-nowrap">Canales</th>
+            <SortableHeader className="py-3 px-3 w-36 whitespace-nowrap" etiqueta="Destinatarios" columna="destinatarios" orden={orden} onOrdenar={handleSort} />
+            <SortableHeader className="py-3 px-3 w-28 whitespace-nowrap" etiqueta="Estado" columna="estado" orden={orden} onOrdenar={handleSort} />
           </>
         }
       >
@@ -200,6 +200,7 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
             tono: 'neutral',
             icon: 'info',
           }
+          const { fecha, hora } = formatFechaHora(notif.fecha_creacion)
 
           return (
             <tr
@@ -208,7 +209,11 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
               title="Hacé clic para ver el detalle del comunicado"
               className="hover:bg-surface-container-low/70 transition-colors cursor-pointer group"
             >
-              <td className="py-3.5 px-4 max-w-md">
+              <td className="py-3 px-3 w-28 whitespace-nowrap text-xs tabular-nums leading-tight">
+                <span className="block font-medium text-on-surface">{fecha}</span>
+                {hora && <span className="block text-[11px] text-on-surface-variant">{hora} hs</span>}
+              </td>
+              <td className="py-3 px-4 max-w-md">
                 <p className="font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
                   {notif.asunto || notif.titulo || 'Sin asunto'}
                 </p>
@@ -216,10 +221,7 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
                   {notif.contenido || '—'}
                 </p>
               </td>
-              <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
-                {formatFechaHora(notif.fecha_creacion)}
-              </td>
-              <td className="py-3.5 px-4 whitespace-nowrap">
+              <td className="py-3 px-3 w-28 whitespace-nowrap">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {canales.length === 0 && <span className="text-xs text-on-surface-variant">—</span>}
                   {canales.includes('MAIL') && (
@@ -236,7 +238,7 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
                   )}
                 </div>
               </td>
-              <td className="py-3.5 px-4 whitespace-nowrap">
+              <td className="py-3 px-3 w-36 whitespace-nowrap">
                 <div className="flex items-center gap-2 text-xs">
                   <span className="font-semibold text-on-surface tabular-nums">
                     {total} {total === 1 ? 'envío' : 'envíos'}
@@ -248,7 +250,7 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
                   )}
                 </div>
               </td>
-              <td className="py-3.5 px-4 whitespace-nowrap">
+              <td className="py-3 px-3 w-28 whitespace-nowrap">
                 <StatusBadge badge={badge} />
               </td>
             </tr>
