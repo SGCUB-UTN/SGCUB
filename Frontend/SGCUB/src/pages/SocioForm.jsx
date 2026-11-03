@@ -415,6 +415,30 @@ function SocioForm() {
               </Campo>
             </div>
 
+            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
+              <SeccionTitulo icono="school" titulo="Datos Educativos" />
+              <Campo id="nivel_educacion" label="Nivel de educación" opcional>
+                <SelectConFlecha
+                  id="nivel_educacion"
+                  name="nivel_educacion"
+                  value={formulario.nivel_educacion ?? ''}
+                  onChange={(event) => actualizarCampo('nivel_educacion', event.target.value || null)}
+                  conError={false}
+                >
+                  <option value="">Sin especificar</option>
+                  <option value="primario_en_proceso">Primario en proceso</option>
+                  <option value="primario_incompleto">Primario incompleto</option>
+                  <option value="primario_completo">Primario completo</option>
+                  <option value="secundario_en_proceso">Secundario en proceso</option>
+                  <option value="secundario_incompleto">Secundario incompleto</option>
+                  <option value="secundario_completo">Secundario completo</option>
+                  <option value="universitario_en_proceso">Universitario en proceso</option>
+                  <option value="universitario_incompleto">Universitario incompleto</option>
+                  <option value="universitario_completo">Universitario completo</option>
+                </SelectConFlecha>
+              </Campo>
+            </div>
+
             {editando && (
               <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
                 <SeccionTitulo icono="verified_user" titulo="Estado Institucional" />

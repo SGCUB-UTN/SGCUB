@@ -6,6 +6,19 @@ const nombreGenero = (persona) => {
   if (!persona.genero_nombre) return ''
   return persona.genero_nombre === 'Otro' ? persona.genero_otro || 'Otro' : persona.genero_nombre
 }
+
+const NIVELES_EDUCACION = {
+  primario_en_proceso: 'Primario en proceso',
+  primario_incompleto: 'Primario incompleto',
+  primario_completo: 'Primario completo',
+  secundario_en_proceso: 'Secundario en proceso',
+  secundario_incompleto: 'Secundario incompleto',
+  secundario_completo: 'Secundario completo',
+  universitario_en_proceso: 'Universitario en proceso',
+  universitario_incompleto: 'Universitario incompleto',
+  universitario_completo: 'Universitario completo',
+}
+
 export default function PersonalDataTab({ persona, localidades = [], deportivo, onEdit }) {
   if (!persona) return null
 
@@ -43,6 +56,18 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo, 
           )}
         </div>
       </RecordSection>
+
+      {persona.nivel_educacion !== undefined && (
+        <RecordSection title="Datos educativos" color="bg-secondary-container">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Field
+              label="Nivel de educación"
+              value={NIVELES_EDUCACION[persona.nivel_educacion] ?? 'Sin especificar'}
+              icon="school"
+            />
+          </div>
+        </RecordSection>
+      )}
 
       {deportivo && (
         <RecordSection

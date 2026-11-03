@@ -494,6 +494,33 @@ class PadronViewTests(APITestCase):
         self.assertEqual(socio.persona.apellido, response.data["apellido"])
         self.assertEqual(socio.persona.dni, response.data["dni"])
         self.assertIsNone(response.data["esquema_vacunacion"])
+        self.assertIsNone(response.data["nivel_educacion"])
+
+    def test_socio_nivel_educacion_se_guarda_y_actualiza(self):
+        response = self.create_socio(
+            self.datos_alta_persona(nivel_educacion="secundario_incompleto")
+        )
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        socio = Socio.objects.get(pk=response.data["socio_id"])
+        self.assertEqual("secundario_incompleto", socio.nivel_educacion)
+        self.assertEqual("secundario_incompleto", response.data["nivel_educacion"])
+
+        response = self.client.patch(
+            f"/api/padron/socio/{socio.socio_id}/",
+            {"nivel_educacion": None},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        socio.refresh_from_db()
+        self.assertIsNone(socio.nivel_educacion)
+        self.assertIsNone(response.data["nivel_educacion"])
+
+        response = self.client.patch(
+            f"/api/padron/socio/{socio.socio_id}/",
+            {"nivel_educacion": "nivel_invalido"},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_socio_esquema_vacunacion_se_guarda_y_actualiza(self):
         response = self.create_socio(self.datos_alta_persona(esquema_vacunacion=True))
