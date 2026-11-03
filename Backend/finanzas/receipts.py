@@ -21,9 +21,6 @@ from .services import receipt_code, receipt_detail, refund_code, socio_detail
 PAGE_WIDTH, PAGE_HEIGHT = A4
 PAGE_GUTTER = 12 * mm
 INNER_WIDTH = PAGE_WIDTH - 2 * PAGE_GUTTER
-CARD_GUTTER = 12
-CARD_WIDTH = INNER_WIDTH + 2 * CARD_GUTTER
-CARD_MARGIN = (PAGE_WIDTH - CARD_WIDTH) / 2
 AMOUNT_COLUMNS = [INNER_WIDTH * 0.7, INNER_WIDTH * 0.3]
 RECEIPT_BLOCK_WIDTH = 60 * mm
 DEFAULT_CLUB_NAME = "Club Universitario de Berisso"
@@ -39,7 +36,6 @@ FAINT = colors.HexColor("#787f85")
 PRIMARY = colors.HexColor("#006493")
 ERROR = colors.HexColor("#ba1a1a")
 DISCOUNT = colors.HexColor("#047857")
-FRAME = colors.HexColor("#e5e9ed")
 BORDER = colors.HexColor("#eceff2")
 DIVIDER = colors.HexColor("#f2f4f6")
 HEADER_BACKGROUND = colors.HexColor("#f9fbff")
@@ -51,8 +47,7 @@ BULLET_HEX = "#dee3e8"
 FAINT_HEX = "#787f85"
 
 HEADER, PLAIN, SECTION, ITEM, TOTAL, NOTICE, FILL, FOOTER = "header", "plain", "section", "item", "total", "notice", "fill", "footer"
-ROW_PADDING = {HEADER: (14, 14), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FILL: (0, 0), FOOTER: (7, 8)}
-PAGE_ROW_PADDING = {**ROW_PADDING, HEADER: (10 * mm, 16), FOOTER: (10, 8 * mm)}
+ROW_PADDING = {HEADER: (10 * mm, 16), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FILL: (0, 0), FOOTER: (10, 8 * mm)}
 ROW_BACKGROUNDS = {
     HEADER: HEADER_BACKGROUND,
     SECTION: SECTION_BACKGROUND,
@@ -307,20 +302,16 @@ def notice_rows(notes):
     return [(paragraph(note, "notice"), NOTICE) for note in notes]
 
 
-def frame(rows, full_page):
+def frame(rows):
     kinds = [kind for _, kind in rows]
-    content = Table([[cell] for cell, _ in rows], colWidths=[PAGE_WIDTH if full_page else CARD_WIDTH])
-    gutter = PAGE_GUTTER if full_page else CARD_GUTTER
-    padding = PAGE_ROW_PADDING if full_page else ROW_PADDING
+    content = Table([[cell] for cell, _ in rows], colWidths=[PAGE_WIDTH])
     style = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), gutter),
-        ("RIGHTPADDING", (0, 0), (-1, -1), gutter),
+        ("LEFTPADDING", (0, 0), (-1, -1), PAGE_GUTTER),
+        ("RIGHTPADDING", (0, 0), (-1, -1), PAGE_GUTTER),
     ]
-    if not full_page:
-        style += [("BOX", (0, 0), (-1, -1), 0.75, FRAME), ("ROUNDEDCORNERS", [10, 10, 10, 10])]
     for index, kind in enumerate(kinds):
-        top, bottom = padding[kind]
+        top, bottom = ROW_PADDING[kind]
         style += [("TOPPADDING", (0, index), (0, index), top), ("BOTTOMPADDING", (0, index), (0, index), bottom)]
         if kind in ROW_BACKGROUNDS:
             style.append(("BACKGROUND", (0, index), (0, index), ROW_BACKGROUNDS[kind]))
@@ -332,14 +323,14 @@ def frame(rows, full_page):
 
 
 def page_frame(rows):
-    content = frame(rows, full_page=True)
+    content = frame(rows)
     _, height = content.wrap(PAGE_WIDTH, PAGE_HEIGHT)
     if height >= PAGE_HEIGHT - 1:
         return content
-    return frame([*rows[:-1], (Spacer(1, PAGE_HEIGHT - height - 1), FILL), rows[-1]], full_page=True)
+    return frame([*rows[:-1], (Spacer(1, PAGE_HEIGHT - height - 1), FILL), rows[-1]])
 
 
-def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False, full_page=True):
+def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False, fill_page=True):
     rows = [
         (header_block(title, code, issued, is_cancelled), HEADER),
         *notice_rows(notes),
@@ -348,7 +339,6 @@ def render_document(title, code, issued, socio, notes, body, footer, is_cancelle
         (paragraph(footer, "footer"), FOOTER),
     ]
     document_title = f"{title} - N° {code.split()[-1]}" + (" (ANULADO)" if is_cancelled else "")
-    margin = 0 if full_page else CARD_MARGIN
     buffer = BytesIO()
     document = BaseDocTemplate(
         buffer,
@@ -357,9 +347,8 @@ def render_document(title, code, issued, socio, notes, body, footer, is_cancelle
         author=club_name(),
         pageCompression=0,
     )
-    page = Frame(margin, margin, PAGE_WIDTH - 2 * margin, PAGE_HEIGHT - 2 * margin, 0, 0, 0, 0)
-    document.addPageTemplates([PageTemplate(frames=[page])])
-    document.build([page_frame(rows) if full_page else frame(rows, full_page=False)])
+    document.addPageTemplates([PageTemplate(frames=[Frame(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 0, 0, 0, 0)])])
+    document.build([page_frame(rows) if fill_page else frame(rows)])
     return buffer.getvalue()
 
 
@@ -372,7 +361,7 @@ def receipt_notes(receipt):
     return notes
 
 
-def render_receipt_pdf(receipt, full_page=True):
+def render_receipt_pdf(receipt, fill_page=True):
     detail = receipt_detail(receipt)
     if detail["es_ingreso"]:
         body = section("Concepto", concept_rows(detail["concepto"], detail["monto_total"]))
@@ -391,11 +380,11 @@ def render_receipt_pdf(receipt, full_page=True):
         body,
         RECEIPT_FOOTER,
         is_cancelled=receipt.estado == EstadoComprobanteChoices.ANULADO,
-        full_page=full_page,
+        fill_page=fill_page,
     )
 
 
-def render_refund_pdf(refund, full_page=True):
+def render_refund_pdf(refund, fill_page=True):
     body = section("Concepto", concept_rows(refund.concepto, refund.monto))
     cancelled = refund.comprobante_anulado
     if cancelled is not None:
@@ -411,47 +400,29 @@ def render_refund_pdf(refund, full_page=True):
         [],
         body,
         REFUND_FOOTER,
-        full_page=full_page,
+        fill_page=fill_page,
     )
 
 
-def crop_whitespace(image, padding=40):
-    """Crops empty white margins so the receipt is compact and legible in mobile/WhatsApp views."""
+def crop_below_content(image):
     from PIL import Image as PILImage, ImageChops
 
-    bg = PILImage.new(image.mode, image.size, (255, 255, 255))
-    diff = ImageChops.difference(image, bg)
-    bbox = diff.getbbox()
-    if not bbox:
-        return image
-
-    crop_box = (
-        max(0, bbox[0] - padding),
-        max(0, bbox[1] - padding),
-        min(image.width, bbox[2] + padding),
-        min(image.height, bbox[3] + padding),
-    )
-    return image.crop(crop_box)
+    bbox = ImageChops.difference(image, PILImage.new(image.mode, image.size, (255, 255, 255))).getbbox()
+    return image.crop((0, 0, image.width, bbox[3])) if bbox else image
 
 
-def pdf_to_png(pdf_bytes, scale=2.5, trim=True, padding=40):
-    """Renders the first page of a PDF document to a PNG image at high resolution,
-    trimming the blank A4 sheet space so it displays large and readable in WhatsApp."""
+def pdf_to_png(pdf_bytes, scale=2.5):
     import pypdfium2 as pdfium
 
-    pdf = pdfium.PdfDocument(pdf_bytes)
-    page = pdf[0]
-    image = page.render(scale=scale).to_pil()
-    if trim:
-        image = crop_whitespace(image, padding=padding)
+    page = pdfium.PdfDocument(pdf_bytes)[0]
     buf = BytesIO()
-    image.save(buf, format="PNG")
+    crop_below_content(page.render(scale=scale).to_pil()).save(buf, format="PNG")
     return buf.getvalue()
 
 
 def render_receipt_image(receipt, scale=2.5):
-    return pdf_to_png(render_receipt_pdf(receipt, full_page=False), scale=scale)
+    return pdf_to_png(render_receipt_pdf(receipt, fill_page=False), scale=scale)
 
 
 def render_refund_image(refund, scale=2.5):
-    return pdf_to_png(render_refund_pdf(refund, full_page=False), scale=scale)
+    return pdf_to_png(render_refund_pdf(refund, fill_page=False), scale=scale)
