@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Modal } from '@mantine/core'
 import { collectErrorMessages, formatAmount, formatDate } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
