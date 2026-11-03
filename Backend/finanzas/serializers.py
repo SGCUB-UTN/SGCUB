@@ -216,6 +216,11 @@ class RegistroPagoSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
     )
+    item_cuota_ids_descuento = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        default=list,
+    )
     monto_total = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -229,6 +234,11 @@ class RegistroPagoSerializer(serializers.Serializer):
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
             raise serializers.ValidationError("No se deben repetir cuotas.")
+        return value
+
+    def validate_item_cuota_ids_descuento(self, value):
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("No se deben repetir detalles para descontar.")
         return value
 
     def validate(self, attrs):

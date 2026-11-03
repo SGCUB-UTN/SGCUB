@@ -1170,6 +1170,53 @@ class RegistroPagoTests(PagoTestBase):
 		self.assertEqual(self.aplicado(self.agosto), Decimal("400.00"))
 		self.cuenta.refresh_from_db()
 
+	def test_descuenta_un_detalle_al_registrar_el_pago_sin_borrar_el_cargo_original(self):
+		deportivo = ItemCuota.objects.create(
+			cuota=self.agosto,
+			concepto="CuotaDeportiva",
+			fecha_aplicacion=date(2026, 8, 1),
+			monto=Decimal("200.00"),
+		)
+		self.agosto.movimiento.monto += Decimal("200.00")
+		self.agosto.movimiento.save(update_fields=["monto"])
+
+		response = self.pagar(
+			[self.agosto],
+			"1000.00",
+			item_cuota_ids_descuento=[deportivo.pk],
+		)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertTrue(ItemCuota.objects.filter(pk=deportivo.pk, estado=EstadoItemCuotaChoices.VIGENTE).exists())
+		descuento = self.agosto.items.get(concepto="DescuentoUnico")
+		self.assertEqual(descuento.monto, Decimal("200.00"))
+		self.assertEqual(descuento.motivo, "Descuento por quitar: Cuota Deportiva")
+		self.agosto.refresh_from_db()
+		self.agosto.movimiento.refresh_from_db()
+		self.assertEqual(self.agosto.movimiento.monto, Decimal("1000.00"))
+		self.assertEqual(self.agosto.estado_cuota, EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.aplicado(self.agosto), Decimal("1000.00"))
+
+	def test_no_permite_descontar_un_detalle_de_una_cuota_con_pagos_aplicados(self):
+		self.pagar([self.agosto], "100.00")
+		deportivo = ItemCuota.objects.create(
+			cuota=self.agosto,
+			concepto="CuotaDeportiva",
+			fecha_aplicacion=date(2026, 8, 1),
+			monto=Decimal("200.00"),
+		)
+		self.agosto.movimiento.monto += Decimal("200.00")
+		self.agosto.movimiento.save(update_fields=["monto"])
+
+		response = self.pagar(
+			[self.agosto],
+			"1100.00",
+			item_cuota_ids_descuento=[deportivo.pk],
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(self.agosto.items.filter(concepto="DescuentoUnico").exists())
+
 	def test_segundo_pago_no_puede_superar_el_saldo_pendiente(self):
 		self.pagar([self.agosto], "400.00")
 

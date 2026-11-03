@@ -780,9 +780,66 @@ def payment_methods_detail(payment_methods):
     return [{"medio_de_pago": method["medio_de_pago"], "monto": method["monto"]} for method in payment_methods]
 
 
+def discount_payment_items(cuotas, item_ids, socio, user):
+    if not item_ids:
+        return
+
+    items = list(
+        ItemCuota.objects.select_for_update()
+        .filter(pk__in=item_ids, cuota__in=cuotas)
+        .select_related("cuota")
+        .order_by("pk")
+    )
+    if len(items) != len(item_ids):
+        raise PagoInvalidoError("Uno o más detalles para descontar no pertenecen a las cuotas seleccionadas.")
+
+    items_by_cuota = {}
+    for item in items:
+        if item.es_descuento or item.concepto == ConceptoItemChoices.MORA:
+            raise PagoInvalidoError("Solo se pueden descontar cargos pendientes de las cuotas.")
+        items_by_cuota.setdefault(item.cuota_id, []).append(item)
+
+    for cuota in cuotas:
+        selected_items = items_by_cuota.get(cuota.pk, [])
+        if not selected_items:
+            continue
+        if cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota):
+            raise PagoInvalidoError("No se pueden descontar detalles de cuotas que ya tienen pagos aplicados.")
+
+        pending = pending_amounts([cuota])[cuota.pk]
+        available = discountable_pending(cuota, list(cuota.items.all()), pending)
+        amount = sum((item.monto for item in selected_items), Decimal("0.00"))
+        if amount > available:
+            raise PagoInvalidoError("El descuento de los detalles supera el saldo pendiente de la cuota.")
+
+        for item in selected_items:
+            label = item.motivo or item.get_concepto_display()
+            reason = benefit_reason(f"Descuento por quitar: {label}")
+            ItemCuota.objects.create(
+                cuota=cuota,
+                concepto=ConceptoItemChoices.DESCUENTO_UNICO,
+                es_descuento=True,
+                fecha_aplicacion=timezone.localdate(),
+                monto=item.monto,
+                motivo=reason,
+                autorizado_por="",
+            )
+            record_transaction(
+                Accion.DESCUENTO_ASIGNADO,
+                f"Detalle de {label.lower()} descontado de la cuota {cuota.periodo}",
+                user,
+                socio=socio,
+                amount=item.monto,
+                reference=f"Cuota {cuota.periodo}",
+                detail={"cuota_id": cuota.pk, "item_cuota_id": item.pk, "motivo": reason},
+            )
+        sync_cuota_charge(cuota)
+
+
 @transaction.atomic
 def register_payment(
     socio_id, cuota_ids, payment_methods, total, note="", user=None, late_fee_waiver=None, credit_note=None,
+    item_cuota_ids_descuento=None,
 ):
     """Registers a payment of cuotas. `credit_note` refunds, in the same operation, the excess of a
     payment reverted to be charged again: {comprobante_id, monto, medio_de_pago, motivo, responsable}.
@@ -793,12 +850,22 @@ def register_payment(
     if late_fee_waiver:
         waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]
         waive_late_fees(waived, late_fee_waiver["motivo"], late_fee_waiver["autorizado_por"], account.socio, user)
-        cuotas = lock_account_cuotas(account, cuota_ids)
-    validate_payment_amount(pending_amounts(cuotas), total, "No se pueden pagar cuotas ya saldadas.")
-    validate_every_cuota_receives_payment(cuotas, total)
+    discount_payment_items(cuotas, item_cuota_ids_descuento or [], account.socio, user)
+    cuotas = lock_account_cuotas(account, cuota_ids)
+    pending = pending_amounts(cuotas)
+    payable_cuotas = [cuota for cuota in cuotas if pending[cuota.pk] > 0]
+    if not payable_cuotas:
+        raise PagoInvalidoError("No queda saldo pendiente para registrar un pago.")
+    validate_payment_order(account, payable_cuotas)
+    validate_payment_amount(
+        pending_amounts(payable_cuotas),
+        total,
+        "No se pueden pagar cuotas ya saldadas.",
+    )
+    validate_every_cuota_receives_payment(payable_cuotas, total)
 
     payment, receipt, movement = create_payment(account, payment_methods, total, note, user, "Pago de cuotas")
-    imputations = apply_payment(movement, cuotas, total)
+    imputations = apply_payment(movement, payable_cuotas, total)
     validate_receipt(receipt)
     record_transaction(
         Accion.PAGO_REGISTRADO,
