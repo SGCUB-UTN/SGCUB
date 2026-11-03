@@ -239,13 +239,13 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
                 </div>
               </td>
               <td className="py-3 px-3 w-36 whitespace-nowrap">
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-xs">
                   <span className="font-semibold text-on-surface tabular-nums">
-                    {total} {total === 1 ? 'envío' : 'envíos'}
+                    {total} {total === 1 ? 'destinatario' : 'destinatarios'}
                   </span>
-                  {total > 0 && (
-                    <span className="text-on-surface-variant tabular-nums">
-                      ({exitosos} ok{fallidos > 0 ? ` · ${fallidos} fallido${fallidos === 1 ? '' : 's'}` : ''})
+                  {fallidos > 0 && (
+                    <span className="text-error font-medium tabular-nums">
+                      ({fallidos} fallido{fallidos === 1 ? '' : 's'})
                     </span>
                   )}
                 </div>
