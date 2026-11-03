@@ -201,13 +201,28 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                     continue
 
                 monto = cuota.movimiento.monto if cuota.movimiento else Decimal("0.00")
+                items = list(cuota.items.all().order_by("item_cuota_id"))
+                lineas_detalle = []
+                for it in items:
+                    nombre_concepto = it.get_concepto_display()
+                    monto_fmt = format_amount(it.monto)
+                    if it.es_descuento:
+                        lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
+                    else:
+                        lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
+
+                if lineas_detalle:
+                    bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total: {format_amount(monto)}"
+                else:
+                    bloque_detalle = f"Importe total: {format_amount(monto)}"
+
                 venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
                 venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
                 asunto = f"Emisión de cuota social período {current_period} - {club}"
                 contenido = (
                     f"Estimado/a {socio.persona.nombre},\n\n"
-                    f"Te informamos que ya se encuentra disponible para abonar tu cuota social del período {current_period} "
-                    f"por un importe de {format_amount(monto)}.\n\n"
+                    f"Te informamos que ya se encuentra disponible para abonar tu cuota social del período {current_period}.\n\n"
+                    f"{bloque_detalle}\n\n"
                     f"Fechas de vencimiento:\n"
                     f"  • Primer vencimiento: {venc1}\n"
                     f"  • Segundo vencimiento: {venc2}\n\n"

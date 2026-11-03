@@ -4840,6 +4840,34 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
 
+	def test_modificacion_configuracion_solo_notifica_primer_periodo_afectado(self):
+		from unittest.mock import patch
+		from comunicaciones.models import EnvioNotificacion
+		from finanzas.services import create_configuration_version
+
+		crear_cuota_con_cargo(self.cuenta, "2026-12", "1000.00")
+		crear_cuota_con_cargo(self.cuenta, "2027-01", "1000.00")
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True):
+			params = {
+				"periodo_vigencia": "2026-12",
+				"monto_cuota_social": Decimal("1500.00"),
+				"monto_cuota_deportiva": Decimal("2500.00"),
+				"monto_inscripcion": Decimal("0.00"),
+				"valor_recargo_1": Decimal("200.00"),
+				"valor_recargo_2": Decimal("300.00"),
+				"dia_generacion": 1,
+				"dia_vencimiento_1": 10,
+				"dia_vencimiento_2": 20,
+			}
+			create_configuration_version(params, responsable="Tesorería")
+
+			envios = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains="2026-12")
+			self.assertEqual(envios.count(), 1)
+
+			envios_futuros = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains="2027-01")
+			self.assertEqual(envios_futuros.count(), 0)
+
 
 
 
