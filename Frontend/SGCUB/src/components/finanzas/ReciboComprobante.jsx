@@ -1,4 +1,4 @@
-import { formatAmount, formatDni } from '../personas/format'
+import { formatAmount, formatDate, formatDni } from '../personas/format'
 import DesgloseComprobante from './DesgloseComprobante'
 
 const DEFAULT_CLUB_NAME = 'Club Universitario de Berisso'
@@ -12,17 +12,41 @@ function formatClubAddress(cfg) {
   return [calleYNumero, pisoDepto, barrio, localidad].filter(Boolean).join(', ')
 }
 
-function ReciboComprobante({
+function annulmentLine(anulacion) {
+  return anulacion?.fecha ? `Anulado el ${formatDate(anulacion.fecha)}` : 'Anulado'
+}
+
+export function ReceiptSection({ title, children }) {
+  return (
+    <section className="border-b border-outline-variant/30">
+      <div className="px-5 py-2 bg-surface-container-low border-b border-outline-variant/30">
+        <h3 className="font-semibold text-on-surface">{title}</h3>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function ReceiptTotal({ label, amount, tone = 'text-primary' }) {
+  return (
+    <div className="flex justify-between items-center gap-4 px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low/70">
+      <strong className="text-on-surface font-semibold">{label}</strong>
+      <strong className={`text-xl font-bold ${tone}`}>{formatAmount(amount)}</strong>
+    </div>
+  )
+}
+
+export function ReceiptLayout({
   ref,
   clubConfig,
   socio = {},
-  detalle,
+  titulo,
   codigo,
   fecha,
-  medios = [],
-  montoTotal,
-  observacion,
+  pie,
   anulado = false,
+  anulacion = null,
+  children,
 }) {
   const clubNombre = clubConfig?.club_nombre || DEFAULT_CLUB_NAME
   const clubAddress = formatClubAddress(clubConfig)
@@ -31,7 +55,7 @@ function ReciboComprobante({
   return (
     <div
       ref={ref}
-      className="border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm"
+      className="relative border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm"
     >
       {/* Encabezado institucional: Club a la izquierda, Comprobante a la derecha */}
       <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/40">
@@ -71,15 +95,9 @@ function ReciboComprobante({
 
           {/* Lado derecho: Tarjeta de Comprobante / Recibo */}
           <div className="sm:text-right shrink-0 sm:min-w-[210px]">
-            <div className="flex items-center gap-2 sm:justify-end">
-              <p className="text-xl font-bold uppercase text-on-surface">Recibo {detalle?.tipo || 'X'}</p>
-              {anulado && (
-                <span className="inline-block px-2.5 py-0.5 rounded text-xs font-bold tracking-wider uppercase bg-error-container/30 text-error border border-error/20">
-                  Anulado
-                </span>
-              )}
-            </div>
+            <p className="text-xl font-bold uppercase text-on-surface">{titulo}</p>
             <p className="text-base font-bold font-mono text-on-surface tracking-tight">N° {codigo?.split(' ').pop()}</p>
+            {anulado && <p className="text-xs font-semibold text-error">{annulmentLine(anulacion)}</p>}
             <p className="text-xs text-on-surface-variant mt-0.5">Fecha: {fecha}</p>
             <p className="text-[11px] text-on-surface-variant/70 mt-1 italic">Documento no válido como factura</p>
           </div>
@@ -111,6 +129,49 @@ function ReciboComprobante({
         </div>
       </div>
 
+      {children}
+
+      {/* Pie institucional */}
+      <div className="px-5 py-3 bg-surface-container-low/40 text-center text-xs text-on-surface-variant">
+        {pie}
+      </div>
+
+      {anulado && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
+          <span className="-rotate-45 select-none text-6xl sm:text-8xl md:text-9xl font-extrabold uppercase tracking-widest text-error/20">
+            Anulado
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReciboComprobante({
+  ref,
+  clubConfig,
+  socio = {},
+  detalle,
+  codigo,
+  fecha,
+  medios = [],
+  montoTotal,
+  observacion,
+  anulado = false,
+  anulacion = null,
+}) {
+  return (
+    <ReceiptLayout
+      ref={ref}
+      clubConfig={clubConfig}
+      socio={socio}
+      titulo={`Recibo ${detalle?.tipo || 'X'}`}
+      codigo={codigo}
+      fecha={fecha}
+      pie="Recibo de uso interno · Asociación civil sin fines de lucro exenta"
+      anulado={anulado}
+      anulacion={anulacion}
+    >
       {/* Desglose de cuotas y conceptos */}
       <div className="border-b border-outline-variant/30">
         {detalle ? (
@@ -123,10 +184,7 @@ function ReciboComprobante({
       </div>
 
       {/* Medios de pago y Total */}
-      <section className="border-b border-outline-variant/30">
-        <div className="px-5 py-2 bg-surface-container-low border-b border-outline-variant/30">
-          <h3 className="font-semibold text-on-surface">Detalle del cobro</h3>
-        </div>
+      <ReceiptSection title="Detalle del cobro">
         <div className="divide-y divide-outline-variant/20">
           {medios.map((medio, index) => (
             <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-5 py-2.5 text-sm">
@@ -135,11 +193,8 @@ function ReciboComprobante({
             </div>
           ))}
         </div>
-        <div className="flex justify-between items-center gap-4 px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low/70">
-          <strong className="text-on-surface font-semibold">Total abonado</strong>
-          <strong className="text-xl font-bold text-primary">{formatAmount(montoTotal)}</strong>
-        </div>
-      </section>
+        <ReceiptTotal label="Total abonado" amount={montoTotal} />
+      </ReceiptSection>
 
       {/* Observación si existe */}
       {observacion && (
@@ -148,12 +203,7 @@ function ReciboComprobante({
           <p className="text-sm text-on-surface mt-0.5">{observacion}</p>
         </div>
       )}
-
-      {/* Pie institucional */}
-      <div className="px-5 py-3 bg-surface-container-low/40 text-center text-xs text-on-surface-variant">
-        Recibo de uso interno · Asociación civil sin fines de lucro exenta
-      </div>
-    </div>
+    </ReceiptLayout>
   )
 }
 

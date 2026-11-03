@@ -146,6 +146,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
               montoTotal={detalle.monto_total}
               observacion={pago?.observacion}
               anulado={anulado}
+              anulacion={detalle.anulacion}
             />
 
             {detalle.anulacion && (
