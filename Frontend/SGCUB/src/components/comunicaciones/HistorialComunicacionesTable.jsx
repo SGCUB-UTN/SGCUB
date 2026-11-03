@@ -192,7 +192,8 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
         {paginated.map((notif) => {
           const envios = notif.envios || []
           const total = envios.length
-          const exitosos = envios.filter((e) => e.estado === 'ENVIADA').length
+          //KPI no usado por ahora, se puede usar para mostrar un badge de "fallidos" si hay alguno
+         // const exitosos = envios.filter((e) => e.estado === 'ENVIADA').length
           const fallidos = envios.filter((e) => e.estado === 'FALLIDA').length
           const canales = [...new Set(envios.map((e) => e.canal))]
           const badge = ESTADO_BADGES[notif.estado] || {

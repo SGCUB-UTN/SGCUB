@@ -37,8 +37,9 @@ export default function ComunicacionesKPIs({ kpis, onOpenExcluded }) {
   const porCanal = kpis?.por_canal ?? {}
   const mailEnviados = Number(porCanal.mail_enviados ?? 0)
   const mailFallidos = Number(porCanal.mail_fallidos ?? 0)
-  const whatsappEnviados = Number(porCanal.whatsapp_enviados ?? 0)
-  const whatsappFallidos = Number(porCanal.whatsapp_fallidos ?? 0)
+ //DATOS PARA WHATSAPP (todavia no se implementa)
+  // const whatsappEnviados = Number(porCanal.whatsapp_enviados ?? 0)
+ // const whatsappFallidos = Number(porCanal.whatsapp_fallidos ?? 0)
 
   const remitente = kpis?.remitente ?? {}
   const emailRemitente = remitente.email_remitente || ''
