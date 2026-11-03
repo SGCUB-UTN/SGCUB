@@ -33,6 +33,7 @@ const NOTIFICATIONS = [
     field: 'notificar_cumpleanos',
     label: 'Saludos de cumpleaños',
     description: 'Envía una salutación institucional por correo a los socios en el día de su cumpleaños.',
+    withBirthdayMessage: true,
   },
 ]
 
@@ -71,6 +72,29 @@ function NotificationOption({ option, form, errors, setField }) {
               />
             </div>
           </CompactField>
+        </div>
+      )}
+      {option.withBirthdayMessage && (
+        <div className="pl-7 pt-1 flex flex-col gap-1.5">
+          <CompactField
+            id="mensaje_cumpleanos"
+            label="Mensaje de felicitación"
+            error={errors.mensaje_cumpleanos}
+          >
+            <textarea
+              id="mensaje_cumpleanos"
+              rows={6}
+              maxLength={1500}
+              className="w-full rounded-lg border border-outline-variant/40 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none transition-colors resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder="Escribí el mensaje de cumpleaños..."
+              value={form.mensaje_cumpleanos ?? ''}
+              onChange={(event) => setField('mensaje_cumpleanos', event.target.value)}
+              disabled={!checked}
+            />
+          </CompactField>
+          <p className="text-[11px] text-on-surface-variant/80">
+            Podés usar <code className="bg-surface-container-low px-1 py-0.5 rounded text-primary">{'{nombre}'}</code> para el nombre del socio y <code className="bg-surface-container-low px-1 py-0.5 rounded text-primary">{'{club}'}</code> para el nombre del club.
+          </p>
         </div>
       )}
     </li>

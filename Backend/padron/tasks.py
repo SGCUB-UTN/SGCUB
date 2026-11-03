@@ -35,18 +35,23 @@ def send_scheduled_birthday_greetings(today=None):
         logger.info("Saludos de cumpleaños: no hay socios de cumpleaños hoy (%s)", today)
         return {"cumpleanieros": 0, "despachados": 0, "fecha": today.isoformat()}
 
+    plantilla = (config.mensaje_cumpleanos or "").strip()
+    if not plantilla:
+        plantilla = (
+            "¡Hola {nombre}!\n\n"
+            "Desde el {club} te enviamos nuestros saludos en este día tan especial. "
+            "Esperamos que disfrutes de un muy feliz cumpleaños rodeado de tus seres queridos.\n\n"
+            "¡Muchas gracias por ser parte de nuestra familia!\n\n"
+            "Comisión Directiva"
+        )
+
     enviados = 0
     for socio in socios_cumple:
         nombre = socio.persona.nombre
         titulo = "¡Feliz Cumpleaños!"
         asunto = f"¡Feliz Cumpleaños te desea {club}!"
-        contenido = (
-            f"¡Hola {nombre}!\n\n"
-            f"Desde el {club} te enviamos nuestros más afectuosos saludos en este día tan especial. "
-            f"Esperamos que disfrutes de un muy feliz cumpleaños rodeado de tus afectos.\n\n"
-            f"¡Muchas gracias por ser parte de nuestra familia deportiva y social!\n\n"
-            f"Comisión Directiva"
-        )
+
+        contenido = plantilla.replace("{nombre}", nombre).replace("{club}", club)
 
         crear_y_despachar_notificacion(
             titulo=titulo,

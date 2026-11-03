@@ -1982,3 +1982,34 @@ class SaludosCumpleanosTest(TestCase):
             self.assertTrue(envios_s2.exists())
             self.assertEqual(envios_s2.first().estado, EstadoNotificacion.FALLIDA)
 
+    def test_send_scheduled_birthday_greetings_con_mensaje_personalizado(self):
+        from unittest.mock import patch
+        from django.utils import timezone
+        from configuracion.models import ConfiguracionGeneral
+        from padron.models import Persona, Socio
+        from comunicaciones.models import EnvioNotificacion
+        from padron.tasks import send_scheduled_birthday_greetings
+
+        config = ConfiguracionGeneral.load()
+        config.notificar_cumpleanos = True
+        config.mensaje_cumpleanos = "¡Felicidades {nombre}! Que tengas un gran año en el {club}."
+        config.save()
+
+        hoy = timezone.localdate()
+        p = Persona.objects.create(
+            nombre="Lucas",
+            apellido="Gomez",
+            dni="45111222",
+            email="lucas@example.com",
+            fecha_nacimiento=date(2005, hoy.month, hoy.day),
+        )
+        s = Socio.objects.create(persona=p)
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True):
+            res = send_scheduled_birthday_greetings(today=hoy)
+            self.assertEqual(res["despachados"], 1)
+            envio = EnvioNotificacion.objects.filter(socio=s).first()
+            self.assertIsNotNone(envio)
+            self.assertIn("¡Felicidades Lucas!", envio.notificacion.contenido)
+            self.assertIn(config.club_nombre, envio.notificacion.contenido)
+

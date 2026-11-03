@@ -47,6 +47,11 @@ class ConfiguracionGeneral(models.Model):
     notificar_modificacion_cuota = models.BooleanField(default=False)
     notificar_comprobante_pago = models.BooleanField(default=False)
     notificar_cumpleanos = models.BooleanField(default=False)
+    mensaje_cumpleanos = models.TextField(
+        max_length=1500,
+        default="¡Hola {nombre}!\n\nDesde el {club} te enviamos nuestros saludos en este día tan especial. Esperamos que disfrutes de un muy feliz cumpleaños rodeado de tus seres queridos.\n\n¡Muchas gracias por ser parte de nuestra familia!\n\nComisión Directiva",
+        blank=True,
+    )
     dias_recordatorio_vencimiento = models.PositiveSmallIntegerField(default=3)
     email_nombre_remitente = models.CharField(max_length=80, default="Club Universitario de Berisso")
     email_firma = models.TextField(max_length=500, default="Club Social y Deportivo - SGCUB")

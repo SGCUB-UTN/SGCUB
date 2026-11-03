@@ -24,6 +24,7 @@ FIELD_SECTIONS = {
     "notificar_modificacion_cuota": (Seccion.COMUNICACIONES, "Notificar modificaciones de la cuota"),
     "notificar_comprobante_pago": (Seccion.COMUNICACIONES, "Enviar comprobantes de pago"),
     "notificar_cumpleanos": (Seccion.COMUNICACIONES, "Enviar saludos de cumpleaños"),
+    "mensaje_cumpleanos": (Seccion.COMUNICACIONES, "Mensaje de felicitación de cumpleaños"),
     "dias_recordatorio_vencimiento": (Seccion.COMUNICACIONES, "Días de anticipación del recordatorio"),
     "email_nombre_remitente": (Seccion.COMUNICACIONES, "Nombre del remitente"),
     "email_firma": (Seccion.COMUNICACIONES, "Firma de los emails"),
