@@ -7,6 +7,7 @@ import useAssignBenefit from '../../hooks/useAssignBenefit'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { BenefitButton } from '../personas/HeaderPersona'
 import PagoForm from './PagoForm'
+import { receiptModalStyles } from './receiptModal'
 import SocioPicker from './SocioPicker'
 import { TitleSkeleton } from '../shared/Skeleton'
 
@@ -128,7 +129,7 @@ function RegisterPaymentModal({
           <BenefitButton onClick={() => assignBenefit()} disabled={!ready} />
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(paid ? receiptModalStyles(isMobile) : {}) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered

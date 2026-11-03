@@ -20,6 +20,11 @@ export const descargarComprobantePdf = async (comprobanteId) => {
   savePdfResponse(response, `recibo-${comprobanteId}.pdf`)
 }
 
+export const obtenerComprobanteImagenBlob = async (comprobanteId) => {
+  const response = await api.get(`${comprobantesEndpoint}${comprobanteId}/imagen/`, { responseType: 'blob' })
+  return response.data
+}
+
 // Refunds money of an annulled receipt: { monto, medio_de_pago, motivo, responsable }
 export const emitirNotaCredito = async (comprobanteId, notaCredito) => {
   const response = await api.post(`${comprobantesEndpoint}${comprobanteId}/nota-credito/`, notaCredito)

@@ -844,7 +844,7 @@ class DevolucionesManualesTests(APITestCase):
 		self.assertEqual(pdf.status_code, 200)
 		self.assertIn(b"DEVOLUCI", pdf.content)
 		self.assertIn(b"00000001", pdf.content)
-		self.assertIn(b"Tesorera", pdf.content)
+		self.assertNotIn(b"Tesorera", pdf.content)
 		self.assertIn("devolucion-00000001.pdf", pdf["Content-Disposition"])
 
 	def test_lista_filtrando_por_socio_y_tipo(self):
@@ -2372,6 +2372,35 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertEqual(self.desglose(primero), [("CuotaSocial", Decimal("900.00")), ("Beca", Decimal("-500.00"))])
 		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("100.00")), ("CuotaDeportiva", Decimal("1500.00"))])
 
+	def nombres_del_periodo(self, detalle):
+		return [linea["concepto_nombre"] for linea in detalle["periodos"][0]["detalle"]]
+
+	def test_pago_parcial_informa_el_saldo_pendiente_y_el_concepto_abonado_en_parte(self):
+		detalle = self.pagar("1200.00")
+		periodo = detalle["periodos"][0]
+
+		self.assertTrue(periodo["es_parcial"])
+		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("1300.00"))
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Cuota Deportiva - Abono parcial"])
+		self.assertEqual(Imputacion.objects.get().saldo_pendiente, Decimal("1300.00"))
+
+	def test_pago_que_cancela_el_saldo_no_es_parcial(self):
+		self.pagar("1200.00")
+
+		detalle = self.pagar("1300.00")
+		periodo = detalle["periodos"][0]
+
+		self.assertFalse(periodo["es_parcial"])
+		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("0.00"))
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Deportiva"])
+
+	def test_pago_parcial_no_marca_los_descuentos(self):
+		self.asignar_beca("500.00")
+
+		detalle = self.pagar("400.00")
+
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social - Abono parcial", "Beca"])
+
 	def test_un_recargo_posterior_no_altera_comprobantes_ya_emitidos(self):
 		primero = self.pagar("400.00")
 		self.agregar_mora(self.cuota, "200.00")
@@ -2456,6 +2485,17 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(comprobantes[0]["estado"], "Anulado")
 		self.assertEqual(comprobantes[0]["motivo_anulacion"], "Se cargó dos veces")
 
+	def test_lista_y_detalle_incluyen_telefono_del_socio(self):
+		self.socio.persona.telefono = "2215556677"
+		self.socio.persona.save()
+		detalle = self.pagar("2500.00")
+		comprobantes, _ = self.list_comprobantes()
+		self.assertEqual(comprobantes[0]["socio"]["telefono"], "2215556677")
+
+		response = self.client.get(reverse("comprobante-detail", args=[detalle["comprobante_id"]]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["socio"]["telefono"], "2215556677")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 
@@ -2524,9 +2564,9 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		for texto in (
 			b"RECIBO X",
 			f"{detalle['numero']:08d}".encode(),
-			self.socio.persona.dni.encode(),
+			f"{int(self.socio.persona.dni):,}".replace(",", ".").encode(),
 			b"Prueba, Socio",
-			b"2026-10",
+			b"Octubre de 2026",
 			b"$ 1.000,00",
 			b"$ 1.500,00",
 			b"-$ 500,00",
@@ -2548,6 +2588,8 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		contenido = self.descargar(original["numero"]).content
 
 		self.assertIn(b"ANULADO", contenido)
+		self.assertIn(b"Anulado el", contenido)
+		self.assertNotIn(b"Tesorera", contenido)
 		self.assertIn(b"NC-X 00000001", contenido)
 
 	def test_el_frontend_puede_leer_el_nombre_del_archivo(self):
@@ -2562,6 +2604,22 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		response = self.client.get(reverse("comprobante-pdf", args=[999999]))
 
 		self.assertEqual(response.status_code, 404)
+
+	def test_recibo_pdf_incluye_telefono_si_esta_cargado(self):
+		self.socio.persona.telefono = "2215556677"
+		self.socio.persona.save()
+		detalle = self.pagar("2500.00")
+		response = self.descargar(detalle["numero"])
+		self.assertIn(b"2215556677", response.content)
+
+	def test_comprobante_imagen_devuelve_png_del_recibo(self):
+		detalle = self.pagar("1000.00")
+		comprobante = Comprobante.objects.get(numero=detalle["numero"])
+		response = self.client.get(reverse("comprobante-imagen", args=[comprobante.pk]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "image/png")
+		self.assertTrue(response.content.startswith(b"\x89PNG"))
+		self.assertIn(f'recibo-{comprobante.numero:08d}.png', response["Content-Disposition"])
 
 	def test_formato_de_importes(self):
 		self.assertEqual(format_amount(Decimal("1234567.5")), "$ 1.234.567,50")
