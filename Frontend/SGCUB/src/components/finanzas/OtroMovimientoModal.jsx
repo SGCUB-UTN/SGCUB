@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { Modal } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
-import { formatAmount, formatDate, formatDni, formatNumber, getErrorMessage } from '../personas/format'
+import { formatAmount, formatDni, formatNumber, getErrorMessage } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { claseInput } from '../socios/socioForm'
 import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
+import ReciboDevolucion, { RefundResponsable } from './ReciboDevolucion'
+import { receiptModalStyles } from './receiptModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
+import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import SocioPicker from './SocioPicker'
 import { PaymentRow } from './PagoForm'
 import { INCOME, MANUAL_REFUND, isOtherConcept } from './conceptOrigins'
@@ -57,38 +60,33 @@ function OperationOption({ operation, selected, onSelect }) {
 
 function DevolucionRegistrada({ devolucion, onBack }) {
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="flex flex-col gap-5 flex-1 min-h-0">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-wider font-semibold text-emerald-700">Operación confirmada</p>
+          <p className="text-xs uppercase tracking-wider font-semibold text-emerald-700">Operación confirmada</p>
           <h2 className="text-2xl font-bold text-on-surface">Comprobante de devolución</h2>
         </div>
-        <span className="inline-flex items-center gap-2 text-emerald-700 font-semibold">
-          <span className="material-symbols-outlined" aria-hidden="true">verified</span>Registrado
+        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 font-semibold text-sm border border-emerald-500/20">
+          <span className="material-symbols-outlined text-base" aria-hidden="true">verified</span>
+          Registrado
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-surface-container-low border border-outline-variant/30">
-        <div><p className="text-sm text-on-surface-variant">Fecha</p><p className="font-semibold text-on-surface">{formatDate(devolucion.fecha)}</p></div>
-        <div><p className="text-sm text-on-surface-variant">Comprobante N°</p><p className="font-semibold text-on-surface">{devolucion.codigo}</p></div>
-        <div><p className="text-sm text-on-surface-variant">Socio N°</p><p className="font-semibold text-on-surface">{devolucion.socio?.numero_socio}</p></div>
-        <div><p className="text-sm text-on-surface-variant">Nombre y apellido</p><p className="font-semibold text-on-surface">{devolucion.socio?.nombre} {devolucion.socio?.apellido}</p></div>
-        <div><p className="text-sm text-on-surface-variant">DNI</p><p className="font-semibold text-on-surface">{formatDni(devolucion.socio?.dni)}</p></div>
-        <div><p className="text-sm text-on-surface-variant">Responsable</p><p className="font-semibold text-on-surface">{devolucion.responsable}</p></div>
+      <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges] [&>*]:shrink-0">
+        <ReciboDevolucion devolucion={devolucion} />
+        <RefundResponsable responsable={devolucion.responsable} />
       </div>
 
-      <section className="border border-outline-variant/30 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 bg-surface-container-low border-b border-outline-variant/30"><h3 className="font-bold text-on-surface">Detalle de la devolución</h3></div>
-        <div className="divide-y divide-outline-variant/20">
-          <div className="flex justify-between gap-4 px-4 py-3"><span className="text-on-surface-variant">Concepto</span><strong className="text-on-surface text-right">{devolucion.concepto}</strong></div>
-          <div className="flex justify-between gap-4 px-4 py-3"><span className="text-on-surface-variant">{devolucion.medio_de_pago_nombre}</span><strong className="text-on-surface">{formatAmount(devolucion.monto)}</strong></div>
-          <div className="flex justify-between gap-4 px-4 py-3 bg-surface-container-low"><strong className="text-on-surface">Total devuelto</strong><strong className="text-lg text-error">{formatAmount(devolucion.monto)}</strong></div>
-        </div>
-      </section>
-
-      <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
-        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+      <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
         <SecondaryButton icon="arrow_back" onClick={onBack}>Volver</SecondaryButton>
+        <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+        <WhatsAppComprobanteButton
+          socio={devolucion.socio}
+          devolucionId={devolucion.devolucion_id}
+          comprobanteCodigo={devolucion.codigo}
+          montoTotal={devolucion.monto}
+          tipo="devolucion"
+        />
       </div>
     </div>
   )
@@ -145,7 +143,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
         medios: activeRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
       })
       setResult({ kind: INCOME, comprobante })
-      onSuccess?.()
+      onSuccess?.(INCOME)
     } catch (error) {
       setSubmitError(getErrorMessage(error, 'No se pudo registrar el ingreso.'))
     } finally {
@@ -163,7 +161,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     })
     setConfirmingRefund(false)
     setResult({ kind: MANUAL_REFUND, devolucion })
-    onSuccess?.()
+    onSuccess?.(MANUAL_REFUND)
   }
 
   const submit = (event) => {
@@ -369,6 +367,17 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
 function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio = null, initialOperation = INCOME }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [socio, setSocio] = useState(initialSocio)
+  const [registered, setRegistered] = useState(null)
+
+  const handleSuccess = (kind) => {
+    setRegistered(kind)
+    onSuccess?.()
+  }
+
+  const chooseAnotherSocio = () => {
+    setSocio(null)
+    setRegistered(null)
+  }
 
   const socioSummary = () => {
     if (socio) {
@@ -391,7 +400,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
         <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
-            onClick={() => setSocio(null)}
+            onClick={chooseAnotherSocio}
             disabled={!socio}
             className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:grayscale disabled:cursor-default disabled:hover:bg-transparent"
           >
@@ -402,7 +411,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
           <div className="flex-1 min-w-0">{socioSummary()}</div>
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(registered ? receiptModalStyles(isMobile) : {}) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered
@@ -413,7 +422,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
         socio={socio}
         initialOperation={initialOperation}
         onCancel={onClose}
-        onSuccess={onSuccess}
+        onSuccess={handleSuccess}
       />
     </Modal>
   )
