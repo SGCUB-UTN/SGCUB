@@ -14,7 +14,7 @@ function DesgloseComprobante({ detalle }) {
   // An income receipt is the same as a payment one, with the concept instead of the periods
   if (detalle?.es_ingreso) {
     return (
-      <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
+      <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
         <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">
           <h3 className="font-semibold text-on-surface">Concepto</h3>
         </div>
@@ -27,7 +27,7 @@ function DesgloseComprobante({ detalle }) {
   }
 
   return (
-    <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
+    <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
       <div className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30">
         <h3 className="font-semibold text-on-surface">Períodos abonados</h3>
       </div>

@@ -32,30 +32,32 @@ function CreditNotes({ detalle, methodLabel }) {
   if (!notes.length) return null
   const available = availableToRefund(detalle)
   return (
-    <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
-      <h3 className="px-3 py-2 bg-surface-container-low font-semibold text-on-surface">Notas de crédito</h3>
-      {notes.map((note) => (
-        <div key={note.devolucion_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-outline-variant/20">
-          <div className="min-w-0">
-            <p className="font-semibold text-on-surface">{note.codigo} · {formatAmount(note.monto)}</p>
-            <p className="text-sm text-on-surface-variant break-words">
-              {formatDate(note.fecha)} · {methodLabel(note.medio_de_pago)} · Responsable: {note.responsable}
-            </p>
+    <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
+      <h3 className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30 font-semibold text-on-surface">Notas de crédito</h3>
+      <div className="divide-y divide-outline-variant/20">
+        {notes.map((note) => (
+          <div key={note.devolucion_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-on-surface">{note.codigo} · {formatAmount(note.monto)}</p>
+              <p className="text-sm text-on-surface-variant break-words">
+                {formatDate(note.fecha)} · {methodLabel(note.medio_de_pago)} · Responsable: {note.responsable}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <WhatsAppComprobanteButton
+                socio={detalle.socio}
+                devolucionId={note.devolucion_id}
+                comprobanteCodigo={note.codigo}
+                montoTotal={note.monto}
+                tipo="nota_credito"
+                label="WhatsApp"
+                className="h-9 px-3 text-xs min-w-0"
+              />
+              <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <WhatsAppComprobanteButton
-              socio={detalle.socio}
-              devolucionId={note.devolucion_id}
-              comprobanteCodigo={note.codigo}
-              montoTotal={note.monto}
-              tipo="nota_credito"
-              label="WhatsApp"
-              className="h-9 px-3 text-xs min-w-0"
-            />
-            <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
       {available > 0 && (
         <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
           <span className="text-on-surface-variant">Disponible para devolver</span>
@@ -122,7 +124,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
       {state.error && <p className="text-sm text-error" role="alert">{state.error}</p>}
       {detalle && (
         <div className="flex flex-col gap-4">
-          <div ref={comprobanteRef} className="flex flex-col gap-4 bg-surface rounded-xl">
+          <div ref={comprobanteRef} className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30 flex flex-col gap-3">
             <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-low border border-outline-variant/30">
               <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">receipt_long</span>
               <div className="flex-1 min-w-0">
@@ -140,7 +142,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
             </dl>
 
             {detalle.socio && (
-              <div className="p-3 rounded-lg bg-surface-container-low">
+              <div className="p-3 rounded-lg bg-surface-container-low border border-outline-variant/30">
                 <p className="text-sm text-on-surface-variant">Socio</p>
                 <p className="font-semibold text-on-surface">
                   {detalle.socio.apellido}, {detalle.socio.nombre} · DNI {formatDni(detalle.socio.dni)} · Socio N° {detalle.socio.numero_socio}
@@ -151,17 +153,24 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 
             <DesgloseComprobante detalle={detalle} />
 
-            <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
-              <h3 className="px-3 py-2 bg-surface-container-low font-semibold text-on-surface">Medios de pago</h3>
-              {(pago?.items_pago ?? []).map((item) => (
-                <div key={item.id_item_pago} className="flex justify-between px-3 py-2 border-t border-outline-variant/20">
-                  <span className="text-on-surface-variant">{methodLabel(item.medio_de_pago)}</span>
-                  <strong>{formatAmount(item.monto)}</strong>
-                </div>
-              ))}
+            <section className="border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest">
+              <h3 className="px-3 py-2 bg-surface-container-low border-b border-outline-variant/30 font-semibold text-on-surface">Medios de pago</h3>
+              <div className="divide-y divide-outline-variant/20">
+                {(pago?.items_pago ?? []).map((item) => (
+                  <div key={item.id_item_pago} className="flex justify-between px-3 py-2">
+                    <span className="text-on-surface-variant">{methodLabel(item.medio_de_pago)}</span>
+                    <strong>{formatAmount(item.monto)}</strong>
+                  </div>
+                ))}
+              </div>
             </section>
 
-            {pago?.observacion && <p className="text-sm text-on-surface-variant">Observación: {pago.observacion}</p>}
+            {pago?.observacion && (
+              <div className="p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/30">
+                <p className="text-xs text-on-surface-variant font-medium">Observación</p>
+                <p className="text-sm text-on-surface mt-0.5">{pago.observacion}</p>
+              </div>
+            )}
 
             {detalle.anulacion && (
               <section className="flex flex-col gap-1.5 p-3 rounded-lg border border-error/20 bg-error-container/30">

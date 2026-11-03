@@ -58,6 +58,13 @@ def document_styles():
     return {
         "normal": styles["Normal"],
         "title": ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2),
+        "title_cancelled": ParagraphStyle(
+            "TituloAnulado",
+            parent=styles["Title"],
+            alignment=0,
+            spaceAfter=2,
+            textColor=colors.HexColor("#b3261e"),
+        ),
         "subtitle": ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368")),
         "club_name": ParagraphStyle(
             "ClubNombre",
@@ -78,7 +85,16 @@ def document_styles():
             textColor=colors.HexColor("#5f6368"),
         ),
         "section": ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4),
-        "cancelled": ParagraphStyle("Anulado", parent=styles["Heading2"], textColor=colors.HexColor("#b3261e")),
+        "cancelled": ParagraphStyle(
+            "Anulado",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11.5,
+            leading=14,
+            spaceBefore=2,
+            spaceAfter=4,
+            textColor=colors.HexColor("#b3261e"),
+        ),
     }
 
 
@@ -161,7 +177,7 @@ def get_club_header_flowable(styles):
     return info_paragraphs
 
 
-def render_document(title, number, issued, socio, notes, sections, footer):
+def render_document(title, number, issued, socio, notes, sections, footer, is_cancelled=False):
     """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
     styles = document_styles()
     socio = socio or {}
@@ -174,14 +190,19 @@ def render_document(title, number, issued, socio, notes, sections, footer):
     else:
         story.append(header)
 
+    title_text = f"{title} - N° {number_str} (ANULADO)" if is_cancelled else f"{title} - N° {number_str}"
+    title_style = styles["title_cancelled"] if is_cancelled else styles["title"]
+
     story += [
         Spacer(1, 4 * mm),
-        Paragraph(f"{title} - N° {number_str}", styles["title"]),
+        Paragraph(title_text, title_style),
+    ]
+    for note in notes:
+        story.append(Paragraph(escape(note), styles["cancelled"]))
+    story += [
         Paragraph(escape(f"Documento no válido como factura · Fecha de emisión: {issued:%d/%m/%Y}"), styles["subtitle"]),
         Spacer(1, 4 * mm),
     ]
-    for note in notes:
-        story += [Spacer(1, 4 * mm), Paragraph(escape(note), styles["cancelled"])]
 
     socio_headers = ["Apellido y nombre", "DNI", "N° de socio"]
     socio_row = [f"{socio.get('apellido', '')}, {socio.get('nombre', '')}", socio.get("dni", ""), str(socio.get("numero_socio", ""))]
@@ -210,7 +231,7 @@ def render_document(title, number, issued, socio, notes, sections, footer):
         rightMargin=20 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title=f"{title} - N° {number_str}",
+        title=title_text,
         author=club_name(),
         pageCompression=0,
     ).build(story)
@@ -220,7 +241,7 @@ def render_document(title, number, issued, socio, notes, sections, footer):
 def receipt_notes(receipt):
     if receipt.estado != EstadoComprobanteChoices.ANULADO:
         return []
-    notes = ["ANULADO"]
+    notes = []
     for credit_note in receipt.notas_credito.order_by("pk"):
         notes.append(f"Devuelto por nota de crédito {refund_code(credit_note)} ({format_amount(credit_note.monto)})")
     return notes
@@ -228,6 +249,7 @@ def receipt_notes(receipt):
 
 def render_receipt_pdf(receipt):
     detail = receipt_detail(receipt)
+    is_cancelled = receipt.estado == EstadoComprobanteChoices.ANULADO
     if detail["es_ingreso"]:
         content = ("Concepto", lambda styles: concept_table(detail["concepto"], detail["monto_total"], "Total abonado", styles["normal"]))
     else:
@@ -247,6 +269,7 @@ def render_receipt_pdf(receipt):
         receipt_notes(receipt),
         [content, ("Medios de pago", lambda styles: methods_table(methods))],
         "Recibo de uso interno. Asociación civil exenta.",
+        is_cancelled=is_cancelled,
     )
 
 
