@@ -7,6 +7,7 @@ import { claseInput } from '../socios/socioForm'
 import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
+import { receiptModalStyles } from './receiptModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import SocioPicker from './SocioPicker'
@@ -153,7 +154,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
         medios: activeRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
       })
       setResult({ kind: INCOME, comprobante })
-      onSuccess?.()
+      onSuccess?.(INCOME)
     } catch (error) {
       setSubmitError(getErrorMessage(error, 'No se pudo registrar el ingreso.'))
     } finally {
@@ -171,7 +172,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     })
     setConfirmingRefund(false)
     setResult({ kind: MANUAL_REFUND, devolucion })
-    onSuccess?.()
+    onSuccess?.(MANUAL_REFUND)
   }
 
   const submit = (event) => {
@@ -377,6 +378,17 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
 function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio = null, initialOperation = INCOME }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [socio, setSocio] = useState(initialSocio)
+  const [registered, setRegistered] = useState(null)
+
+  const handleSuccess = (kind) => {
+    setRegistered(kind)
+    onSuccess?.()
+  }
+
+  const chooseAnotherSocio = () => {
+    setSocio(null)
+    setRegistered(null)
+  }
 
   const socioSummary = () => {
     if (socio) {
@@ -399,7 +411,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
         <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
-            onClick={() => setSocio(null)}
+            onClick={chooseAnotherSocio}
             disabled={!socio}
             className="inline-flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-50 disabled:grayscale disabled:cursor-default disabled:hover:bg-transparent"
           >
@@ -410,7 +422,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
           <div className="flex-1 min-w-0">{socioSummary()}</div>
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(registered === INCOME ? receiptModalStyles(isMobile) : {}) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered
@@ -421,7 +433,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
         socio={socio}
         initialOperation={initialOperation}
         onCancel={onClose}
-        onSuccess={onSuccess}
+        onSuccess={handleSuccess}
       />
     </Modal>
   )
