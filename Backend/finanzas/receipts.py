@@ -4,21 +4,91 @@ from xml.sax.saxutils import escape
 
 from django.utils import timezone
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from configuracion.models import ConfiguracionGeneral
-from configuracion.services import address_text, club_details, club_name
+from configuracion.services import address_text, club_name
 
 from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
-from .pdf_utils import format_amount, table
-from .services import RECEIPT_TYPE, receipt_code, receipt_detail, refund_code, socio_detail
+from .pdf_utils import format_amount
+from .services import receipt_code, receipt_detail, refund_code, socio_detail
 
 WIDTH = A4[0] - 40 * mm
+GUTTER = 12
+INNER_WIDTH = WIDTH - 2 * GUTTER
+AMOUNT_COLUMNS = [INNER_WIDTH * 0.7, INNER_WIDTH * 0.3]
+RECEIPT_BLOCK_WIDTH = 60 * mm
+DEFAULT_CLUB_NAME = "Club Universitario de Berisso"
+RECEIPT_FOOTER = "Recibo de uso interno · Asociación civil sin fines de lucro exenta"
+REFUND_FOOTER = "Comprobante de uso interno · Asociación civil sin fines de lucro exenta"
 REFUND_TITLES = {TipoDevolucionChoices.MANUAL: "DEVOLUCIÓN X", TipoDevolucionChoices.NOTA_CREDITO: "NOTA DE CRÉDITO X"}
 REFUND_FILENAMES = {TipoDevolucionChoices.MANUAL: "devolucion", TipoDevolucionChoices.NOTA_CREDITO: "nota-credito"}
+MONTHS = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+ON_SURFACE = colors.HexColor("#0b1c30")
+MUTED = colors.HexColor("#3e4850")
+FAINT = colors.HexColor("#787f85")
+PRIMARY = colors.HexColor("#006493")
+ERROR = colors.HexColor("#ba1a1a")
+DISCOUNT = colors.HexColor("#047857")
+FRAME = colors.HexColor("#e5e9ed")
+BORDER = colors.HexColor("#eceff2")
+DIVIDER = colors.HexColor("#f2f4f6")
+SURFACE = colors.HexColor("#f8f9ff")
+HEADER_BACKGROUND = colors.HexColor("#f9fbff")
+SECTION_BACKGROUND = colors.HexColor("#eff4ff")
+TOTAL_BACKGROUND = colors.HexColor("#f4f7ff")
+BADGE_BACKGROUND = colors.HexColor("#e6f0f4")
+BADGE_BORDER = colors.HexColor("#cce0e9")
+NOTICE_BACKGROUND = colors.HexColor("#fff4f3")
+NOTICE_BORDER = colors.HexColor("#f1d1d1")
+BULLET_HEX = "#dee3e8"
+FAINT_HEX = "#787f85"
+
+HEADER, PLAIN, SECTION, ITEM, TOTAL, NOTICE, FOOTER = "header", "plain", "section", "item", "total", "notice", "footer"
+ROW_PADDING = {HEADER: (14, 14), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FOOTER: (7, 8)}
+ROW_BACKGROUNDS = {
+    HEADER: HEADER_BACKGROUND,
+    SECTION: SECTION_BACKGROUND,
+    TOTAL: TOTAL_BACKGROUND,
+    NOTICE: NOTICE_BACKGROUND,
+    FOOTER: HEADER_BACKGROUND,
+}
+
+
+def text_style(name, size=9, font="Helvetica", color=ON_SURFACE, alignment=0, leading=None):
+    return ParagraphStyle(name, fontName=font, fontSize=size, leading=leading or round(size * 1.35, 1), textColor=color, alignment=alignment)
+
+
+STYLES = {
+    "club": text_style("Club", 13, "Helvetica-Bold", leading=16),
+    "club_detail": text_style("ClubDetalle", 7.5, color=MUTED),
+    "code": text_style("Codigo", 13, "Courier-Bold", alignment=TA_RIGHT, leading=16),
+    "date": text_style("Fecha", 7.5, color=MUTED, alignment=TA_RIGHT),
+    "disclaimer": text_style("Aclaracion", 7, "Helvetica-Oblique", FAINT, TA_RIGHT),
+    "caption": text_style("Rotulo", 7.5, "Helvetica-Bold", MUTED),
+    "label": text_style("Etiqueta", 7.5, color=MUTED),
+    "value": text_style("Valor", 9, "Helvetica-Bold"),
+    "missing": text_style("Faltante", 9, "Helvetica-BoldOblique", FAINT),
+    "section": text_style("Seccion", 10, "Helvetica-Bold"),
+    "strong": text_style("Destacado", 9, "Helvetica-Bold"),
+    "strong_right": text_style("DestacadoDerecha", 9, "Helvetica-Bold", alignment=TA_RIGHT),
+    "text": text_style("Texto", 9, color=MUTED),
+    "text_right": text_style("TextoDerecha", 9, color=MUTED, alignment=TA_RIGHT),
+    "discount_right": text_style("DescuentoDerecha", 9, "Helvetica-Bold", DISCOUNT, TA_RIGHT),
+    "body": text_style("Cuerpo", 9),
+    "note": text_style("Nota", 7.5, "Helvetica-Oblique", MUTED),
+    "note_right": text_style("NotaDerecha", 7.5, "Helvetica-Oblique", MUTED, TA_RIGHT),
+    "total": text_style("Total", 10, "Helvetica-Bold"),
+    "total_amount": text_style("TotalMonto", 13, "Helvetica-Bold", PRIMARY, TA_RIGHT, 16),
+    "notice": text_style("Aviso", 8.5, "Helvetica-Bold", ERROR),
+    "footer": text_style("Pie", 7.5, color=MUTED, alignment=TA_CENTER),
+}
 
 
 def receipt_filename(receipt):
@@ -32,92 +102,70 @@ def refund_filename(refund):
 def render_period_label(period_str):
     try:
         y, m = period_str.split("-")
-        months = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-        return f"{months[int(m)]} de {y}"
+        return f"{MONTHS[int(m)]} de {y}"
     except Exception:
         return period_str
 
 
-def build_periodos_rows(periodos, style):
-    rows = []
-    for p in periodos:
-        rows.append([
-            Paragraph(f"<b>{escape(render_period_label(p['periodo']))} ({escape(p['periodo'])})</b>", style),
-            format_amount(p["monto_aplicado"]),
-        ])
-        for line in p.get("detalle", []):
-            rows.append([
-                Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;• {escape(line['concepto_nombre'])}", style),
-                format_amount(line["monto"]),
-            ])
-    return rows
+def render_month_label(period_str):
+    try:
+        return MONTHS[int(period_str.split("-")[1])]
+    except Exception:
+        return period_str
 
 
-def document_styles():
-    styles = getSampleStyleSheet()
-    return {
-        "normal": styles["Normal"],
-        "title": ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2),
-        "title_cancelled": ParagraphStyle(
-            "TituloAnulado",
-            parent=styles["Title"],
-            alignment=0,
-            spaceAfter=2,
-            textColor=colors.HexColor("#b3261e"),
-        ),
-        "subtitle": ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368")),
-        "club_name": ParagraphStyle(
-            "ClubNombre",
-            parent=styles["Normal"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=12,
-            alignment=2,
-            textColor=colors.HexColor("#5f6368"),
-        ),
-        "club_details": ParagraphStyle(
-            "ClubDetalles",
-            parent=styles["Normal"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=12,
-            alignment=2,
-            textColor=colors.HexColor("#5f6368"),
-        ),
-        "section": ParagraphStyle("Seccion", parent=styles["Heading3"], spaceBefore=10, spaceAfter=4),
-        "cancelled": ParagraphStyle(
-            "Anulado",
-            parent=styles["Normal"],
-            fontName="Helvetica-Bold",
-            fontSize=11.5,
-            leading=14,
-            spaceBefore=2,
-            spaceAfter=4,
-            textColor=colors.HexColor("#b3261e"),
-        ),
-    }
+def format_dni(dni):
+    if not dni:
+        return "—"
+    return f"{int(dni):,}".replace(",", ".") if str(dni).isdigit() else str(dni)
 
 
-def concept_table(concept, amount, total_label, style):
-    return table(
-        [
-            ["Concepto", "Importe"],
-            [Paragraph(escape(concept or "—"), style), format_amount(amount)],
-            [total_label, format_amount(amount)],
-        ],
-        [WIDTH * 0.6, WIDTH * 0.4],
-        total_row=True,
-    )
+def paragraph(text, style):
+    return Paragraph(escape(str(text)), STYLES[style])
 
 
-def methods_table(methods):
-    return table(
-        [["Medio", "Monto"]] + [[MedioPago.label(code), format_amount(amount)] for code, amount in methods],
-        [WIDTH * 0.6, WIDTH * 0.4],
-    )
+def grid(rows, widths, extra_style=()):
+    content = Table(rows, colWidths=widths)
+    content.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        *extra_style,
+    ]))
+    return content
 
 
-def get_club_logo_flowable(max_width=35 * mm, max_height=20 * mm):
+def amount_row(label, amount, label_style="text", amount_style="strong_right"):
+    return grid([[paragraph(label, label_style), paragraph(format_amount(amount), amount_style)]], AMOUNT_COLUMNS)
+
+
+def badge(text, color=PRIMARY, background=BADGE_BACKGROUND, border=BADGE_BORDER):
+    font, size = "Helvetica-Bold", 7
+    content = Table([[text]], colWidths=[stringWidth(text, font, size) + 10])
+    content.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("FONTSIZE", (0, 0), (-1, -1), size),
+        ("TEXTCOLOR", (0, 0), (-1, -1), color),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BACKGROUND", (0, 0), (-1, -1), background),
+        ("BOX", (0, 0), (-1, -1), 0.5, border),
+        ("ROUNDEDCORNERS", [3, 3, 3, 3]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+    ]))
+    return content
+
+
+def badges_row(badges):
+    widths = [item._colWidths[0] + (4 if index else 0) for index, item in enumerate(badges)]
+    return grid([badges], widths, [("ALIGN", (0, 0), (-1, -1), "RIGHT")])
+
+
+def get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm):
     try:
         config = ConfiguracionGeneral.load()
         if config.club_logo and hasattr(config.club_logo, "path") and os.path.exists(config.club_logo.path):
@@ -135,93 +183,176 @@ def get_club_logo_flowable(max_width=35 * mm, max_height=20 * mm):
     return None
 
 
-def get_club_header_flowable(styles):
-    """Club identity: logo on the left, name & CUIT on top right, address & phone below."""
-    config = ConfiguracionGeneral.load()
+def framed_logo():
     logo = get_club_logo_flowable()
+    if logo is None:
+        return None
+    content = Table([[logo]], colWidths=[logo.drawWidth + 6], rowHeights=[logo.drawHeight + 6])
+    content.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+        ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+        ("ROUNDEDCORNERS", [5, 5, 5, 5]),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return content
 
-    name_text = escape(config.club_nombre or "Club Universitario de Berisso")
-    cuit_text = f" · CUIT {escape(config.club_cuit)}" if config.club_cuit else ""
-    line_1 = f"{name_text}{cuit_text}"
 
-    addr_parts = []
-    if (domicilio := address_text(config.club_domicilio)):
-        addr_parts.append(domicilio)
+def labeled(label, value):
+    return f'<font color="{FAINT_HEX}">{escape(label)}</font> {escape(value)}'
+
+
+def club_block(config):
+    lines = [paragraph(config.club_nombre or DEFAULT_CLUB_NAME, "club")]
+    if config.club_cuit:
+        lines.append(Paragraph(labeled("CUIT:", config.club_cuit), STYLES["club_detail"]))
+    if (address := address_text(config.club_domicilio)):
+        lines.append(Paragraph(labeled("Dirección:", address), STYLES["club_detail"]))
+    contact = []
     if config.club_telefono:
-        addr_parts.append(f"Tel. {config.club_telefono}")
+        contact.append(labeled("Tel:", config.club_telefono))
     if config.club_email:
-        addr_parts.append(config.club_email)
-    addr_line = " · ".join(escape(part) for part in addr_parts)
-
-    info_paragraphs = [Paragraph(line_1, styles["club_name"])]
-    if addr_line:
-        info_paragraphs.append(Paragraph(addr_line, styles["club_details"]))
-
-    if logo is not None:
-        logo_col_width = logo.drawWidth + 6 * mm
-        header_table = Table(
-            [[logo, info_paragraphs]],
-            colWidths=[logo_col_width, WIDTH - logo_col_width],
-        )
-        header_table.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (0, 0), (0, 0), "LEFT"),
-            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        return header_table
-
-    return info_paragraphs
+        contact.append(escape(config.club_email))
+    if contact:
+        lines.append(Paragraph(f' <font color="{BULLET_HEX}">·</font> '.join(contact), STYLES["club_detail"]))
+    return lines
 
 
-def render_document(title, number, issued, socio, notes, sections, footer, is_cancelled=False):
-    """Common layout of every receipt: club, title and number, status notes, socio and the sections."""
-    styles = document_styles()
-    socio = socio or {}
-    number_str = f"{number:08d}" if isinstance(number, int) else str(number)
-
-    header = get_club_header_flowable(styles)
-    story = []
-    if isinstance(header, list):
-        story.extend(header)
-    else:
-        story.append(header)
-
-    title_text = f"{title} - N° {number_str} (ANULADO)" if is_cancelled else f"{title} - N° {number_str}"
-    title_style = styles["title_cancelled"] if is_cancelled else styles["title"]
-
-    story += [
-        Spacer(1, 4 * mm),
-        Paragraph(title_text, title_style),
-    ]
-    for note in notes:
-        story.append(Paragraph(escape(note), styles["cancelled"]))
-    story += [
-        Paragraph(escape(f"Documento no válido como factura · Fecha de emisión: {issued:%d/%m/%Y}"), styles["subtitle"]),
-        Spacer(1, 4 * mm),
+def receipt_block(title, code, issued, is_cancelled):
+    badges = [badge(title)]
+    if is_cancelled:
+        badges.append(badge("ANULADO", ERROR, NOTICE_BACKGROUND, NOTICE_BORDER))
+    return [
+        badges_row(badges),
+        Spacer(1, 4),
+        paragraph(code, "code"),
+        paragraph(f"Fecha: {issued:%d/%m/%Y}", "date"),
+        Spacer(1, 2),
+        paragraph("Documento no válido como factura", "disclaimer"),
     ]
 
-    socio_headers = ["Apellido y nombre", "DNI", "N° de socio"]
-    socio_row = [f"{socio.get('apellido', '')}, {socio.get('nombre', '')}", socio.get("dni", ""), str(socio.get("numero_socio", ""))]
-    col_widths = [WIDTH * 0.5, WIDTH * 0.25, WIDTH * 0.25]
-    if socio.get("telefono"):
-        socio_headers.append("Teléfono")
-        socio_row.append(str(socio.get("telefono")))
-        col_widths = [WIDTH * 0.4, WIDTH * 0.2, WIDTH * 0.2, WIDTH * 0.2]
 
-    story += [
-        Paragraph("Socio", styles["section"]),
-        table(
-            [socio_headers, socio_row],
-            col_widths,
-        ),
+def header_block(title, code, issued, is_cancelled):
+    config = ConfiguracionGeneral.load()
+    logo = framed_logo()
+    receipt = receipt_block(title, code, issued, is_cancelled)
+    club = club_block(config)
+    align_receipt = [("ALIGN", (-1, 0), (-1, 0), "RIGHT")]
+    if logo is None:
+        return grid([[club, receipt]], [INNER_WIDTH - RECEIPT_BLOCK_WIDTH, RECEIPT_BLOCK_WIDTH], align_receipt)
+    logo_width = logo._colWidths[0] + 10
+    return grid(
+        [[logo, club, receipt]],
+        [logo_width, INNER_WIDTH - logo_width - RECEIPT_BLOCK_WIDTH, RECEIPT_BLOCK_WIDTH],
+        align_receipt,
+    )
+
+
+def socio_block(socio):
+    name = ", ".join(part for part in (socio.get("apellido"), socio.get("nombre")) if part) or "—"
+    number = socio.get("numero_socio")
+    phone = socio.get("telefono")
+    fields = [
+        ("Apellido y nombre", name, "value"),
+        ("DNI", format_dni(socio.get("dni")), "value"),
+        ("N° de socio", "—" if number is None else number, "value"),
+        ("Teléfono", phone or "No registrado", "value" if phone else "missing"),
     ]
-    for heading, content in sections:
-        story += [Paragraph(heading, styles["section"]), content(styles)]
-    story += [Spacer(1, 10 * mm), Paragraph(footer, styles["subtitle"])]
+    cells = [[paragraph(label, "label"), paragraph(value, style)] for label, value, style in fields]
+    return [
+        paragraph("DATOS DEL SOCIO", "caption"),
+        Spacer(1, 6),
+        grid([cells], [INNER_WIDTH * 0.36, INNER_WIDTH * 0.2, INNER_WIDTH * 0.2, INNER_WIDTH * 0.24], [("VALIGN", (0, 0), (-1, -1), "TOP")]),
+    ]
+
+
+def section(title, rows):
+    return [(paragraph(title, "section"), SECTION)] + rows
+
+
+def period_block(period):
+    partial = period.get("es_parcial")
+    label = render_period_label(period["periodo"]) + (" (Pago parcial)" if partial else "")
+    rows = [[paragraph(label, "strong"), paragraph(format_amount(period["monto_aplicado"]), "strong_right")]]
+    for line in period.get("detalle", []):
+        bullet = f'<font color="{BULLET_HEX}">•</font>&nbsp;&nbsp;{escape(line["concepto_nombre"])}'
+        rows.append([
+            Paragraph(bullet, STYLES["text"]),
+            paragraph(format_amount(line["monto"]), "discount_right" if line["monto"] < 0 else "text_right"),
+        ])
+    if partial:
+        rows.append([
+            paragraph(f"Saldo pendiente período {render_month_label(period['periodo'])}:", "note"),
+            paragraph(format_amount(period["saldo_pendiente"]), "note_right"),
+        ])
+    return grid(rows, AMOUNT_COLUMNS, [
+        ("TOPPADDING", (0, 1), (-1, -1), 3),
+        ("LEFTPADDING", (0, 1), (0, -1), 3),
+    ])
+
+
+def period_rows(periods):
+    if not periods:
+        return [(paragraph("Sin períodos imputados.", "text"), ITEM)]
+    return [(period_block(period), ITEM) for period in periods]
+
+
+def concept_rows(concept, amount):
+    return [(amount_row(concept or "—", amount, "strong"), ITEM)]
+
+
+def method_rows(methods):
+    return [(amount_row(MedioPago.label(code), amount), ITEM) for code, amount in methods]
+
+
+def total_row(label, amount, color=PRIMARY):
+    amount_style = ParagraphStyle("TotalMontoColor", parent=STYLES["total_amount"], textColor=color)
+    return (grid([[paragraph(label, "total"), Paragraph(format_amount(amount), amount_style)]], AMOUNT_COLUMNS), TOTAL)
+
+
+def info_row(label, value):
+    return ([paragraph(label, "label"), Spacer(1, 2), paragraph(value, "body")], PLAIN)
+
+
+def notice_rows(notes):
+    return [(paragraph(note, "notice"), NOTICE) for note in notes]
+
+
+def frame(rows):
+    kinds = [kind for _, kind in rows]
+    content = Table([[cell] for cell, _ in rows], colWidths=[WIDTH])
+    style = [
+        ("BOX", (0, 0), (-1, -1), 0.75, FRAME),
+        ("ROUNDEDCORNERS", [10, 10, 10, 10]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), GUTTER),
+        ("RIGHTPADDING", (0, 0), (-1, -1), GUTTER),
+    ]
+    for index, kind in enumerate(kinds):
+        top, bottom = ROW_PADDING[kind]
+        style += [("TOPPADDING", (0, index), (0, index), top), ("BOTTOMPADDING", (0, index), (0, index), bottom)]
+        if kind in ROW_BACKGROUNDS:
+            style.append(("BACKGROUND", (0, index), (0, index), ROW_BACKGROUNDS[kind]))
+        if index < len(kinds) - 1:
+            color = DIVIDER if kind == ITEM and kinds[index + 1] == ITEM else BORDER
+            style.append(("LINEBELOW", (0, index), (0, index), 0.5, color))
+    content.setStyle(TableStyle(style))
+    return content
+
+
+def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False):
+    rows = [
+        (header_block(title, code, issued, is_cancelled), HEADER),
+        *notice_rows(notes),
+        (socio_block(socio or {}), PLAIN),
+        *body,
+        (paragraph(footer, "footer"), FOOTER),
+    ]
+    document_title = f"{title} - N° {code.split()[-1]}" + (" (ANULADO)" if is_cancelled else "")
 
     buffer = BytesIO()
     SimpleDocTemplate(
@@ -231,10 +362,10 @@ def render_document(title, number, issued, socio, notes, sections, footer, is_ca
         rightMargin=20 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title=title_text,
+        title=document_title,
         author=club_name(),
         pageCompression=0,
-    ).build(story)
+    ).build([frame(rows)])
     return buffer.getvalue()
 
 
@@ -249,53 +380,42 @@ def receipt_notes(receipt):
 
 def render_receipt_pdf(receipt):
     detail = receipt_detail(receipt)
-    is_cancelled = receipt.estado == EstadoComprobanteChoices.ANULADO
     if detail["es_ingreso"]:
-        content = ("Concepto", lambda styles: concept_table(detail["concepto"], detail["monto_total"], "Total abonado", styles["normal"]))
+        body = section("Concepto", concept_rows(detail["concepto"], detail["monto_total"]))
     else:
-        content = ("Períodos abonados", lambda styles: table(
-            [["Período / Concepto", "Importe"]]
-            + build_periodos_rows(detail["periodos"], styles["normal"])
-            + [["Total abonado", format_amount(detail["monto_total"])]],
-            [WIDTH * 0.6, WIDTH * 0.4],
-            total_row=True,
-        ))
+        body = section("Períodos abonados", period_rows(detail["periodos"]))
     methods = [(method["medio_de_pago"], method["monto"]) for method in detail["medios"]]
+    body += section("Detalle del cobro", method_rows(methods) + [total_row("Total abonado", detail["monto_total"])])
+    if receipt.pago.observacion:
+        body.append(info_row("Observación", receipt.pago.observacion))
     return render_document(
         f"RECIBO {detail['tipo']}",
-        receipt.numero,
+        receipt_code(receipt),
         detail["fecha_emision"],
         detail["socio"],
         receipt_notes(receipt),
-        [content, ("Medios de pago", lambda styles: methods_table(methods))],
-        "Recibo de uso interno. Asociación civil exenta.",
-        is_cancelled=is_cancelled,
+        body,
+        RECEIPT_FOOTER,
+        is_cancelled=receipt.estado == EstadoComprobanteChoices.ANULADO,
     )
 
 
 def render_refund_pdf(refund):
-    sections = [("Concepto", lambda styles: concept_table(refund.concepto, refund.monto, "Total devuelto", styles["normal"]))]
+    body = section("Concepto", concept_rows(refund.concepto, refund.monto))
     cancelled = refund.comprobante_anulado
     if cancelled is not None:
-        sections.append(("Comprobante anulado", lambda styles: table(
-            [
-                ["Recibo X", "Fecha de emisión", "Importe"],
-                [f"{cancelled.numero:08d}", cancelled.fecha_emision.strftime("%d/%m/%Y"), format_amount(cancelled.monto_total)],
-            ],
-            [WIDTH * 0.4, WIDTH * 0.3, WIDTH * 0.3],
-        )))
-    sections += [
-        ("Medio de devolución", lambda styles: methods_table([(refund.medio_de_pago, refund.monto)])),
-        ("Responsable", lambda styles: Paragraph(escape(refund.responsable), styles["normal"])),
-    ]
+        label = f"Recibo {receipt_code(cancelled)} · Emitido el {cancelled.fecha_emision:%d/%m/%Y}"
+        body += section("Comprobante anulado", [(amount_row(label, cancelled.monto_total), ITEM)])
+    body += section("Medio de devolución", method_rows([(refund.medio_de_pago, refund.monto)]) + [total_row("Total devuelto", refund.monto, ERROR)])
+    body.append(info_row("Responsable", refund.responsable))
     return render_document(
         REFUND_TITLES[refund.tipo],
-        refund.numero,
+        refund_code(refund),
         timezone.localtime(refund.fecha).date(),
         socio_detail(refund.cuenta_corriente.socio),
         [],
-        sections,
-        "Comprobante de uso interno. Asociación civil exenta.",
+        body,
+        REFUND_FOOTER,
     )
 
 
@@ -339,4 +459,3 @@ def render_receipt_image(receipt, scale=2.5):
 
 def render_refund_image(refund, scale=2.5):
     return pdf_to_png(render_refund_pdf(refund), scale=scale)
-

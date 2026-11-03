@@ -2334,7 +2334,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 
 		self.assertTrue(periodo["es_parcial"])
 		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("1300.00"))
-		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Abono parcial - Cuota Deportiva"])
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Cuota Deportiva - Abono parcial"])
 		self.assertEqual(Imputacion.objects.get().saldo_pendiente, Decimal("1300.00"))
 
 	def test_pago_que_cancela_el_saldo_no_es_parcial(self):
@@ -2352,7 +2352,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 
 		detalle = self.pagar("400.00")
 
-		self.assertEqual(self.nombres_del_periodo(detalle), ["Abono parcial - Cuota Social", "Beca"])
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social - Abono parcial", "Beca"])
 
 	def test_un_recargo_posterior_no_altera_comprobantes_ya_emitidos(self):
 		primero = self.pagar("400.00")
@@ -2517,9 +2517,9 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		for texto in (
 			b"RECIBO X",
 			f"{detalle['numero']:08d}".encode(),
-			self.socio.persona.dni.encode(),
+			f"{int(self.socio.persona.dni):,}".replace(",", ".").encode(),
 			b"Prueba, Socio",
-			b"2026-10",
+			b"Octubre de 2026",
 			b"$ 1.000,00",
 			b"$ 1.500,00",
 			b"-$ 500,00",
