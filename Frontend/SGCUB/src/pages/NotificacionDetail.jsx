@@ -33,7 +33,7 @@ function formatFechaCompleta(iso) {
       hour: '2-digit',
       minute: '2-digit',
     })
-    return `${fecha} · ${hora} hs`
+    return `${fecha} · ${hora}`
   } catch {
     return iso
   }

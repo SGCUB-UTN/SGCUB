@@ -57,7 +57,7 @@ export default function DetalleNotificacionModal({ isOpen, onClose, notificacion
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
-      })} a las ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`
+      })} a las ${d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
     } catch {
       fechaStr = notificacion.fecha_creacion
     }

@@ -211,7 +211,7 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
             >
               <td className="py-3 px-3 w-28 whitespace-nowrap text-xs tabular-nums leading-tight">
                 <span className="block font-medium text-on-surface">{fecha}</span>
-                {hora && <span className="block text-[11px] text-on-surface-variant">{hora} hs</span>}
+                {hora && <span className="block text-[11px] text-on-surface-variant">{hora}</span>}
               </td>
               <td className="py-3 px-4 max-w-md">
                 <p className="font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
