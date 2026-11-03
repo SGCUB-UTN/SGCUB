@@ -378,7 +378,7 @@ class SocioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Socio
         fields = [
-            "socio_id", "persona", "numero_socio", "nombre", "apellido", "dni", "telefono", "email",
+            "socio_id", "persona", "numero_socio", "esquema_vacunacion", "nombre", "apellido", "dni", "telefono", "email",
             "fecha_nacimiento", "edad", "genero", "genero_nombre", "genero_otro",
             "domicilio_calle", "domicilio_numero", "domicilio_piso", "domicilio_departamento", "domicilio_entre_calle_1", "domicilio_entre_calle_2", "domicilio_barrio", "domicilio_barrio_nombre", "domicilio_localidad",
             "estado_administrativo", "estado_administrativo_nombre", "fecha_alta", "es_jugador", "es_ex_jugador", "jugador_id"

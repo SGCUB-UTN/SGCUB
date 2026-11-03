@@ -493,6 +493,34 @@ class PadronViewTests(APITestCase):
         self.assertEqual(socio.persona.nombre, response.data["nombre"])
         self.assertEqual(socio.persona.apellido, response.data["apellido"])
         self.assertEqual(socio.persona.dni, response.data["dni"])
+        self.assertIsNone(response.data["esquema_vacunacion"])
+
+    def test_socio_esquema_vacunacion_se_guarda_y_actualiza(self):
+        response = self.create_socio(self.datos_alta_persona(esquema_vacunacion=True))
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        socio = Socio.objects.get(pk=response.data["socio_id"])
+        self.assertTrue(socio.esquema_vacunacion)
+        self.assertTrue(response.data["esquema_vacunacion"])
+
+        response = self.client.patch(
+            f"/api/padron/socio/{socio.socio_id}/",
+            {"esquema_vacunacion": False},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        socio.refresh_from_db()
+        self.assertFalse(socio.esquema_vacunacion)
+        self.assertFalse(response.data["esquema_vacunacion"])
+
+        response = self.client.patch(
+            f"/api/padron/socio/{socio.socio_id}/",
+            {"esquema_vacunacion": None},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        socio.refresh_from_db()
+        self.assertIsNone(socio.esquema_vacunacion)
+        self.assertIsNone(response.data["esquema_vacunacion"])
 
     def test_socio_get_detail_no_existe(self):
         response = self.client.get("/api/padron/socio/9999/", format="json")

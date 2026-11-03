@@ -32,6 +32,15 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo, 
           <Field label="Género" value={nombreGenero(persona)} />
           <Field label="Teléfono / Móvil" value={persona.telefono ? formatPhone(persona.telefono) : ''} icon="call" />
           <Field label="Correo electrónico" value={persona.email} icon="mail" className="lg:col-span-2" />
+          {persona.esquema_vacunacion !== undefined && (
+            <Field
+              label="Esquema de vacunación"
+              value={persona.esquema_vacunacion === null
+                ? 'Sin especificar'
+                : persona.esquema_vacunacion ? 'Completo' : 'Incompleto'}
+              icon="health_and_safety"
+            />
+          )}
         </div>
       </RecordSection>
 

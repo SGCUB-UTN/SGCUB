@@ -193,6 +193,7 @@ class Socio(SequentialNumberMixin, models.Model):
     )
     fecha_alta = models.DateField(default=django.utils.timezone.localdate)
     numero_socio = models.PositiveIntegerField(unique=True, null=True, blank=True)
+    esquema_vacunacion = models.BooleanField(null=True, blank=True, default=None)
 
     sequential_field = "numero_socio"
 
