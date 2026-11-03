@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { getConfiguracionGeneral } from '../../api/configuracion'
@@ -27,6 +27,7 @@ function ComprobantePago({
   backLabel = 'Volver al estado de cuenta',
 }) {
   const [clubConfig, setClubConfig] = useState(null)
+  const comprobanteRef = useRef(null)
   const fecha = fechaEmision ? formatDate(fechaEmision) : new Date().toLocaleDateString('es-AR')
 
   useEffect(() => {
@@ -63,7 +64,10 @@ function ComprobantePago({
       </div>
 
       {/* Recibo formal con datos del club configurados */}
-      <div className="border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm">
+      <div
+        ref={comprobanteRef}
+        className="border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm"
+      >
         {/* Encabezado institucional: Club a la izquierda, Comprobante a la derecha */}
         <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -189,6 +193,7 @@ function ComprobantePago({
           comprobanteCodigo={codigoComprobante}
           montoTotal={montoTotal}
           clubNombre={clubNombre}
+          comprobanteRef={comprobanteRef}
         />
         <DownloadComprobanteButton comprobanteId={comprobanteId} />
         <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>

@@ -2534,6 +2534,15 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		response = self.descargar(detalle["numero"])
 		self.assertIn(b"2215556677", response.content)
 
+	def test_comprobante_imagen_devuelve_png_del_recibo(self):
+		detalle = self.pagar("1000.00")
+		comprobante = Comprobante.objects.get(numero=detalle["numero"])
+		response = self.client.get(reverse("comprobante-imagen", args=[comprobante.pk]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response["Content-Type"], "image/png")
+		self.assertTrue(response.content.startswith(b"\x89PNG"))
+		self.assertIn(f'recibo-{comprobante.numero:08d}.png', response["Content-Disposition"])
+
 	def test_formato_de_importes(self):
 		self.assertEqual(format_amount(Decimal("1234567.5")), "$ 1.234.567,50")
 		self.assertEqual(format_amount(Decimal("0")), "$ 0,00")

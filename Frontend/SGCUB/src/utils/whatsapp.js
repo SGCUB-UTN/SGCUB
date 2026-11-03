@@ -1,3 +1,4 @@
+import { toBlob } from 'html-to-image'
 import { formatAmount } from '../components/personas/format'
 
 /**
@@ -85,3 +86,63 @@ export function openWhatsAppChat({ phone, message }) {
   return true
 }
 
+/**
+ * Copia un Blob de imagen PNG directamente al portapapeles.
+ */
+export async function copyReceiptBlobToClipboard(blob) {
+  if (!blob) {
+    throw new Error('No se recibió ninguna imagen para copiar.')
+  }
+
+  if (!navigator?.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    throw new Error('El navegador no soporta copiar imágenes directamente al portapapeles.')
+  }
+
+  const pngBlob = blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' })
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': pngBlob }),
+  ])
+
+  return true
+}
+
+/**
+ * Renderiza el elemento DOM del comprobante como imagen PNG y lo copia al portapapeles.
+ * Permite que el administrativo pegue la imagen directamente con Ctrl + V en WhatsApp Web.
+ */
+export async function copyReceiptImageToClipboard(element) {
+  if (!element) {
+    throw new Error('No se encontró el elemento del comprobante para capturar.')
+  }
+
+  if (!navigator?.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    throw new Error('El navegador no soporta copiar imágenes directamente al portapapeles.')
+  }
+
+  let blob
+  try {
+    blob = await toBlob(element, {
+      backgroundColor: '#ffffff',
+      pixelRatio: 2,
+      cacheBust: true,
+    })
+  } catch (err) {
+    console.warn('Fallo renderizando con fuentes remotas, reintentando con skipFonts:', err)
+    blob = await toBlob(element, {
+      backgroundColor: '#ffffff',
+      pixelRatio: 2,
+      skipFonts: true,
+    })
+  }
+
+  if (!blob) {
+    throw new Error('No se pudo generar la imagen del comprobante.')
+  }
+
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': blob }),
+  ])
+
+  return true
+}

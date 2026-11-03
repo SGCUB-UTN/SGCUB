@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Modal } from '@mantine/core'
 import { getComprobante } from '../../api/comprobantes'
 import { getConfiguracionGeneral } from '../../api/configuracion'
@@ -58,6 +58,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
   const [action, setAction] = useState(null)
   const [justReverted, setJustReverted] = useState(false)
   const [clubConfig, setClubConfig] = useState(null)
+  const comprobanteRef = useRef(null)
   const { openPayment } = useRegisterPayment()
   const { openReversal } = useRevertPayment()
   const { methodLabel } = useMediosPago()
@@ -114,63 +115,65 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
       {state.error && <p className="text-sm text-error" role="alert">{state.error}</p>}
       {detalle && (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-low border border-outline-variant/30">
-            <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">receipt_long</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-on-surface-variant">{isIncome ? 'Recibo de ingreso' : 'Recibo de pago de cuotas'}</p>
-              <p className="text-xl font-bold text-on-surface">{detalle.codigo}</p>
-            </div>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${anulado ? 'bg-error-container text-on-error-container border-error/20' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-              {anulado ? 'Anulado' : 'Vigente'}
-            </span>
-          </div>
-
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <div><dt className="text-sm text-on-surface-variant">Fecha de emisión</dt><dd className="font-semibold text-on-surface">{formatDate(detalle.fecha_emision)}</dd></div>
-            <div><dt className="text-sm text-on-surface-variant">Monto total</dt><dd className="text-xl font-bold text-primary">{formatAmount(detalle.monto_total)}</dd></div>
-          </dl>
-
-          {detalle.socio && (
-            <div className="p-3 rounded-lg bg-surface-container-low">
-              <p className="text-sm text-on-surface-variant">Socio</p>
-              <p className="font-semibold text-on-surface">
-                {detalle.socio.apellido}, {detalle.socio.nombre} · DNI {formatDni(detalle.socio.dni)} · Socio N° {detalle.socio.numero_socio}
-                {detalle.socio.telefono ? ` · Tel. ${detalle.socio.telefono}` : ''}
-              </p>
-            </div>
-          )}
-
-          <DesgloseComprobante detalle={detalle} />
-
-          <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
-            <h3 className="px-3 py-2 bg-surface-container-low font-semibold text-on-surface">Medios de pago</h3>
-            {(pago?.items_pago ?? []).map((item) => (
-              <div key={item.id_item_pago} className="flex justify-between px-3 py-2 border-t border-outline-variant/20">
-                <span className="text-on-surface-variant">{methodLabel(item.medio_de_pago)}</span>
-                <strong>{formatAmount(item.monto)}</strong>
+          <div ref={comprobanteRef} className="flex flex-col gap-4 bg-surface rounded-xl">
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-low border border-outline-variant/30">
+              <span className="material-symbols-outlined text-primary text-3xl" aria-hidden="true">receipt_long</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-on-surface-variant">{isIncome ? 'Recibo de ingreso' : 'Recibo de pago de cuotas'}</p>
+                <p className="text-xl font-bold text-on-surface">{detalle.codigo}</p>
               </div>
-            ))}
-          </section>
-
-          {pago?.observacion && <p className="text-sm text-on-surface-variant">Observación: {pago.observacion}</p>}
-
-          {detalle.anulacion && (
-            <section className="flex flex-col gap-1.5 p-3 rounded-lg border border-error/20 bg-error-container/30">
-              <h3 className="font-semibold text-error">Anulado</h3>
-              <InfoRow label="Fecha">{detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'}</InfoRow>
-              <InfoRow label="Motivo">{detalle.anulacion.motivo || '—'}</InfoRow>
-              <InfoRow label="Responsable">{detalle.anulacion.responsable || '—'}</InfoRow>
-            </section>
-          )}
-
-          <CreditNotes detalle={detalle} methodLabel={methodLabel} />
-
-          {justReverted && (
-            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-              <p className="font-semibold text-on-surface">Ingreso anulado.</p>
-              <p className="text-sm text-on-surface-variant">Si le devolvés el dinero al socio, emití una nota de crédito.</p>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${anulado ? 'bg-error-container text-on-error-container border-error/20' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                {anulado ? 'Anulado' : 'Vigente'}
+              </span>
             </div>
-          )}
+
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <div><dt className="text-sm text-on-surface-variant">Fecha de emisión</dt><dd className="font-semibold text-on-surface">{formatDate(detalle.fecha_emision)}</dd></div>
+              <div><dt className="text-sm text-on-surface-variant">Monto total</dt><dd className="text-xl font-bold text-primary">{formatAmount(detalle.monto_total)}</dd></div>
+            </dl>
+
+            {detalle.socio && (
+              <div className="p-3 rounded-lg bg-surface-container-low">
+                <p className="text-sm text-on-surface-variant">Socio</p>
+                <p className="font-semibold text-on-surface">
+                  {detalle.socio.apellido}, {detalle.socio.nombre} · DNI {formatDni(detalle.socio.dni)} · Socio N° {detalle.socio.numero_socio}
+                  {detalle.socio.telefono ? ` · Tel. ${detalle.socio.telefono}` : ''}
+                </p>
+              </div>
+            )}
+
+            <DesgloseComprobante detalle={detalle} />
+
+            <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
+              <h3 className="px-3 py-2 bg-surface-container-low font-semibold text-on-surface">Medios de pago</h3>
+              {(pago?.items_pago ?? []).map((item) => (
+                <div key={item.id_item_pago} className="flex justify-between px-3 py-2 border-t border-outline-variant/20">
+                  <span className="text-on-surface-variant">{methodLabel(item.medio_de_pago)}</span>
+                  <strong>{formatAmount(item.monto)}</strong>
+                </div>
+              ))}
+            </section>
+
+            {pago?.observacion && <p className="text-sm text-on-surface-variant">Observación: {pago.observacion}</p>}
+
+            {detalle.anulacion && (
+              <section className="flex flex-col gap-1.5 p-3 rounded-lg border border-error/20 bg-error-container/30">
+                <h3 className="font-semibold text-error">Anulado</h3>
+                <InfoRow label="Fecha">{detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'}</InfoRow>
+                <InfoRow label="Motivo">{detalle.anulacion.motivo || '—'}</InfoRow>
+                <InfoRow label="Responsable">{detalle.anulacion.responsable || '—'}</InfoRow>
+              </section>
+            )}
+
+            <CreditNotes detalle={detalle} methodLabel={methodLabel} />
+
+            {justReverted && (
+              <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
+                <p className="font-semibold text-on-surface">Ingreso anulado.</p>
+                <p className="text-sm text-on-surface-variant">Si le devolvés el dinero al socio, emití una nota de crédito.</p>
+              </div>
+            )}
+          </div>
 
           <div className="pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
             {detalle.revertible && (
@@ -200,6 +203,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
                 comprobanteCodigo={detalle.codigo}
                 montoTotal={detalle.monto_total}
                 clubNombre={clubConfig?.club_nombre}
+                comprobanteRef={comprobanteRef}
               />
             )}
           </div>

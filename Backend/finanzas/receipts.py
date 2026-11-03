@@ -274,3 +274,24 @@ def render_refund_pdf(refund):
         sections,
         "Comprobante de uso interno. Asociación civil exenta.",
     )
+
+
+def pdf_to_png(pdf_bytes, scale=2):
+    """Renders the first page of a PDF document to a PNG image at high resolution."""
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    page = pdf[0]
+    image = page.render(scale=scale).to_pil()
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def render_receipt_image(receipt, scale=2):
+    return pdf_to_png(render_receipt_pdf(receipt), scale=scale)
+
+
+def render_refund_image(refund, scale=2):
+    return pdf_to_png(render_refund_pdf(refund), scale=scale)
+

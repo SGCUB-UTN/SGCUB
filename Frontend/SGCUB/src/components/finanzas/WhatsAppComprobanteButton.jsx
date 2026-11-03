@@ -1,6 +1,12 @@
-import { useState } from 'react'
-import { descargarComprobantePdf } from '../../api/comprobantes'
-import { buildWhatsAppMessage, formatWhatsAppPhone, openWhatsAppChat } from '../../utils/whatsapp'
+import { useEffect, useState } from 'react'
+import { descargarComprobantePdf, obtenerComprobanteImagenBlob } from '../../api/comprobantes'
+import {
+  buildWhatsAppMessage,
+  copyReceiptBlobToClipboard,
+  copyReceiptImageToClipboard,
+  formatWhatsAppPhone,
+  openWhatsAppChat,
+} from '../../utils/whatsapp'
 
 function WhatsAppIcon({ className = 'w-4 h-4' }) {
   return (
@@ -16,18 +22,28 @@ function WhatsAppComprobanteButton({
   comprobanteCodigo,
   montoTotal,
   clubNombre,
+  comprobanteRef,
   autoDownload = true,
   variant = 'primary',
   label = 'Enviar por WhatsApp',
+  className = '',
 }) {
-  const [descargando, setDescargando] = useState(false)
+  const [procesando, setProcesando] = useState(false)
+  const [toast, setToast] = useState(null)
   const phone = socio?.telefono || socio?.persona?.telefono || ''
   const hasPhone = Boolean(phone && String(phone).trim().length >= 6)
   const formattedPhone = hasPhone ? formatWhatsAppPhone(phone) : null
 
-  const handleClick = async () => {
-    if (!hasPhone) return
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 6000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
+  const handleClick = async () => {
+    if (!hasPhone || procesando) return
+
+    setProcesando(true)
     const message = buildWhatsAppMessage({
       socio,
       comprobanteCodigo,
@@ -35,19 +51,54 @@ function WhatsAppComprobanteButton({
       clubNombre,
     })
 
-    // Si tiene comprobanteId y autoDownload está activo, descargamos el PDF
-    // para que el administrativo lo tenga a mano y solo deba arrastrarlo a WhatsApp
-    if (autoDownload && comprobanteId) {
-      setDescargando(true)
+    let imagenCopiada = false
+
+    // 1. Prioridad: Obtener la imagen PNG del mismo PDF oficial generado por el backend
+    if (comprobanteId) {
       try {
-        await descargarComprobantePdf(comprobanteId)
+        const blob = await obtenerComprobanteImagenBlob(comprobanteId)
+        await copyReceiptBlobToClipboard(blob)
+        imagenCopiada = true
+        setToast({
+          type: 'success',
+          title: '¡Comprobante copiado al portapapeles!',
+          description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+        })
       } catch (err) {
-        console.error('No se pudo descargar automáticamente el PDF del comprobante:', err)
-      } finally {
-        setDescargando(false)
+        console.warn('No se pudo obtener/copiar la imagen del PDF desde el backend:', err)
       }
     }
 
+    // 2. Si no se pudo por backend (ej. comprobante pendiente sin ID guardado), capturamos del DOM:
+    if (!imagenCopiada && comprobanteRef?.current) {
+      try {
+        await copyReceiptImageToClipboard(comprobanteRef.current)
+        imagenCopiada = true
+        setToast({
+          type: 'success',
+          title: '¡Comprobante copiado al portapapeles!',
+          description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+        })
+      } catch (err) {
+        console.warn('Fallo capturando imagen del DOM:', err)
+      }
+    }
+
+    // 3. Si no se pudo copiar al portapapeles (por permisos o error), descargamos el PDF de respaldo:
+    if (!imagenCopiada && autoDownload && comprobanteId) {
+      try {
+        await descargarComprobantePdf(comprobanteId)
+        setToast({
+          type: 'info',
+          title: 'Comprobante descargado',
+          description: 'Descargamos el PDF para que lo adjuntes directamente en WhatsApp.',
+        })
+      } catch (pdfErr) {
+        console.error('Error descargando PDF:', pdfErr)
+      }
+    }
+
+    setProcesando(false)
     openWhatsAppChat({ phone, message })
   }
 
@@ -64,20 +115,53 @@ function WhatsAppComprobanteButton({
     : 'border border-outline-variant/40 text-on-surface-variant/40 cursor-not-allowed opacity-60'
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={!hasPhone || descargando}
-      title={tooltipText}
-      aria-label={tooltipText}
-      className={`${baseClass} ${variant === 'primary' ? primaryClass : secondaryClass}`}
-    >
-      <WhatsAppIcon className="w-4 h-4 shrink-0" />
-      <span>{descargando ? 'Preparando...' : label}</span>
-      {hasPhone && formattedPhone && (
-        <span className="sr-only">a {formattedPhone}</span>
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!hasPhone || procesando}
+        title={tooltipText}
+        aria-label={tooltipText}
+        className={`${baseClass} ${variant === 'primary' ? primaryClass : secondaryClass} ${className}`}
+      >
+        {procesando ? (
+          <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+        ) : (
+          <WhatsAppIcon className="w-4 h-4 shrink-0" />
+        )}
+        <span>{procesando ? 'Preparando...' : label}</span>
+        {hasPhone && formattedPhone && (
+          <span className="sr-only">a {formattedPhone}</span>
+        )}
+      </button>
+
+      {toast && (
+        <div
+          className="fixed bottom-6 right-6 z-50 bg-inverse-surface text-inverse-on-surface px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 border border-outline-variant/30 max-w-sm animate-fade-in"
+          role="status"
+        >
+          <span
+            className={`material-symbols-outlined text-2xl shrink-0 ${
+              toast.type === 'success' ? 'text-emerald-400' : 'text-primary-container'
+            }`}
+          >
+            {toast.type === 'success' ? 'content_paste_go' : 'download_done'}
+          </span>
+          <div className="flex flex-col text-xs gap-0.5">
+            <span className="font-bold text-sm text-white">{toast.title}</span>
+            <span className="text-inverse-on-surface/90 leading-relaxed">{toast.description}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-auto text-inverse-on-surface/60 hover:text-white shrink-0 p-0.5"
+            aria-label="Cerrar notificación"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
       )}
-    </button>
+    </>
   )
 }
 
