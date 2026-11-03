@@ -2449,6 +2449,41 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["socio"]["telefono"], "2215556677")
 
+	def test_comprobante_menor_resuelve_telefono_de_responsable_legal(self):
+		from datetime import date
+		from padron.models import Jugador, Persona, VinculoFamiliar
+
+		self.socio.persona.fecha_nacimiento = date.today().replace(year=date.today().year - 12)
+		self.socio.persona.telefono = "2210000000"
+		self.socio.persona.save()
+
+		jugador, _ = Jugador.objects.get_or_create(socio=self.socio)
+		mama = Persona.objects.create(
+			nombre="Laura",
+			apellido="Gomez",
+			dni="30111222",
+			telefono="2219998877",
+			email="mama@example.com",
+			fecha_nacimiento=date(1985, 1, 1),
+			genero=self.socio.persona.genero,
+		)
+		VinculoFamiliar.objects.create(
+			jugador=jugador,
+			persona=mama,
+			responsable_legal=True,
+			relacion="Madre",
+		)
+
+		detalle = self.pagar("2500.00")
+		comprobantes, _ = self.list_comprobantes()
+		self.assertEqual(comprobantes[0]["socio"]["telefono"], "2219998877")
+		self.assertTrue(comprobantes[0]["socio"]["es_menor"])
+		self.assertEqual(comprobantes[0]["socio"]["responsable_nombre"], "Laura Gomez")
+
+		response = self.client.get(reverse("comprobante-detail", args=[detalle["comprobante_id"]]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["socio"]["telefono"], "2219998877")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 

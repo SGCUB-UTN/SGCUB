@@ -421,7 +421,13 @@ function ComprobantesTable({
                       type="button"
                       onClick={(event) => handleSendWhatsApp(event, item)}
                       disabled={!item.socio?.telefono}
-                      title={item.socio?.telefono ? `Enviar comprobante por WhatsApp (${item.socio.telefono})` : 'Socio sin teléfono registrado'}
+                      title={
+                        item.socio?.telefono
+                          ? item.socio.es_menor && item.socio.responsable_nombre
+                            ? `Enviar comprobante por WhatsApp a ${item.socio.responsable_nombre} (Responsable de ${item.socioLabel}) (${item.socio.telefono})`
+                            : `Enviar comprobante por WhatsApp (${item.socio.telefono})`
+                          : 'Socio sin teléfono registrado'
+                      }
                       aria-label={`Enviar comprobante ${item.refCode} por WhatsApp`}
                       className={item.socio?.telefono ? WHATSAPP_ICON_BUTTON_CLASS : WHATSAPP_DISABLED_BUTTON_CLASS}
                     >

@@ -358,7 +358,11 @@ def comprobante_list(request):
 	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).prefetch_related("pago__items_pago").annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+		"pago__movimiento__cuenta_corriente__socio__jugador",
+	).prefetch_related(
+		"pago__items_pago",
+		"pago__movimiento__cuenta_corriente__socio__jugador__vinculos_familiares__persona",
+	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
@@ -438,7 +442,12 @@ def emitir_nota_credito(request, pk):
 
 def _refunds_queryset():
 	return Devolucion.objects.select_related(
-		"cuenta_corriente__socio__persona", "comprobante_anulado", "usuario",
+		"cuenta_corriente__socio__persona",
+		"cuenta_corriente__socio__jugador",
+		"comprobante_anulado",
+		"usuario",
+	).prefetch_related(
+		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	)
 
 

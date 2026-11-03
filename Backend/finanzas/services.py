@@ -593,17 +593,59 @@ def mark_partial_line(lines):
     return lines
 
 
-def socio_detail(socio):
+def resolver_contacto_socio_finanzas(socio):
     if socio is None:
         return None
+    persona = getattr(socio, "persona", None)
+    if not persona:
+        return {
+            "socio_id": socio.socio_id,
+            "numero_socio": socio.numero_socio,
+            "nombre": "",
+            "apellido": "",
+            "dni": "",
+            "telefono": "",
+            "telefono_socio": "",
+            "es_menor": False,
+            "responsable_nombre": None,
+            "telefono_responsable": None,
+        }
+
+    edad = persona.edad
+    es_menor = bool(edad is not None and edad < 18)
+    responsable_nombre = None
+    telefono_responsable = None
+    telefono_contacto = (persona.telefono or "").strip()
+
+    if es_menor:
+        jugador = getattr(socio, "jugador", None)
+        if jugador:
+            vinculos = list(jugador.vinculos_familiares.select_related("persona").all())
+            tutor = next((v for v in vinculos if v.responsable_legal and v.persona and (v.persona.telefono or "").strip()), None)
+            if not tutor:
+                tutor = next((v for v in vinculos if v.persona and (v.persona.telefono or "").strip()), None)
+
+            if tutor and tutor.persona and tutor.persona.telefono:
+                telefono_responsable = tutor.persona.telefono.strip()
+                responsable_nombre = f"{tutor.persona.nombre} {tutor.persona.apellido}".strip()
+                telefono_contacto = telefono_responsable
+
     return {
         "socio_id": socio.socio_id,
         "numero_socio": socio.numero_socio,
-        "nombre": socio.persona.nombre,
-        "apellido": socio.persona.apellido,
-        "dni": socio.persona.dni,
-        "telefono": socio.persona.telefono,
+        "nombre": persona.nombre,
+        "apellido": persona.apellido,
+        "dni": persona.dni,
+        "telefono": telefono_contacto,
+        "telefono_socio": (persona.telefono or "").strip(),
+        "es_menor": es_menor,
+        "responsable_nombre": responsable_nombre,
+        "telefono_responsable": telefono_responsable,
     }
+
+
+def socio_detail(socio):
+    return resolver_contacto_socio_finanzas(socio)
 
 
 def receipt_code(receipt):
