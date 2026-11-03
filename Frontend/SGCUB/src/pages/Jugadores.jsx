@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import JugadoresTable from '../components/jugadores/JugadoresTable'
+import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useCategorias from '../hooks/useCategorias'
 import useJugadores from '../hooks/useJugadores'
 import PageHeader from '../components/shared/PageHeader'
@@ -60,6 +61,7 @@ function Jugadores() {
           onEdit={(jugador) => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)}
         />
       </section>
+      <JugadorHealthEducationSummary jugadores={jugadores} isLoading={isLoading} error={error} />
     </div>
   )
 }

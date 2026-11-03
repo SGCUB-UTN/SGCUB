@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
-import JugadorHealthEducationSummary from '../components/socios/JugadorHealthEducationSummary'
+import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
 
 const MOSTRAR_RESUMEN_JUGADORES = false
