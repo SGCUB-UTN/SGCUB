@@ -59,7 +59,7 @@ from .models import (
 from .pdf_utils import format_amount
 from .period_summary import period_summary
 from .receipts import render_receipt_pdf
-from .serializers import CuentaCorrienteEstadoSerializer, MedioPagoSerializer
+from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
 from .services import (
 	apply_surcharges,
 	assign_benefit,
@@ -3625,6 +3625,12 @@ class CurrentAccountOpeningTests(APITestCase):
 			"domicilio_localidad": self.localidad.pk,
 		}
 
+	def set_registration_fee(self, amount="5000.00"):
+		ConfiguracionFinanciera.objects.create(
+			periodo_vigencia=timezone.localdate().strftime("%Y-%m"),
+			monto_inscripcion=Decimal(amount),
+		)
+
 	def test_new_socio_gets_a_current_account_and_first_monthly_cuota(self):
 		with self.captureOnCommitCallbacks(execute=True):
 			response = self.client.post("/api/padron/socio/", self.person_payload("40111222"), format="json")
@@ -3650,6 +3656,7 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(status_response.data["total_adeudado"], cuotas[0].movimiento.monto)
 
 	def test_new_player_with_new_socio_gets_a_current_account(self):
+		self.set_registration_fee()
 		categoria = Categoria.objects.create(nombre="Infantil", anio_vigente=2026, edad_maxima=12, genero="M")
 		payload = {
 			"nuevo_socio": self.person_payload("40111223", birth_date="2015-03-01"),
@@ -3670,9 +3677,13 @@ class CurrentAccountOpeningTests(APITestCase):
 		account = CuentaCorriente.objects.get(socio__persona__dni="40111223")
 		cuotas = list(Cuota.objects.filter(movimiento__cuenta_corriente=account).order_by("periodo"))
 		self.assertEqual(len(cuotas), 3)
-		for cuota in cuotas:
+		for cuota in cuotas[1:]:
 			conceptos = set(cuota.items.values_list("concepto", flat=True))
 			self.assertEqual(conceptos, {"CuotaSocial", "CuotaDeportiva"})
+		registration = cuotas[0].items.get(concepto="Otro")
+		self.assertEqual((registration.motivo, registration.monto), ("Inscripción", Decimal("5000.00")))
+		self.assertEqual(ItemCuotaSerializer(registration).data["descripcion"], "Inscripción")
+		self.assertEqual(cuotas[0].movimiento.monto, Decimal("7500.00"))
 
 	def create_player_for_existing_socio(self, socio):
 		categoria = Categoria.objects.create(
@@ -3718,6 +3729,7 @@ class CurrentAccountOpeningTests(APITestCase):
 			self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
 
 	def test_new_player_adds_sports_charge_to_existing_unpaid_current_cuota(self):
+		self.set_registration_fee()
 		persona = Persona.objects.create(
 			nombre="Juan",
 			apellido="Perez",
@@ -3736,6 +3748,35 @@ class CurrentAccountOpeningTests(APITestCase):
 		account = CuentaCorriente.objects.get(socio=socio)
 		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), 3)
 		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
+		registration = cuota.items.get(concepto="Otro")
+		self.assertEqual((registration.motivo, registration.monto), ("Inscripción", Decimal("5000.00")))
+		self.assertEqual(cuota.movimiento.monto, Decimal("7500.00"))
+		future_cuotas = Cuota.objects.filter(
+			movimiento__cuenta_corriente=account,
+		).exclude(pk=cuota.pk)
+		self.assertFalse(ItemCuota.objects.filter(cuota__in=future_cuotas, concepto="Otro").exists())
+
+	def test_new_player_does_not_get_registration_fee_if_a_past_cuota_had_a_sports_charge(self):
+		self.set_registration_fee()
+		today = timezone.localdate()
+		socio = crear_socio("40111229")
+		previous_period = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+		previous_cuota = create_cuota(socio, previous_period, today=today.replace(day=1))
+		ItemCuota.objects.create(
+			cuota=previous_cuota,
+			concepto="CuotaDeportiva",
+			fecha_aplicacion=previous_cuota.fecha_venc1.replace(day=1),
+			monto=Decimal("1500.00"),
+		)
+		cuota = create_cuota(socio, today.strftime("%Y-%m"), today=today.replace(day=1))
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.create_player_for_existing_socio(socio)
+
+		self.assertEqual(response.status_code, 201, response.data)
+		cuota.refresh_from_db()
+		self.assertTrue(cuota.items.filter(concepto="CuotaDeportiva").exists())
+		self.assertFalse(cuota.items.filter(concepto="Otro", motivo="Inscripción").exists())
 		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
 
 	def test_new_player_does_not_change_paid_current_cuota(self):

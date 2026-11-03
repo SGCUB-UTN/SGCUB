@@ -349,6 +349,8 @@ def item_description(item):
         return f"Condonación del recargo por {item.vencimiento}° vencimiento"
     if item.concepto == ConceptoItemChoices.BECA and item.beca_id and item.beca.porcentaje is not None:
         return f"Beca {item.beca.porcentaje.normalize():f}%"
+    if item.concepto == ConceptoItemChoices.OTRO and item.motivo:
+        return item.motivo
     return item.get_concepto_display()
 
 
