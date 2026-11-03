@@ -193,7 +193,7 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                 contenido = (
                     f"Estimado/a {socio.persona.nombre},\n\n"
                     f"Te informamos que ya se encuentra generada tu cuota del período {periodos_str} "
-                    f"por un importe total de ${format_amount(total_monto)}.\n\n"
+                    f"por un importe total de {format_amount(total_monto)}.\n\n"
                     f"Fechas de vencimiento:\n"
                     f"  • Primer vencimiento: {venc1}\n"
                     f"  • Segundo vencimiento: {venc2}\n\n"
@@ -352,7 +352,7 @@ def run_surcharges(today, numbers, origin=OrigenEjecucionChoices.AUTOMATICA, use
                     contenido = (
                         f"Estimado/a {socio.persona.nombre},\n\n"
                         f"Te informamos que ha operado el {ordinal} vencimiento de tu cuota del período {cuota.periodo}.\n"
-                        f"Se ha aplicado un recargo por mora de ${format_amount(item.monto)}.\n\n"
+                        f"Se ha aplicado un recargo por mora de {format_amount(item.monto)}.\n\n"
                         f"Te solicitamos regularizar tu estado de cuenta a la brevedad.\n"
                         f"¡Muchas gracias!"
                     )
@@ -393,11 +393,11 @@ def enviar_comprobante_pago_email(comprobante_id):
     """
     Tarea asíncrona de Django-Q (HU-08 / HU-13 / #73):
     Envía el comprobante de pago en formato PDF al correo electrónico del socio
-    (o a su contacto responsable si es menor).
+    (o a su contacto responsable si es menor de edad).
     Se ejecuta fuera de la transacción principal tras confirmarse el pago.
     """
     from configuracion.models import ConfiguracionGeneral
-    from comunicaciones.services import crear_y_despachar_notificacion
+    from comunicaciones.services import crear_y_despachar_notificacion, obtener_contacto_socio
     from .models import Comprobante
     from .receipts import receipt_filename, render_receipt_pdf
 
@@ -416,11 +416,35 @@ def enviar_comprobante_pago_email(comprobante_id):
 
     titulo = f"Comprobante de pago N° {comprobante.numero:08d}"
     asunto = f"Comprobante de pago N° {comprobante.numero:08d} - {club}"
+
+    persona_socio = socio.persona
+    nombre_socio = f"{persona_socio.nombre} {persona_socio.apellido}".strip()
+    edad = persona_socio.edad
+
+    # Si es menor de 18 años y se envía al responsable legal
+    if edad is not None and edad < 18:
+        email, nombre_dest, _ = obtener_contacto_socio(socio)
+        nombre_saludo = nombre_dest.split(" (")[0] if nombre_dest else "Responsable"
+        if nombre_saludo != nombre_socio:
+            saludo = (
+                f"Estimado/a {nombre_saludo},\n\n"
+                f"Te confirmamos la recepción del pago correspondiente a {nombre_socio} por un monto total de {format_amount(comprobante.monto_total)}."
+            )
+        else:
+            saludo = (
+                f"Estimado/a {persona_socio.nombre},\n\n"
+                f"Te confirmamos la recepción de tu pago por un monto total de {format_amount(comprobante.monto_total)}."
+            )
+    else:
+        saludo = (
+            f"Estimado/a {persona_socio.nombre},\n\n"
+            f"Te confirmamos la recepción de tu pago por un monto total de {format_amount(comprobante.monto_total)}."
+        )
+
     contenido = (
-        f"Estimado/a {socio.persona.nombre},\n\n"
-        f"Te confirmamos la recepción de tu pago por un monto total de ${format_amount(comprobante.monto_total)}.\n"
+        f"{saludo}\n"
         f"Adjuntamos a este correo tu comprobante oficial en formato PDF.\n\n"
-        f"¡Muchas gracias por colaborar con el club!"
+        f"¡Muchas gracias!"
     )
 
     return crear_y_despachar_notificacion(
@@ -493,7 +517,7 @@ def send_scheduled_due_reminders(today=None):
         contenido = (
             f"Estimado/a {socio.persona.nombre},\n\n"
             f"Te recordamos que tu cuota social del período {cuota.periodo} vence {tiempo_str}.\n"
-            f"El saldo pendiente de pago es de ${format_amount(saldo)}.\n\n"
+            f"El saldo pendiente de pago es de {format_amount(saldo)}.\n\n"
             f"Te recomendamos regularizarla para evitar la aplicación de recargos por mora.\n"
             f"¡Muchas gracias!"
         )

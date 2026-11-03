@@ -344,7 +344,7 @@ def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
 
         socio = cuota.movimiento.cuenta_corriente.socio
         club = config.club_nombre
-        monto_str = f" El importe actualizado es de ${format_amount(nuevo_monto)}." if nuevo_monto is not None else ""
+        monto_str = f" El importe actualizado es de {format_amount(nuevo_monto)}." if nuevo_monto is not None else ""
         venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
         venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
 
