@@ -276,22 +276,44 @@ def render_refund_pdf(refund):
     )
 
 
-def pdf_to_png(pdf_bytes, scale=2):
-    """Renders the first page of a PDF document to a PNG image at high resolution."""
+def crop_whitespace(image, padding=40):
+    """Crops empty white margins so the receipt is compact and legible in mobile/WhatsApp views."""
+    from PIL import Image as PILImage, ImageChops
+
+    bg = PILImage.new(image.mode, image.size, (255, 255, 255))
+    diff = ImageChops.difference(image, bg)
+    bbox = diff.getbbox()
+    if not bbox:
+        return image
+
+    crop_box = (
+        max(0, bbox[0] - padding),
+        max(0, bbox[1] - padding),
+        min(image.width, bbox[2] + padding),
+        min(image.height, bbox[3] + padding),
+    )
+    return image.crop(crop_box)
+
+
+def pdf_to_png(pdf_bytes, scale=2.5, trim=True, padding=40):
+    """Renders the first page of a PDF document to a PNG image at high resolution,
+    trimming the blank A4 sheet space so it displays large and readable in WhatsApp."""
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(pdf_bytes)
     page = pdf[0]
     image = page.render(scale=scale).to_pil()
+    if trim:
+        image = crop_whitespace(image, padding=padding)
     buf = BytesIO()
     image.save(buf, format="PNG")
     return buf.getvalue()
 
 
-def render_receipt_image(receipt, scale=2):
+def render_receipt_image(receipt, scale=2.5):
     return pdf_to_png(render_receipt_pdf(receipt), scale=scale)
 
 
-def render_refund_image(refund, scale=2):
+def render_refund_image(refund, scale=2.5):
     return pdf_to_png(render_refund_pdf(refund), scale=scale)
 
