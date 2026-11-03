@@ -177,12 +177,11 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
             <th scope="col" className="py-3 px-4">Canales</th>
             <SortableHeader className="py-3 px-4" etiqueta="Destinatarios" columna="destinatarios" orden={orden} onOrdenar={handleSort} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={orden} onOrdenar={handleSort} />
-            <th scope="col" className="py-3 px-4 text-right">Acciones</th>
           </>
         }
       >
         <TableMessageRow
-          colSpan={6}
+          colSpan={5}
           isEmpty={paginated.length === 0}
           emptyText={
             notificaciones.length === 0
@@ -206,13 +205,14 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
             <tr
               key={notif.id}
               onClick={() => onViewDetail?.(notif)}
-              className="hover:bg-surface-container-low/50 transition-colors cursor-pointer"
+              title="Hacé clic para ver el detalle del comunicado"
+              className="hover:bg-surface-container-low/70 transition-colors cursor-pointer group"
             >
               <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
                 {formatFechaHora(notif.fecha_creacion)}
               </td>
               <td className="py-3.5 px-4 max-w-md">
-                <p className="font-semibold text-on-surface truncate">
+                <p className="font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
                   {notif.asunto || notif.titulo || 'Sin asunto'}
                 </p>
                 <p className="text-xs text-on-surface-variant truncate mt-0.5">
@@ -250,19 +250,6 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
               </td>
               <td className="py-3.5 px-4 whitespace-nowrap">
                 <StatusBadge badge={badge} />
-              </td>
-              <td className="py-2.5 px-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  onClick={() => onViewDetail?.(notif)}
-                  title="Ver detalle"
-                  aria-label="Ver detalle del comunicado"
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
-                    visibility
-                  </span>
-                </button>
               </td>
             </tr>
           )
