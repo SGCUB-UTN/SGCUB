@@ -191,7 +191,6 @@ function ReversalDone({ detalle, creditNote, onClose }) {
               comprobanteCodigo={creditNote.codigo}
               montoTotal={creditNote.monto}
               tipo="nota_credito"
-              label="WhatsApp nota de crédito"
             />
           </>
         ) : (
@@ -201,7 +200,6 @@ function ReversalDone({ detalle, creditNote, onClose }) {
             comprobanteCodigo={detalle.codigo}
             montoTotal={detalle.monto_total}
             tipo="anulado"
-            label="WhatsApp recibo anulado"
           />
         )}
       </div>

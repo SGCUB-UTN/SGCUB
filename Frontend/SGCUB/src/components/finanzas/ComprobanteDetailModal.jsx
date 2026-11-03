@@ -4,7 +4,6 @@ import { getComprobante } from '../../api/comprobantes'
 import { getConfiguracionGeneral } from '../../api/configuracion'
 import { revertirPago } from '../../api/pagos'
 import useMediosPago from '../../hooks/useMediosPago'
-import useRegisterPayment from '../../hooks/useRegisterPayment'
 import useRevertPayment from '../../hooks/useRevertPayment'
 import { formatAmount, formatDate, formatDni } from '../personas/format'
 import AuthorizationModal from './AuthorizationModal'
@@ -12,7 +11,7 @@ import DesgloseComprobante from './DesgloseComprobante'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
-import { availableToRefund, reversalOf } from './refunds'
+import { availableToRefund } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
@@ -31,6 +30,7 @@ function InfoRow({ label, children }) {
 function CreditNotes({ detalle, methodLabel }) {
   const notes = detalle.notas_credito ?? []
   if (!notes.length) return null
+  const available = availableToRefund(detalle)
   return (
     <section className="border border-outline-variant/30 rounded-lg overflow-hidden">
       <h3 className="px-3 py-2 bg-surface-container-low font-semibold text-on-surface">Notas de crédito</h3>
@@ -56,10 +56,12 @@ function CreditNotes({ detalle, methodLabel }) {
           </div>
         </div>
       ))}
-      <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
-        <span className="text-on-surface-variant">Disponible para devolver</span>
-        <strong>{formatAmount(availableToRefund(detalle))}</strong>
-      </div>
+      {available > 0 && (
+        <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
+          <span className="text-on-surface-variant">Disponible para devolver</span>
+          <strong>{formatAmount(available)}</strong>
+        </div>
+      )}
     </section>
   )
 }
@@ -70,7 +72,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
   const [justReverted, setJustReverted] = useState(false)
   const [clubConfig, setClubConfig] = useState(null)
   const comprobanteRef = useRef(null)
-  const { openPayment } = useRegisterPayment()
   const { openReversal } = useRevertPayment()
   const { methodLabel } = useMediosPago()
 
@@ -109,11 +110,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
     onChanged?.()
   }
 
-  const registerAgain = () => {
-    onClose()
-    openPayment({ socioId: detalle.socio.socio_id, reversal: reversalOf(detalle), onSuccess: onChanged })
-  }
-
   const creditNoteIssued = () => {
     setAction(null)
     load()
@@ -138,7 +134,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
               </span>
             </div>
 
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-3">
               <div><dt className="text-sm text-on-surface-variant">Fecha de emisión</dt><dd className="font-semibold text-on-surface">{formatDate(detalle.fecha_emision)}</dd></div>
               <div><dt className="text-sm text-on-surface-variant">Monto total</dt><dd className="text-xl font-bold text-primary">{formatAmount(detalle.monto_total)}</dd></div>
             </dl>
@@ -193,14 +189,12 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
             )}
-            {anulado && !isIncome && available > 0 && (
-              <button type="button" onClick={registerAgain} className={`${ACTION_BUTTON_CLASS} border-primary/40 text-primary hover:bg-primary/5 mr-auto`}>
-                <span className="material-symbols-outlined text-lg" aria-hidden="true">payments</span>
-                Volver a cobrar
-              </button>
-            )}
-            {anulado && available > 0 && (
-              <button type="button" onClick={() => setAction('creditNote')} className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low mr-auto`}>
+            {anulado && isIncome && available > 0 && (
+              <button
+                type="button"
+                onClick={() => setAction('creditNote')}
+                className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low mr-auto`}
+              >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">currency_exchange</span>
                 Emitir nota de crédito
               </button>
@@ -215,7 +209,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
               clubNombre={clubConfig?.club_nombre}
               comprobanteRef={comprobanteRef}
               tipo={anulado ? 'anulado' : 'comprobante'}
-              label={anulado ? 'WhatsApp (anulado)' : 'WhatsApp'}
             />
           </div>
         </div>
