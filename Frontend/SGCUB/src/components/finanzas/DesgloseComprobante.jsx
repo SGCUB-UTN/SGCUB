@@ -5,13 +5,15 @@ function DesgloseComprobante({ detalle, flat = false }) {
   const sectionClass = flat ? '' : 'border border-outline-variant/30 rounded-lg overflow-hidden bg-surface-container-lowest'
   const gutter = flat ? 'px-5' : 'px-3'
 
-  const renderPeriodoLabel = (periodo) => {
+  const formatPeriodo = (periodo, options) => {
     if (!periodo) return '—'
     const [year, month] = periodo.split('-')
     const date = new Date(Number(year), Number(month) - 1, 1)
-    const label = date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+    const label = date.toLocaleDateString('es-AR', options)
     return label.charAt(0).toUpperCase() + label.slice(1)
   }
+  const renderPeriodoLabel = (periodo) => formatPeriodo(periodo, { month: 'long', year: 'numeric' })
+  const renderMonthLabel = (periodo) => formatPeriodo(periodo, { month: 'long' })
 
   // An income receipt is the same as a payment one, with the concept instead of the periods
   if (detalle?.es_ingreso) {
@@ -38,7 +40,10 @@ function DesgloseComprobante({ detalle, flat = false }) {
         {periodos.map((periodo) => (
           <div key={periodo.cuota_id} className={`${gutter} py-3`}>
             <div className="flex justify-between items-center mb-1.5">
-              <strong className="text-on-surface text-sm">{renderPeriodoLabel(periodo.periodo)}</strong>
+              <strong className="text-on-surface text-sm">
+                {renderPeriodoLabel(periodo.periodo)}
+                {periodo.es_parcial && ' (Pago parcial)'}
+              </strong>
               <span className="font-semibold text-on-surface text-sm">{formatAmount(periodo.monto_aplicado)}</span>
             </div>
             {periodo.detalle && periodo.detalle.length > 0 && (
@@ -54,6 +59,12 @@ function DesgloseComprobante({ detalle, flat = false }) {
                   </li>
                 ))}
               </ul>
+            )}
+            {periodo.es_parcial && (
+              <p className="flex justify-between mt-1.5 pl-1 text-xs italic text-on-surface-variant">
+                <span>Saldo pendiente período {renderMonthLabel(periodo.periodo)}:</span>
+                <span>{formatAmount(periodo.saldo_pendiente)}</span>
+              </p>
             )}
           </div>
         ))}
