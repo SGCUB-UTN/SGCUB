@@ -42,9 +42,11 @@ HEADER_BACKGROUND = colors.HexColor("#f9fbff")
 SECTION_BACKGROUND = colors.HexColor("#eff4ff")
 TOTAL_BACKGROUND = colors.HexColor("#f4f7ff")
 NOTICE_BACKGROUND = colors.HexColor("#fff4f3")
-NOTICE_BORDER = colors.HexColor("#f1d1d1")
 BULLET_HEX = "#dee3e8"
 FAINT_HEX = "#787f85"
+WATERMARK_TEXT = "ANULADO"
+WATERMARK_FONT = "Helvetica-Bold"
+WATERMARK_ALPHA = 0.18
 
 HEADER, PLAIN, SECTION, ITEM, TOTAL, NOTICE, FILL, FOOTER = "header", "plain", "section", "item", "total", "notice", "fill", "footer"
 ROW_PADDING = {HEADER: (10 * mm, 16), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FILL: (0, 0), FOOTER: (10, 8 * mm)}
@@ -64,10 +66,11 @@ def text_style(name, size=9, font="Helvetica", color=ON_SURFACE, alignment=0, le
 STYLES = {
     "club": text_style("Club", 13, "Helvetica-Bold", leading=16),
     "club_detail": text_style("ClubDetalle", 7.5, color=MUTED),
-    "title": text_style("Titulo", 13, "Helvetica-Bold", leading=16),
+    "title": text_style("Titulo", 13, "Helvetica-Bold", alignment=TA_RIGHT, leading=16),
     "number": text_style("Numero", 11, "Courier-Bold", alignment=TA_RIGHT, leading=14),
     "date": text_style("Fecha", 7.5, color=MUTED, alignment=TA_RIGHT),
     "disclaimer": text_style("Aclaracion", 7, "Helvetica-Oblique", FAINT, TA_RIGHT),
+    "annulment": text_style("Anulacion", 7.5, "Helvetica-Bold", ERROR, TA_RIGHT),
     "caption": text_style("Rotulo", 7.5, "Helvetica-Bold", MUTED),
     "label": text_style("Etiqueta", 7.5, color=MUTED),
     "value": text_style("Valor", 9, "Helvetica-Bold"),
@@ -138,34 +141,6 @@ def amount_row(label, amount, label_style="text", amount_style="strong_right"):
     return grid([[paragraph(label, label_style), paragraph(format_amount(amount), amount_style)]], AMOUNT_COLUMNS)
 
 
-def cancelled_badge():
-    text, font, size = "ANULADO", "Helvetica-Bold", 7
-    content = Table([[text]], colWidths=[stringWidth(text, font, size) + 10])
-    content.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font),
-        ("FONTSIZE", (0, 0), (-1, -1), size),
-        ("TEXTCOLOR", (0, 0), (-1, -1), ERROR),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("BACKGROUND", (0, 0), (-1, -1), NOTICE_BACKGROUND),
-        ("BOX", (0, 0), (-1, -1), 0.5, NOTICE_BORDER),
-        ("ROUNDEDCORNERS", [3, 3, 3, 3]),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
-    ]))
-    return content
-
-
-def title_row(title, is_cancelled):
-    cells, widths = [paragraph(title, "title")], [stringWidth(title, "Helvetica-Bold", 13) + 1]
-    if is_cancelled:
-        tag = cancelled_badge()
-        cells.append(tag)
-        widths.append(tag._colWidths[0] + 6)
-    return grid([cells], widths, [("ALIGN", (-1, 0), (-1, 0), "RIGHT")])
-
-
 def get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm):
     try:
         config = ConfiguracionGeneral.load()
@@ -204,11 +179,12 @@ def club_block(config):
     return lines
 
 
-def receipt_block(title, code, issued, is_cancelled):
+def receipt_block(title, code, issued, annulment):
     return [
-        title_row(title, is_cancelled),
+        paragraph(title, "title"),
         Spacer(1, 2),
         paragraph(f"N° {code.split()[-1]}", "number"),
+        *([Spacer(1, 1), paragraph(annulment, "annulment")] if annulment else []),
         Spacer(1, 2),
         paragraph(f"Fecha: {issued:%d/%m/%Y}", "date"),
         Spacer(1, 2),
@@ -216,10 +192,10 @@ def receipt_block(title, code, issued, is_cancelled):
     ]
 
 
-def header_block(title, code, issued, is_cancelled):
+def header_block(title, code, issued, annulment):
     config = ConfiguracionGeneral.load()
     logo = get_club_logo_flowable()
-    receipt = receipt_block(title, code, issued, is_cancelled)
+    receipt = receipt_block(title, code, issued, annulment)
     club = club_block(config)
     align_receipt = [("ALIGN", (-1, 0), (-1, 0), "RIGHT")]
     if logo is None:
@@ -330,9 +306,28 @@ def page_frame(rows):
     return frame([*rows[:-1], (Spacer(1, PAGE_HEIGHT - height - 1), FILL), rows[-1]])
 
 
-def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False, fill_page=True):
+def draw_watermark(canvas, center_y, available_height):
+    unit_width = stringWidth(WATERMARK_TEXT, WATERMARK_FONT, 1)
+    size = min(110, 0.8 * min(INNER_WIDTH, available_height) / (0.71 * (unit_width + 1)))
+    canvas.saveState()
+    canvas.setFillColor(ERROR)
+    canvas.setFillAlpha(WATERMARK_ALPHA)
+    canvas.setFont(WATERMARK_FONT, size)
+    canvas.translate(PAGE_WIDTH / 2, center_y)
+    canvas.rotate(45)
+    canvas.drawCentredString(0, -size * 0.35, WATERMARK_TEXT)
+    canvas.restoreState()
+
+
+def watermark_callback(rows):
+    _, height = frame(rows).wrap(PAGE_WIDTH, PAGE_HEIGHT)
+    available = min(height, PAGE_HEIGHT)
+    return lambda canvas, document: draw_watermark(canvas, PAGE_HEIGHT - available / 2, available)
+
+
+def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False, annulment=None, fill_page=True):
     rows = [
-        (header_block(title, code, issued, is_cancelled), HEADER),
+        (header_block(title, code, issued, annulment), HEADER),
         *notice_rows(notes),
         (socio_block(socio or {}), PLAIN),
         *body,
@@ -347,9 +342,16 @@ def render_document(title, code, issued, socio, notes, body, footer, is_cancelle
         author=club_name(),
         pageCompression=0,
     )
-    document.addPageTemplates([PageTemplate(frames=[Frame(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 0, 0, 0, 0)])])
+    page_events = {"onPageEnd": watermark_callback(rows)} if is_cancelled else {}
+    document.addPageTemplates([PageTemplate(frames=[Frame(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 0, 0, 0, 0)], **page_events)])
     document.build([page_frame(rows) if fill_page else frame(rows)])
     return buffer.getvalue()
+
+
+def annulment_line(payment):
+    if payment.fecha_anulacion:
+        return f"Anulado el {timezone.localtime(payment.fecha_anulacion):%d/%m/%Y}"
+    return "Anulado"
 
 
 def receipt_notes(receipt):
@@ -363,6 +365,7 @@ def receipt_notes(receipt):
 
 def render_receipt_pdf(receipt, fill_page=True):
     detail = receipt_detail(receipt)
+    is_cancelled = receipt.estado == EstadoComprobanteChoices.ANULADO
     if detail["es_ingreso"]:
         body = section("Concepto", concept_rows(detail["concepto"], detail["monto_total"]))
     else:
@@ -379,7 +382,8 @@ def render_receipt_pdf(receipt, fill_page=True):
         receipt_notes(receipt),
         body,
         RECEIPT_FOOTER,
-        is_cancelled=receipt.estado == EstadoComprobanteChoices.ANULADO,
+        is_cancelled=is_cancelled,
+        annulment=annulment_line(receipt.pago) if is_cancelled else None,
         fill_page=fill_page,
     )
 
@@ -391,7 +395,6 @@ def render_refund_pdf(refund, fill_page=True):
         label = f"Recibo {receipt_code(cancelled)} · Emitido el {cancelled.fecha_emision:%d/%m/%Y}"
         body += section("Comprobante anulado", [(amount_row(label, cancelled.monto_total), ITEM)])
     body += section("Medio de devolución", method_rows([(refund.medio_de_pago, refund.monto)]) + [total_row("Total devuelto", refund.monto, ERROR)])
-    body.append(info_row("Responsable", refund.responsable))
     return render_document(
         REFUND_TITLES[refund.tipo],
         refund_code(refund),

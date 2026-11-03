@@ -494,6 +494,10 @@ class DevolucionSerializer(serializers.ModelSerializer):
     medio_de_pago_nombre = serializers.SerializerMethodField()
     socio = serializers.SerializerMethodField()
     comprobante_anulado_codigo = serializers.SerializerMethodField()
+    comprobante_anulado_fecha = serializers.DateField(source="comprobante_anulado.fecha_emision", read_only=True, default=None)
+    comprobante_anulado_monto = serializers.DecimalField(
+        source="comprobante_anulado.monto_total", max_digits=10, decimal_places=2, read_only=True, default=None,
+    )
     usuario_nombre = serializers.SerializerMethodField()
 
     class Meta:
@@ -501,7 +505,7 @@ class DevolucionSerializer(serializers.ModelSerializer):
         fields = [
             "devolucion_id", "tipo", "tipo_nombre", "numero", "codigo", "fecha", "socio", "concepto", "monto",
             "medio_de_pago", "medio_de_pago_nombre", "comprobante_anulado", "comprobante_anulado_codigo",
-            "responsable", "usuario", "usuario_nombre",
+            "comprobante_anulado_fecha", "comprobante_anulado_monto", "responsable", "usuario", "usuario_nombre",
         ]
         read_only_fields = fields
 

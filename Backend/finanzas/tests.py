@@ -844,7 +844,7 @@ class DevolucionesManualesTests(APITestCase):
 		self.assertEqual(pdf.status_code, 200)
 		self.assertIn(b"DEVOLUCI", pdf.content)
 		self.assertIn(b"00000001", pdf.content)
-		self.assertIn(b"Tesorera", pdf.content)
+		self.assertNotIn(b"Tesorera", pdf.content)
 		self.assertIn("devolucion-00000001.pdf", pdf["Content-Disposition"])
 
 	def test_lista_filtrando_por_socio_y_tipo(self):
@@ -2541,6 +2541,8 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		contenido = self.descargar(original["numero"]).content
 
 		self.assertIn(b"ANULADO", contenido)
+		self.assertIn(b"Anulado el", contenido)
+		self.assertNotIn(b"Tesorera", contenido)
 		self.assertIn(b"NC-X 00000001", contenido)
 
 	def test_el_frontend_puede_leer_el_nombre_del_archivo(self):
