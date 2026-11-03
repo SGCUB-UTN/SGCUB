@@ -172,8 +172,8 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
       <DataTable
         headers={
           <>
-            <SortableHeader className="py-3 px-4" etiqueta="Fecha y hora" columna="fecha_creacion" orden={orden} onOrdenar={handleSort} />
             <SortableHeader className="py-3 px-4" etiqueta="Asunto y mensaje" columna="asunto" orden={orden} onOrdenar={handleSort} />
+            <SortableHeader className="py-3 px-4" etiqueta="Fecha y hora" columna="fecha_creacion" orden={orden} onOrdenar={handleSort} />
             <th scope="col" className="py-3 px-4">Canales</th>
             <SortableHeader className="py-3 px-4" etiqueta="Destinatarios" columna="destinatarios" orden={orden} onOrdenar={handleSort} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={orden} onOrdenar={handleSort} />
@@ -208,9 +208,6 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
               title="Hacé clic para ver el detalle del comunicado"
               className="hover:bg-surface-container-low/70 transition-colors cursor-pointer group"
             >
-              <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
-                {formatFechaHora(notif.fecha_creacion)}
-              </td>
               <td className="py-3.5 px-4 max-w-md">
                 <p className="font-semibold text-on-surface group-hover:text-primary transition-colors truncate">
                   {notif.asunto || notif.titulo || 'Sin asunto'}
@@ -218,6 +215,9 @@ export default function HistorialComunicacionesTable({ notificaciones = [], onVi
                 <p className="text-xs text-on-surface-variant truncate mt-0.5">
                   {notif.contenido || '—'}
                 </p>
+              </td>
+              <td className="py-3.5 px-4 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
+                {formatFechaHora(notif.fecha_creacion)}
               </td>
               <td className="py-3.5 px-4 whitespace-nowrap">
                 <div className="flex flex-wrap items-center gap-1.5">
