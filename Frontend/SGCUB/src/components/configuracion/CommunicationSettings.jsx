@@ -29,6 +29,11 @@ const NOTIFICATIONS = [
     label: 'Enviar comprobantes de pago',
     description: 'Envía por mail el comprobante cada vez que se registra un pago.',
   },
+  {
+    field: 'notificar_cumpleanos',
+    label: 'Saludos de cumpleaños',
+    description: 'Envía una salutación institucional por correo a los socios en el día de su cumpleaños.',
+  },
 ]
 
 function NotificationOption({ option, form, errors, setField }) {

@@ -46,6 +46,7 @@ class ConfiguracionGeneral(models.Model):
     notificar_cuota_vencida = models.BooleanField(default=False)
     notificar_modificacion_cuota = models.BooleanField(default=False)
     notificar_comprobante_pago = models.BooleanField(default=False)
+    notificar_cumpleanos = models.BooleanField(default=False)
     dias_recordatorio_vencimiento = models.PositiveSmallIntegerField(default=3)
     email_nombre_remitente = models.CharField(max_length=80, default="Club Universitario de Berisso")
     email_firma = models.TextField(max_length=500, default="Club Social y Deportivo - SGCUB")
