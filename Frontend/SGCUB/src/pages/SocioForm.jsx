@@ -390,55 +390,6 @@ function SocioForm() {
 
             <SeccionDomicilio bindInput={bindInput} errores={errores} localidades={localidades} onCrearLocalidad={crearLocalidad} />
 
-            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
-              <SeccionTitulo icono="health_and_safety" titulo="Datos de Salud" />
-              <Campo id="esquema_vacunacion" label="¿Tiene el esquema de vacunación completo?" opcional>
-                <div className="flex items-center gap-6">
-                  {[
-                    { label: 'Sí', value: true },
-                    { label: 'No', value: false },
-                  ].map(({ label, value }) => (
-                    <label key={label} className="inline-flex items-center gap-2 text-base text-on-surface cursor-pointer">
-                      <input
-                        id={value === true ? 'esquema_vacunacion' : 'esquema_vacunacion-no'}
-                        type="radio"
-                        name="esquema_vacunacion"
-                        value={value === null ? '' : String(value)}
-                        checked={formulario.esquema_vacunacion === value}
-                        onChange={() => actualizarCampo('esquema_vacunacion', value)}
-                        className="h-4 w-4 accent-primary"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </Campo>
-            </div>
-
-            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
-              <SeccionTitulo icono="school" titulo="Datos Educativos" />
-              <Campo id="nivel_educacion" label="Nivel de educación" opcional>
-                <SelectConFlecha
-                  id="nivel_educacion"
-                  name="nivel_educacion"
-                  value={formulario.nivel_educacion ?? ''}
-                  onChange={(event) => actualizarCampo('nivel_educacion', event.target.value || null)}
-                  conError={false}
-                >
-                  <option value="">Sin especificar</option>
-                  <option value="primario_en_proceso">Primario en proceso</option>
-                  <option value="primario_incompleto">Primario incompleto</option>
-                  <option value="primario_completo">Primario completo</option>
-                  <option value="secundario_en_proceso">Secundario en proceso</option>
-                  <option value="secundario_incompleto">Secundario incompleto</option>
-                  <option value="secundario_completo">Secundario completo</option>
-                  <option value="universitario_en_proceso">Universitario en proceso</option>
-                  <option value="universitario_incompleto">Universitario incompleto</option>
-                  <option value="universitario_completo">Universitario completo</option>
-                </SelectConFlecha>
-              </Campo>
-            </div>
-
             {editando && (
               <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
                 <SeccionTitulo icono="verified_user" titulo="Estado Institucional" />

@@ -11,8 +11,6 @@ export const bindPhone = (binding) => ({
 
 export const FORM_INICIAL = {
   nombre: '', apellido: '', dni: '', telefono: '', email: '', estado_administrativo: '',
-  esquema_vacunacion: null,
-  nivel_educacion: null,
   fecha_nacimiento: '', genero: '', genero_otro: '',
   domicilio_calle: '', domicilio_numero: '', domicilio_piso: '', domicilio_departamento: '',
   domicilio_entre_calle_1: '', domicilio_entre_calle_2: '', domicilio_barrio: '', domicilio_localidad: '',
@@ -37,8 +35,6 @@ export const socioAFormulario = (socio) => ({
   telefono: phoneDigits(socio.telefono),
   email: socio.email || '',
   estado_administrativo: socio.estado_administrativo ? String(socio.estado_administrativo) : '',
-  esquema_vacunacion: socio.esquema_vacunacion ?? null,
-  nivel_educacion: socio.nivel_educacion ?? null,
   fecha_nacimiento: socio.fecha_nacimiento || '',
   genero: socio.genero ? String(socio.genero) : '',
   genero_otro: socio.genero_otro || '',

@@ -207,7 +207,11 @@ function JugadorDetail() {
       icon: 'person',
       content: (
         <PersonalDataTab
-          persona={socio}
+          persona={{
+            ...socio,
+            esquema_vacunacion: jugador.esquema_vacunacion,
+            nivel_educacion: jugador.nivel_educacion,
+          }}
           localidades={localidades}
           onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           deportivo={{

@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
-import SocioEducationChart from '../components/socios/SocioEducationChart'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
+import JugadorHealthEducationSummary from '../components/socios/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
+
+const MOSTRAR_RESUMEN_JUGADORES = false
 
 function Padron() {
   const { socios, isLoading, error } = useSocio({ onlyMembers: true })
@@ -23,10 +25,8 @@ function Padron() {
       activos: formato(sociosActivos.length),
       inactivos: formato(socios.length - sociosActivos.length),
       exJugadores: formato(socios.filter((socio) => socio.es_ex_jugador).length),
-      vacunados: formato(sociosActivos.filter((socio) => socio.esquema_vacunacion === true).length),
     }
   }, [socios, sociosActivos])
-
   return (
     <>
       <div className="w-full flex flex-col gap-5">
@@ -45,15 +45,14 @@ function Padron() {
           )}
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
           <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
           <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
           <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
           <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
-          <StatCard label="Vacunados activos" value={isLoading ? '…' : totales.vacunados} caption={!isLoading ? `de ${sociosActivos.length.toLocaleString('es-AR')} socios activos` : undefined} icon="vaccines" tone="positive" />
         </div>
 
-        <SocioEducationChart socios={sociosActivos} isLoading={isLoading} />
+        {MOSTRAR_RESUMEN_JUGADORES && <JugadorHealthEducationSummary />}
 
         <section aria-label="Socios">
           <SociosTable

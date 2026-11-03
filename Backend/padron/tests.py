@@ -493,61 +493,8 @@ class PadronViewTests(APITestCase):
         self.assertEqual(socio.persona.nombre, response.data["nombre"])
         self.assertEqual(socio.persona.apellido, response.data["apellido"])
         self.assertEqual(socio.persona.dni, response.data["dni"])
-        self.assertIsNone(response.data["esquema_vacunacion"])
-        self.assertIsNone(response.data["nivel_educacion"])
-
-    def test_socio_nivel_educacion_se_guarda_y_actualiza(self):
-        response = self.create_socio(
-            self.datos_alta_persona(nivel_educacion="secundario_incompleto")
-        )
-        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
-        socio = Socio.objects.get(pk=response.data["socio_id"])
-        self.assertEqual("secundario_incompleto", socio.nivel_educacion)
-        self.assertEqual("secundario_incompleto", response.data["nivel_educacion"])
-
-        response = self.client.patch(
-            f"/api/padron/socio/{socio.socio_id}/",
-            {"nivel_educacion": None},
-            format="json",
-        )
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-        socio.refresh_from_db()
-        self.assertIsNone(socio.nivel_educacion)
-        self.assertIsNone(response.data["nivel_educacion"])
-
-        response = self.client.patch(
-            f"/api/padron/socio/{socio.socio_id}/",
-            {"nivel_educacion": "nivel_invalido"},
-            format="json",
-        )
-        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
-
-    def test_socio_esquema_vacunacion_se_guarda_y_actualiza(self):
-        response = self.create_socio(self.datos_alta_persona(esquema_vacunacion=True))
-        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
-        socio = Socio.objects.get(pk=response.data["socio_id"])
-        self.assertTrue(socio.esquema_vacunacion)
-        self.assertTrue(response.data["esquema_vacunacion"])
-
-        response = self.client.patch(
-            f"/api/padron/socio/{socio.socio_id}/",
-            {"esquema_vacunacion": False},
-            format="json",
-        )
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-        socio.refresh_from_db()
-        self.assertFalse(socio.esquema_vacunacion)
-        self.assertFalse(response.data["esquema_vacunacion"])
-
-        response = self.client.patch(
-            f"/api/padron/socio/{socio.socio_id}/",
-            {"esquema_vacunacion": None},
-            format="json",
-        )
-        self.assertEqual(status.HTTP_200_OK, response.status_code)
-        socio.refresh_from_db()
-        self.assertIsNone(socio.esquema_vacunacion)
-        self.assertIsNone(response.data["esquema_vacunacion"])
+        self.assertNotIn("esquema_vacunacion", response.data)
+        self.assertNotIn("nivel_educacion", response.data)
 
     def test_socio_get_detail_no_existe(self):
         response = self.client.get("/api/padron/socio/9999/", format="json")
@@ -901,6 +848,43 @@ class PadronViewTests(APITestCase):
             socio.socio_id, categoria.pk, vinculos_familiares=[self.contacto_payload(responsable_legal=False)]
         )
         self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+
+    def test_jugador_guarda_esquema_vacunacion_y_nivel_educacion(self):
+        socio = self.crear_socio_menor_orm()
+        categoria = self.crear_categoria_orm()
+        response = self.create_jugador(
+            socio.socio_id,
+            categoria.pk,
+            esquema_vacunacion=True,
+            nivel_educacion="secundario_incompleto",
+        )
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        jugador = Jugador.objects.get(pk=response.data["jugador_id"])
+        self.assertTrue(jugador.esquema_vacunacion)
+        self.assertEqual("secundario_incompleto", jugador.nivel_educacion)
+        self.assertTrue(response.data["esquema_vacunacion"])
+        self.assertEqual("secundario_incompleto", response.data["nivel_educacion"])
+        self.assertNotIn("esquema_vacunacion", response.data["socio"])
+        self.assertNotIn("nivel_educacion", response.data["socio"])
+
+        response = self.client.patch(
+            f"/api/padron/jugador/{jugador.jugador_id}/",
+            {"esquema_vacunacion": None, "nivel_educacion": None},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        jugador.refresh_from_db()
+        self.assertIsNone(jugador.esquema_vacunacion)
+        self.assertIsNone(jugador.nivel_educacion)
+        self.assertIsNone(response.data["esquema_vacunacion"])
+        self.assertIsNone(response.data["nivel_educacion"])
+
+        response = self.client.patch(
+            f"/api/padron/jugador/{jugador.jugador_id}/",
+            {"nivel_educacion": "nivel_invalido"},
+            format="json",
+        )
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_jugador_post_edad_supera_categoria(self):
         socio = self.crear_socio_orm(persona=self.crear_persona_orm(fecha_nacimiento=date(2012, 3, 1)))
