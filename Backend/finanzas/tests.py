@@ -2593,12 +2593,12 @@ class ComprobantePdfTests(ComprobanteTestBase):
 
 		self.assertEqual(response.status_code, 404)
 
-	def test_recibo_pdf_incluye_telefono_si_esta_cargado(self):
+	def test_recibo_pdf_no_incluye_telefono(self):
 		self.socio.persona.telefono = "2215556677"
 		self.socio.persona.save()
 		detalle = self.pagar("2500.00")
 		response = self.descargar(detalle["numero"])
-		self.assertIn(b"2215556677", response.content)
+		self.assertNotIn(b"2215556677", response.content)
 
 	def test_comprobante_imagen_devuelve_png_del_recibo(self):
 		detalle = self.pagar("1000.00")

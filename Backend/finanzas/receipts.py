@@ -225,18 +225,16 @@ def header_block(title, code, issued, annulment):
 def socio_block(socio):
     name = ", ".join(part for part in (socio.get("apellido"), socio.get("nombre")) if part) or "—"
     number = socio.get("numero_socio")
-    phone = socio.get("telefono")
     fields = [
         ("Apellido y nombre", name, "value"),
         ("DNI", format_dni(socio.get("dni")), "value"),
         ("N° de socio", "—" if number is None else number, "value"),
-        ("Teléfono", phone or "No registrado", "value" if phone else "missing"),
     ]
     cells = [[paragraph(label, "label"), paragraph(value, style)] for label, value, style in fields]
     return [
         paragraph("DATOS DEL SOCIO", "caption"),
         Spacer(1, 6),
-        grid([cells], [INNER_WIDTH * 0.36, INNER_WIDTH * 0.2, INNER_WIDTH * 0.2, INNER_WIDTH * 0.24], [("VALIGN", (0, 0), (-1, -1), "TOP")]),
+        grid([cells], [INNER_WIDTH * 0.44, INNER_WIDTH * 0.28, INNER_WIDTH * 0.28], [("VALIGN", (0, 0), (-1, -1), "TOP")]),
     ]
 
 
