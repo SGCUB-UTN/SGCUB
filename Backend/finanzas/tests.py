@@ -3806,7 +3806,13 @@ class CurrentAccountOpeningTests(APITestCase):
 	def test_new_player_does_not_get_registration_fee_if_a_past_cuota_had_a_sports_charge(self):
 		self.set_registration_fee()
 		today = timezone.localdate()
-		socio = crear_socio("40111229")
+		persona = Persona.objects.create(
+			nombre="Juan",
+			apellido="Perez",
+			dni="40111229",
+			fecha_nacimiento=date(2015, 3, 1),
+		)
+		socio = Socio.objects.create(persona=persona)
 		previous_period = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 		previous_cuota = create_cuota(socio, previous_period, today=today.replace(day=1))
 		ItemCuota.objects.create(
