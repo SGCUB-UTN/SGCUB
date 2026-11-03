@@ -2325,6 +2325,35 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertEqual(self.desglose(primero), [("CuotaSocial", Decimal("900.00")), ("Beca", Decimal("-500.00"))])
 		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("100.00")), ("CuotaDeportiva", Decimal("1500.00"))])
 
+	def nombres_del_periodo(self, detalle):
+		return [linea["concepto_nombre"] for linea in detalle["periodos"][0]["detalle"]]
+
+	def test_pago_parcial_informa_el_saldo_pendiente_y_el_concepto_abonado_en_parte(self):
+		detalle = self.pagar("1200.00")
+		periodo = detalle["periodos"][0]
+
+		self.assertTrue(periodo["es_parcial"])
+		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("1300.00"))
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Abono parcial - Cuota Deportiva"])
+		self.assertEqual(Imputacion.objects.get().saldo_pendiente, Decimal("1300.00"))
+
+	def test_pago_que_cancela_el_saldo_no_es_parcial(self):
+		self.pagar("1200.00")
+
+		detalle = self.pagar("1300.00")
+		periodo = detalle["periodos"][0]
+
+		self.assertFalse(periodo["es_parcial"])
+		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("0.00"))
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Deportiva"])
+
+	def test_pago_parcial_no_marca_los_descuentos(self):
+		self.asignar_beca("500.00")
+
+		detalle = self.pagar("400.00")
+
+		self.assertEqual(self.nombres_del_periodo(detalle), ["Abono parcial - Cuota Social", "Beca"])
+
 	def test_un_recargo_posterior_no_altera_comprobantes_ya_emitidos(self):
 		primero = self.pagar("400.00")
 		self.agregar_mora(self.cuota, "200.00")
