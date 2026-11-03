@@ -26,6 +26,7 @@ import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
 
 const ORIGINS = {
   jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
@@ -200,6 +201,16 @@ function JugadorDetail() {
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
 
+  const handleDownloadPhoto = async () => {
+    if (!socio.foto_url) return
+    try {
+      await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
+    } catch (err) {
+      console.error(err)
+      alert('No se pudo descargar la foto.')
+    }
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -268,6 +279,8 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        photoUrl={socio.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
         tags={categoryTags(jugador)}

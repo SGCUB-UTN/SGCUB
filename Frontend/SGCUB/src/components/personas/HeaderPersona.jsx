@@ -1,4 +1,5 @@
 import PageHeader from '../shared/PageHeader'
+import { useEffect, useState } from 'react'
 
 const getInitials = (name, surname) =>
   `${name?.trim()?.[0] ?? ''}${surname?.trim()?.[0] ?? ''}`.toUpperCase() || '?'
@@ -12,9 +13,57 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
+function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto }) {
+  const [imageError, setImageError] = useState(false)
+
+  // Resetea el fallback si cambia la URL (p. ej. al subir una nueva foto)
+  useEffect(() => {
+    setImageError(false)
+  }, [photoUrl])
+
+  const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
+  const showPhoto = Boolean(photoUrl) && !imageError
+
+  return (
+    <div className="relative shrink-0" group>
+      <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
+        {showPhoto ? (
+          <img
+            src={photoUrl}
+            alt={fullName}
+            className="w-full h-full object-cover"
+            onError={() => setImageError(true)}
+            draggable={false}
+          />
+        ) : (
+          getInitials(name, surname)
+        )}
+      </div>
+      {isActive && (
+        <span
+          className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
+          title="Activo"
+          aria-label="Activo"
+        />
+      )}
+      {showPhoto && onDownloadPhoto && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onDownloadPhoto() }}
+          title="Descargar foto"
+          aria-label="Descargar foto"
+          className="absolute -bottom-1 -left-1 w-7 h-7 rounded-full bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[16px]">download</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export const ACTION_GRID_CLASS ='grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
   const statusList = statuses ?? (status ? [status] : [])
 
@@ -26,18 +75,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, isActive 
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-            <div className="relative shrink-0">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
-                {getInitials(name, surname)}
-              </div>
-              {isActive && (
-                <span
-                  className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
-                  title="Activo"
-                  aria-label="Activo"
-                />
-              )}
-            </div>
+            <Avatar name={name} surname={surname} photoUrl={photoUrl} isActive={isActive} onDownloadPhoto={onDownloadPhoto} />
 
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">

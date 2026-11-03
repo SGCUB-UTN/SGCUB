@@ -20,6 +20,8 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 import { FormSkeleton } from '../components/shared/Skeleton'
+import PhotoUploadField from '../components/shared/PhotoUploadField'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
 
@@ -125,6 +127,7 @@ function JugadorForm() {
   const [personaEncontrada, setPersonaEncontrada] = useState(null)
   const [obrasSocialesLista, setObrasSocialesLista] = useState(OBRAS_SOCIALES)
   const [tallesLista, setTallesLista] = useState(TALLES)
+  const [foto, setFoto] = useState(null)
   const busqueda = usePersonaSearchDNI({ habilitada: !editando })
 
   useEffect(() => {
@@ -379,15 +382,25 @@ function JugadorForm() {
     setGuardando(true)
     try {
       let jugadorId
+      let personaIdParaFoto = null
       if (editando) {
         await putSocio(socioActualId, datosSocio)
         await patchJugador(jugador.jugador_id, datosJugador)
         jugadorId = jugador.jugador_id
+        personaIdParaFoto = jugador.socio?.persona ?? null
       } else if (socioVinculado) {
         await putSocio(socioVinculado.socio_id, datosSocio)
         jugadorId = (await postJugador({ ...datosJugador, socio: socioVinculado.socio_id })).jugador_id
       } else {
         jugadorId = (await postJugador({ ...datosJugador, nuevo_socio: datosSocio })).jugador_id
+        personaIdParaFoto = creado.socio?.persona ?? null
+      }
+      if (foto && personaIdParaFoto) {
+        try {
+          await uploadPersonaFoto(personaIdParaFoto, foto)
+        } catch (photoError) {
+          console.error('No se pudo subir la foto de perfil:', photoError)
+        }
       }
       navigate(`/padron/jugadores/${jugadorId}${editando ? '' : '?tab=financiero'}`)
     } catch (requestError) {
@@ -486,6 +499,18 @@ function JugadorForm() {
 
         <form id="form-jugador" className="p-6 md:p-8" onSubmit={guardar} noValidate>
           <div className="space-y-6">
+            {/* Foto de perfil: visible en edición o al crear una persona nueva */}
+            {(editando || (!socioVinculado && !personaEncontrada)) && (
+              <div className="flex flex-col gap-3 pb-4 border-b border-outline-variant/20">
+                <SeccionTitulo icono="photo_camera" titulo="Foto de perfil" />
+                <PhotoUploadField
+                  value={foto}
+                  onChange={setFoto}
+                  disabled={guardando}
+                  currentUrl={editando ? jugador?.socio?.foto_url : null}
+                />
+              </div>
+            )}
             <SeccionDatosPersonales
               bindInput={bindInput}
               errores={errores}

@@ -20,6 +20,8 @@ import useLocalidades from '../hooks/useLocalidades'
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+
 function DocenteDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -158,6 +160,16 @@ function DocenteDetail() {
   const nombresCargos = (docente.asignaciones ?? []).map((asignacion) => asignacion.cargo_nombre).filter(Boolean).join(', ')
   const activo = isActiveStatus(docente.estado_nombre)
 
+  const handleDownloadPhoto = async () => {
+    if (!persona.foto_url) return
+    try {
+      await downloadImage(persona.foto_url, buildPhotoFilename(persona.foto_url, persona.nombre, persona.apellido))
+    } catch (err) {
+      console.error(err)
+      alert('No se pudo descargar la foto.')
+    }
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -221,6 +233,8 @@ function DocenteDetail() {
         ]}
         name={persona.nombre}
         surname={persona.apellido}
+        photoUrl={persona.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
         isActive={activo}
         statuses={teacherStatuses(activo)}
         metadata={[
