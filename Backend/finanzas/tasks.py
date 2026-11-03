@@ -171,29 +171,43 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
 
     try:
         from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.models import EnvioNotificacion
         from comunicaciones.services import crear_y_despachar_notificacion
 
         config = ConfiguracionGeneral.load()
-        if config.notificar_generacion_cuota and created:
-            amounts = dict(
-                MovimientoCuenta.objects.filter(cuota__in=[cuota.pk for _, _, cuota in created]).values_list("cuota_id", "monto")
+        if config.notificar_generacion_cuota:
+            current_period = today.strftime(PERIOD_FORMAT)
+            titulo = f"Nueva cuota emitida: {current_period}"
+
+            cuotas_periodo = list(
+                Cuota.objects.filter(
+                    periodo=current_period,
+                    movimiento__cuenta_corriente__socio__estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO,
+                )
+                .select_related("movimiento__cuenta_corriente__socio__persona")
             )
-            socio_cuotas = defaultdict(list)
-            for _, socio, cuota in created:
-                socio_cuotas[socio].append(cuota)
+
+            notificados = set(
+                EnvioNotificacion.objects.filter(
+                    notificacion__titulo=titulo,
+                    socio__in=[c.movimiento.cuenta_corriente.socio_id for c in cuotas_periodo],
+                ).values_list("socio_id", flat=True)
+            )
 
             club = config.club_nombre
-            for socio, lista_cuotas in socio_cuotas.items():
-                periodos_str = ", ".join(c.periodo for c in lista_cuotas)
-                total_monto = sum((amounts.get(c.pk, Decimal("0.00")) for c in lista_cuotas), Decimal("0.00"))
-                venc1 = lista_cuotas[0].fecha_venc1.strftime("%d/%m/%Y") if lista_cuotas[0].fecha_venc1 else "—"
-                venc2 = lista_cuotas[0].fecha_venc2.strftime("%d/%m/%Y") if lista_cuotas[0].fecha_venc2 else "—"
-                titulo = f"Nueva cuota emitida: {periodos_str}"
-                asunto = f"Emisión de cuota social período {periodos_str} - {club}"
+            for cuota in cuotas_periodo:
+                socio = cuota.movimiento.cuenta_corriente.socio
+                if socio.pk in notificados:
+                    continue
+
+                monto = cuota.movimiento.monto if cuota.movimiento else Decimal("0.00")
+                venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
+                venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
+                asunto = f"Emisión de cuota social período {current_period} - {club}"
                 contenido = (
                     f"Estimado/a {socio.persona.nombre},\n\n"
-                    f"Te informamos que ya se encuentra generada tu cuota del período {periodos_str} "
-                    f"por un importe total de {format_amount(total_monto)}.\n\n"
+                    f"Te informamos que ya se encuentra disponible para abonar tu cuota social del período {current_period} "
+                    f"por un importe de {format_amount(monto)}.\n\n"
                     f"Fechas de vencimiento:\n"
                     f"  • Primer vencimiento: {venc1}\n"
                     f"  • Segundo vencimiento: {venc2}\n\n"
@@ -206,6 +220,7 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                     contenido=contenido,
                     socios=[socio],
                 )
+                notificados.add(socio.pk)
     except Exception:
         logger.exception("Error al enviar notificaciones automáticas de generación de cuota")
 
