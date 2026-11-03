@@ -34,7 +34,7 @@ def delete_schedules(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("finanzas", "0050_item_cuota_fecha_creacion"),
+        ("finanzas", "0051_imputacion_saldo_pendiente"),
         ("django_q", "0019_alter_task_options_alter_ormq_key_alter_ormq_lock_and_more"),
     ]
 
