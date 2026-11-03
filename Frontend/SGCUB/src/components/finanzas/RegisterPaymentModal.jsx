@@ -145,7 +145,6 @@ function RegisterPaymentModal({
           onCancel={onClose}
           onSuccess={handleSuccess}
           onAssignBenefit={assignBenefit}
-          onAccountChanged={refreshAccount}
         />
       ) : (
         <PagoForm key="empty" onCancel={onClose} />

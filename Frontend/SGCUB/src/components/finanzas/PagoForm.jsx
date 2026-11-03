@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Modal, Text } from '@mantine/core'
+import { Modal } from '@mantine/core'
 import { collectErrorMessages, formatAmount, formatDate } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
@@ -7,9 +7,8 @@ import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
-import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { isAdjustment, itemLabel, itemTone } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
@@ -79,88 +78,21 @@ const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
   .slice(0, count)
   .reduce((total, cuota) => total + cuotaDue(cuota), 0))
 
-function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false, action = null }) {
+function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false }) {
   return (
     <div className={`flex items-center justify-between gap-3 text-base ${tone} ${strong ? 'font-bold' : ''}`}>
       <div className="flex flex-col min-w-0">
         <span>{label}</span>
         {detail && <span className="text-sm font-normal text-on-surface-variant truncate" title={detail}>{detail}</span>}
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="tabular-nums whitespace-nowrap">{value}</span>
-        <span className="w-6 shrink-0">{action}</span>
-      </div>
+      <span className="shrink-0 tabular-nums whitespace-nowrap">{value}</span>
     </div>
-  )
-}
-
-function DiscountDetailButton({ item, selected, blocker = '', onClick }) {
-  const label = selected ? `Deshacer descuento de ${itemLabel(item)}` : `Quitar ${itemLabel(item)} y aplicar descuento`
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-      disabled={Boolean(blocker)}
-      title={blocker || label}
-      aria-label={label}
-      className="w-6 h-6 shrink-0 inline-flex items-center justify-center rounded-full text-primary hover:bg-primary-fixed/40 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-    >
-      <span className="material-symbols-outlined text-[16px]" aria-hidden="true">{selected ? 'undo' : 'remove'}</span>
-    </button>
-  )
-}
-
-function DiscountDetailConfirmation({ selection, onCancel, onConfirm }) {
-  const { cuota, item } = selection ?? {}
-  return (
-    <Modal
-      opened={Boolean(selection)}
-      onClose={onCancel}
-      title={<Text fw={700} size="xl">Quitar detalle</Text>}
-      centered
-      zIndex={300}
-    >
-      {selection && (
-        <div className="flex flex-col gap-5">
-          <p className="text-base text-on-surface-variant">
-            Se agregará un descuento de{' '}
-            <strong className="text-on-surface">{formatAmount(item.monto)}</strong> por{' '}
-            <strong className="text-on-surface">{itemLabel(item)}</strong> en la cuota{' '}
-            <strong className="text-on-surface">{formatPeriod(cuota.periodo)}</strong>.
-            El detalle original se conserva y el descuento se registra al confirmar el pago.
-          </p>
-          <div className="pt-4 border-t border-outline-variant/20 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={onConfirm}
-              className="px-5 py-2.5 rounded text-sm font-semibold bg-primary text-on-primary hover:bg-primary/90 transition-colors cursor-pointer"
-            >
-              Aplicar descuento
-            </button>
-          </div>
-        </div>
-      )}
-    </Modal>
   )
 }
 
 function CuotaBreakdownRow({
   line,
-  onRemoveItem,
   onAssignBenefit,
-  discountItemIds,
-  onDiscountItem,
-  canDiscountQuota,
 }) {
   const { cuota, due } = line
   const items = cuota.items ?? []
@@ -177,38 +109,17 @@ function CuotaBreakdownRow({
           </div>
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
             {items.filter((item) => !isAdjustment(item)).map((item) => {
-              const selected = discountItemIds.includes(item.item_cuota_id)
-              const available = Number(cuota.saldo_sin_recargo ?? cuota.saldo_pendiente ?? 0)
-              const blocker = selected
-                ? ''
-                : paid > 0
-                  ? 'La cuota tiene pagos aplicados.'
-                  : !canDiscountQuota
-                    ? 'El pago actual debe alcanzar esta cuota.'
-                    : Number(item.monto) > available
-                      ? 'El descuento supera el saldo pendiente de la cuota.'
-                      : ''
               return (
                 <BreakdownLine
                   key={item.item_cuota_id}
                   label={itemLabel(item)}
-                  detail={selected ? 'Se aplicará como descuento al confirmar el pago' : ''}
-                  value={`${selected ? '− ' : ''}${formatAmount(Number(item.monto || 0))}`}
-                  tone={selected ? 'text-emerald-700' : 'text-on-surface'}
-                  action={onDiscountItem ? (
-                    <DiscountDetailButton
-                      item={item}
-                      selected={selected}
-                      blocker={blocker}
-                      onClick={() => onDiscountItem(cuota, item, selected)}
-                    />
-                  ) : null}
+                  value={formatAmount(Number(item.monto || 0))}
+                  tone="text-on-surface"
                 />
               )
             })}
             {items.filter(isAdjustment).map((item) => {
               const tone = itemTone(item)
-              const blocker = onRemoveItem ? removalBlocker(cuota, item) : null
               return (
                 <BreakdownLine
                   key={item.item_cuota_id}
@@ -216,9 +127,6 @@ function CuotaBreakdownRow({
                   detail={item.es_descuento ? item.motivo : ''}
                   value={`${tone.sign}${formatAmount(Number(item.monto || 0))}`}
                   tone={tone.className}
-                  action={blocker === null ? null : (
-                    <RemoveItemButton label={`Quitar ${itemLabel(item)}`} blocker={blocker} onClick={() => onRemoveItem(cuota, item)} />
-                  )}
                 />
               )
             })}
@@ -251,11 +159,7 @@ function CuotasTable({
   onToggleFuture,
   expandedIds,
   onToggleExpand,
-  onRemoveItem,
   onAssignBenefit,
-  discountItemIds,
-  onDiscountItem,
-  canDiscountQuotaIds,
 }) {
   const handleKeyDown = (event, cuotaId) => {
     if (event.target !== event.currentTarget) return
@@ -273,11 +177,7 @@ function CuotasTable({
       line={line}
       expandedIds={expandedIds}
       onToggleExpand={onToggleExpand}
-      onRemoveItem={onRemoveItem}
       onAssignBenefit={onAssignBenefit}
-      discountItemIds={discountItemIds}
-      onDiscountItem={onDiscountItem}
-      canDiscountQuota={canDiscountQuotaIds.has(line.cuota.cuota_id)}
       onKeyDown={handleKeyDown}
     />
   )
@@ -332,11 +232,7 @@ function CuotaLine({
   line,
   expandedIds,
   onToggleExpand,
-  onRemoveItem,
   onAssignBenefit,
-  discountItemIds,
-  onDiscountItem,
-  canDiscountQuota,
   onKeyDown,
 }) {
   const { cuota, due, applied } = line
@@ -389,11 +285,7 @@ function CuotaLine({
       {expanded && (
         <CuotaBreakdownRow
           line={line}
-          onRemoveItem={onRemoveItem}
           onAssignBenefit={onAssignBenefit}
-          discountItemIds={discountItemIds}
-          onDiscountItem={onDiscountItem}
-          canDiscountQuota={canDiscountQuota}
         />
       )}
     </Fragment>
@@ -486,7 +378,7 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit }) {
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
@@ -498,41 +390,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
-  const [removal, setRemoval] = useState(null)
-  const [discountItemIds, setDiscountItemIds] = useState([])
-  const [discountConfirmation, setDiscountConfirmation] = useState(null)
-  const discountedAmounts = useMemo(() => {
-    const amounts = new Map()
-    for (const cuota of pendingCuotas) {
-      const amount = (cuota.items ?? [])
-        .filter((item) => discountItemIds.includes(item.item_cuota_id))
-        .reduce((total, item) => total + Number(item.monto || 0), 0)
-      if (amount > 0) amounts.set(cuota.cuota_id, roundCents(amount))
-    }
-    return amounts
-  }, [pendingCuotas, discountItemIds])
-  const selectedDiscountItems = useMemo(
-    () => pendingCuotas.flatMap((cuota) => (cuota.items ?? [])
-      .filter((item) => discountItemIds.includes(item.item_cuota_id))
-      .map((item) => ({ cuota, item }))),
-    [pendingCuotas, discountItemIds],
-  )
-  const discountTotal = roundCents(
-    selectedDiscountItems.reduce((total, selection) => total + Number(selection.item.monto || 0), 0),
-  )
-  const paymentCuotas = useMemo(
-    () => pendingCuotas.map((cuota) => {
-      const discount = discountedAmounts.get(cuota.cuota_id) ?? 0
-      return {
-        ...cuota,
-        saldo_pendiente: roundCents(Math.max(Number(cuota.saldo_pendiente || 0) - discount, 0)),
-        saldo_sin_recargo: roundCents(
-          Math.max(Number(cuota.saldo_sin_recargo ?? cuota.saldo_pendiente ?? 0) - discount, 0),
-        ),
-      }
-    }),
-    [pendingCuotas, discountedAmounts],
-  )
+  const paymentCuotas = pendingCuotas
   // When the money received is more than all the socio owes, it can only be partly refunded
   const [excessMode, setExcessMode] = useState(() => (
     reversal && reversal.total > firstCuotasTotal(pendingCuotas, pendingCuotas.length) ? EXCESS_CREDIT_NOTE : EXCESS_PARTIAL
@@ -565,15 +423,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const pendingTotal = roundCents(lines.reduce((total, line) => total + line.due, 0))
   const billedLines = lines.filter((line) => !isFuture(line.cuota, period) || line.applied > 0)
   const billedTotal = roundCents(billedLines.reduce((total, line) => total + line.due, 0))
-  const originalCoveredIds = new Set(
-    allocate(pendingCuotas, enteredTotal)
-      .filter((line) => line.applied > 0)
-      .map((line) => line.cuota.cuota_id),
-  )
-  const discountCoverageValid = selectedDiscountItems.every(({ cuota }) => {
-    const line = lines.find((candidate) => candidate.cuota.cuota_id === cuota.cuota_id)
-    return line && (line.due <= 0 || line.applied > 0)
-  })
   const settledLines = coveredLines.filter((line) => line.applied >= line.due)
   const partialLines = coveredLines.filter((line) => line.applied < line.due)
   const pendingBalance = roundCents(billedTotal - enteredTotal)
@@ -584,14 +433,12 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     setSyncedCuenta(cuenta)
     const suggested = amountInput(firstCuotasTotal(pendingCuotas, suggestedCount))
     setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
-    setDiscountItemIds([])
-    setDiscountConfirmation(null)
   }
 
   useEffect(() => {
     const suggested = amountInput(firstCuotasTotal(paymentCuotas, suggestedCount))
     setPaymentRows((rows) => (rows.length === 1 && !rows[0].edited ? [{ ...rows[0], monto: suggested }] : rows))
-  }, [discountItemIds, paymentCuotas, suggestedCount])
+  }, [paymentCuotas, suggestedCount])
 
   const [syncedHasExcess, setSyncedHasExcess] = useState(hasExcess)
   if (hasExcess !== syncedHasExcess) {
@@ -607,20 +454,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
 
   const removeRow = (index) => setPaymentRows((rows) => rows.filter((_, position) => position !== index))
 
-  const toggleDiscountItem = (cuota, item, selected) => {
-    if (selected) {
-      setDiscountItemIds((ids) => ids.filter((id) => id !== item.item_cuota_id))
-      return
-    }
-    setDiscountConfirmation({ cuota, item })
-  }
-
-  const confirmDiscountItem = () => {
-    if (!discountConfirmation) return
-    setDiscountItemIds((ids) => [...ids, discountConfirmation.item.item_cuota_id])
-    setDiscountConfirmation(null)
-  }
-
   const addRow = () => setPaymentRows((rows) => [...rows, emptyPaymentRow(amountInput(debtTotal - enteredTotal))])
 
   const canAddRow = !hasExcess && allRows.length < paymentMethods.length
@@ -630,7 +463,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const exceedsDebt = enteredTotal > pendingTotal
   const formErrors = {
     medios: allRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá el monto de cada pago.' : '',
-    descuentos: discountCoverageValid ? '' : 'El pago debe alcanzar cada cuota cuyo detalle se va a descontar.',
     montos: exceedsDebt
       ? `El pago no puede superar el total de cuotas pendientes, incluidas las futuras (${formatAmount(pendingTotal)}).${hasExcess ? ' Devolvé el excedente con una nota de crédito.' : ''}`
       : '',
@@ -657,19 +489,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     try {
       const response = await registrarPago({
         socio_id: socio.socio_id,
-        cuota_ids: (() => {
-          const targetIds = new Set([
-            ...coveredLines.map((line) => line.cuota.cuota_id),
-            ...selectedDiscountItems.map(({ cuota }) => cuota.cuota_id),
-          ])
-          if (!discountItemIds.length) return [...targetIds]
-          const lastTargetIndex = pendingCuotas.reduce(
-            (last, cuota, index) => (targetIds.has(cuota.cuota_id) ? index : last),
-            -1,
-          )
-          return pendingCuotas.slice(0, lastTargetIndex + 1).map((cuota) => cuota.cuota_id)
-        })(),
-        item_cuota_ids_descuento: discountItemIds,
+        cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
+        item_cuota_ids_descuento: [],
         monto_total: enteredTotal,
         medios: allRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion: observacion || reversalNote(reversal),
@@ -717,7 +538,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             id="payment-cuotas-title"
             icon="receipt_long"
             title="Cuotas a saldar"
-            disabled={!socio || (noDebt && discountItemIds.length === 0)}
+            disabled={!socio || noDebt}
             flush={pendingCuotas.length > 0}
           >
             {pendingCuotas.length ? (
@@ -729,11 +550,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                 onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
                 onToggleExpand={toggleExpand}
-                onRemoveItem={onAccountChanged ? (cuota, item) => setRemoval({ cuota, item }) : undefined}
                 onAssignBenefit={onAssignBenefit}
-                discountItemIds={discountItemIds}
-                onDiscountItem={toggleDiscountItem}
-                canDiscountQuotaIds={originalCoveredIds}
               />
             ) : (
               <p className="text-base text-on-surface-variant text-center py-6 border border-dashed border-outline-variant/40 rounded-lg">
@@ -890,18 +707,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             </TicketSection>
 
             <div className="pb-3 border-b border-dashed border-slate-300">
-              {discountTotal > 0 && (
-                <SummaryLine
-                  label="Descuentos por detalles"
-                  value={`− ${formatAmount(discountTotal)}`}
-                  valueClassName="text-emerald-700"
-                />
-              )}
-              <SummaryLine
-                label={discountTotal > 0 ? 'Total de cuotas con descuentos' : 'Total de cuotas'}
-                value={formatAmount(billedTotal)}
-                isTotal
-              />
+              <SummaryLine label="Total de cuotas" value={formatAmount(billedTotal)} isTotal />
             </div>
 
             <TicketSection title="Medios de pago">
@@ -979,17 +785,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         withReason={false}
         onConfirm={({ autorizado_por: responsable }) => submitPayment(responsable)}
         onClose={() => setConfirmingRefund(false)}
-      />
-      <RemoveCuotaItemModal
-        cuota={removal?.cuota ?? null}
-        item={removal?.item ?? null}
-        onClose={() => setRemoval(null)}
-        onRemoved={onAccountChanged}
-      />
-      <DiscountDetailConfirmation
-        selection={discountConfirmation}
-        onCancel={() => setDiscountConfirmation(null)}
-        onConfirm={confirmDiscountItem}
       />
     </form>
   )
