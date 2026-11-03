@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
+import SocioEducationChart from '../components/socios/SocioEducationChart'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 import useSocio from '../hooks/useSocio'
@@ -10,19 +11,21 @@ function Padron() {
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
 
+  const sociosActivos = useMemo(() => socios.filter((socio) => {
+    const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
+    return estado.includes('activo') && !estado.includes('inactivo')
+  }), [socios])
+
   const totales = useMemo(() => {
-    const activos = socios.filter((socio) => {
-      const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
-      return estado.includes('activo') && !estado.includes('inactivo')
-    }).length
     const formato = (valor) => valor.toLocaleString('es-AR')
     return {
       total: formato(socios.length),
-      activos: formato(activos),
-      inactivos: formato(socios.length - activos),
+      activos: formato(sociosActivos.length),
+      inactivos: formato(socios.length - sociosActivos.length),
       exJugadores: formato(socios.filter((socio) => socio.es_ex_jugador).length),
+      vacunados: formato(sociosActivos.filter((socio) => socio.esquema_vacunacion === true).length),
     }
-  }, [socios])
+  }, [socios, sociosActivos])
 
   return (
     <>
@@ -42,12 +45,15 @@ function Padron() {
           )}
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
           <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
           <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
           <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+          <StatCard label="Vacunados activos" value={isLoading ? '…' : totales.vacunados} caption={!isLoading ? `de ${sociosActivos.length.toLocaleString('es-AR')} socios activos` : undefined} icon="vaccines" tone="positive" />
         </div>
+
+        <SocioEducationChart socios={sociosActivos} isLoading={isLoading} />
 
         <section aria-label="Socios">
           <SociosTable
