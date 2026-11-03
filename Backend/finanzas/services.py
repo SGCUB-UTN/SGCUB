@@ -332,6 +332,43 @@ def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
     return True
 
 
+def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.services import crear_y_despachar_notificacion
+        from .pdf_utils import format_amount
+
+        config = ConfiguracionGeneral.load()
+        if not config.notificar_modificacion_cuota:
+            return
+
+        socio = cuota.movimiento.cuenta_corriente.socio
+        club = config.club_nombre
+        monto_str = f" El importe actualizado es de ${format_amount(nuevo_monto)}." if nuevo_monto is not None else ""
+        venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
+        venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
+
+        titulo = f"Modificación en cuota {cuota.periodo}"
+        asunto = f"Modificación en tu cuota social {cuota.periodo} - {club}"
+        contenido = (
+            f"Estimado/a {socio.persona.nombre},\n\n"
+            f"Te informamos que se ha registrado una actualización en tu cuota del período {cuota.periodo}.\n"
+            f"Motivo: {motivo}.{monto_str}\n\n"
+            f"Vencimientos vigentes:\n"
+            f"  • Primer vencimiento: {venc1}\n"
+            f"  • Segundo vencimiento: {venc2}\n\n"
+            f"Podés consultar el detalle desde tu estado de cuenta o en la secretaría del club."
+        )
+        crear_y_despachar_notificacion(
+            titulo=titulo,
+            asunto=asunto,
+            contenido=contenido,
+            socios=[socio],
+        )
+    except Exception:
+        logger.exception("Error al notificar modificación de cuota")
+
+
 def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     cuota = lock_cuota(cuota_id)
     reason = f"Actualización de la configuración vigente desde {configuration.periodo_vigencia}"
@@ -346,6 +383,7 @@ def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
     sync_cuota_charge(cuota)
     apply_cuota_surcharges(cuota.pk, configuration=configuration, user=user)
+    notificar_modificacion_cuota_evento(cuota, reason, cuota.movimiento.monto)
     return True
 
 
@@ -803,6 +841,15 @@ def register_payment(
             credit_note["responsable"],
             user,
         )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -821,6 +868,15 @@ def register_income(socio_id, concept, payment_methods, total, user=None):
         reference=receipt_code(receipt),
         detail={"pago_id": payment.pk, "medios": payment_methods_detail(payment_methods)},
     )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -1079,6 +1135,7 @@ def reschedule_cuota(cuota_id, first_due_date, second_due_date, today=None, user
         deleted, _ = cuota.items.filter(concepto=ConceptoItemChoices.MORA).delete()
         if deleted:
             sync_cuota_charge(cuota)
+        notificar_modificacion_cuota_evento(cuota, "Reprogramación de fechas de vencimiento")
     apply_cuota_surcharges(cuota.pk, today, user=user)
 
 
