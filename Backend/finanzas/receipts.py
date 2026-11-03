@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import BaseDocTemplate, Frame, Image, PageTemplate, Paragraph, Spacer, Table, TableStyle
 
 from configuracion.models import ConfiguracionGeneral
 from configuracion.services import address_text, club_name
@@ -18,9 +18,12 @@ from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
 from .pdf_utils import format_amount
 from .services import receipt_code, receipt_detail, refund_code, socio_detail
 
-WIDTH = A4[0] - 40 * mm
-GUTTER = 12
-INNER_WIDTH = WIDTH - 2 * GUTTER
+PAGE_WIDTH, PAGE_HEIGHT = A4
+PAGE_GUTTER = 12 * mm
+INNER_WIDTH = PAGE_WIDTH - 2 * PAGE_GUTTER
+CARD_GUTTER = 12
+CARD_WIDTH = INNER_WIDTH + 2 * CARD_GUTTER
+CARD_MARGIN = (PAGE_WIDTH - CARD_WIDTH) / 2
 AMOUNT_COLUMNS = [INNER_WIDTH * 0.7, INNER_WIDTH * 0.3]
 RECEIPT_BLOCK_WIDTH = 60 * mm
 DEFAULT_CLUB_NAME = "Club Universitario de Berisso"
@@ -39,19 +42,17 @@ DISCOUNT = colors.HexColor("#047857")
 FRAME = colors.HexColor("#e5e9ed")
 BORDER = colors.HexColor("#eceff2")
 DIVIDER = colors.HexColor("#f2f4f6")
-SURFACE = colors.HexColor("#f8f9ff")
 HEADER_BACKGROUND = colors.HexColor("#f9fbff")
 SECTION_BACKGROUND = colors.HexColor("#eff4ff")
 TOTAL_BACKGROUND = colors.HexColor("#f4f7ff")
-BADGE_BACKGROUND = colors.HexColor("#e6f0f4")
-BADGE_BORDER = colors.HexColor("#cce0e9")
 NOTICE_BACKGROUND = colors.HexColor("#fff4f3")
 NOTICE_BORDER = colors.HexColor("#f1d1d1")
 BULLET_HEX = "#dee3e8"
 FAINT_HEX = "#787f85"
 
-HEADER, PLAIN, SECTION, ITEM, TOTAL, NOTICE, FOOTER = "header", "plain", "section", "item", "total", "notice", "footer"
-ROW_PADDING = {HEADER: (14, 14), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FOOTER: (7, 8)}
+HEADER, PLAIN, SECTION, ITEM, TOTAL, NOTICE, FILL, FOOTER = "header", "plain", "section", "item", "total", "notice", "fill", "footer"
+ROW_PADDING = {HEADER: (14, 14), PLAIN: (12, 12), SECTION: (5, 6), ITEM: (7, 7), TOTAL: (8, 8), NOTICE: (7, 7), FILL: (0, 0), FOOTER: (7, 8)}
+PAGE_ROW_PADDING = {**ROW_PADDING, HEADER: (10 * mm, 16), FOOTER: (10, 8 * mm)}
 ROW_BACKGROUNDS = {
     HEADER: HEADER_BACKGROUND,
     SECTION: SECTION_BACKGROUND,
@@ -68,7 +69,8 @@ def text_style(name, size=9, font="Helvetica", color=ON_SURFACE, alignment=0, le
 STYLES = {
     "club": text_style("Club", 13, "Helvetica-Bold", leading=16),
     "club_detail": text_style("ClubDetalle", 7.5, color=MUTED),
-    "code": text_style("Codigo", 13, "Courier-Bold", alignment=TA_RIGHT, leading=16),
+    "title": text_style("Titulo", 13, "Helvetica-Bold", leading=16),
+    "number": text_style("Numero", 11, "Courier-Bold", alignment=TA_RIGHT, leading=14),
     "date": text_style("Fecha", 7.5, color=MUTED, alignment=TA_RIGHT),
     "disclaimer": text_style("Aclaracion", 7, "Helvetica-Oblique", FAINT, TA_RIGHT),
     "caption": text_style("Rotulo", 7.5, "Helvetica-Bold", MUTED),
@@ -141,16 +143,16 @@ def amount_row(label, amount, label_style="text", amount_style="strong_right"):
     return grid([[paragraph(label, label_style), paragraph(format_amount(amount), amount_style)]], AMOUNT_COLUMNS)
 
 
-def badge(text, color=PRIMARY, background=BADGE_BACKGROUND, border=BADGE_BORDER):
-    font, size = "Helvetica-Bold", 7
+def cancelled_badge():
+    text, font, size = "ANULADO", "Helvetica-Bold", 7
     content = Table([[text]], colWidths=[stringWidth(text, font, size) + 10])
     content.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), font),
         ("FONTSIZE", (0, 0), (-1, -1), size),
-        ("TEXTCOLOR", (0, 0), (-1, -1), color),
+        ("TEXTCOLOR", (0, 0), (-1, -1), ERROR),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("BACKGROUND", (0, 0), (-1, -1), background),
-        ("BOX", (0, 0), (-1, -1), 0.5, border),
+        ("BACKGROUND", (0, 0), (-1, -1), NOTICE_BACKGROUND),
+        ("BOX", (0, 0), (-1, -1), 0.5, NOTICE_BORDER),
         ("ROUNDEDCORNERS", [3, 3, 3, 3]),
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
         ("RIGHTPADDING", (0, 0), (-1, -1), 5),
@@ -160,9 +162,13 @@ def badge(text, color=PRIMARY, background=BADGE_BACKGROUND, border=BADGE_BORDER)
     return content
 
 
-def badges_row(badges):
-    widths = [item._colWidths[0] + (4 if index else 0) for index, item in enumerate(badges)]
-    return grid([badges], widths, [("ALIGN", (0, 0), (-1, -1), "RIGHT")])
+def title_row(title, is_cancelled):
+    cells, widths = [paragraph(title, "title")], [stringWidth(title, "Helvetica-Bold", 13) + 1]
+    if is_cancelled:
+        tag = cancelled_badge()
+        cells.append(tag)
+        widths.append(tag._colWidths[0] + 6)
+    return grid([cells], widths, [("ALIGN", (-1, 0), (-1, 0), "RIGHT")])
 
 
 def get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm):
@@ -181,25 +187,6 @@ def get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm):
     except Exception:
         pass
     return None
-
-
-def framed_logo():
-    logo = get_club_logo_flowable()
-    if logo is None:
-        return None
-    content = Table([[logo]], colWidths=[logo.drawWidth + 6], rowHeights=[logo.drawHeight + 6])
-    content.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
-        ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
-        ("ROUNDEDCORNERS", [5, 5, 5, 5]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    return content
 
 
 def labeled(label, value):
@@ -223,13 +210,11 @@ def club_block(config):
 
 
 def receipt_block(title, code, issued, is_cancelled):
-    badges = [badge(title)]
-    if is_cancelled:
-        badges.append(badge("ANULADO", ERROR, NOTICE_BACKGROUND, NOTICE_BORDER))
     return [
-        badges_row(badges),
-        Spacer(1, 4),
-        paragraph(code, "code"),
+        title_row(title, is_cancelled),
+        Spacer(1, 2),
+        paragraph(f"N° {code.split()[-1]}", "number"),
+        Spacer(1, 2),
         paragraph(f"Fecha: {issued:%d/%m/%Y}", "date"),
         Spacer(1, 2),
         paragraph("Documento no válido como factura", "disclaimer"),
@@ -238,13 +223,13 @@ def receipt_block(title, code, issued, is_cancelled):
 
 def header_block(title, code, issued, is_cancelled):
     config = ConfiguracionGeneral.load()
-    logo = framed_logo()
+    logo = get_club_logo_flowable()
     receipt = receipt_block(title, code, issued, is_cancelled)
     club = club_block(config)
     align_receipt = [("ALIGN", (-1, 0), (-1, 0), "RIGHT")]
     if logo is None:
         return grid([[club, receipt]], [INNER_WIDTH - RECEIPT_BLOCK_WIDTH, RECEIPT_BLOCK_WIDTH], align_receipt)
-    logo_width = logo._colWidths[0] + 10
+    logo_width = logo.drawWidth + 10
     return grid(
         [[logo, club, receipt]],
         [logo_width, INNER_WIDTH - logo_width - RECEIPT_BLOCK_WIDTH, RECEIPT_BLOCK_WIDTH],
@@ -322,18 +307,20 @@ def notice_rows(notes):
     return [(paragraph(note, "notice"), NOTICE) for note in notes]
 
 
-def frame(rows):
+def frame(rows, full_page):
     kinds = [kind for _, kind in rows]
-    content = Table([[cell] for cell, _ in rows], colWidths=[WIDTH])
+    content = Table([[cell] for cell, _ in rows], colWidths=[PAGE_WIDTH if full_page else CARD_WIDTH])
+    gutter = PAGE_GUTTER if full_page else CARD_GUTTER
+    padding = PAGE_ROW_PADDING if full_page else ROW_PADDING
     style = [
-        ("BOX", (0, 0), (-1, -1), 0.75, FRAME),
-        ("ROUNDEDCORNERS", [10, 10, 10, 10]),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), GUTTER),
-        ("RIGHTPADDING", (0, 0), (-1, -1), GUTTER),
+        ("LEFTPADDING", (0, 0), (-1, -1), gutter),
+        ("RIGHTPADDING", (0, 0), (-1, -1), gutter),
     ]
+    if not full_page:
+        style += [("BOX", (0, 0), (-1, -1), 0.75, FRAME), ("ROUNDEDCORNERS", [10, 10, 10, 10])]
     for index, kind in enumerate(kinds):
-        top, bottom = ROW_PADDING[kind]
+        top, bottom = padding[kind]
         style += [("TOPPADDING", (0, index), (0, index), top), ("BOTTOMPADDING", (0, index), (0, index), bottom)]
         if kind in ROW_BACKGROUNDS:
             style.append(("BACKGROUND", (0, index), (0, index), ROW_BACKGROUNDS[kind]))
@@ -344,7 +331,15 @@ def frame(rows):
     return content
 
 
-def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False):
+def page_frame(rows):
+    content = frame(rows, full_page=True)
+    _, height = content.wrap(PAGE_WIDTH, PAGE_HEIGHT)
+    if height >= PAGE_HEIGHT - 1:
+        return content
+    return frame([*rows[:-1], (Spacer(1, PAGE_HEIGHT - height - 1), FILL), rows[-1]], full_page=True)
+
+
+def render_document(title, code, issued, socio, notes, body, footer, is_cancelled=False, full_page=True):
     rows = [
         (header_block(title, code, issued, is_cancelled), HEADER),
         *notice_rows(notes),
@@ -353,19 +348,18 @@ def render_document(title, code, issued, socio, notes, body, footer, is_cancelle
         (paragraph(footer, "footer"), FOOTER),
     ]
     document_title = f"{title} - N° {code.split()[-1]}" + (" (ANULADO)" if is_cancelled else "")
-
+    margin = 0 if full_page else CARD_MARGIN
     buffer = BytesIO()
-    SimpleDocTemplate(
+    document = BaseDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=20 * mm,
-        rightMargin=20 * mm,
-        topMargin=18 * mm,
-        bottomMargin=18 * mm,
         title=document_title,
         author=club_name(),
         pageCompression=0,
-    ).build([frame(rows)])
+    )
+    page = Frame(margin, margin, PAGE_WIDTH - 2 * margin, PAGE_HEIGHT - 2 * margin, 0, 0, 0, 0)
+    document.addPageTemplates([PageTemplate(frames=[page])])
+    document.build([page_frame(rows) if full_page else frame(rows, full_page=False)])
     return buffer.getvalue()
 
 
@@ -378,7 +372,7 @@ def receipt_notes(receipt):
     return notes
 
 
-def render_receipt_pdf(receipt):
+def render_receipt_pdf(receipt, full_page=True):
     detail = receipt_detail(receipt)
     if detail["es_ingreso"]:
         body = section("Concepto", concept_rows(detail["concepto"], detail["monto_total"]))
@@ -397,10 +391,11 @@ def render_receipt_pdf(receipt):
         body,
         RECEIPT_FOOTER,
         is_cancelled=receipt.estado == EstadoComprobanteChoices.ANULADO,
+        full_page=full_page,
     )
 
 
-def render_refund_pdf(refund):
+def render_refund_pdf(refund, full_page=True):
     body = section("Concepto", concept_rows(refund.concepto, refund.monto))
     cancelled = refund.comprobante_anulado
     if cancelled is not None:
@@ -416,6 +411,7 @@ def render_refund_pdf(refund):
         [],
         body,
         REFUND_FOOTER,
+        full_page=full_page,
     )
 
 
@@ -454,8 +450,8 @@ def pdf_to_png(pdf_bytes, scale=2.5, trim=True, padding=40):
 
 
 def render_receipt_image(receipt, scale=2.5):
-    return pdf_to_png(render_receipt_pdf(receipt), scale=scale)
+    return pdf_to_png(render_receipt_pdf(receipt, full_page=False), scale=scale)
 
 
 def render_refund_image(refund, scale=2.5):
-    return pdf_to_png(render_refund_pdf(refund), scale=scale)
+    return pdf_to_png(render_refund_pdf(refund, full_page=False), scale=scale)
