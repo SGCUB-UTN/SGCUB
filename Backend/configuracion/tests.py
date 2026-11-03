@@ -25,6 +25,7 @@ class ConfiguracionGeneralTests(APITestCase):
         self.usuario = get_user_model().objects.create_user(username="admin", first_name="Laura", last_name="Gómez")
         self.client.force_authenticate(user=self.usuario)
         self.localidad = Localidad.objects.create(nombre="Berisso Test")
+        ConfiguracionGeneral.objects.all().delete()
 
     def guardar(self, responsable="Marta Ruiz", **datos):
         return self.client.post(reverse("configuracion-guardar"), {"responsable": responsable, **datos}, format="json")
