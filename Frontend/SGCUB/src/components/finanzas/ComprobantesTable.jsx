@@ -261,10 +261,17 @@ function ComprobantesTable({
     if (item.raw?.comprobante_id) {
       descargarComprobantePdf(item.raw.comprobante_id).catch(() => {})
     }
+    let tipo = 'comprobante'
+    if (item.isAnulado) {
+      tipo = 'anulado'
+    } else if (item.kind === 'devolucion') {
+      tipo = item.filterCode === 'NotaCredito' ? 'nota_credito' : 'devolucion'
+    }
     const message = buildWhatsAppMessage({
       socio,
       comprobanteCodigo: item.refCode,
       montoTotal: item.amount,
+      tipo,
     })
     openWhatsAppChat({ phone, message })
   }
