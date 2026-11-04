@@ -44,7 +44,7 @@ function ActionButton({ icon, label, className, onClick }) {
   )
 }
 
-export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, onDelete, isHistory = false }) {
+export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, onDelete, onGenerate, canGenerate, isHistory = false }) {
   const [search, setSearch] = useState('')
   const [docType, setDocType] = useState(ALL)
 
@@ -119,6 +119,9 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
             </td>
             <td className="py-3 px-4 pr-6">
               <div className="flex items-center justify-end gap-1">
+                {!isHistory && canGenerate?.(doc) && (
+                  <ActionButton icon="article" label={`Generar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onGenerate(doc)} />
+                )}
                 {doc.archivoUrl && (
                   <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />
                 )}

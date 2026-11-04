@@ -83,6 +83,11 @@ export function buildWhatsAppMessage({ comprobanteCodigo, montoTotal, clubNombre
   return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de tu pago${codigo}${monto}. ¡Muchas gracias!`
 }
 
+export function buildDocumentWhatsAppMessage({ clubNombre, documento }) {
+  const nombreClub = clubNombre || 'Club Universitario de Berisso'
+  return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el documento "${documento}" para que firmes el talón y lo entregues en el club. ¡Muchas gracias!`
+}
+
 /**
  * Abre una conversación de WhatsApp Web / App con el número y mensaje precargado.
  */

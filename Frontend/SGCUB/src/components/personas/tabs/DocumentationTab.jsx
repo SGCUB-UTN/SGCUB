@@ -4,6 +4,8 @@ import useDocumentacion from '../../../hooks/useDocumentacion'
 import useDocumentUploadForm from '../../../hooks/useDocumentUploadForm'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
+import DocumentTemplateModal from '../../documental/DocumentTemplateModal'
+import GenerateDocumentMenu from '../../documental/GenerateDocumentMenu'
 import PersonaDocumentsTable from '../../documental/PersonaDocumentsTable'
 import MissingDocumentsTable from '../../documental/MissingDocumentsTable'
 import { appliesToProfile, findMissingDocumentTypes } from '../../documental/missingDocuments'
@@ -34,6 +36,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [docToDelete, setDocToDelete] = useState(null)
   const [activeSection, setActiveSection] = useState(ACTIVE)
+  const [templateTipo, setTemplateTipo] = useState(null)
 
   // Enabled types that apply to this profile; when editing, the document's own type is always offered
   const tiposFiltrados = tipos.filter(t => (
@@ -41,6 +44,10 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     || (t.activo && appliesToProfile(t, personaType))
   ))
   const missingTipos = findMissingDocumentTypes(tipos, documentosActivos, personaType)
+  const findTipo = (tipoId) => tipos.find((tipo) => String(tipo.id_tipo_documento) === String(tipoId))
+  const isGenerable = (tipo) => Boolean(tipo?.tiene_plantilla && tipo.activo && appliesToProfile(tipo, personaType))
+  const generableTipos = tipos.filter(isGenerable)
+  const canGenerate = (doc) => isGenerable(findTipo(doc.tipo_documento))
 
   const handleDeleteClick = (doc) => {
     setDocToDelete(doc)
@@ -48,6 +55,11 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
   }
 
   const handleNewClick = (tipo = null) => upload.openNew(personaId, tipo ? tipo.id_tipo_documento : '')
+
+  const handleUploadSigned = (tipo) => {
+    setTemplateTipo(null)
+    handleNewClick(tipo)
+  }
 
   const confirmDelete = async () => {
     if (!docToDelete) return
@@ -102,7 +114,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
       </KpiGrid>
 
       {missingTipos.length > 0 && (
-        <MissingDocumentsTable tipos={missingTipos} onUpload={handleNewClick} className="mt-6" />
+        <MissingDocumentsTable tipos={missingTipos} onUpload={handleNewClick} onGenerate={setTemplateTipo} className="mt-6" />
       )}
 
       <SegmentedTabs
@@ -126,10 +138,13 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
                   getTypeName={getNombreTipo}
                   onEdit={upload.openEdit}
                   onDelete={handleDeleteClick}
+                  canGenerate={canGenerate}
+                  onGenerate={(doc) => setTemplateTipo(findTipo(doc.tipo_documento))}
                 />
               )}
               <TableFooter>
                 <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0}>Descargar ZIP</SecondaryButton>
+                <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
                 <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
               </TableFooter>
             </>
@@ -163,6 +178,13 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
         tipos={tiposFiltrados} 
         isEditing={upload.isEditing}
         error={upload.error}
+      />
+
+      <DocumentTemplateModal
+        tipo={templateTipo}
+        personaId={personaId}
+        onClose={() => setTemplateTipo(null)}
+        onUpload={handleUploadSigned}
       />
 
       <DocumentacionDeleteModal 

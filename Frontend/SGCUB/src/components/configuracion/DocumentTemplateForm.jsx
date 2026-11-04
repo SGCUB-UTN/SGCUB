@@ -27,12 +27,13 @@ function CheckboxField({ id, label, description, checked, onChange }) {
   )
 }
 
-export default function DocumentTemplateForm({ tipo, logoUrl, clubName, onClose }) {
+export default function DocumentTemplateForm({ tipo, logoUrl, clubName, onClose, onRemove }) {
   const [saved, setSaved] = useState(null)
   const [form, setForm] = useState(null)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -54,6 +55,17 @@ export default function DocumentTemplateForm({ tipo, logoUrl, clubName, onClose 
   const setField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: undefined, general: undefined }))
+  }
+
+  const remove = async () => {
+    setSaving(true)
+    try {
+      await onRemove()
+    } catch (requestError) {
+      setErrors({ general: getErrorMessage(requestError, 'No se pudo quitar la plantilla.') })
+      setConfirmingRemoval(false)
+      setSaving(false)
+    }
   }
 
   const submit = async (event) => {
@@ -136,10 +148,33 @@ export default function DocumentTemplateForm({ tipo, logoUrl, clubName, onClose 
       </div>
 
       {errors.general && <Notice tone="error">{errors.general}</Notice>}
-      <div className="flex justify-end gap-2">
-        <button type="button" className={BUTTON_CLASSES.secondary} onClick={onClose} disabled={saving}>Cancelar</button>
-        <button type="submit" className={BUTTON_CLASSES.primary} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
-      </div>
+      {confirmingRemoval ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-red-900">
+            ¿Quitar la plantilla de <span className="font-semibold">{tipo.nombre}</span>? Ya no se va a poder generar el documento. Los documentos cargados no se modifican.
+          </p>
+          <div className="flex shrink-0 justify-end gap-2">
+            <button type="button" className={BUTTON_CLASSES.secondary} onClick={() => setConfirmingRemoval(false)} disabled={saving}>Cancelar</button>
+            <button type="button" className={BUTTON_CLASSES.danger} onClick={remove} disabled={saving}>{saving ? 'Quitando...' : 'Quitar plantilla'}</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-2 text-sm font-semibold text-error hover:bg-error-container/60 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => setConfirmingRemoval(true)}
+            disabled={saving}
+          >
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span>
+            Quitar plantilla
+          </button>
+          <div className="flex justify-end gap-2">
+            <button type="button" className={BUTTON_CLASSES.secondary} onClick={onClose} disabled={saving}>Cancelar</button>
+            <button type="submit" className={BUTTON_CLASSES.primary} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        </div>
+      )}
     </form>
   )
 }
