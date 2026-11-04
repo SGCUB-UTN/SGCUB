@@ -17,6 +17,7 @@ export const NOTIFICATION_FIELDS = [
   'notificar_cuota_vencida',
   'notificar_modificacion_cuota',
   'notificar_comprobante_pago',
+  'notificar_cumpleanos',
 ]
 
 export const GENERAL_FIELD_LABELS = {
@@ -31,6 +32,8 @@ export const GENERAL_FIELD_LABELS = {
   notificar_cuota_vencida: 'Notificación al cumplirse un vencimiento',
   notificar_modificacion_cuota: 'Notificación de modificaciones en la cuota',
   notificar_comprobante_pago: 'Envío de comprobantes de pago',
+  notificar_cumpleanos: 'Saludos de cumpleaños',
+  mensaje_cumpleanos: 'Mensaje de felicitación de cumpleaños',
   dias_recordatorio_vencimiento: 'Días de anticipación del recordatorio',
   email_nombre_remitente: 'Nombre del remitente',
   email_firma: 'Firma de los mails',

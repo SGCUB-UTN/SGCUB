@@ -1,4 +1,5 @@
 import PageHeader from '../shared/PageHeader'
+import { useEffect, useRef, useState } from 'react'
 
 const getInitials = (name, surname) =>
   `${name?.trim()?.[0] ?? ''}${surname?.trim()?.[0] ?? ''}`.toUpperCase() || '?'
@@ -12,9 +13,112 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
+function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPhoto }) {
+  const [imageError, setImageError] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
+
+  // Resetea el fallback si cambia la URL (p. ej. al subir una nueva foto)
+  useEffect(() => {
+    setImageError(false)
+  }, [photoUrl])
+
+  const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
+  const showPhoto = Boolean(photoUrl) && !imageError
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      alert('Formato no soportado. Usá JPG, PNG o WEBP.')
+      event.target.value = ''
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('La imagen no puede superar los 5 MB.')
+      event.target.value = ''
+      return
+    }
+
+    try {
+      setUploading(true)
+      await onUploadPhoto(file)
+    } catch (err) {
+      console.error('Error al subir foto:', err)
+      alert(err.response?.data?.foto?.[0] || err.message || 'No se pudo subir la foto de perfil.')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="relative shrink-0">
+      {onUploadPhoto && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      )}
+      <div
+        onClick={onUploadPhoto && !uploading ? () => fileInputRef.current?.click() : undefined}
+        title={onUploadPhoto ? (showPhoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil') : undefined}
+        className={`relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight ${onUploadPhoto ? 'cursor-pointer group' : ''}`}
+      >
+        {showPhoto ? (
+          <img
+            src={photoUrl}
+            alt={fullName}
+            className="w-full h-full object-cover"
+            onError={() => setImageError(true)}
+            draggable={false}
+          />
+        ) : (
+          getInitials(name, surname)
+        )}
+
+        {onUploadPhoto && (
+          <div className={`absolute inset-0 transition-opacity flex flex-col items-center justify-center text-white gap-0.5 ${uploading ? 'opacity-100 bg-black/60' : 'opacity-0 group-hover:opacity-100 bg-black/50'}`}>
+            <span className={`material-symbols-outlined text-[20px] ${uploading ? 'animate-spin' : ''}`}>
+              {uploading ? 'progress_activity' : 'photo_camera'}
+            </span>
+            <span className="text-[10px] uppercase font-semibold tracking-wider">
+              {uploading ? 'Subiendo' : (showPhoto ? 'Cambiar' : 'Subir')}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {isActive && (
+        <span
+          className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
+          title="Activo"
+          aria-label="Activo"
+        />
+      )}
+
+      {showPhoto && onDownloadPhoto && (
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onDownloadPhoto() }}
+          title="Descargar foto"
+          aria-label="Descargar foto"
+          className="absolute -bottom-1 -left-1 w-7 h-7 rounded-full bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[16px]">download</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export const ACTION_GRID_CLASS ='grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, onUploadPhoto, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
   const statusList = statuses ?? (status ? [status] : [])
 
@@ -26,18 +130,14 @@ export default function PersonHeader({ breadcrumb = [], name, surname, isActive 
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-            <div className="relative shrink-0">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight">
-                {getInitials(name, surname)}
-              </div>
-              {isActive && (
-                <span
-                  className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
-                  title="Activo"
-                  aria-label="Activo"
-                />
-              )}
-            </div>
+            <Avatar
+              name={name}
+              surname={surname}
+              photoUrl={photoUrl}
+              isActive={isActive}
+              onDownloadPhoto={onDownloadPhoto}
+              onUploadPhoto={onUploadPhoto}
+            />
 
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">

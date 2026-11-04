@@ -3,10 +3,9 @@ import { descargarComprobantePdf, getComprobantesByCuota } from '../../api/compr
 import { formatAmount, formatDate } from '../personas/format'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import ComprobanteDetailModal from './ComprobanteDetailModal'
-import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
-import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { isAdjustment, itemLabel, itemTone } from './cuotaItems'
 import { ListSkeleton } from '../shared/Skeleton'
 
 const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm'
@@ -113,7 +112,7 @@ function DueDatesBar({ cuota }) {
   )
 }
 
-function ConceptsCard({ cuota, onRemove, className }) {
+function ConceptsCard({ cuota, className }) {
   const items = cuota.items ?? []
   const charges = items.filter((item) => !isAdjustment(item))
   const adjustments = items.filter(isAdjustment)
@@ -133,7 +132,6 @@ function ConceptsCard({ cuota, onRemove, className }) {
             <ConceptLine label="Subtotal" value={formatAmount(sumItems(charges))} className="font-semibold text-on-surface" />
             {adjustments.map((item) => {
               const tone = itemTone(item)
-              const blocker = onRemove ? removalBlocker(cuota, item) : null
               return (
                 <ConceptLine
                   key={item.item_cuota_id}
@@ -141,9 +139,6 @@ function ConceptsCard({ cuota, onRemove, className }) {
                   detail={item.es_descuento ? item.motivo : ''}
                   value={`${tone.sign}${formatAmount(Number(item.monto ?? 0))}`}
                   className={tone.className}
-                  action={blocker === null ? null : (
-                    <RemoveItemButton label={`Remover ${itemLabel(item)}`} blocker={blocker} onClick={() => onRemove(item)} />
-                  )}
                 />
               )
             })}
@@ -242,14 +237,13 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
 function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
-  const [removing, setRemoving] = useState(null)
 
   return (
     <tr className="bg-surface-container-low/60">
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
         <div className={layout.grid}>
           <div className={layout.main}>
-            <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemoving : undefined} className={layout.concepts} />
+            <ConceptsCard cuota={cuota} className={layout.concepts} />
           </div>
           <div className={layout.side}>
             <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)} className={layout.receipts} />
@@ -263,7 +257,6 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
         />
-        <RemoveCuotaItemModal cuota={removing ? cuota : null} item={removing} onClose={() => setRemoving(null)} onRemoved={onChanged} />
       </td>
     </tr>
   )

@@ -93,21 +93,21 @@ function ScheduledVersions({ versions, onRevert, onReverted }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-start gap-2 text-sm text-sky-900" role="status">
-        <span className="material-symbols-outlined shrink-0 text-[18px] text-sky-700" aria-hidden="true">event_upcoming</span>
+      <div className="flex items-start gap-2 text-sm text-on-surface" role="status">
+        <span className="material-symbols-outlined shrink-0 text-[18px] text-primary" aria-hidden="true">event_upcoming</span>
         <div className="flex-1">
-          <p className="font-semibold">Cambios programados</p>
-          <ul className="mt-1.5 flex flex-col gap-2">
+          <p className="font-semibold text-primary">Cambios programados</p>
+          <ul className="mt-2 flex flex-col divide-y divide-outline-variant/30">
             {versions.map((version) => (
-              <li key={version.configuracion_financiera_id} className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  <span className="font-semibold">{formatVigencia(version.periodo_vigencia)}</span>
-                  {' '}(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):
-                  {' '}{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}
+              <li key={version.configuracion_financiera_id} className="flex items-start sm:items-center justify-between gap-4 py-2 first:pt-0 last:pb-0">
+                <span className="min-w-0 flex-1 text-xs leading-relaxed">
+                  <span className="font-semibold text-sm text-on-surface">{formatVigencia(version.periodo_vigencia)}</span>
+                  {' '}<span className="text-on-surface-variant">(cargado por {version.responsable || version.usuario_nombre || 'el sistema'} el {formatDate(version.fecha_creacion)}):</span>
+                  {' '}<span className="font-medium text-on-surface">{version.cambios.map((cambio) => `${CUOTA_FIELD_LABELS[cambio.campo]} ${formatCuotaValue(cambio.campo, cambio.nuevo, version)}`).join(' · ')}</span>
                 </span>
                 <button
                   type="button"
-                  className={SMALL_BUTTON_CLASSES.secondary}
+                  className={`${SMALL_BUTTON_CLASSES.secondary} shrink-0 self-start sm:self-center`}
                   disabled={reverting}
                   onClick={() => {
                     setError('')
