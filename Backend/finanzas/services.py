@@ -423,11 +423,46 @@ def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
     return True
 
 
+def build_cuota_items_detail(cuota, total_label="Total"):
+    """
+    Construye el bloque de texto con el desglose de conceptos vigentes de la cuota:
+    - Cuota social
+    - Cuota deportiva / disciplinas
+    - Becas y descuentos (con signo negativo)
+    - Recargos por mora
+    - Total de la cuota
+    """
+    from .pdf_utils import format_amount
+
+    items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
+    lineas_detalle = []
+    total = Decimal("0.00")
+    for it in items:
+        if it.concepto == ConceptoItemChoices.OTRO and it.motivo:
+            nombre = it.motivo
+        elif it.motivo and it.concepto in (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO):
+            nombre = f"{it.get_concepto_display()} ({it.motivo})"
+        else:
+            nombre = it.get_concepto_display()
+
+        monto_fmt = format_amount(it.monto)
+        if it.es_descuento:
+            lineas_detalle.append(f"  • {nombre}: -{monto_fmt}")
+            total -= it.monto
+        else:
+            lineas_detalle.append(f"  • {nombre}: {monto_fmt}")
+            total += it.monto
+
+    monto_final = cuota.movimiento.monto if (getattr(cuota, "movimiento", None) and cuota.movimiento.monto is not None) else total
+    if lineas_detalle:
+        return f"Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • {total_label}: {format_amount(monto_final)}"
+    return f"Importe {total_label.lower()}: {format_amount(monto_final)}"
+
+
 def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
     try:
         from configuracion.models import ConfiguracionGeneral
         from comunicaciones.services import crear_y_despachar_notificacion
-        from .pdf_utils import format_amount
 
         config = ConfiguracionGeneral.load()
         if not config.notificar_modificacion_cuota:
@@ -440,22 +475,7 @@ def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
         socio = cuota.movimiento.cuenta_corriente.socio
         club = config.club_nombre
 
-        total = nuevo_monto if nuevo_monto is not None else (cuota.movimiento.monto if cuota.movimiento else net_amount(ItemCuota.objects.filter(cuota=cuota)))
-
-        items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
-        lineas_detalle = []
-        for it in items:
-            nombre_concepto = it.get_concepto_display()
-            monto_fmt = format_amount(it.monto)
-            if it.es_descuento:
-                lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
-            else:
-                lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
-
-        if lineas_detalle:
-            bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total actualizado: {format_amount(total)}"
-        else:
-            bloque_detalle = f"Importe total actualizado: {format_amount(total)}"
+        bloque_detalle = build_cuota_items_detail(cuota, total_label="Total actualizado")
 
         venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
         venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"

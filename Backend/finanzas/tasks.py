@@ -17,7 +17,15 @@ from .models import (
     TipoTareaCuotaChoices,
 )
 from .pdf_utils import format_amount
-from .services import apply_surcharges, due_date, generar_cuotas_mensuales, parse_period, pending_amounts, user_name
+from .services import (
+    apply_surcharges,
+    build_cuota_items_detail,
+    due_date,
+    generar_cuotas_mensuales,
+    parse_period,
+    pending_amounts,
+    user_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -211,22 +219,7 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                 if socio.pk in notificados:
                     continue
 
-                monto = cuota.movimiento.monto if cuota.movimiento else Decimal("0.00")
-                items = list(cuota.items.all().order_by("item_cuota_id"))
-                lineas_detalle = []
-                for it in items:
-                    nombre_concepto = it.get_concepto_display()
-                    monto_fmt = format_amount(it.monto)
-                    if it.es_descuento:
-                        lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
-                    else:
-                        lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
-
-                if lineas_detalle:
-                    bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total: {format_amount(monto)}"
-                else:
-                    bloque_detalle = f"Importe total: {format_amount(monto)}"
-
+                bloque_detalle = build_cuota_items_detail(cuota)
                 venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
                 venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
                 asunto = f"Emisión de cuota social período {current_period} - {club}"
@@ -238,7 +231,8 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                     f"  • Primer vencimiento: {venc1}\n"
                     f"  • Segundo vencimiento: {venc2}\n\n"
                     f"Podés abonarla mediante los canales habilitados del club.\n"
-                    f"¡Muchas gracias!"
+                    f"¡Muchas gracias!\n"
+                    f"{club}"
                 )
                 crear_y_despachar_notificacion(
                     titulo=titulo,
@@ -390,12 +384,15 @@ def run_surcharges(today, numbers, origin=OrigenEjecucionChoices.AUTOMATICA, use
                     ordinal = DUE_ORDINALS.get(num, f"{num}°")
                     titulo = f"Aviso de cuota vencida: período {cuota.periodo}"
                     asunto = f"Aviso de vencimiento y recargo - Cuota {cuota.periodo} - {club}"
+                    bloque_detalle = build_cuota_items_detail(cuota)
                     contenido = (
                         f"Estimado/a {socio.persona.nombre},\n\n"
                         f"Te informamos que ha operado el {ordinal} vencimiento de tu cuota del período {cuota.periodo}.\n"
                         f"Se ha aplicado un recargo por mora de {format_amount(item.monto)}.\n\n"
+                        f"{bloque_detalle}\n\n"
                         f"Te solicitamos regularizar tu estado de cuenta a la brevedad.\n"
-                        f"¡Muchas gracias!"
+                        f"¡Muchas gracias!\n"
+                        f"{club}"
                     )
                     crear_y_despachar_notificacion(
                         titulo=titulo,
@@ -561,12 +558,15 @@ def send_scheduled_due_reminders(today=None):
         ).exists()
         if ya_notificado:
             continue
+        bloque_detalle = build_cuota_items_detail(cuota)
         contenido = (
             f"Estimado/a {socio.persona.nombre},\n\n"
             f"Te recordamos que tu cuota social del período {cuota.periodo} vence {tiempo_str}.\n"
             f"El saldo pendiente de pago es de {format_amount(saldo)}.\n\n"
+            f"{bloque_detalle}\n\n"
             f"Te recomendamos regularizarla para evitar la aplicación de recargos por mora.\n"
-            f"¡Muchas gracias!"
+            f"¡Muchas gracias!\n"
+            f"{club}"
         )
 
         crear_y_despachar_notificacion(

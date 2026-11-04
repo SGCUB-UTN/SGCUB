@@ -5027,6 +5027,8 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_notificar_cuota_vencida_recargo_despacha_notificacion(self):
 		from datetime import timedelta
@@ -5057,6 +5059,46 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Recargo por mora:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
+
+	def test_notificar_cuota_con_beca_desglosa_conceptos_y_descuento(self):
+		from datetime import timedelta
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion
+		from finanzas.models import ItemCuota, ConceptoItemChoices
+		from finanzas.tasks import run_cuota_generation
+
+		hoy = timezone.localdate()
+		periodo_actual = hoy.strftime("%Y-%m")
+
+		cuota_actual = crear_cuota_con_cargo(
+			self.cuenta,
+			periodo_actual,
+			"1000.00",
+			venc1=hoy + timedelta(days=10),
+			venc2=hoy + timedelta(days=20),
+		)
+		ItemCuota.objects.create(
+			cuota=cuota_actual,
+			concepto=ConceptoItemChoices.BECA,
+			es_descuento=True,
+			fecha_aplicacion=hoy,
+			monto=Decimal("500.00"),
+			motivo="Beca Deportiva",
+		)
+		cuota_actual.movimiento.monto = Decimal("500.00")
+		cuota_actual.movimiento.save()
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			run_cuota_generation(today=hoy)
+			envio = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains=periodo_actual).first()
+			self.assertIsNotNone(envio)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Beca (Beca Deportiva): -$ 500,00", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_modificacion_configuracion_solo_notifica_primer_periodo_afectado(self):
 		from unittest.mock import patch
