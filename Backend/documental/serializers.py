@@ -1,8 +1,17 @@
 from rest_framework import serializers
-from .models import TipoDocumento, EstadoDocumento, Documento, _local_date
+from .models import TipoDocumento, EstadoDocumento, Documento, PlantillaDocumento, _local_date
+
+
+def has_template(tipo):
+    try:
+        return tipo.plantilla is not None
+    except PlantillaDocumento.DoesNotExist:
+        return False
+
 
 class TipoDocumentoSerializer(serializers.ModelSerializer):
     en_uso = serializers.SerializerMethodField()
+    tiene_plantilla = serializers.SerializerMethodField()
 
     class Meta:
         model = TipoDocumento
@@ -11,6 +20,9 @@ class TipoDocumentoSerializer(serializers.ModelSerializer):
 
     def get_en_uso(self, obj) -> bool:
         return obj.documentos.exists()
+
+    def get_tiene_plantilla(self, obj) -> bool:
+        return has_template(obj)
 
     def validate_nombre(self, value):
         value = value.strip()

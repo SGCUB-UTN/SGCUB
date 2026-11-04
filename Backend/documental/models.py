@@ -23,6 +23,21 @@ class TipoDocumento(models.Model):
         return self.nombre
 
 
+class PlantillaDocumento(models.Model):
+    id_plantilla_documento = models.AutoField(primary_key=True)
+    tipo_documento = models.OneToOneField(TipoDocumento, on_delete=models.CASCADE, related_name='plantilla')
+    titulo = models.CharField(max_length=120)
+    cuerpo = models.TextField(blank=True)
+    talon_leyenda = models.TextField(max_length=500)
+    firma_jugador_menor = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "plantilla_documento"
+
+    def __str__(self):
+        return self.titulo
+
+
 class EstadoDocumento(models.Model):
     id_estado_documento = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=20)

@@ -92,6 +92,35 @@ class TipoDocumentoTests(APITestCase):
         self.assertEqual(response.status_code, 204)
         self.assertFalse(TipoDocumento.objects.filter(pk=tipo_id).exists())
 
+    def test_pautas_de_convivencia_tiene_plantilla_y_se_pide_a_jugadores(self):
+        tipo = TipoDocumento.objects.get(nombre="Pautas de Convivencia")
+
+        self.assertEqual((tipo.aplica_jugador, tipo.aplica_socio, tipo.aplica_docente), (True, False, False))
+        self.assertEqual(tipo.plantilla.titulo, "Pautas de Convivencia")
+        self.assertTrue(tipo.plantilla.talon_leyenda)
+        self.assertFalse(TipoDocumento.objects.filter(nombre="Pauta de Convivencia").exists())
+
+        response = self.client.get(reverse("tipo_documento_list"))
+        flags = {item["nombre"]: item["tiene_plantilla"] for item in response.data}
+        self.assertTrue(flags["Pautas de Convivencia"])
+        self.assertFalse(flags["DNI"])
+
+    def test_no_elimina_un_tipo_con_plantilla(self):
+        tipo = TipoDocumento.objects.get(nombre="Pautas de Convivencia")
+
+        response = self.client.delete(reverse("tipo_documento_detail", args=[tipo.pk]))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(TipoDocumento.objects.filter(pk=tipo.pk).exists())
+
+    def test_un_tipo_con_plantilla_se_puede_pedir_a_docentes(self):
+        tipo = TipoDocumento.objects.get(nombre="Pautas de Convivencia")
+
+        response = self.client.patch(reverse("tipo_documento_detail", args=[tipo.pk]), {"aplica_docente": True}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["aplica_docente"])
+
     def test_un_tipo_deshabilitado_no_admite_documentos_nuevos(self):
         tipo = TipoDocumento.objects.get(nombre="DNI")
         tipo.activo = False

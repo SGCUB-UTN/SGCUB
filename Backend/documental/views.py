@@ -10,7 +10,7 @@ from configuracion.models import ConfiguracionGeneral
 from configuracion.services import Seccion, record_catalog_update, record_change
 
 from .models import Documento, TipoDocumento, EstadoDocumento
-from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
+from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer, has_template
 from .padron_pdf import padron_filename, render_padron_pdf
 from .services import PadronFilterError, build_padron_documental, padron_summary, parse_padron_filters
 
@@ -78,7 +78,7 @@ def request_user(request):
 @api_view(["GET", "POST"])
 def tipo_documento_list(request):
     if request.method == "GET":
-        tipos = TipoDocumento.objects.order_by('nombre')
+        tipos = TipoDocumento.objects.select_related('plantilla').order_by('nombre')
         if request.query_params.get('activos') in ('1', 'true'):
             tipos = tipos.filter(activo=True)
         return Response(TipoDocumentoSerializer(tipos, many=True).data)
@@ -96,6 +96,11 @@ def tipo_documento_list(request):
 def tipo_documento_detail(request, pk):
     tipo = get_object_or_404(TipoDocumento, pk=pk)
     if request.method == "DELETE":
+        if has_template(tipo):
+            return Response(
+                {"detail": "El tipo tiene una plantilla para generar el documento: deshabilitalo en lugar de eliminarlo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if tipo.documentos.exists():
             return Response(
                 {"detail": "El tipo ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo."},
