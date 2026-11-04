@@ -5,9 +5,9 @@ import SectionHeading from '../shared/SectionHeading'
 import { HeadingSkeleton, SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 
 const INDICATORS = [
-  { key: 'socios', label: 'Socios', caption: 'Activos, sin ficha de jugador' },
-  { key: 'jugadores', label: 'Jugadores', caption: 'Activos' },
-  { key: 'baja_parcial', label: 'Jugadores de baja parcial', caption: 'Siguen como socios activos' },
+  { key: 'socios', label: 'Socios' },
+  { key: 'jugadores', label: 'Jugadores', },
+  { key: 'baja_parcial', label: 'Jugadores de baja parcial', },
 ]
 
 function MemberCountsSkeleton() {

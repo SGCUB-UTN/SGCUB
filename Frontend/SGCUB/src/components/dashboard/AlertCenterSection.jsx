@@ -140,7 +140,7 @@ function AlertRow({ row, canOpen }) {
 
 function AlertCenterSkeleton() {
   return (
-    <SkeletonStatus label="Cargando alertas..." className={`${PANEL_CLASS} lg:col-span-7`}>
+    <SkeletonStatus label="Cargando alertas..." className={PANEL_CLASS}>
       <HeadingSkeleton withAction />
       <div className="flex flex-col divide-y divide-outline-variant/20">
         {Array.from({ length: 4 }, (_, index) => (
@@ -167,7 +167,7 @@ export default function AlertCenterSection({ isLoading, alerts }) {
   const summary = pending === 0 ? 'Todo en orden' : pending === 1 ? '1 por resolver' : `${pending} por resolver`
 
   return (
-    <section className={`${PANEL_CLASS} lg:col-span-7`} aria-labelledby="alert-center-title">
+    <section className={PANEL_CLASS} aria-labelledby="alert-center-title">
       <SectionHeading
         id="alert-center-title"
         icon="notifications_active"

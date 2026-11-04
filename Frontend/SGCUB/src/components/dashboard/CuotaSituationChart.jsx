@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { formatCount, formatPercentage } from '../cuota/cuotaPeriod'
 import { shareOf } from '../finanzas/cashFormat'
-import { formatDate } from '../personas/format'
 import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
 
@@ -28,17 +27,6 @@ const SEGMENTS_BY_STAGE = [
   ],
 ]
 
-function stageNotice(situation) {
-  if (situation.generated === 0) return 'Todavía no se generaron las cuotas del período.'
-  if (situation.due_dates_passed === 0) {
-    return `1° vencimiento el ${formatDate(situation.first_due)}: las impagas todavía no tienen recargo.`
-  }
-  if (situation.due_dates_passed === 1) {
-    return `Pasó el 1° vencimiento (${formatDate(situation.first_due)}): corre el 1° recargo hasta el 2° vencimiento, el ${formatDate(situation.second_due)}.`
-  }
-  return `Pasó el 2° vencimiento (${formatDate(situation.second_due)}): a las impagas les corre el 2° recargo.`
-}
-
 export default function CuotaSituationChart({ situation, label }) {
   const [activeKey, setActiveKey] = useState(null)
   const stage = SEGMENTS_BY_STAGE[Math.min(situation.due_dates_passed, 2)]
@@ -53,11 +41,14 @@ export default function CuotaSituationChart({ situation, label }) {
   }))
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col sm:flex-row items-center gap-5">
+    <div className="min-w-0 h-full flex flex-col">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Estado de las cuotas</h3>
+      <div className="mt-2 flex items-center gap-4">
         <DonutChart
           segments={segments}
           total={situation.generated}
+          size={120}
+          stroke={16}
           centerValue={formatPercentage(shareOf(paid, situation.generated))}
           caption="pagas"
           label={`${label}: ${stage.map((segment) => `${formatCount(situation[segment.key])} ${segment.label.toLowerCase()}`).join(', ')}`}
@@ -65,7 +56,7 @@ export default function CuotaSituationChart({ situation, label }) {
           activeKey={activeKey}
           onActiveChange={setActiveKey}
         />
-        <ul className="flex flex-col gap-1 min-w-0 w-full sm:w-auto text-sm">
+        <ul className="flex flex-col gap-1 min-w-0 text-sm">
           <li className="flex items-center gap-2 pb-1 mb-1 border-b border-outline-variant/30">
             <span className="text-on-surface-variant">Generadas</span>
             <span className="ml-auto pl-3 font-semibold tabular-nums text-on-surface">{formatCount(situation.generated)}</span>
@@ -82,7 +73,6 @@ export default function CuotaSituationChart({ situation, label }) {
           })}
         </ul>
       </div>
-      <p className="text-sm text-on-surface-variant">{stageNotice(situation)}</p>
     </div>
   )
 }
