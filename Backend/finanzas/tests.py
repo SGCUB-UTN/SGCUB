@@ -1067,22 +1067,22 @@ class CategoriaExentaTests(TestCase):
 		self.assertIn("Exentos de pago por categoría (1):", run.registro)
 		self.assertIn(exento.jugador.categoria.nombre, run.registro)
 
-	def test_anula_solo_las_cuotas_futuras_impagas(self):
+	def test_anula_las_cuotas_impagas_desde_el_mes_actual(self):
 		socio = crear_socio("71000041", con_jugador=True)
 		generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
 		paga = crear_cuota_con_cargo(account_for(socio), "2027-01", "1000.00", estado=EstadoCuotaChoices.PAGA)
 
 		anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
 
-		self.assertEqual(anuladas, 2)
-		self.assertEqual(periodos_de(socio), ["2026-10", "2027-01"])
+		self.assertEqual(anuladas, 3)
+		self.assertEqual(periodos_de(socio), ["2027-01"])
 		self.assertTrue(Cuota.objects.filter(pk=paga.pk).exists())
 		self.assertEqual(
 			RegistroAuditoria.objects.filter(accion=AccionAuditoriaChoices.CUOTA_ELIMINADA).count(),
-			2,
+			3,
 		)
 
-	def test_anulacion_conserva_cuotas_futuras_con_pagos(self):
+	def test_anulacion_conserva_cuotas_con_pagos(self):
 		socio = crear_socio("71000051", con_jugador=True)
 		generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
 		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio, periodo="2026-12")
@@ -1090,10 +1090,10 @@ class CategoriaExentaTests(TestCase):
 		with patch("finanzas.services.has_active_payments", side_effect=lambda c: c.pk == cuota.pk):
 			anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
 
-		self.assertEqual(anuladas, 1)
-		self.assertEqual(periodos_de(socio), ["2026-10", "2026-12"])
+		self.assertEqual(anuladas, 2)
+		self.assertEqual(periodos_de(socio), ["2026-12"])
 
-	def test_pasar_a_categoria_exenta_anula_las_cuotas_futuras(self):
+	def test_pasar_a_categoria_exenta_anula_las_cuotas_desde_el_mes_actual(self):
 		socio = crear_socio("71000061", con_jugador=True)
 		hoy = timezone.localdate()
 		generar_cuotas_mensuales(hoy, today=hoy)
@@ -1105,7 +1105,7 @@ class CategoriaExentaTests(TestCase):
 		with self.captureOnCommitCallbacks(execute=True):
 			schedule_exemption_sync(socio.pk, anterior, jugador.categoria)
 
-		self.assertEqual(periodos_de(socio), [hoy.strftime("%Y-%m")])
+		self.assertEqual(periodos_de(socio), [])
 
 	def test_salir_de_categoria_exenta_genera_las_cuotas(self):
 		socio = eximir_categoria(crear_socio("71000071", con_jugador=True))

@@ -200,17 +200,17 @@ class CategoriasExentasTests(APITestCase):
             .values_list("periodo", flat=True)
         )
 
-    def test_marcar_categoria_exenta_anula_cuotas_futuras_y_registra_historial(self):
+    def test_marcar_categoria_exenta_anula_cuotas_desde_el_mes_actual_y_registra_historial(self):
         create_or_update_player_current_cuota(self.socio.pk)
         self.assertEqual(len(self.periodos()), 3)
 
         response = self.guardar({str(self.categoria.pk): True})
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["cuotas_anuladas"], 2)
+        self.assertEqual(response.data["cuotas_anuladas"], 3)
         self.categoria.refresh_from_db()
         self.assertTrue(self.categoria.exenta_cuota)
-        self.assertEqual(self.periodos(), [timezone.localdate().strftime("%Y-%m")])
+        self.assertEqual(self.periodos(), [])
         cambio = HistorialConfiguracion.objects.get()
         self.assertEqual(cambio.seccion, "Finanzas")
         self.assertEqual(cambio.campo, "Categoría exenta de pago · M15 (Masculino)")

@@ -254,7 +254,7 @@ def schedule_exemption_sync(socio_id, previous_category, category):
 def annul_exempt_cuotas(socio_ids, today=None, user=None):
     current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
     cuotas = (
-        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gt=current_period)
+        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
         .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .order_by("periodo", "pk")
     )
