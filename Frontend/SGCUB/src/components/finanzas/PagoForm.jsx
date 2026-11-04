@@ -6,8 +6,9 @@ import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
+import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { isAdjustment, itemLabel, itemTone } from './cuotaItems'
+import { isAdjustment, isLateFee, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
@@ -77,20 +78,24 @@ const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
   .slice(0, count)
   .reduce((total, cuota) => total + cuotaDue(cuota), 0))
 
-function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false }) {
+function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-variant', strong = false, action = null }) {
   return (
     <div className={`flex items-center justify-between gap-3 text-base ${tone} ${strong ? 'font-bold' : ''}`}>
       <div className="flex flex-col min-w-0">
         <span>{label}</span>
         {detail && <span className="text-sm font-normal text-on-surface-variant truncate" title={detail}>{detail}</span>}
       </div>
-      <span className="shrink-0 tabular-nums whitespace-nowrap">{value}</span>
+      <div className="grid w-44 max-w-[55%] shrink-0 grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-1.5">
+        <span className="text-right tabular-nums whitespace-nowrap">{value}</span>
+        <span className="flex w-6 justify-center">{action}</span>
+      </div>
     </div>
   )
 }
 
 function CuotaBreakdownRow({
   line,
+  onRemoveItem,
   onAssignBenefit,
 }) {
   const { cuota, due } = line
@@ -119,6 +124,7 @@ function CuotaBreakdownRow({
             })}
             {items.filter(isAdjustment).map((item) => {
               const tone = itemTone(item)
+              const blocker = onRemoveItem && isLateFee(item) ? removalBlocker(cuota, item) : null
               return (
                 <BreakdownLine
                   key={item.item_cuota_id}
@@ -126,6 +132,13 @@ function CuotaBreakdownRow({
                   detail={item.es_descuento ? item.motivo : ''}
                   value={`${tone.sign}${formatAmount(Number(item.monto || 0))}`}
                   tone={tone.className}
+                  action={blocker === null ? null : (
+                    <RemoveItemButton
+                      label={`Remover ${itemLabel(item)}`}
+                      blocker={blocker}
+                      onClick={() => onRemoveItem(cuota, item)}
+                    />
+                  )}
                 />
               )
             })}
@@ -158,6 +171,7 @@ function CuotasTable({
   onToggleFuture,
   expandedIds,
   onToggleExpand,
+  onRemoveItem,
   onAssignBenefit,
 }) {
   const handleKeyDown = (event, cuotaId) => {
@@ -176,6 +190,7 @@ function CuotasTable({
       line={line}
       expandedIds={expandedIds}
       onToggleExpand={onToggleExpand}
+      onRemoveItem={onRemoveItem}
       onAssignBenefit={onAssignBenefit}
       onKeyDown={handleKeyDown}
     />
@@ -231,6 +246,7 @@ function CuotaLine({
   line,
   expandedIds,
   onToggleExpand,
+  onRemoveItem,
   onAssignBenefit,
   onKeyDown,
 }) {
@@ -284,6 +300,7 @@ function CuotaLine({
       {expanded && (
         <CuotaBreakdownRow
           line={line}
+          onRemoveItem={onRemoveItem}
           onAssignBenefit={onAssignBenefit}
         />
       )}
@@ -377,7 +394,7 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
@@ -389,6 +406,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
+  const [removal, setRemoval] = useState(null)
   const paymentCuotas = pendingCuotas
   // When the money received is more than all the socio owes, it can only be partly refunded
   const [excessMode, setExcessMode] = useState(() => (
@@ -549,6 +567,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                 onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
                 onToggleExpand={toggleExpand}
+                onRemoveItem={onAccountChanged ? (cuota, item) => setRemoval({ cuota, item }) : undefined}
                 onAssignBenefit={onAssignBenefit}
               />
             ) : (
@@ -784,6 +803,12 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         withReason={false}
         onConfirm={({ autorizado_por: responsable }) => submitPayment(responsable)}
         onClose={() => setConfirmingRefund(false)}
+      />
+      <RemoveCuotaItemModal
+        cuota={removal?.cuota ?? null}
+        item={removal?.item ?? null}
+        onClose={() => setRemoval(null)}
+        onRemoved={onAccountChanged}
       />
     </form>
   )
