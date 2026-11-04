@@ -2018,3 +2018,129 @@ class SaludosCumpleanosTest(TestCase):
             self.assertEqual(res_repetido["despachados"], 0)
             self.assertEqual(EnvioNotificacion.objects.filter(socio=s).count(), 1)
 
+
+class PersonaFotoTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="admin_foto", password="password123", is_staff=True
+        )
+        self.client.force_authenticate(user=self.user)
+        self.persona = Persona.objects.create(
+            nombre="Juan",
+            apellido="Pérez",
+            dni="30111222",
+        )
+
+    def _generar_imagen(self, ancho=100, alto=100, formato="JPEG"):
+        from io import BytesIO
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        buffer = BytesIO()
+        image = Image.new("RGB", (ancho, alto), color="red")
+        image.save(buffer, format=formato)
+        buffer.seek(0)
+        ext = "jpg" if formato == "JPEG" else formato.lower()
+        return SimpleUploadedFile(f"avatar.{ext}", buffer.read(), content_type=f"image/{ext}")
+
+    def test_subir_foto_exitosamente(self):
+        foto = self._generar_imagen(200, 200, "PNG")
+        response = self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": foto},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.persona.refresh_from_db()
+        self.assertTrue(self.persona.foto)
+        self.assertIn("foto_url", response.data)
+        self.assertTrue(response.data["foto_url"].startswith("http"))
+
+    def test_subir_foto_sin_archivo_retorna_400(self):
+        response = self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("foto", response.data)
+
+    def test_subir_foto_archivo_invalido_retorna_400(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        archivo_invalido = SimpleUploadedFile("fake.jpg", b"no es una imagen", content_type="image/jpeg")
+        response = self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": archivo_invalido},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_redimensionar_foto_grande(self):
+        from PIL import Image
+        foto_grande = self._generar_imagen(2000, 1500, "JPEG")
+        response = self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": foto_grande},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.persona.refresh_from_db()
+        with Image.open(self.persona.foto.path) as img:
+            self.assertLessEqual(max(img.size), 1200)
+
+    def test_eliminar_foto(self):
+        foto = self._generar_imagen()
+        self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": foto},
+            format="multipart",
+        )
+        self.persona.refresh_from_db()
+        self.assertTrue(self.persona.foto)
+
+        response = self.client.delete(f"/api/padron/persona/{self.persona.pk}/foto/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.persona.refresh_from_db()
+        self.assertFalse(self.persona.foto)
+
+    def test_subir_foto_supera_tamano_maximo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        payload = b"0" * (5 * 1024 * 1024 + 10)
+        archivo_pesado = SimpleUploadedFile("pesada.jpg", payload, content_type="image/jpeg")
+        response = self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": archivo_pesado},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("5 MB", str(response.data))
+
+    def test_jugador_y_docente_detail_exponen_foto_url(self):
+        foto = self._generar_imagen()
+        self.client.post(
+            f"/api/padron/persona/{self.persona.pk}/foto/",
+            {"foto": foto},
+            format="multipart",
+        )
+        socio = Socio.objects.create(persona=self.persona)
+        categoria = Categoria.objects.create(nombre="Primera", anio_vigente=get_anio_actual(), genero="M", edad_maxima=99)
+        estado_dep = EstadoDeportivo.objects.get_or_create(nombre="Activo")[0]
+        jugador = Jugador.objects.create(
+            socio=socio,
+            categoria=categoria,
+            estado=estado_dep,
+            obra_social="OSDE",
+            tallaIndumentaria="L",
+        )
+        docente = Docente.objects.create(persona=self.persona, legajo=999)
+
+        res_jugador = self.client.get(f"/api/padron/jugador/{jugador.pk}/")
+        self.assertEqual(res_jugador.status_code, status.HTTP_200_OK)
+        self.assertIn("foto_url", res_jugador.data["socio"])
+        self.assertTrue(res_jugador.data["socio"]["foto_url"].startswith("http"))
+
+        res_docente = self.client.get(f"/api/padron/docente/{docente.pk}/")
+        self.assertEqual(res_docente.status_code, status.HTTP_200_OK)
+        self.assertIn("foto_url", res_docente.data["persona_detalle"])
+        self.assertTrue(res_docente.data["persona_detalle"]["foto_url"].startswith("http"))
+

@@ -5,6 +5,109 @@ from django.db import transaction
 from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
 from finanzas.services import create_or_update_player_current_cuota, schedule_exemption_sync
 
+from io import BytesIO
+
+from PIL import Image, ImageOps
+from django.core.files.uploadedfile import InMemoryUploadedFile
+
+MAX_FOTO_UPLOAD_SIZE = 5 * 1024 * 1024     # 5 MB de entrada
+MAX_FOTO_DIMENSION = 1200                  # px máximo en cualquier lado
+MAX_FOTO_BYTES_SIN_COMPRIMIR = 500 * 1024  # si pesa menos, no re-comprime
+FOTO_QUALITY = 85
+FOTO_FORMATS = {
+    "JPEG": ("jpg", "image/jpeg"),
+    "PNG": ("png", "image/png"),
+    "WEBP": ("webp", "image/webp"),
+}
+
+
+def resize_uploaded_image(file):
+    """Valida tamaño, redimensiona y comprime una imagen subida.
+
+    Devuelve un `InMemoryUploadedFile` listo para asignar a un `ImageField`,
+    o el mismo `file` si ya era chica y liviana.
+    """
+    if not file:
+        return file
+
+    if file.size > MAX_FOTO_UPLOAD_SIZE:
+        raise serializers.ValidationError("La imagen no puede superar los 5 MB.")
+
+    try:
+        file.seek(0)
+        image = Image.open(file)
+        image.load()
+    except Exception:
+        raise serializers.ValidationError("El archivo no es una imagen válida.")
+
+    original_format = (image.format or "").upper()
+    if original_format not in FOTO_FORMATS:
+        original_format = "JPEG"
+
+    # Si ya es chica de dimensiones y de peso, no tocar nada
+    if max(image.size) <= MAX_FOTO_DIMENSION and file.size <= MAX_FOTO_BYTES_SIN_COMPRIMIR:
+        file.seek(0)
+        return file
+
+    # Corregir rotación EXIF (fotos de celular)
+    try:
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        pass
+
+    # Asegurar modo compatible con el formato destino
+    if original_format == "JPEG" and image.mode != "RGB":
+        if image.mode in ("RGBA", "LA", "P"):
+            if image.mode == "P":
+                image = image.convert("RGBA")
+            if image.mode == "RGBA":
+                bg = Image.new("RGB", image.size, (255, 255, 255))
+                bg.paste(image, mask=image.split()[-1])
+                image = bg
+            else:
+                image = image.convert("RGB")
+        else:
+            image = image.convert("RGB")
+
+    # Resize preservando aspect ratio
+    if max(image.size) > MAX_FOTO_DIMENSION:
+        image.thumbnail((MAX_FOTO_DIMENSION, MAX_FOTO_DIMENSION), Image.LANCZOS)
+
+    # Guardar al formato original (con fallback a JPEG si algo falla)
+    output = BytesIO()
+    if original_format in ("JPEG", "WEBP"):
+        save_kwargs = {"quality": FOTO_QUALITY, "optimize": True}
+    elif original_format == "PNG":
+        save_kwargs = {"optimize": True}
+    else:
+        save_kwargs = {}
+
+    try:
+        image.save(output, format=original_format, **save_kwargs)
+        target_format = original_format
+    except Exception:
+        target_format = "JPEG"
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=FOTO_QUALITY, optimize=True)
+
+    size = output.getbuffer().nbytes
+    output.seek(0)
+
+    ext, content_type = FOTO_FORMATS[target_format]
+    original_name = getattr(file, "name", "foto") or "foto"
+    base_name = original_name.rsplit(".", 1)[0] or "foto"
+    new_name = f"{base_name}.{ext}"
+
+    return InMemoryUploadedFile(
+        output,
+        "ImageField",
+        new_name,
+        content_type,
+        size,
+        None,
+    )
 
 DNI_REGEX = re.compile(r"\d{7,8}")
 MANDATORY_PERSONA_FIELDS = {
@@ -229,6 +332,8 @@ class PersonaSerializer(serializers.ModelSerializer):
     domicilio_barrio_nombre = serializers.CharField(source="domicilio.barrio.nombre", read_only=True)
     domicilio_localidad = serializers.PrimaryKeyRelatedField(source="domicilio.localidad", queryset=Localidad.objects.all(), required=False, allow_null=True)
     domicilio_localidad_nombre = serializers.CharField(source="domicilio.localidad.nombre", read_only=True)
+    foto_url = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Persona
@@ -238,7 +343,7 @@ class PersonaSerializer(serializers.ModelSerializer):
             "domicilio_calle", "domicilio_numero", "domicilio_piso",
             "domicilio_departamento", "domicilio_entre_calle_1",
             "domicilio_entre_calle_2", "domicilio_barrio", "domicilio_barrio_nombre",
-            "domicilio_localidad", "domicilio_localidad_nombre", "perfiles",
+            "domicilio_localidad", "domicilio_localidad_nombre", "foto", "foto_url","perfiles",
         ]
         read_only_fields = ["persona_id"]
 
@@ -262,6 +367,13 @@ class PersonaSerializer(serializers.ModelSerializer):
             for link in person.vinculos_familiares.all()
         ]
         return profiles
+    
+    def get_foto_url(self, person):
+        if not person.foto:
+            return None
+        request = self.context.get("request")
+        url = person.foto.url
+        return request.build_absolute_uri(url) if request else url
 
     @transaction.atomic
     def create(self, validated_data):
@@ -291,6 +403,9 @@ class PersonaSerializer(serializers.ModelSerializer):
         validate_dni_uniqueness(attrs.get("dni"), self.instance)
         validate_barrio_localidad(attrs.get("domicilio"), getattr(self.instance, "domicilio", None))
         return attrs
+    
+    def validate_foto(self, value):
+        return resize_uploaded_image(value) if value else value
 
 
 def save_contact_person(person_data, current_person=None):
@@ -366,6 +481,9 @@ class SocioSerializer(serializers.ModelSerializer):
     domicilio_barrio_nombre = serializers.CharField(source="persona.domicilio.barrio.nombre", read_only=True)
     domicilio_localidad = serializers.PrimaryKeyRelatedField(source="persona.domicilio.localidad", queryset=Localidad.objects.all(), required=False, allow_null=True)
 
+    foto = serializers.ImageField(source="persona.foto", read_only=True)
+    foto_url = serializers.SerializerMethodField()
+
     estado_administrativo = serializers.PrimaryKeyRelatedField(
         queryset=EstadoAdministrativo.objects.all(),
         required=False
@@ -381,6 +499,7 @@ class SocioSerializer(serializers.ModelSerializer):
             "socio_id", "persona", "numero_socio", "nombre", "apellido", "dni", "telefono", "email",
             "fecha_nacimiento", "edad", "genero", "genero_nombre", "genero_otro",
             "domicilio_calle", "domicilio_numero", "domicilio_piso", "domicilio_departamento", "domicilio_entre_calle_1", "domicilio_entre_calle_2", "domicilio_barrio", "domicilio_barrio_nombre", "domicilio_localidad",
+            "foto", "foto_url", 
             "estado_administrativo", "estado_administrativo_nombre", "fecha_alta", "es_jugador", "es_ex_jugador", "jugador_id"
         ]
         read_only_fields = ["numero_socio", "fecha_alta"]
@@ -447,6 +566,13 @@ class SocioSerializer(serializers.ModelSerializer):
         if "estado_administrativo" in validated_data and member.is_inactive:
             member.deactivate()
         return member
+    
+    def get_foto_url(self, socio):
+        if not socio.persona.foto:
+            return None
+        request = self.context.get("request")
+        url = socio.persona.foto.url
+        return request.build_absolute_uri(url) if request else url
 
 
 class CategoriaSerializer(serializers.ModelSerializer):

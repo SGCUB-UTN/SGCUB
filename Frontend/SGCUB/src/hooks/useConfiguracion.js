@@ -7,7 +7,14 @@ import {
   revertirVersionConfiguracionFinanciera,
 } from '../api/configuracion'
 import { getCategorias } from '../api/categorias'
-import { createTipoDocumento, deleteTipoDocumento, getTiposDocumento, updateTipoDocumento } from '../api/documentacion'
+import {
+  createPlantillaDocumento,
+  createTipoDocumento,
+  deletePlantillaDocumento,
+  deleteTipoDocumento,
+  getTiposDocumento,
+  updateTipoDocumento,
+} from '../api/documentacion'
 import { deleteMedioPago, getMediosPago, patchMedioPago, postMedioPago } from '../api/mediosPago'
 import { CUOTA_FIELDS, validateCuotaForm } from '../components/configuracion/financialFields'
 import { GENERAL_FIELDS } from '../components/configuracion/generalFields'
@@ -190,6 +197,8 @@ function useConfiguracion() {
     createTipo: withTipos(createTipoDocumento),
     updateTipo: withTipos(updateTipoDocumento),
     deleteTipo: withTipos(deleteTipoDocumento),
+    createPlantilla: withTipos(createPlantillaDocumento),
+    deletePlantilla: withTipos(deletePlantillaDocumento),
   }
 }
 
