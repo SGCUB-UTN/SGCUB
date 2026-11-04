@@ -21,7 +21,7 @@ import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 import { FormSkeleton } from '../components/shared/Skeleton'
 import PhotoUploadField from '../components/shared/PhotoUploadField'
-import { uploadPersonaFoto } from '../api/personaFoto'
+import { uploadPersonaFoto, deletePersonaFoto } from '../api/personaFoto'
 
 const CAMPOS_ASIGNACION = ['cargo', 'categorias']
 
@@ -184,6 +184,7 @@ function DocenteForm() {
   // The criminal record may be handed in without attaching the PDF
   const [criminalRecordDelivered, setCriminalRecordDelivered] = useState(false)
   const [foto, setFoto] = useState(null)
+  const [eliminarFoto, setEliminarFoto] = useState(false)
 
   const handleClearFile = () => {
     setArchivoAntecedente(null)
@@ -423,6 +424,12 @@ function DocenteForm() {
           } catch (photoError) {
             console.error('No se pudo subir la foto de perfil:', photoError)
           }
+        } else if (eliminarFoto) {
+          try {
+            await deletePersonaFoto(docenteOriginal.persona)
+          } catch (photoError) {
+            console.error('No se pudo eliminar la foto de perfil:', photoError)
+          }
         }
 
         if (archivoAntecedente || criminalRecordDelivered) await saveCriminalRecord(docenteOriginal.persona)
@@ -560,9 +567,18 @@ function DocenteForm() {
                 <SeccionTitulo icono="photo_camera" titulo="Foto de perfil" />
                 <PhotoUploadField
                   value={foto}
-                  onChange={setFoto}
+                  onChange={(nuevoArchivo) => {
+                    setFoto(nuevoArchivo)
+                    setEliminarFoto(false)
+                  }}
                   disabled={guardando}
                   currentUrl={editando ? docenteOriginal?.persona_detalle?.foto_url : null}
+                  onDeleteCurrent={() => {
+                    setFoto(null)
+                    setEliminarFoto(true)
+                  }}
+                  isDeleted={eliminarFoto}
+                  onRestoreCurrent={() => setEliminarFoto(false)}
                 />
               </div>
             )}

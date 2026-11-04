@@ -21,7 +21,7 @@ import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 import { FormSkeleton } from '../components/shared/Skeleton'
 import PhotoUploadField from '../components/shared/PhotoUploadField'
-import { uploadPersonaFoto } from '../api/personaFoto'
+import { uploadPersonaFoto, deletePersonaFoto } from '../api/personaFoto'
 
 const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
 
@@ -128,6 +128,7 @@ function JugadorForm() {
   const [obrasSocialesLista, setObrasSocialesLista] = useState(OBRAS_SOCIALES)
   const [tallesLista, setTallesLista] = useState(TALLES)
   const [foto, setFoto] = useState(null)
+  const [eliminarFoto, setEliminarFoto] = useState(false)
   const busqueda = usePersonaSearchDNI({ habilitada: !editando })
 
   useEffect(() => {
@@ -398,11 +399,19 @@ function JugadorForm() {
         jugadorId = creado.jugador_id
         personaIdParaFoto = creado.socio?.persona ?? null
       }
-      if (foto && personaIdParaFoto) {
-        try {
-          await uploadPersonaFoto(personaIdParaFoto, foto)
-        } catch (photoError) {
-          console.error('No se pudo subir la foto de perfil:', photoError)
+      if (personaIdParaFoto) {
+        if (foto) {
+          try {
+            await uploadPersonaFoto(personaIdParaFoto, foto)
+          } catch (photoError) {
+            console.error('No se pudo subir la foto de perfil:', photoError)
+          }
+        } else if (eliminarFoto) {
+          try {
+            await deletePersonaFoto(personaIdParaFoto)
+          } catch (photoError) {
+            console.error('No se pudo eliminar la foto de perfil:', photoError)
+          }
         }
       }
       navigate(`/padron/jugadores/${jugadorId}${editando ? '' : '?tab=financiero'}`)
@@ -508,9 +517,18 @@ function JugadorForm() {
                 <SeccionTitulo icono="photo_camera" titulo="Foto carnet" />
                 <PhotoUploadField
                   value={foto}
-                  onChange={setFoto}
+                  onChange={(nuevoArchivo) => {
+                    setFoto(nuevoArchivo)
+                    setEliminarFoto(false)
+                  }}
                   disabled={guardando}
                   currentUrl={editando ? jugador?.socio?.foto_url : null}
+                  onDeleteCurrent={() => {
+                    setFoto(null)
+                    setEliminarFoto(true)
+                  }}
+                  isDeleted={eliminarFoto}
+                  onRestoreCurrent={() => setEliminarFoto(false)}
                 />
               </div>
             )}
