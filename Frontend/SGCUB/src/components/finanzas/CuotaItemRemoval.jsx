@@ -4,7 +4,7 @@ import { formatPeriod } from '../shared/periodFormat'
 import AuthorizationModal from './AuthorizationModal'
 import { SCHOLARSHIP_CONCEPT, isLateFee, itemLabel } from './cuotaItems'
 
-export function RemoveItemButton({ label, blocker = '', onClick }) {
+export function RemoveItemButton({ label, blocker = '', onClick, isDiscount = false }) {
   return (
     <button
       type="button"
@@ -15,7 +15,7 @@ export function RemoveItemButton({ label, blocker = '', onClick }) {
       disabled={Boolean(blocker)}
       title={blocker || label}
       aria-label={label}
-      className="w-6 h-6 shrink-0 inline-flex items-center justify-center rounded-full text-error hover:bg-error-container/60 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+      className={`w-6 h-6 shrink-0 inline-flex items-center justify-center rounded-full transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent ${isDiscount ? 'text-emerald-700 hover:bg-emerald-100' : 'text-error hover:bg-error-container/60'}`}
     >
       <span className="material-symbols-outlined text-[6px]" aria-hidden="true">close</span>
     </button>

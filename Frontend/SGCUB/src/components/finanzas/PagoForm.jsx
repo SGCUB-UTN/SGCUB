@@ -124,7 +124,7 @@ function CuotaBreakdownRow({
             })}
             {items.filter(isAdjustment).map((item) => {
               const tone = itemTone(item)
-              const blocker = onRemoveItem && isLateFee(item) ? removalBlocker(cuota, item) : null
+              const blocker = onRemoveItem ? removalBlocker(cuota, item) : null
               return (
                 <BreakdownLine
                   key={item.item_cuota_id}
@@ -137,6 +137,7 @@ function CuotaBreakdownRow({
                       label={`Remover ${itemLabel(item)}`}
                       blocker={blocker}
                       onClick={() => onRemoveItem(cuota, item)}
+                      isDiscount={item.es_descuento}
                     />
                   )}
                 />
@@ -148,14 +149,16 @@ function CuotaBreakdownRow({
             </div>
           </div>
           {onAssignBenefit && (
-            <button
-              type="button"
-              onClick={() => onAssignBenefit(cuota.cuota_id)}
-              className="self-start inline-flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sell</span>
-              Agregar descuento
-            </button>
+            <div className="grid w-44 max-w-[55%] shrink-0 grid-cols-[minmax(0,1fr)_1.5rem] gap-1.5">
+              <button
+                type="button"
+                onClick={() => onAssignBenefit(cuota.cuota_id)}
+                className="col-start-1 inline-flex w-full items-center justify-end gap-1.5 rounded-md pt-1 text-sm font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sell</span>
+                Agregar descuento
+              </button>
+            </div>
           )}
         </div>
       </td>
