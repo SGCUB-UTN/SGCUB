@@ -6,6 +6,16 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
+from rest_framework.views import APIView
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.conf import settings
+
+from .emails import enviar_email_password_reset
+from .serializers import PasswordResetConfirmSerializer, PasswordResetRequestSerializer
 
 from .models import set_must_change_password
 from .permissions import CanChangeUsuarios, CanManageUsuarios
@@ -133,3 +143,70 @@ def usuario_reset_password(request, pk):
 @permission_classes([CanManageUsuarios])
 def role_list(request):
     return Response(ROLES)
+
+class PasswordResetRequestView(APIView):
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    @extend_schema(tags=["Auth"], request=PasswordResetRequestSerializer, responses={200: None})
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}"
+            enviar_email_password_reset(user, reset_url)
+
+        return Response({
+            "detail": "Si el correo está registrado, vas a recibir un enlace para restablecer la contraseña."
+        })
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    @extend_schema(tags=["Auth"], request=PasswordResetConfirmSerializer, responses={204: None})
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Decodificar el uid
+        try:
+            uid = force_str(urlsafe_base64_decode(data["uid"]))
+            user = User.objects.get(pk=uid, is_active=True)
+        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+            return Response(
+                {"detail": "El enlace de restablecimiento no es válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validar token
+        if not default_token_generator.check_token(user, data["token"]):
+            return Response(
+                {"detail": "El enlace expiró o ya fue usado. Solicitá uno nuevo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validar contraseña con los validators de Django
+        try:
+            validate_password(data["new_password"], user=user)
+        except DjangoValidationError as exc:
+            return Response(
+                {"new_password": exc.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Aplicar
+        user.set_password(data["new_password"])
+        user.save(update_fields=["password"])
+        set_must_change_password(user, required=False)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
