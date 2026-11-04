@@ -15,6 +15,7 @@ from documental.services import (
     VIGENTE,
     build_padron_documental,
 )
+from finanzas.financial_summary import month_income
 from finanzas.generators import PERIOD_FORMAT
 from finanzas.models import EjecucionTareaCuota, OrigenEjecucionChoices, TipoTareaCuotaChoices
 from finanzas.period_summary import cuota_situation
@@ -80,7 +81,8 @@ def documentation_status():
         "players": profiles[PERFIL_JUGADOR],
         "teachers": profiles[PERFIL_DOCENTE],
         "documents": {
-            "valid": documents[VIGENTE] + documents[POR_VENCER],
+            "valid": documents[VIGENTE],
+            "expiring": documents[POR_VENCER],
             "missing": documents[FALTANTE],
             "expired": documents[VENCIDO],
         },
@@ -90,9 +92,11 @@ def documentation_status():
 def home_summary():
     now = timezone.now()
     year = get_anio_actual()
+    period = timezone.localdate().strftime(PERIOD_FORMAT)
     return {
         "members": member_counts(),
-        "cuotas": cuota_situation(timezone.localdate().strftime(PERIOD_FORMAT)),
+        "cuotas": cuota_situation(period),
+        "income": month_income(period),
         "alerts": {
             "categories_updated": categories_status()["actualizadas"],
             "recategorization": recategorization_status(year),

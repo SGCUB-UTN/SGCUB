@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -18,6 +19,7 @@ from documental.models import Documento, EstadoDocumento, TipoDocumento
 from finanzas.generators import PERIOD_FORMAT
 from finanzas.models import EjecucionTareaCuota, EstadoCuotaChoices, OrigenEjecucionChoices, TipoTareaCuotaChoices
 from finanzas.period_summary import cuota_situation
+from finanzas.services import register_income, register_payment, revert_payment
 from finanzas.tasks import period_due_dates
 from finanzas.tests import account_for, crear_cuota_con_cargo, crear_socio
 from padron.models import (
@@ -129,6 +131,21 @@ class SituacionCuotasTests(ResumenInicioTestCase):
         self.assertEqual(cuotas["period"], self.period)
         self.assertEqual(cuotas["generated"], 2)
         self.assertEqual(cuotas["unpaid"], 1)
+
+
+class IngresosDelMesTests(ResumenInicioTestCase):
+    def test_separa_ingresos_por_cuotas_y_por_otros_movimientos_vigentes(self):
+        socio = crear_socio("72000051")
+        cuota = crear_cuota_con_cargo(account_for(socio), self.period, "1000.00")
+        register_payment(socio.pk, [cuota.pk], [{"medio_de_pago": "Efectivo", "monto": Decimal("600.00")}], Decimal("600.00"))
+        register_income(socio.pk, "Bufet", [{"medio_de_pago": "Efectivo", "monto": Decimal("300.00")}], Decimal("300.00"))
+        anulado, _ = register_income(socio.pk, "Error", [{"medio_de_pago": "Efectivo", "monto": Decimal("999.00")}], Decimal("999.00"))
+        revert_payment(anulado.pk, "Carga duplicada", "Tesorera")
+
+        self.assertEqual(self.summary()["income"], {"cuotas": Decimal("600.00"), "other": Decimal("300.00")})
+
+    def test_sin_movimientos_devuelve_cero(self):
+        self.assertEqual(self.summary()["income"], {"cuotas": Decimal("0.00"), "other": Decimal("0.00")})
 
 
 class ResumenInicioAlertasTests(ResumenInicioTestCase):
@@ -270,4 +287,4 @@ class ResumenInicioDocumentacionTests(ResumenInicioTestCase):
 
         self.assertEqual(documentation["players"], {"total": 2, "up_to_date": 1})
         self.assertEqual(documentation["teachers"], {"total": 2, "up_to_date": 1})
-        self.assertEqual(documentation["documents"], {"valid": 4, "missing": 1, "expired": 1})
+        self.assertEqual(documentation["documents"], {"valid": 3, "expiring": 1, "missing": 1, "expired": 1})
