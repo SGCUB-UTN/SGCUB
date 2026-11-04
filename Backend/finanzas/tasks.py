@@ -506,7 +506,7 @@ def send_scheduled_due_reminders(today=None):
     dias = config.dias_recordatorio_vencimiento or 3
     target_date = today + timedelta(days=dias)
 
-    # Cuotas que vencen en 'dias' días o que vencen hoy
+    # Cuotas que vencen preventivamente en 'dias' días
     cuotas = list(
         Cuota.objects.filter(
             movimiento__isnull=False,
@@ -514,8 +514,6 @@ def send_scheduled_due_reminders(today=None):
         .filter(
             Q(fecha_venc1=target_date)
             | Q(fecha_venc2=target_date)
-            | Q(fecha_venc1=today)
-            | Q(fecha_venc2=today)
         )
         .select_related("movimiento__cuenta_corriente__socio__persona")
     )
@@ -531,16 +529,13 @@ def send_scheduled_due_reminders(today=None):
     for cuota in cuotas_impagas:
         socio = cuota.movimiento.cuenta_corriente.socio
         saldo = pending[cuota.pk]
-        vencimiento = cuota.fecha_venc1 if cuota.fecha_venc1 and cuota.fecha_venc1 >= today else cuota.fecha_venc2
+        vencimiento = cuota.fecha_venc1 if cuota.fecha_venc1 == target_date else cuota.fecha_venc2
 
         if not vencimiento:
             continue
 
         dias_restantes = (vencimiento - today).days
-        if dias_restantes == 0:
-            tiempo_str = "hoy mismo"
-        else:
-            tiempo_str = f"en {dias_restantes} días (el {vencimiento.strftime('%d/%m/%Y')})"
+        tiempo_str = f"en {dias_restantes} {'día' if dias_restantes == 1 else 'días'} (el {vencimiento.strftime('%d/%m/%Y')})"
 
         titulo = f"Recordatorio de vencimiento de cuota {cuota.periodo}"
         asunto = f"Recordatorio de vencimiento - Cuota {cuota.periodo} - {club}"
