@@ -293,11 +293,12 @@ def annul_exempt_cuotas(socio_ids, today=None, user=None):
     cuotas = (
         Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
         .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento")
         .order_by("periodo", "pk")
     )
     annulled = 0
     for cuota in cuotas:
-        if has_active_payments(cuota):
+        if is_locked(cuota):
             continue
         delete_cuota(cuota, user)
         annulled += 1
@@ -309,8 +310,15 @@ def active_imputations():
     return Imputacion.objects.filter(movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO)
 
 
+def has_imputations(cuota):
+    movement = getattr(cuota, "movimiento", None)
+    if not movement:
+        return False
+    return movement.imputaciones_destino.exists() or movement.imputaciones_origen.exists()
+
+
 def is_locked(cuota):
-    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota)
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota) or has_imputations(cuota)
 
 
 def applied_amount(cuota):
