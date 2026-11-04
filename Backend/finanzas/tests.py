@@ -57,7 +57,7 @@ from .models import (
 	SecuenciaComprobante,
 	TipoTareaCuotaChoices,
 )
-from .pdf_utils import format_amount
+from .pdf_utils import format_amount, format_phone
 from .period_summary import period_summary
 from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
@@ -2784,6 +2784,32 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		self.assertEqual(format_amount(Decimal("1234567.5")), "$ 1.234.567,50")
 		self.assertEqual(format_amount(Decimal("0")), "$ 0,00")
 		self.assertEqual(format_amount(Decimal("-500")), "-$ 500,00")
+
+	def test_formato_de_telefonos(self):
+		casos = {
+			"+5492216755822": "+54 9 2216 75-5822",
+			"+54 9 221 675-5822": "+54 9 2216 75-5822",
+			"2214592810": "+54 2214 59-2810",
+			"02214592810": "+54 2214 59-2810",
+			"+541143214321": "+54 1143 21-4321",
+			"+34612345678": "+34612345678",
+			"12345": "12345",
+		}
+		for telefono, esperado in casos.items():
+			with self.subTest(telefono=telefono):
+				self.assertEqual(format_phone(telefono), esperado)
+
+	def test_recibo_muestra_el_telefono_del_club_formateado(self):
+		from configuracion.models import ConfiguracionGeneral
+		config = ConfiguracionGeneral.load()
+		config.club_telefono = "+5492216755822"
+		config.save()
+		detalle = self.pagar("1000.00")
+
+		contenido = self.descargar(detalle["numero"]).content
+
+		self.assertIn(b"+54 9 2216 75-5822", contenido)
+		self.assertNotIn(b"+5492216755822", contenido)
 
 
 class ProteccionRegistrosFinancierosTests(PagoTestBase):

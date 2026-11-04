@@ -1,3 +1,5 @@
+import re
+
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 
@@ -12,6 +14,24 @@ def format_receipt_number(receipt_type, number):
 def format_amount(value):
     formatted = f"{abs(value):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"{'-' if value < 0 else ''}$ {formatted}"
+
+
+def format_phone(phone):
+    """'+54 9 2216 75-5822', the same as formatReceiptPhone in the frontend.
+    Foreign or unrecognized numbers are returned as stored."""
+    text = str(phone or "").strip()
+    digits = re.sub(r"\D", "", text)
+    mobile = False
+    if text.startswith("+"):
+        if not digits.startswith("54"):
+            return text
+        digits = digits[2:]
+        mobile = digits.startswith("9")
+        digits = digits[1:] if mobile else digits
+    digits = digits.removeprefix("0")
+    if len(digits) != 10:
+        return text
+    return f"+54 {'9 ' if mobile else ''}{digits[:4]} {digits[4:6]}-{digits[6:]}"
 
 
 def table(rows, column_widths, total_row=False, right_aligned_from=-1):
