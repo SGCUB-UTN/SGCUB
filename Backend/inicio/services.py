@@ -17,8 +17,7 @@ from documental.services import (
 )
 from finanzas.generators import PERIOD_FORMAT
 from finanzas.models import EjecucionTareaCuota, OrigenEjecucionChoices, TipoTareaCuotaChoices
-from finanzas.period_summary import period_cuotas
-from finanzas.services import pending_amounts
+from finanzas.period_summary import cuota_situation
 from finanzas.tasks import MEMBER_GROUPS, active_socios, member_group
 from padron.models import RecategorizacionEjecucion, get_anio_actual
 from padron.services import categories_status, mark_stale_runs_as_failed
@@ -31,20 +30,6 @@ def member_counts():
     for socio in active_socios():
         counts[member_group(socio)] += 1
     return counts
-
-
-def cuota_status(period):
-    cuotas = period_cuotas(period)
-    pending = pending_amounts(cuotas)
-    unpaid = Counter(min(cuota.recargos_aplicados, 2) for cuota in cuotas if pending[cuota.pk] > 0)
-    return {
-        "period": period,
-        "generated": len(cuotas),
-        "paid": len(cuotas) - sum(unpaid.values()),
-        "unpaid_without_surcharge": unpaid[0],
-        "unpaid_first_surcharge": unpaid[1],
-        "unpaid_second_surcharge": unpaid[2],
-    }
 
 
 def recategorization_status(year):
@@ -107,7 +92,7 @@ def home_summary():
     year = get_anio_actual()
     return {
         "members": member_counts(),
-        "cuotas": cuota_status(timezone.localdate().strftime(PERIOD_FORMAT)),
+        "cuotas": cuota_situation(timezone.localdate().strftime(PERIOD_FORMAT)),
         "alerts": {
             "categories_updated": categories_status()["actualizadas"],
             "recategorization": recategorization_status(year),

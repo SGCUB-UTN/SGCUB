@@ -17,6 +17,8 @@ from comunicaciones.services import crear_y_despachar_notificacion
 from documental.models import Documento, EstadoDocumento, TipoDocumento
 from finanzas.generators import PERIOD_FORMAT
 from finanzas.models import EjecucionTareaCuota, EstadoCuotaChoices, OrigenEjecucionChoices, TipoTareaCuotaChoices
+from finanzas.period_summary import cuota_situation
+from finanzas.tasks import period_due_dates
 from finanzas.tests import account_for, crear_cuota_con_cargo, crear_socio
 from padron.models import (
     ActualizacionCategoriasEjecucion,
@@ -59,37 +61,74 @@ class ResumenInicioPadronTests(ResumenInicioTestCase):
         self.assertEqual(self.summary()["members"], {"socios": 2, "jugadores": 1, "baja_parcial": 1})
 
 
-class ResumenInicioCuotasTests(ResumenInicioTestCase):
-    def cuota(self, dni, recargos=0, paga=False, periodo=None):
+class SituacionCuotasTests(ResumenInicioTestCase):
+    PERIOD = "2026-09"
+
+    def setUp(self):
+        super().setUp()
+        self.due = period_due_dates(self.PERIOD)
+
+    def cuota(self, dni, recargos=0, paga=False, periodo=PERIOD):
         estado = EstadoCuotaChoices.PAGA if paga else EstadoCuotaChoices.EN_FECHA
-        cuota = crear_cuota_con_cargo(account_for(crear_socio(dni)), periodo or self.period, "1000", estado=estado)
+        cuota = crear_cuota_con_cargo(account_for(crear_socio(dni)), periodo, "1000", estado=estado)
         cuota.recargos_aplicados = recargos
         cuota.save(update_fields=["recargos_aplicados"])
         return cuota
 
-    def test_separa_cuotas_impagas_segun_recargo_aplicado(self):
+    def create_cuotas(self):
         self.cuota("72000011", paga=True)
-        self.cuota("72000012", paga=True, recargos=1)
-        self.cuota("72000013")
-        self.cuota("72000014", recargos=1)
-        self.cuota("72000015", recargos=2)
+        self.cuota("72000012", paga=True)
+        self.cuota("72000013", paga=True, recargos=1)
+        self.cuota("72000014", paga=True, recargos=2)
+        self.cuota("72000015")
         self.cuota("72000016", recargos=2)
         self.cuota("72000017", periodo="2000-01")
 
-        self.assertEqual(self.summary()["cuotas"], {
-            "period": self.period,
-            "generated": 6,
-            "paid": 2,
-            "unpaid_without_surcharge": 1,
-            "unpaid_first_surcharge": 1,
-            "unpaid_second_surcharge": 2,
+    def situation(self, today):
+        result = cuota_situation(self.PERIOD, today=today)
+        return {key: result[key] for key in (
+            "due_dates_passed", "generated", "paid_on_time", "paid_first_surcharge", "paid_second_surcharge", "unpaid",
+        )}
+
+    def test_antes_del_primer_vencimiento_todas_las_pagas_son_en_primera_instancia(self):
+        self.create_cuotas()
+
+        self.assertEqual(self.situation(self.due[1]), {
+            "due_dates_passed": 0, "generated": 6, "paid_on_time": 4,
+            "paid_first_surcharge": 0, "paid_second_surcharge": 0, "unpaid": 2,
         })
 
-    def test_periodo_sin_cuotas_devuelve_ceros(self):
+    def test_entre_vencimientos_separa_las_pagas_con_primer_recargo(self):
+        self.create_cuotas()
+
+        self.assertEqual(self.situation(self.due[1] + timedelta(days=1)), {
+            "due_dates_passed": 1, "generated": 6, "paid_on_time": 2,
+            "paid_first_surcharge": 2, "paid_second_surcharge": 0, "unpaid": 2,
+        })
+
+    def test_despues_del_segundo_vencimiento_separa_las_pagas_con_cada_recargo(self):
+        self.create_cuotas()
+
+        self.assertEqual(self.situation(self.due[2] + timedelta(days=1)), {
+            "due_dates_passed": 2, "generated": 6, "paid_on_time": 2,
+            "paid_first_surcharge": 1, "paid_second_surcharge": 1, "unpaid": 2,
+        })
+
+    def test_informa_las_fechas_de_vencimiento_del_periodo(self):
+        result = cuota_situation(self.PERIOD, today=self.due[1])
+
+        self.assertEqual((result["first_due"], result["second_due"]), (self.due[1], self.due[2]))
+        self.assertEqual(result["generated"], 0)
+
+    def test_el_panel_muestra_la_situacion_del_mes_actual(self):
+        self.cuota("72000021", paga=True, periodo=self.period)
+        self.cuota("72000022", periodo=self.period)
+
         cuotas = self.summary()["cuotas"]
 
-        self.assertEqual(cuotas["generated"], 0)
-        self.assertEqual(cuotas["paid"], 0)
+        self.assertEqual(cuotas["period"], self.period)
+        self.assertEqual(cuotas["generated"], 2)
+        self.assertEqual(cuotas["unpaid"], 1)
 
 
 class ResumenInicioAlertasTests(ResumenInicioTestCase):

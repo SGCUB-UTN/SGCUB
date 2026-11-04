@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import useDashboard from '../hooks/useDashboard'
+import CuotaStatusSection from '../components/dashboard/CuotaStatusSection'
 import MemberCountsSection from '../components/dashboard/MemberCountsSection'
 import ProcessStatusSection from '../components/dashboard/ProcessStatusSection'
 import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
@@ -34,6 +35,7 @@ export default function Principal() {
       <MemberCountsSection isLoading={isLoading} members={data?.members} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+        <CuotaStatusSection isLoading={isLoading} cuotas={data?.cuotas} />
         <ProcessStatusSection />
       </div>
 
