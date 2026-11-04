@@ -6,7 +6,9 @@ import DocumentStatusBadge from './DocumentStatusBadge'
 const HEADER_CLASS = 'py-3 px-4'
 const compareText = new Intl.Collator('es', { sensitivity: 'base' }).compare
 
-export default function MissingDocumentsTable({ tipos, onUpload, className = '' }) {
+const ROW_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold text-primary hover:bg-primary-fixed/30 transition-colors cursor-pointer'
+
+export default function MissingDocumentsTable({ tipos, onUpload, onGenerate, className = '' }) {
   const sortedTipos = [...tipos].sort((a, b) => compareText(a.nombre, b.nombre))
   return (
     <section aria-labelledby="documentos-faltantes-title" className={`min-w-0 overflow-hidden rounded-xl border border-error/30 bg-surface-container-lowest ${className}`}>
@@ -31,12 +33,18 @@ export default function MissingDocumentsTable({ tipos, onUpload, className = '' 
             <td className="py-3 px-4 pl-6 font-medium text-base">{tipo.nombre}</td>
             <td className="py-3 px-4"><DocumentStatusBadge status="faltante" /></td>
             <td className="py-3 px-4 pr-6">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-1">
+                {tipo.tiene_plantilla && onGenerate && (
+                  <button type="button" onClick={() => onGenerate(tipo)} aria-label={`Generar ${tipo.nombre}`} className={ROW_BUTTON_CLASS}>
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">article</span>
+                    Generar
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onUpload(tipo)}
                   aria-label={`Cargar ${tipo.nombre}`}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-semibold text-primary hover:bg-primary-fixed/30 transition-colors cursor-pointer"
+                  className={ROW_BUTTON_CLASS}
                 >
                   <span className="material-symbols-outlined text-[20px]" aria-hidden="true">upload_file</span>
                   Cargar

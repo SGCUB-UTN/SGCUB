@@ -4,6 +4,7 @@ from collections import Counter
 from django.utils import timezone
 
 from configuracion.models import ConfiguracionGeneral
+from configuracion.services import category_label as category_model_label
 from padron.models import (
     ESTADO_ADMINISTRATIVO_ACTIVO,
     ESTADO_DEPORTIVO_ACTIVO,
@@ -232,4 +233,44 @@ def padron_summary(personas):
         "cumplimiento": round((len(personas) - len(disabled)) * 100 / len(personas), 1) if personas else 100.0,
         "documentos": {estado: document_counts[estado] for estado in DOCUMENT_STATES},
         "categorias_afectadas": most_affected_categories(personas),
+    }
+
+
+MINOR_AGE = 18
+
+
+class TemplateSubjectError(Exception):
+    pass
+
+
+def default_template_legend(document_name):
+    return f"Declaro haber recibido y leído {document_name}, y presto conformidad con su contenido."
+
+
+def template_subject(tipo, persona):
+    jugador = getattr(getattr(persona, "socio", None), "jugador", None)
+    if jugador and tipo.aplica_jugador:
+        is_minor = persona.edad is not None and persona.edad < MINOR_AGE
+        guardian = None
+        if is_minor:
+            guardian = jugador.vinculos_familiares.filter(responsable_legal=True).select_related("persona").first()
+        return {
+            "persona": persona,
+            "perfil": PERFIL_JUGADOR,
+            "categoria": category_model_label(jugador.categoria),
+            "menor": is_minor,
+            "responsable": guardian,
+        }
+    if getattr(persona, "docente", None) and tipo.aplica_docente:
+        return {"persona": persona, "perfil": PERFIL_DOCENTE, "categoria": None, "menor": False, "responsable": None}
+    raise TemplateSubjectError(f'El documento "{tipo.nombre}" no se pide a esta persona.')
+
+
+def template_recipient(subject):
+    guardian = subject["responsable"]
+    contact = guardian.persona if guardian else subject["persona"]
+    return {
+        "nombre": f"{contact.nombre} {contact.apellido}",
+        "telefono": contact.telefono,
+        "es_responsable_legal": guardian is not None,
     }
