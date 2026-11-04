@@ -1,3 +1,4 @@
+import { getGeneroLabel } from '../categorias/categoriaFormat'
 import { formatMoney, formatPercent } from './numberFormat'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 
@@ -50,6 +51,22 @@ export const formatCuotaValue = (field, value, version) => {
   }
   return String(value)
 }
+
+const exemptLabel = (exenta) => (exenta ? 'Exenta' : 'Paga cuota')
+
+const categoryLabel = (categoria) => (
+  categoria.genero ? `${categoria.nombre} (${getGeneroLabel(categoria.genero)})` : categoria.nombre
+)
+
+export const exemptChangeRows = ({ changes, categorias, draft }) => changes.exentas.map((categoriaId) => {
+  const categoria = categorias.find((item) => item.categoria_id === categoriaId)
+  return {
+    key: `exenta-${categoriaId}`,
+    label: `Categoría ${categoryLabel(categoria)}`,
+    before: exemptLabel(categoria.exenta_cuota),
+    after: exemptLabel(draft.exentas[categoriaId]),
+  }
+})
 
 export const formatVigencia = (period) => (period === INITIAL_PERIOD ? 'Desde el inicio' : `Desde ${formatPeriod(period)}`)
 

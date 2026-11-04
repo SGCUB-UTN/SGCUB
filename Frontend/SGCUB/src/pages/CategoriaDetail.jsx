@@ -187,10 +187,20 @@ function CategoriaDetail() {
           { label: categoria.nombre },
         ]}
         title={categoria.nombre}
-        badge={GENERO_BADGE_CLASSES[categoria.genero] && (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold ${GENERO_BADGE_CLASSES[categoria.genero]}`}>
-            {getGeneroLabel(categoria.genero)}
-          </span>
+        badge={(
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {GENERO_BADGE_CLASSES[categoria.genero] && (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold ${GENERO_BADGE_CLASSES[categoria.genero]}`}>
+                {getGeneroLabel(categoria.genero)}
+              </span>
+            )}
+            {categoria.exenta_cuota && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-sm font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700 border-emerald-200">
+                <span className="material-symbols-outlined text-[16px]" aria-hidden="true">money_off</span>
+                Exenta de pago
+              </span>
+            )}
+          </div>
         )}
         metadata={[
           { label: 'Año vigente', value: categoria.anio_vigente ?? '—' },

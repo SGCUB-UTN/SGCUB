@@ -10,7 +10,7 @@ from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .allocation import allocate_payment, charge_order, concept_totals
 from .audit import record_transaction
-from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, scholarships_for_period
+from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, exempt_category, scholarships_for_period
 from .models import (
     AccionAuditoriaChoices as Accion,
     Beca,
@@ -47,6 +47,10 @@ class CuotaDuplicadaError(Exception):
 
 
 class SocioInactivoError(Exception):
+    pass
+
+
+class CategoriaExentaError(Exception):
     pass
 
 
@@ -144,6 +148,11 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
     configuration = configuration or ConfiguracionFinanciera.load(period)
+    category = exempt_category(socio)
+    if category is not None:
+        raise CategoriaExentaError(
+            f"El jugador juega en la categoría {category.nombre}, exenta de pago; no corresponde generar cuota."
+        )
     items = GeneradorItemsCuota(socio, first_day, configuration).build_items()
     if not items:
         raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
@@ -204,7 +213,7 @@ def create_first_cuota(socio, today=None):
             created.append(create_cuota(socio, period, today=today))
         except CuotaDuplicadaError:
             continue
-        except SocioInactivoError:
+        except (SocioInactivoError, CategoriaExentaError):
             return None
     return created[0] if created else None
 
@@ -253,9 +262,47 @@ def _ensure_player_cuota_for_period(socio, period, today):
 @transaction.atomic
 def create_or_update_player_current_cuota(socio_id):
     today = timezone.localdate()
-    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado", "jugador__categoria").get(pk=socio_id)
+    if exempt_category(socio) is not None:
+        annul_exempt_cuotas([socio.pk], today)
+        return None
     results = [_ensure_player_cuota_for_period(socio, period, today) for period in generation_periods(today)]
     return results[0] if results else None
+
+
+@transaction.atomic
+def update_category_exemption(category, exempt, user=None):
+    category.exenta_cuota = exempt
+    category.save(update_fields=["exenta_cuota"])
+    socio_ids = list(category.jugadores.values_list("socio_id", flat=True))
+    if exempt:
+        return annul_exempt_cuotas(socio_ids, user=user)
+    for socio_id in socio_ids:
+        create_or_update_player_current_cuota(socio_id)
+    return 0
+
+
+def schedule_exemption_sync(socio_id, previous_category, category):
+    if previous_category.exenta_cuota != category.exenta_cuota:
+        transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))
+
+
+@transaction.atomic
+def annul_exempt_cuotas(socio_ids, today=None, user=None):
+    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
+    cuotas = (
+        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento")
+        .order_by("periodo", "pk")
+    )
+    annulled = 0
+    for cuota in cuotas:
+        if is_locked(cuota):
+            continue
+        delete_cuota(cuota, user)
+        annulled += 1
+    return annulled
 
 
 def active_imputations():
@@ -263,8 +310,15 @@ def active_imputations():
     return Imputacion.objects.filter(movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO)
 
 
+def has_imputations(cuota):
+    movement = getattr(cuota, "movimiento", None)
+    if not movement:
+        return False
+    return movement.imputaciones_destino.exists() or movement.imputaciones_origen.exists()
+
+
 def is_locked(cuota):
-    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota)
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota) or has_imputations(cuota)
 
 
 def applied_amount(cuota):
@@ -505,7 +559,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
     )
     socios = list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-        .select_related("estado_administrativo", "jugador__estado")
+        .select_related("estado_administrativo", "jugador__estado", "jugador__categoria")
         .prefetch_related(Prefetch(
             "becas",
             queryset=active_scholarships,
@@ -520,6 +574,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
         "cuotas_existentes": 0,
         "items_sociales": 0,
         "items_deportivos": 0,
+        "cuotas_exentas": 0,
     }
 
     for period in periods:
@@ -536,6 +591,9 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
                 cuota = create_cuota(socio, period, configuration=configuration, today=today, user=user)
             except CuotaDuplicadaError:
                 result["cuotas_existentes"] += 1
+                continue
+            except CategoriaExentaError:
+                result["cuotas_exentas"] += 1
                 continue
             except SocioInactivoError:
                 continue

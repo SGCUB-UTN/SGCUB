@@ -7,6 +7,8 @@ from django.db import IntegrityError, transaction
 from django.db.models import Min, Q
 from django.utils import timezone
 
+from finanzas.services import schedule_exemption_sync
+
 from .models import (
     ESTADO_ADMINISTRATIVO_INACTIVO,
     ESTADO_DEPORTIVO_ACTIVO,
@@ -377,6 +379,7 @@ def _process_execution(execution):
         log_lines.append(_result_log_line(player, result))
 
         if result.categoria_nueva is not None and result.categoria_nueva != player.categoria:
+            schedule_exemption_sync(player.socio_id, player.categoria, result.categoria_nueva)
             player.categoria = result.categoria_nueva
             players_to_update.append(player)
 
@@ -423,6 +426,7 @@ def _apply_decision(execution, result, decision, user, categoria=None, categoria
         raise RecategorizationDecisionError("El jugador ya fue revisado o no requiere revisión.")
 
     player = result.jugador
+    previous_category = player.categoria
     if decision == Decision.MANTENIDA and not can_keep_categories(player, execution.anio):
         raise RecategorizationDecisionError("Por su edad, el jugador no puede mantener sus categorías actuales.")
     if decision == Decision.ACEPTADA:
@@ -437,6 +441,7 @@ def _apply_decision(execution, result, decision, user, categoria=None, categoria
         player.categoria_secundaria = categoria_secundaria
     if decision != Decision.MANTENIDA:
         player.save(update_fields=["categoria", "categoria_secundaria"])
+        schedule_exemption_sync(player.socio_id, previous_category, player.categoria)
 
     result.decision = decision
     result.categoria_nueva = player.categoria

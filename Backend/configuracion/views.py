@@ -10,10 +10,11 @@ from rest_framework.response import Response
 from finanzas.models import ConfiguracionFinanciera
 from finanzas.serializers import ConfiguracionFinancieraSerializer, VersionConfiguracionFinancieraSerializer
 from finanzas.services import create_configuration_version
+from padron.models import Categoria
 
 from .models import ConfiguracionGeneral, HistorialConfiguracion
 from .serializers import ConfiguracionGeneralSerializer, HistorialConfiguracionSerializer
-from .services import update_general_configuration
+from .services import update_exempt_categories, update_general_configuration
 
 
 @extend_schema(tags=["Configuracion"], responses=ConfiguracionGeneralSerializer)
@@ -56,13 +57,27 @@ def validate_financial_changes(changes):
     return serializer.validated_data, None
 
 
+def validate_exempt_categories(changes):
+    try:
+        values = {int(pk): value for pk, value in changes.items()}
+    except (TypeError, ValueError):
+        return None, ["Las categorías enviadas no son válidas."]
+    if not all(isinstance(value, bool) for value in values.values()):
+        return None, ["Las categorías enviadas no son válidas."]
+    categories = Categoria.objects.in_bulk(list(values))
+    if len(categories) != len(values):
+        return None, ["Alguna de las categorías enviadas no existe."]
+    return [(categories[pk], value) for pk, value in values.items() if categories[pk].exenta_cuota != value], None
+
+
 @extend_schema(tags=["Configuracion"])
 @api_view(["POST"])
 @parser_classes([JSONParser, MultiPartParser, FormParser])
 def guardar_configuracion(request):
     """Saves every change of the configuration screen at once, with the person responsible for it.
 
-    Body: {"responsable": str, "general": {...}, "quitar_logo": bool, "financiera": {"periodo_vigencia": "YYYY-MM", ...}}
+    Body: {"responsable": str, "general": {...}, "quitar_logo": bool, "financiera": {"periodo_vigencia": "YYYY-MM", ...},
+           "categorias_exentas": {"<categoria_id>": bool}}
     """
     try:
         payload = read_payload(request)
@@ -71,7 +86,12 @@ def guardar_configuracion(request):
 
     general_changes = payload.get("general") or {}
     financial_changes = payload.get("financiera") or None
-    if not isinstance(general_changes, dict) or not isinstance(financial_changes, (dict, type(None))):
+    exempt_changes = payload.get("categorias_exentas") or {}
+    if (
+        not isinstance(general_changes, dict)
+        or not isinstance(financial_changes, (dict, type(None)))
+        or not isinstance(exempt_changes, dict)
+    ):
         return Response({"detail": "Los datos enviados no son válidos."}, status=status.HTTP_400_BAD_REQUEST)
     general_changes = dict(general_changes)
     responsable = str(payload.get("responsable") or "").strip()
@@ -80,9 +100,12 @@ def guardar_configuracion(request):
         general_changes["club_logo"] = request.FILES["club_logo"]
 
     errors = {}
+    exempt_categories, exempt_errors = validate_exempt_categories(exempt_changes)
+    if exempt_errors:
+        errors["categorias_exentas"] = exempt_errors
     if not responsable:
         errors["responsable"] = ["Indicá quién es el responsable de los cambios."]
-    if not (general_changes or financial_changes or remove_logo):
+    if not (general_changes or financial_changes or remove_logo or exempt_categories or exempt_errors):
         errors["detail"] = ["No hay cambios para guardar."]
 
     configuration = ConfiguracionGeneral.load()
@@ -103,8 +126,10 @@ def guardar_configuracion(request):
     with transaction.atomic():
         configuration = update_general_configuration(general_serializer.validated_data, user, responsable, remove_logo)
         version = create_configuration_version(financial_values, user, responsable) if financial_values else None
+        annulled = update_exempt_categories(exempt_categories or [], user, responsable)
 
     return Response({
         "general": ConfiguracionGeneralSerializer(configuration, context={"request": request}).data,
         "financiera": VersionConfiguracionFinancieraSerializer(version).data if version else None,
+        "cuotas_anuladas": annulled,
     })
