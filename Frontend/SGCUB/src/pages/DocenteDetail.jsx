@@ -21,6 +21,7 @@ import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 function DocenteDetail() {
   const { id } = useParams()
@@ -170,6 +171,22 @@ function DocenteDetail() {
     }
   }
 
+  const handleUploadPhoto = async (file) => {
+    const personaId = docente.persona?.persona_id || docente.persona
+    if (!personaId) return
+    const personaActualizada = await uploadPersonaFoto(personaId, file)
+    setCarga((actual) => ({
+      ...actual,
+      docente: {
+        ...actual.docente,
+        persona_detalle: {
+          ...actual.docente.persona_detalle,
+          foto_url: personaActualizada.foto_url,
+        },
+      },
+    }))
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -235,6 +252,7 @@ function DocenteDetail() {
         surname={persona.apellido}
         photoUrl={persona.foto_url}
         onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={handleUploadPhoto}
         isActive={activo}
         statuses={teacherStatuses(activo)}
         metadata={[

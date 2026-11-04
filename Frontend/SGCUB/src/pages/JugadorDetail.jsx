@@ -27,6 +27,7 @@ import CometJugadorCard from '../components/comet/CometJugadorCard'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
 import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 const ORIGINS = {
   jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
@@ -212,6 +213,21 @@ function JugadorDetail() {
     }
   }
 
+  const handleUploadPhoto = async (file) => {
+    if (!socio.persona) return
+    const personaActualizada = await uploadPersonaFoto(socio.persona, file)
+    setCarga((actual) => ({
+      ...actual,
+      datos: {
+        ...actual.datos,
+        socio: {
+          ...actual.datos.socio,
+          foto_url: personaActualizada.foto_url,
+        },
+      },
+    }))
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -282,6 +298,7 @@ function JugadorDetail() {
         surname={socio.apellido}
         photoUrl={socio.foto_url}
         onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={handleUploadPhoto}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
         tags={categoryTags(jugador)}

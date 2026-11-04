@@ -12,3 +12,8 @@ export async function uploadPersonaFoto(personaId, file) {
   })
   return data
 }
+
+export async function deletePersonaFoto(personaId) {
+  if (!personaId) throw new Error('Falta el ID de la persona.')
+  await api.delete(`padron/persona/${personaId}/foto/`)
+}
