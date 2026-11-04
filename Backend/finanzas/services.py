@@ -518,6 +518,7 @@ def apply_payment(payment_movement, cuotas, amount):
                 movimiento_destino=cuota.movimiento,
                 fecha=timezone.now(),
                 monto_aplicado=applied,
+                saldo_pendiente=pending[cuota.pk] - applied,
             )
             DetalleImputacion.objects.bulk_create([
                 DetalleImputacion(imputacion=imputation, concepto=concept, monto=line_amount)
@@ -536,6 +537,7 @@ REFUND_SEQUENCES = {
     TipoDevolucionChoices.NOTA_CREDITO: TipoComprobanteChoices.NOTA_CREDITO,
 }
 DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+PARTIAL_PAYMENT_PREFIX = " - Abono parcial"
 
 
 def detail_lines(totals):
@@ -544,6 +546,13 @@ def detail_lines(totals):
         {"concepto": concept, "concepto_nombre": ConceptoItemChoices(concept).label, "monto": amount}
         for concept, amount in ordered
     ]
+
+
+def mark_partial_line(lines):
+    charges = [line for line in lines if line["concepto"] not in DISCOUNT_CONCEPTS]
+    if charges:
+        charges[-1]["concepto_nombre"] = f"{charges[-1]['concepto_nombre']}{PARTIAL_PAYMENT_PREFIX}"
+    return lines
 
 
 def socio_detail(socio):
@@ -555,6 +564,7 @@ def socio_detail(socio):
         "nombre": socio.persona.nombre,
         "apellido": socio.persona.apellido,
         "dni": socio.persona.dni,
+        "telefono": socio.persona.telefono,
     }
 
 
@@ -590,11 +600,16 @@ def receipt_detail(receipt):
             totals[detail.concepto] = totals.get(detail.concepto, Decimal("0.00")) + detail.monto
             breakdown[detail.concepto] = breakdown.get(detail.concepto, Decimal("0.00")) + detail.monto
         cuota = imputation.movimiento_destino.cuota
+        balance = imputation.saldo_pendiente or Decimal("0.00")
+        partial = balance > 0
+        lines = detail_lines(totals)
         periods.append({
             "cuota_id": cuota.pk,
             "periodo": cuota.periodo,
             "monto_aplicado": imputation.monto_aplicado,
-            "detalle": detail_lines(totals),
+            "es_parcial": partial,
+            "saldo_pendiente": balance,
+            "detalle": mark_partial_line(lines) if partial else lines,
         })
 
     return {
