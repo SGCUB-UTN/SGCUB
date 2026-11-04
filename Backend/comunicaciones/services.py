@@ -7,7 +7,7 @@ from django.utils.html import strip_tags
 
 from configuracion.models import ConfiguracionGeneral
 
-from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion
+from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion, OrigenNotificacion
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +250,7 @@ def crear_y_despachar_notificacion(
         asunto=asunto,
         contenido=contenido,
         estado=EstadoNotificacion.PROGRAMADA,
+        origen=OrigenNotificacion.AUTOMATICA,
     )
 
     exitosos = 0
