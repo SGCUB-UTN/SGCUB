@@ -2,7 +2,7 @@
 export const RECATEGORIZATION_FUNC = 'padron.services.run_recategorization'
 export const CATEGORY_UPDATE_FUNC = 'padron.services.pasr_de_anio_vigente_a_categoria'
 export const RECATEGORIZATION_REVIEW_PATH = '/automatizaciones/recategorizacion'
-export const AREA_ORDER = ['Padrón', 'Finanzas', 'Sistema']
+export const AREA_ORDER = ['Padrón', 'Finanzas', 'Notificaciones', 'Sistema']
 
 const AUTOMATION_CATALOG = {
   'finanzas.tasks.generate_scheduled_cuotas': {
@@ -20,6 +20,30 @@ const AUTOMATION_CATALOG = {
     icon: 'payments',
     area: 'Finanzas',
     changesLabel: ['recargo aplicado', 'recargos aplicados'],
+  },
+  'finanzas.tasks.send_scheduled_due_reminders': {
+    title: 'Recordatorio de vencimiento de cuotas',
+    description: 'Se ejecuta todos los días y envía un correo preventivo a los socios con cuotas impagas que están por vencer (según los días de anticipación definidos en Configuración) o que vencen hoy.',
+    whenOff: 'Si la apagás, los socios no van a recibir el aviso preventivo antes de que opere el vencimiento.',
+    icon: 'notifications_active',
+    area: 'Notificaciones',
+    changesLabel: ['aviso enviado', 'avisos enviados'],
+  },
+  'padron.tasks.send_scheduled_birthday_greetings': {
+    title: 'Saludos de cumpleaños',
+    description: 'Se ejecuta todos los días, cruza el padrón de socios activos y envía un correo de felicitación a quienes cumplen años en el día de la fecha (siempre que esté activo en Configuración).',
+    whenOff: 'Si la apagás, no se enviarán los correos de salutación de cumpleaños.',
+    icon: 'cake',
+    area: 'Notificaciones',
+    changesLabel: ['saludo enviado', 'saludos enviados'],
+  },
+  'documental.tasks.refresh_document_states': {
+    title: 'Alertas y vencimiento documental',
+    description: 'Se ejecuta todos los días para actualizar los estados de los documentos (vigente/vencido) y emite alertas preventivas por correo a los 30 días del vencimiento.',
+    whenOff: 'Si la apagás, los estados de los documentos no se actualizarán automáticamente y no se emitirán alertas de vencimiento.',
+    icon: 'assignment_late',
+    area: 'Notificaciones',
+    changesLabel: ['documento actualizado', 'documentos actualizados'],
   },
   'finanzas.services.finish_expired_scholarships': {
     title: 'Finalizar becas vencidas',

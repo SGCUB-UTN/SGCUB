@@ -298,6 +298,7 @@ def registrar_pago(request):
 			request.user if request.user.is_authenticated else None,
 			data["condonacion_mora"],
 			data["nota_credito"],
+			item_cuota_ids_descuento=data["item_cuota_ids_descuento"],
 		)
 	except CuentaCorriente.DoesNotExist:
 		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
@@ -359,7 +360,11 @@ def comprobante_list(request):
 	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).prefetch_related("pago__items_pago").annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+		"pago__movimiento__cuenta_corriente__socio__jugador",
+	).prefetch_related(
+		"pago__items_pago",
+		"pago__movimiento__cuenta_corriente__socio__jugador__vinculos_familiares__persona",
+	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
@@ -439,7 +444,12 @@ def emitir_nota_credito(request, pk):
 
 def _refunds_queryset():
 	return Devolucion.objects.select_related(
-		"cuenta_corriente__socio__persona", "comprobante_anulado", "usuario",
+		"cuenta_corriente__socio__persona",
+		"cuenta_corriente__socio__jugador",
+		"comprobante_anulado",
+		"usuario",
+	).prefetch_related(
+		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	)
 
 

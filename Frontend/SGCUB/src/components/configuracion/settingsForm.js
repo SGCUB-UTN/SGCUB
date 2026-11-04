@@ -4,13 +4,13 @@ const BUTTON_BASE = 'inline-flex items-center justify-center gap-2 rounded-lg px
 
 export const BUTTON_CLASSES = {
   primary: `${BUTTON_BASE} bg-primary text-on-primary shadow-sm hover:bg-primary/90`,
-  secondary: `${BUTTON_BASE} border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low`,
+  secondary: `${BUTTON_BASE} border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low dark:hover:bg-surface-container-low`,
   danger: `${BUTTON_BASE} bg-red-700 hover:bg-red-800 dark:bg-[#e03131] dark:hover:bg-[#c92a2a] text-white shadow-sm`,
 }
 
 // Small buttons and links used inside the setting sections
 export const SMALL_BUTTON_CLASSES = {
-  secondary: 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-white px-3 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-low cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
+  secondary: 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-low dark:hover:bg-surface-container-low cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
   primary: 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-on-primary transition-colors hover:bg-primary/90 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
   link: 'inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 cursor-pointer',
 }
