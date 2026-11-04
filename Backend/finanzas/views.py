@@ -297,6 +297,7 @@ def registrar_pago(request):
 			request.user if request.user.is_authenticated else None,
 			data["condonacion_mora"],
 			data["nota_credito"],
+			item_cuota_ids_descuento=data["item_cuota_ids_descuento"],
 		)
 	except CuentaCorriente.DoesNotExist:
 		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
