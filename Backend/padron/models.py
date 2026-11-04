@@ -110,6 +110,7 @@ class Persona(models.Model):
     genero = models.ForeignKey(Genero, on_delete=models.PROTECT, blank=True, null=True, related_name="personas")
     genero_otro = models.CharField(max_length=100, blank=True, null=True)
     domicilio = models.ForeignKey(Domicilio, on_delete=models.SET_NULL, blank=True, null=True, related_name="personas")
+    foto = models.ImageField(upload_to="personas/fotos/", blank=True, null=True)
 
     class Meta:
         db_table = "persona"
@@ -255,6 +256,7 @@ class Categoria(models.Model):
         blank=True,
         default="",
     )
+    exenta_cuota = models.BooleanField(default=False)
 
     class Meta:
         db_table = "categoria"

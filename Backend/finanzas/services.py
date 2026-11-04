@@ -10,7 +10,7 @@ from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .allocation import allocate_payment, charge_order, concept_totals
 from .audit import record_transaction
-from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, scholarships_for_period
+from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, exempt_category, scholarships_for_period
 from .models import (
     AccionAuditoriaChoices as Accion,
     Beca,
@@ -47,6 +47,10 @@ class CuotaDuplicadaError(Exception):
 
 
 class SocioInactivoError(Exception):
+    pass
+
+
+class CategoriaExentaError(Exception):
     pass
 
 
@@ -144,6 +148,11 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
     configuration = configuration or ConfiguracionFinanciera.load(period)
+    category = exempt_category(socio)
+    if category is not None:
+        raise CategoriaExentaError(
+            f"El jugador juega en la categoría {category.nombre}, exenta de pago; no corresponde generar cuota."
+        )
     items = GeneradorItemsCuota(socio, first_day, configuration).build_items()
     if not items:
         raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
@@ -204,7 +213,7 @@ def create_first_cuota(socio, today=None):
             created.append(create_cuota(socio, period, today=today))
         except CuotaDuplicadaError:
             continue
-        except SocioInactivoError:
+        except (SocioInactivoError, CategoriaExentaError):
             return None
     return created[0] if created else None
 
@@ -253,9 +262,47 @@ def _ensure_player_cuota_for_period(socio, period, today):
 @transaction.atomic
 def create_or_update_player_current_cuota(socio_id):
     today = timezone.localdate()
-    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado", "jugador__categoria").get(pk=socio_id)
+    if exempt_category(socio) is not None:
+        annul_exempt_cuotas([socio.pk], today)
+        return None
     results = [_ensure_player_cuota_for_period(socio, period, today) for period in generation_periods(today)]
     return results[0] if results else None
+
+
+@transaction.atomic
+def update_category_exemption(category, exempt, user=None):
+    category.exenta_cuota = exempt
+    category.save(update_fields=["exenta_cuota"])
+    socio_ids = list(category.jugadores.values_list("socio_id", flat=True))
+    if exempt:
+        return annul_exempt_cuotas(socio_ids, user=user)
+    for socio_id in socio_ids:
+        create_or_update_player_current_cuota(socio_id)
+    return 0
+
+
+def schedule_exemption_sync(socio_id, previous_category, category):
+    if previous_category.exenta_cuota != category.exenta_cuota:
+        transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))
+
+
+@transaction.atomic
+def annul_exempt_cuotas(socio_ids, today=None, user=None):
+    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
+    cuotas = (
+        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento")
+        .order_by("periodo", "pk")
+    )
+    annulled = 0
+    for cuota in cuotas:
+        if is_locked(cuota):
+            continue
+        delete_cuota(cuota, user)
+        annulled += 1
+    return annulled
 
 
 def active_imputations():
@@ -263,8 +310,15 @@ def active_imputations():
     return Imputacion.objects.filter(movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO)
 
 
+def has_imputations(cuota):
+    movement = getattr(cuota, "movimiento", None)
+    if not movement:
+        return False
+    return movement.imputaciones_destino.exists() or movement.imputaciones_origen.exists()
+
+
 def is_locked(cuota):
-    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota)
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota) or has_imputations(cuota)
 
 
 def applied_amount(cuota):
@@ -369,6 +423,85 @@ def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
     return True
 
 
+def build_cuota_items_detail(cuota, total_label="Total"):
+    """
+    Construye el bloque de texto con el desglose de conceptos vigentes de la cuota:
+    - Cuota social
+    - Cuota deportiva / disciplinas
+    - Becas y descuentos (con signo negativo)
+    - Recargos por mora
+    - Total de la cuota
+    """
+    from .pdf_utils import format_amount
+
+    items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
+    lineas_detalle = []
+    total = Decimal("0.00")
+    for it in items:
+        if it.concepto == ConceptoItemChoices.OTRO and it.motivo:
+            nombre = it.motivo
+        elif it.motivo and it.concepto in (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO):
+            nombre = f"{it.get_concepto_display()} ({it.motivo})"
+        else:
+            nombre = it.get_concepto_display()
+
+        monto_fmt = format_amount(it.monto)
+        if it.es_descuento:
+            lineas_detalle.append(f"  • {nombre}: -{monto_fmt}")
+            total -= it.monto
+        else:
+            lineas_detalle.append(f"  • {nombre}: {monto_fmt}")
+            total += it.monto
+
+    monto_final = cuota.movimiento.monto if (getattr(cuota, "movimiento", None) and cuota.movimiento.monto is not None) else total
+    if lineas_detalle:
+        return f"Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • {total_label}: {format_amount(monto_final)}"
+    return f"Importe {total_label.lower()}: {format_amount(monto_final)}"
+
+
+def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.services import crear_y_despachar_notificacion
+
+        config = ConfiguracionGeneral.load()
+        if not config.notificar_modificacion_cuota:
+            return
+
+        cuota.refresh_from_db()
+        if getattr(cuota, "movimiento", None):
+            cuota.movimiento.refresh_from_db()
+
+        socio = cuota.movimiento.cuenta_corriente.socio
+        club = config.club_nombre
+
+        bloque_detalle = build_cuota_items_detail(cuota, total_label="Total actualizado")
+
+        venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
+        venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
+
+        titulo = f"Modificación en cuota {cuota.periodo}"
+        asunto = f"Modificación en tu cuota social {cuota.periodo} - {club}"
+        contenido = (
+            f"Estimado/a {socio.persona.nombre},\n\n"
+            f"Te informamos que se ha registrado una actualización en tu cuota del período {cuota.periodo}.\n"
+            f"Motivo: {motivo}.\n\n"
+            f"{bloque_detalle}\n\n"
+            f"Vencimientos vigentes:\n"
+            f"  • Primer vencimiento: {venc1}\n"
+            f"  • Segundo vencimiento: {venc2}\n\n"
+            f"Podés consultar el detalle desde tu estado de cuenta o en la secretaría del club."
+        )
+        crear_y_despachar_notificacion(
+            titulo=titulo,
+            asunto=asunto,
+            contenido=contenido,
+            socios=[socio],
+        )
+    except Exception:
+        logger.exception("Error al notificar modificación de cuota")
+
+
 def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     cuota = lock_cuota(cuota_id)
     reason = f"Actualización de la configuración vigente desde {configuration.periodo_vigencia}"
@@ -383,6 +516,12 @@ def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
     sync_cuota_charge(cuota)
     apply_cuota_surcharges(cuota.pk, configuration=configuration, user=user)
+    cuota.refresh_from_db()
+    if getattr(cuota, "movimiento", None):
+        cuota.movimiento.refresh_from_db()
+    if cuota.periodo == configuration.periodo_vigencia:
+        monto_actualizado = cuota.movimiento.monto if cuota.movimiento else net_amount(ItemCuota.objects.filter(cuota=cuota))
+        notificar_modificacion_cuota_evento(cuota, reason, monto_actualizado)
     return True
 
 
@@ -440,7 +579,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
     )
     socios = list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-        .select_related("estado_administrativo", "jugador__estado")
+        .select_related("estado_administrativo", "jugador__estado", "jugador__categoria")
         .prefetch_related(Prefetch(
             "becas",
             queryset=active_scholarships,
@@ -455,6 +594,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
         "cuotas_existentes": 0,
         "items_sociales": 0,
         "items_deportivos": 0,
+        "cuotas_exentas": 0,
     }
 
     for period in periods:
@@ -471,6 +611,9 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
                 cuota = create_cuota(socio, period, configuration=configuration, today=today, user=user)
             except CuotaDuplicadaError:
                 result["cuotas_existentes"] += 1
+                continue
+            except CategoriaExentaError:
+                result["cuotas_exentas"] += 1
                 continue
             except SocioInactivoError:
                 continue
@@ -592,17 +735,59 @@ def mark_partial_line(lines):
     return lines
 
 
-def socio_detail(socio):
+def resolver_contacto_socio_finanzas(socio):
     if socio is None:
         return None
+    persona = getattr(socio, "persona", None)
+    if not persona:
+        return {
+            "socio_id": socio.socio_id,
+            "numero_socio": socio.numero_socio,
+            "nombre": "",
+            "apellido": "",
+            "dni": "",
+            "telefono": "",
+            "telefono_socio": "",
+            "es_menor": False,
+            "responsable_nombre": None,
+            "telefono_responsable": None,
+        }
+
+    edad = persona.edad
+    es_menor = bool(edad is not None and edad < 18)
+    responsable_nombre = None
+    telefono_responsable = None
+    telefono_contacto = (persona.telefono or "").strip()
+
+    if es_menor:
+        jugador = getattr(socio, "jugador", None)
+        if jugador:
+            vinculos = list(jugador.vinculos_familiares.select_related("persona").all())
+            tutor = next((v for v in vinculos if v.responsable_legal and v.persona and (v.persona.telefono or "").strip()), None)
+            if not tutor:
+                tutor = next((v for v in vinculos if v.persona and (v.persona.telefono or "").strip()), None)
+
+            if tutor and tutor.persona and tutor.persona.telefono:
+                telefono_responsable = tutor.persona.telefono.strip()
+                responsable_nombre = f"{tutor.persona.nombre} {tutor.persona.apellido}".strip()
+                telefono_contacto = telefono_responsable
+
     return {
         "socio_id": socio.socio_id,
         "numero_socio": socio.numero_socio,
-        "nombre": socio.persona.nombre,
-        "apellido": socio.persona.apellido,
-        "dni": socio.persona.dni,
-        "telefono": socio.persona.telefono,
+        "nombre": persona.nombre,
+        "apellido": persona.apellido,
+        "dni": persona.dni,
+        "telefono": telefono_contacto,
+        "telefono_socio": (persona.telefono or "").strip(),
+        "es_menor": es_menor,
+        "responsable_nombre": responsable_nombre,
+        "telefono_responsable": telefono_responsable,
     }
+
+
+def socio_detail(socio):
+    return resolver_contacto_socio_finanzas(socio)
 
 
 def receipt_code(receipt):
@@ -907,6 +1092,15 @@ def register_payment(
             credit_note["responsable"],
             user,
         )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -925,6 +1119,15 @@ def register_income(socio_id, concept, payment_methods, total, user=None):
         reference=receipt_code(receipt),
         detail={"pago_id": payment.pk, "medios": payment_methods_detail(payment_methods)},
     )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -1183,6 +1386,7 @@ def reschedule_cuota(cuota_id, first_due_date, second_due_date, today=None, user
         deleted, _ = cuota.items.filter(concepto=ConceptoItemChoices.MORA).delete()
         if deleted:
             sync_cuota_charge(cuota)
+        notificar_modificacion_cuota_evento(cuota, "Reprogramación de fechas de vencimiento")
     apply_cuota_surcharges(cuota.pk, today, user=user)
 
 

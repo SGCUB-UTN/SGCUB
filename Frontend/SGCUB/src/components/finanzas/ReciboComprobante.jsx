@@ -1,4 +1,4 @@
-import { formatAmount, formatDate, formatDni } from '../personas/format'
+import { formatAmount, formatDate, formatDni, formatReceiptPhone } from '../personas/format'
 import DesgloseComprobante from './DesgloseComprobante'
 
 const DEFAULT_CLUB_NAME = 'Club Universitario de Berisso'
@@ -50,7 +50,6 @@ export function ReceiptLayout({
 }) {
   const clubNombre = clubConfig?.club_nombre || DEFAULT_CLUB_NAME
   const clubAddress = formatClubAddress(clubConfig)
-  const socioPhone = socio.telefono || socio.persona?.telefono || ''
 
   return (
     <div
@@ -84,7 +83,7 @@ export function ReceiptLayout({
               {(clubConfig?.club_telefono || clubConfig?.club_email) && (
                 <p className="text-xs text-on-surface-variant">
                   {clubConfig?.club_telefono && (
-                    <span><span className="text-on-surface-variant/70">Tel:</span> {clubConfig.club_telefono}</span>
+                    <span><span className="text-on-surface-variant/70">Tel:</span> {formatReceiptPhone(clubConfig.club_telefono)}</span>
                   )}
                   {clubConfig?.club_telefono && clubConfig?.club_email && <span className="mx-1.5 opacity-40">·</span>}
                   {clubConfig?.club_email && <span>{clubConfig.club_email}</span>}
@@ -107,7 +106,7 @@ export function ReceiptLayout({
       {/* Datos del Socio */}
       <div className="p-5 border-b border-outline-variant/30">
         <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">Datos del socio</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div>
             <p className="text-xs text-on-surface-variant">Apellido y nombre</p>
             <p className="font-semibold text-on-surface truncate">{socio.apellido || socio.nombre ? `${socio.apellido || ''}, ${socio.nombre || ''}`.replace(/^, |, $/g, '') : '—'}</p>
@@ -119,12 +118,6 @@ export function ReceiptLayout({
           <div>
             <p className="text-xs text-on-surface-variant">N° de socio</p>
             <p className="font-semibold text-on-surface">{socio.numero_socio ?? '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-on-surface-variant">Teléfono</p>
-            <p className={`font-semibold ${socioPhone ? 'text-on-surface' : 'text-on-surface-variant/60 italic'}`}>
-              {socioPhone || 'No registrado'}
-            </p>
           </div>
         </div>
       </div>

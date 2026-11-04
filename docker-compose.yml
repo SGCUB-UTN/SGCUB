@@ -48,6 +48,7 @@ services:
       - .env
     volumes:
       - ./Backend:/app
+      - /documentacion:/app/media
     environment:
       DB_NAME: ${DB_NAME:-sgcub_db}
       DB_USER: ${DB_USER:-sgcub_user}

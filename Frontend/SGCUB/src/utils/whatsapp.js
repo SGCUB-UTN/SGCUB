@@ -64,23 +64,55 @@ export function formatWhatsAppPhone(phone) {
 }
 
 /**
+ * Formatea la etiqueta oficial que acompaña al comprobante (ej: RECIBO X - N° 00000123).
+ */
+export function formatEtiquetaComprobante(tipo, comprobanteCodigo) {
+  if (!comprobanteCodigo) return ''
+
+  const digitsMatch = String(comprobanteCodigo).match(/\d+$/)
+  const numero = digitsMatch ? digitsMatch[0].padStart(8, '0') : comprobanteCodigo.trim()
+
+  switch (tipo) {
+    case 'anulado':
+      return ` (RECIBO X - N° ${numero} ANULADO)`
+    case 'nota_credito':
+      return ` (NOTA DE CRÉDITO X - N° ${numero})`
+    case 'devolucion':
+      return ` (DEVOLUCIÓN X - N° ${numero})`
+    case 'comprobante':
+    default:
+      return ` (RECIBO X - N° ${numero})`
+  }
+}
+
+/**
  * Genera el texto del mensaje para enviar el comprobante por WhatsApp.
  */
-export function buildWhatsAppMessage({ comprobanteCodigo, montoTotal, clubNombre, tipo = 'comprobante' }) {
+export function buildWhatsAppMessage({ socio, comprobanteCodigo, montoTotal, clubNombre, tipo = 'comprobante' }) {
   const nombreClub = clubNombre || 'Club Universitario de Berisso'
-  const codigo = comprobanteCodigo ? ` (${comprobanteCodigo})` : ''
+  const etiqueta = formatEtiquetaComprobante(tipo, comprobanteCodigo)
   const monto = montoTotal != null ? ` por un monto de ${formatAmount(montoTotal)}` : ''
 
+  const esMenor = Boolean(socio?.es_menor)
+  const nombreSocio = [socio?.nombre, socio?.apellido].filter(Boolean).join(' ').trim()
+  const sufijoDestinatario = esMenor && nombreSocio ? ` correspondiente a ${nombreSocio}` : ''
+  const frasePago = esMenor && nombreSocio ? `el comprobante del pago de ${nombreSocio}` : 'el comprobante de tu pago'
+
   if (tipo === 'nota_credito') {
-    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos la nota de crédito${codigo}${monto}. ¡Muchas gracias!`
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos la nota de crédito${sufijoDestinatario}${etiqueta}${monto}. ¡Muchas gracias!`
   }
   if (tipo === 'devolucion') {
-    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de la devolución${codigo}${monto}. ¡Muchas gracias!`
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de la devolución${sufijoDestinatario}${etiqueta}${monto}. ¡Muchas gracias!`
   }
   if (tipo === 'anulado') {
-    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante anulado${codigo}. Saludos cordiales.`
+    return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante anulado${sufijoDestinatario}${etiqueta}. Saludos cordiales.`
   }
-  return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el comprobante de tu pago${codigo}${monto}. ¡Muchas gracias!`
+  return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos ${frasePago}${etiqueta}${monto}. ¡Muchas gracias!`
+}
+
+export function buildDocumentWhatsAppMessage({ clubNombre, documento }) {
+  const nombreClub = clubNombre || 'Club Universitario de Berisso'
+  return `¡Hola! Te escribimos de ${nombreClub}. Te adjuntamos el documento "${documento}" para que firmes el talón y lo entregues en el club. ¡Muchas gracias!`
 }
 
 /**

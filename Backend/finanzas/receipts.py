@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 from xml.sax.saxutils import escape
 
+from django.conf import settings
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -15,7 +16,7 @@ from configuracion.models import ConfiguracionGeneral
 from configuracion.services import address_text, club_name
 
 from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
-from .pdf_utils import format_amount
+from .pdf_utils import format_amount, format_phone
 from .services import receipt_code, receipt_detail, refund_code, socio_detail
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
@@ -144,10 +145,23 @@ def amount_row(label, amount, label_style="text", amount_style="strong_right"):
 def get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm):
     try:
         config = ConfiguracionGeneral.load()
-        if config.club_logo and hasattr(config.club_logo, "path") and os.path.exists(config.club_logo.path):
-            ext = os.path.splitext(config.club_logo.path)[1].lower()
+        logo_path = None
+        if config.club_logo:
+            try:
+                if hasattr(config.club_logo, "path") and os.path.exists(config.club_logo.path):
+                    logo_path = config.club_logo.path
+            except Exception:
+                pass
+
+        if not logo_path or not os.path.exists(logo_path):
+            fixture_path = os.path.join(settings.BASE_DIR, "configuracion", "fixtures", "escudo-sin-fondo.png")
+            if os.path.exists(fixture_path):
+                logo_path = fixture_path
+
+        if logo_path and os.path.exists(logo_path):
+            ext = os.path.splitext(logo_path)[1].lower()
             if ext in [".png", ".jpg", ".jpeg"]:
-                img = Image(config.club_logo.path)
+                img = Image(logo_path)
                 aspect = img.imageHeight / float(img.imageWidth)
                 w = min(max_width, max_height / aspect)
                 h = w * aspect
@@ -171,7 +185,7 @@ def club_block(config):
         lines.append(Paragraph(labeled("Dirección:", address), STYLES["club_detail"]))
     contact = []
     if config.club_telefono:
-        contact.append(labeled("Tel:", config.club_telefono))
+        contact.append(labeled("Tel:", format_phone(config.club_telefono)))
     if config.club_email:
         contact.append(escape(config.club_email))
     if contact:
@@ -211,18 +225,16 @@ def header_block(title, code, issued, annulment):
 def socio_block(socio):
     name = ", ".join(part for part in (socio.get("apellido"), socio.get("nombre")) if part) or "—"
     number = socio.get("numero_socio")
-    phone = socio.get("telefono")
     fields = [
         ("Apellido y nombre", name, "value"),
         ("DNI", format_dni(socio.get("dni")), "value"),
         ("N° de socio", "—" if number is None else number, "value"),
-        ("Teléfono", phone or "No registrado", "value" if phone else "missing"),
     ]
     cells = [[paragraph(label, "label"), paragraph(value, style)] for label, value, style in fields]
     return [
         paragraph("DATOS DEL SOCIO", "caption"),
         Spacer(1, 6),
-        grid([cells], [INNER_WIDTH * 0.36, INNER_WIDTH * 0.2, INNER_WIDTH * 0.2, INNER_WIDTH * 0.24], [("VALIGN", (0, 0), (-1, -1), "TOP")]),
+        grid([cells], [INNER_WIDTH * 0.44, INNER_WIDTH * 0.28, INNER_WIDTH * 0.28], [("VALIGN", (0, 0), (-1, -1), "TOP")]),
     ]
 
 

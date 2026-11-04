@@ -13,3 +13,4 @@ pypdfium2>=5.14,<6
 croniter
 django-cleanup>=9.0.0
 requests==2.32.3
+Pillow>=10.0

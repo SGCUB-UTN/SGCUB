@@ -44,6 +44,22 @@ export const formatPhone = (phone) => {
   return area ? `(${area}) ${local}` : parsed.formatNational()
 }
 
+// '+54 9 2216 75-5822', the same as format_phone in the backend receipts
+export const formatReceiptPhone = (phone) => {
+  const text = String(phone ?? '').trim()
+  let digits = text.replace(/\D/g, '')
+  let mobile = false
+  if (text.startsWith('+')) {
+    if (!digits.startsWith('54')) return text
+    digits = digits.slice(2)
+    mobile = digits.startsWith('9')
+    if (mobile) digits = digits.slice(1)
+  }
+  if (digits.startsWith('0')) digits = digits.slice(1)
+  if (digits.length !== 10) return text
+  return `+54 ${mobile ? '9 ' : ''}${digits.slice(0, 4)} ${digits.slice(4, 6)}-${digits.slice(6)}`
+}
+
 export const formatNumber =(number) => (number ? `#${String(number).padStart(4, '0')}` : '—')
 
 export const formatAmount = (amount) =>

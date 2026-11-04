@@ -85,6 +85,7 @@ from .serializers import (
 )
 from .services import (
 	BeneficioInvalidoError,
+	CategoriaExentaError,
 	ComprobanteInvalidoError,
 	CuotaConPagosError,
 	CuotaDuplicadaError,
@@ -140,12 +141,12 @@ def cuota_list_create(request):
 
 	data = serializer.validated_data
 	socio = get_object_or_404(
-		Socio.objects.select_related("estado_administrativo", "jugador__estado"),
+		Socio.objects.select_related("estado_administrativo", "jugador__estado", "jugador__categoria"),
 		pk=data["socio_id"],
 	)
 	try:
 		cuota = create_cuota(socio, data["periodo"], data.get("fecha_venc1"), data.get("fecha_venc2"), user=_current_user(request))
-	except (CuotaDuplicadaError, SocioInactivoError) as error:
+	except (CuotaDuplicadaError, SocioInactivoError, CategoriaExentaError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(CuotaSerializer(_cuotas_queryset().get(pk=cuota.pk)).data, status=status.HTTP_201_CREATED)
 
@@ -359,7 +360,11 @@ def comprobante_list(request):
 	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).prefetch_related("pago__items_pago").annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+		"pago__movimiento__cuenta_corriente__socio__jugador",
+	).prefetch_related(
+		"pago__items_pago",
+		"pago__movimiento__cuenta_corriente__socio__jugador__vinculos_familiares__persona",
+	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
@@ -439,7 +444,12 @@ def emitir_nota_credito(request, pk):
 
 def _refunds_queryset():
 	return Devolucion.objects.select_related(
-		"cuenta_corriente__socio__persona", "comprobante_anulado", "usuario",
+		"cuenta_corriente__socio__persona",
+		"cuenta_corriente__socio__jugador",
+		"comprobante_anulado",
+		"usuario",
+	).prefetch_related(
+		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	)
 
 

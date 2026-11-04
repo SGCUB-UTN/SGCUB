@@ -2,11 +2,13 @@ from django.db import models as django_models, transaction
 from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
 from .search import normalize_text, normalized_field
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework import serializers as drf_serializers
 
 from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
 from .serializers import (
@@ -30,6 +32,7 @@ from .serializers import (
     TalleIndumentariaSerializer,
     TipoRelacionFamiliarSerializer,
     player_contacts_error,
+    resize_uploaded_image,
 )
 
 PERSONA_SEARCH_LIMIT = 10
@@ -172,6 +175,7 @@ def estado_administrativo_detail(request, pk):
 
 @extend_schema(tags=["Padron / Persona"], request=PersonaSerializer, responses=PersonaSerializer)
 @api_view(["GET", "POST"])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def persona_list_create(request):
     if request.method == "GET":
         people = Persona.objects.select_related(
@@ -199,29 +203,57 @@ def persona_list_create(request):
                     term_filter |= Q(socio__numero_socio=int(term))
                 people = people.filter(term_filter)
             people = people.order_by("apellido", "nombre")[:PERSONA_SEARCH_LIMIT]
-        serializer = PersonaSerializer(people, many=True)
+        serializer = PersonaSerializer(people, many=True, context={"request": request})
         return Response(serializer.data)
 
-    serializer = PersonaSerializer(data=request.data)
+    serializer = PersonaSerializer(data=request.data, context={"request": request})
     if serializer.is_valid():
         person = serializer.save()
-        return Response(PersonaSerializer(person).data, status=status.HTTP_201_CREATED)
+        return Response(PersonaSerializer(person, context={"request": request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(tags=["Padron / Persona"], request=inline_serializer("FotoUpload", {"foto": drf_serializers.ImageField()}), responses=PersonaSerializer)
+@api_view(["POST", "DELETE"])
+@parser_classes([MultiPartParser, FormParser])
+def persona_foto(request, pk):
+    person = get_object_or_404(Persona, pk=pk)
+
+    if request.method == "DELETE":
+        if person.foto:
+            person.foto.delete(save=False)
+            person.foto = None
+            person.save(update_fields=["foto"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    file = request.FILES.get("foto")
+    if not file:
+        return Response({"foto": ["Debe adjuntar un archivo."]}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        person.foto = resize_uploaded_image(file)
+    except drf_serializers.ValidationError as exc:
+        return Response({"foto": exc.detail if isinstance(exc.detail, list) else [str(exc.detail)]},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    person.save(update_fields=["foto"])
+    return Response(PersonaSerializer(person, context={"request": request}).data)
 
 
 @extend_schema(tags=["Padron / Persona"], request=PersonaSerializer, responses=PersonaSerializer)
 @api_view(["GET", "PUT", "PATCH"])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def persona_detail(request, pk):
     person = get_object_or_404(Persona, pk=pk)
 
     if request.method == "GET":
-        serializer = PersonaSerializer(person)
+        serializer = PersonaSerializer(person, context={"request": request})
         return Response(serializer.data)
 
     serializer = PersonaSerializer(person, data=request.data, partial=True)
     if serializer.is_valid():
         person = serializer.save()
-        return Response(PersonaSerializer(person).data)
+        return Response(PersonaSerializer(person, context={"request": request}).data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -240,7 +272,7 @@ def socio_list_create(request):
                 Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
             )
             members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
-        serializer = SocioSerializer(members, many=True)
+        serializer = SocioSerializer(members, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = SocioSerializer(data=request.data)
@@ -248,7 +280,7 @@ def socio_list_create(request):
     if serializer.is_valid():
         member = serializer.save()
         return Response(
-            SocioSerializer(member).data,
+            SocioSerializer(member, context={"request": request}).data,
             status=status.HTTP_201_CREATED
         )
 
@@ -264,18 +296,18 @@ def socio_detail(request, pk):
     member = get_object_or_404(Socio, pk=pk)
 
     if request.method == "GET":
-        serializer = SocioSerializer(member)
+        serializer = SocioSerializer(member, context={"request": request})
         return Response(serializer.data)
 
     if request.method == "DELETE":
         # Baja lógica: el registro se conserva con estado Inactivo
         member.deactivate()
-        return Response(SocioSerializer(member).data)
+        return Response(SocioSerializer(member, context={"request": request}).data)
 
     serializer = SocioSerializer(member, data=request.data, partial=True)
     if serializer.is_valid():
         member = serializer.save()
-        return Response(SocioSerializer(member).data)
+        return Response(SocioSerializer(member, context={"request": request}).data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -426,13 +458,13 @@ def jugador_list_create(request):
             if not category_id.isdigit():
                 return Response({"categoria": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
             players = players.filter(Q(categoria_id=category_id) | Q(categoria_secundaria_id=category_id))
-        serializer = JugadorListSerializer(players, many=True)
+        serializer = JugadorListSerializer(players, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = JugadorSerializer(data=request.data)
     if serializer.is_valid():
         player = serializer.save()
-        return Response(JugadorSerializerDetail(player).data, status=status.HTTP_201_CREATED)
+        return Response(JugadorSerializerDetail(player, context={"request": request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -442,21 +474,21 @@ def jugador_detail(request, pk):
     player = get_object_or_404(Jugador, pk=pk)
 
     if request.method == "GET":
-        serializer = JugadorSerializerDetail(player)
+        serializer = JugadorSerializerDetail(player, context={"request": request})
         return Response(serializer.data)
 
     if request.method == "PUT":
         serializer = JugadorSerializer(player, data=request.data, partial=False)
         if serializer.is_valid():
             player = serializer.save()
-            return Response(JugadorSerializerDetail(player).data)
+            return Response(JugadorSerializerDetail(player, context={"request": request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     if request.method == "PATCH":
         serializer = JugadorSerializer(player, data=request.data, partial=True)
         if serializer.is_valid():
             player = serializer.save()
-            return Response(JugadorSerializerDetail(player).data)
+            return Response(JugadorSerializerDetail(player, context={"request": request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     # Baja lógica: el registro se conserva con estado deportivo Inactivo
@@ -465,7 +497,7 @@ def jugador_detail(request, pk):
         player.refresh_from_db()
     else:
         player.deactivate()
-    return Response(JugadorSerializerDetail(player).data)
+    return Response(JugadorSerializerDetail(player, context={"request": request}).data)
 
 
 @extend_schema(tags=["Padron / Docente"], request=DocenteSerializer, responses=DocenteSerializer)
@@ -481,13 +513,13 @@ def docente_list_create(request):
             "vinculos_familiares__persona__domicilio__localidad",
             "vinculos_familiares__persona__domicilio__barrio",
         )
-        serializer = DocenteSerializer(teachers, many=True)
+        serializer = DocenteSerializer(teachers, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = DocenteSerializer(data=request.data)
     if serializer.is_valid():
         teacher = serializer.save()
-        return Response(DocenteSerializer(teacher).data, status=status.HTTP_201_CREATED)
+        return Response(DocenteSerializer(teacher, context={"request": request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -497,18 +529,18 @@ def docente_detail(request, pk):
     teacher = get_object_or_404(Docente, pk=pk)
 
     if request.method == "GET":
-        serializer = DocenteSerializer(teacher)
+        serializer = DocenteSerializer(teacher, context={"request": request})
         return Response(serializer.data)
 
     if request.method == "DELETE":
         # Baja lógica: el registro se conserva con estado Inactivo
         teacher.deactivate()
-        return Response(DocenteSerializer(teacher).data)
+        return Response(DocenteSerializer(teacher, context={"request": request}).data)
 
     serializer = DocenteSerializer(teacher, data=request.data, partial=True)
     if serializer.is_valid():
         teacher = serializer.save()
-        return Response(DocenteSerializer(teacher).data)
+        return Response(DocenteSerializer(teacher, context={"request": request}).data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -728,7 +760,7 @@ def vinculo_familiar_list_create(request):
             "docente",
         )
 
-        serializer = VinculoFamiliarSerializer(contacts, many=True)
+        serializer = VinculoFamiliarSerializer(contacts, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = VinculoFamiliarSerializer(data=request.data)
@@ -737,7 +769,7 @@ def vinculo_familiar_list_create(request):
         contact = serializer.save()
 
         return Response(
-            VinculoFamiliarSerializer(contact).data,
+            VinculoFamiliarSerializer(contact, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -762,7 +794,7 @@ def vinculo_familiar_detail(request, pk):
     )
 
     if request.method == "GET":
-        serializer = VinculoFamiliarSerializer(contact)
+        serializer = VinculoFamiliarSerializer(contact, context={"request": request})
         return Response(serializer.data)
 
     if request.method in ["PUT", "PATCH"]:
@@ -774,7 +806,7 @@ def vinculo_familiar_detail(request, pk):
 
         if serializer.is_valid():
             contact = serializer.save()
-            return Response(VinculoFamiliarSerializer(contact).data)
+            return Response(VinculoFamiliarSerializer(contact, context={"request": request}).data)
 
         return Response(
             serializer.errors,

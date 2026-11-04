@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
+import DocumentTemplateForm from './DocumentTemplateForm'
 import { IntegerInput } from './formattedInputs'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, fieldErrors } from './settingsForm'
 import { Field, INPUT_CLASS, IconButton, Notice, SettingsSection, StatusPill } from './settingsParts'
@@ -16,6 +17,7 @@ const EMPTY_TYPE = {
   aplica_jugador: true,
   aplica_docente: false,
   obligatorio: false,
+  con_plantilla: false,
 }
 
 function DocumentTypeForm({ tipo, onSave, onClose }) {
@@ -37,7 +39,7 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
         obligatorio: form.obligatorio,
         ...Object.fromEntries(PROFILES.map(({ field }) => [field, form[field]])),
         aplica_socio: false,
-      })
+      }, form.con_plantilla)
       onClose()
     } catch (requestError) {
       const received = fieldErrors(requestError)
@@ -83,6 +85,25 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
         </div>
       </div>
 
+      {!tipo && (
+        <div className="flex items-center gap-3">
+          <input
+            id="tipo-con-plantilla"
+            type="checkbox"
+            className="h-4 w-4 shrink-0 accent-primary cursor-pointer"
+            checked={form.con_plantilla}
+            onChange={(event) => setField('con_plantilla', event.target.checked)}
+            aria-describedby="tipo-con-plantilla-descripcion"
+          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor="tipo-con-plantilla" className="text-sm font-semibold text-on-surface cursor-pointer">Se genera desde una plantilla</label>
+            <p id="tipo-con-plantilla-descripcion" className="text-sm text-on-surface-variant">
+              El club redacta el documento y lo genera con los datos de cada persona para que lo firme.
+            </p>
+          </div>
+        </div>
+      )}
+
       {errors.general && <Notice tone="error">{errors.general}</Notice>}
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON_CLASSES.secondary} onClick={onClose} disabled={saving}>Cancelar</button>
@@ -94,7 +115,13 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
 
 const profilesLabel = (tipo) => PROFILES.filter(({ field }) => tipo[field]).map(({ label }) => label).join(', ')
 
-function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
+const deleteLabel = (tipo) => {
+  if (tipo.tiene_plantilla) return 'Tiene una plantilla: quitala desde el editor de la plantilla o deshabilitá el tipo'
+  if (tipo.en_uso) return 'Ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo'
+  return 'Eliminar'
+}
+
+function DocumentTypeRow({ tipo, onEdit, onEditTemplate, onAddTemplate, onUpdate, onDelete }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -113,7 +140,15 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   return (
     <tr className={TABLE_CLASSES.row}>
       <td className={TABLE_CLASSES.cell}>
-        <p className={`font-medium ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={`font-medium ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
+          {tipo.tiene_plantilla && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-fixed/40 px-2 py-0.5 text-xs font-medium text-primary">
+              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">article</span>
+              Con plantilla
+            </span>
+          )}
+        </div>
         {error && <p className="mt-1 text-xs font-medium text-error" role="alert">{error}</p>}
       </td>
       <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{profilesLabel(tipo)}</td>
@@ -121,6 +156,9 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
       <td className={TABLE_CLASSES.cell}><StatusPill active={tipo.activo} /></td>
       <td className={TABLE_CLASSES.actionsCell}>
         <div className="flex justify-end">
+          {tipo.tiene_plantilla
+            ? <IconButton icon="edit_document" label="Editar plantilla" disabled={busy} onClick={() => onEditTemplate(tipo)} />
+            : <IconButton icon="note_add" label="Agregar plantilla" disabled={busy} onClick={() => run(() => onAddTemplate(tipo))} />}
           <IconButton icon="edit" label="Editar" disabled={busy} onClick={() => onEdit(tipo)} />
           <IconButton
             icon={tipo.activo ? 'toggle_on' : 'toggle_off'}
@@ -130,8 +168,8 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
           />
           <IconButton
             icon="delete"
-            label={tipo.en_uso ? 'Ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo' : 'Eliminar'}
-            disabled={busy || tipo.en_uso}
+            label={deleteLabel(tipo)}
+            disabled={busy || tipo.en_uso || tipo.tiene_plantilla}
             onClick={() => run(() => onDelete(tipo.id_tipo_documento))}
           />
         </div>
@@ -140,12 +178,30 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   )
 }
 
-function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
+function DocumentTypesSection({ tipos, logoUrl, clubName, onCreate, onUpdate, onDelete, onCreateTemplate, onDeleteTemplate }) {
   const [modal, setModal] = useState({ opened: false, tipo: null, key: 0 })
+  const [templateModal, setTemplateModal] = useState({ opened: false, tipo: null, key: 0 })
   const open = (tipo = null) => setModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
   const close = () => setModal((current) => ({ ...current, opened: false }))
+  const openTemplate = (tipo) => setTemplateModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
+  const closeTemplate = () => setTemplateModal((current) => ({ ...current, opened: false }))
 
-  const save = (data) => (modal.tipo ? onUpdate(modal.tipo.id_tipo_documento, data) : onCreate(data))
+  const addTemplate = async (tipo) => {
+    await onCreateTemplate(tipo.id_tipo_documento)
+    openTemplate(tipo)
+  }
+
+  const removeTemplate = async () => {
+    await onDeleteTemplate(templateModal.tipo.id_tipo_documento)
+    closeTemplate()
+  }
+
+  const save = async (data, withTemplate) => {
+    if (modal.tipo) return onUpdate(modal.tipo.id_tipo_documento, data)
+    const created = await onCreate(data)
+    if (withTemplate) await addTemplate(created)
+    return created
+  }
 
   return (
     <SettingsSection
@@ -172,7 +228,15 @@ function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
           </thead>
           <tbody>
             {tipos.map((tipo) => (
-              <DocumentTypeRow key={tipo.id_tipo_documento} tipo={tipo} onEdit={open} onUpdate={onUpdate} onDelete={onDelete} />
+              <DocumentTypeRow
+                key={tipo.id_tipo_documento}
+                tipo={tipo}
+                onEdit={open}
+                onEditTemplate={openTemplate}
+                onAddTemplate={addTemplate}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+              />
             ))}
           </tbody>
         </table>
@@ -185,6 +249,18 @@ function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
         title={<Text fw={700} size="xl">{modal.tipo ? 'Editar tipo de documento' : 'Nuevo tipo de documento'}</Text>}
       >
         {modal.opened && <DocumentTypeForm key={modal.key} tipo={modal.tipo} onSave={save} onClose={close} />}
+      </Modal>
+
+      <Modal
+        opened={templateModal.opened}
+        onClose={closeTemplate}
+        centered
+        size="72rem"
+        title={<Text fw={700} size="xl">{templateModal.tipo ? `Plantilla · ${templateModal.tipo.nombre}` : 'Plantilla'}</Text>}
+      >
+        {templateModal.opened && (
+          <DocumentTemplateForm key={templateModal.key} tipo={templateModal.tipo} logoUrl={logoUrl} clubName={clubName} onClose={closeTemplate} onRemove={removeTemplate} />
+        )}
       </Modal>
     </SettingsSection>
   )
@@ -220,7 +296,16 @@ function DocumentAlertsSection({ config }) {
 export default function DocumentSettings({ config }) {
   return (
     <div className="flex flex-col">
-      <DocumentTypesSection tipos={config.tipos} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
+      <DocumentTypesSection
+        tipos={config.tipos}
+        logoUrl={config.general?.club_logo}
+        clubName={config.general?.club_nombre}
+        onCreate={config.createTipo}
+        onUpdate={config.updateTipo}
+        onDelete={config.deleteTipo}
+        onCreateTemplate={config.createPlantilla}
+        onDeleteTemplate={config.deletePlantilla}
+      />
       <DocumentAlertsSection config={config} />
     </div>
   )
