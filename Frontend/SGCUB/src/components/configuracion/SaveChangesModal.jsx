@@ -75,7 +75,7 @@ function ExemptionNote() {
       <span className="material-symbols-outlined shrink-0 text-[20px] text-sky-700" aria-hidden="true">info</span>
       <span>
         <strong>Categorías exentas:</strong> a los jugadores de las categorías que pasan a estar exentas se les anulan las cuotas impagas
-        de los meses siguientes; a los de las que dejan de estarlo se les generan las cuotas. Las cuotas pagas no cambian.
+        del mes actual y los siguientes; a los de las que dejan de estarlo se les generan las cuotas. Las cuotas pagas no cambian.
       </span>
     </p>
   )
