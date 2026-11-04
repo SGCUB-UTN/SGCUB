@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getPlantillaDocumento, updatePlantillaDocumento } from '../../api/documentacion'
 import { getErrorMessage } from '../personas/format'
-import MarkdownText, { MarkdownInline } from '../shared/MarkdownText'
+import A4TemplatePreview from './A4TemplatePreview'
 import MarkdownEditor from './MarkdownEditor'
 import { BUTTON_CLASSES, changedFields, fieldErrors } from './settingsForm'
 import { BlockTitle, Field, INPUT_CLASS, Notice } from './settingsParts'
@@ -27,62 +27,7 @@ function CheckboxField({ id, label, description, checked, onChange }) {
   )
 }
 
-function PreviewField({ label }) {
-  return (
-    <div className="flex items-end gap-3">
-      <span className="w-36 shrink-0 text-xs text-on-surface-variant">{label}</span>
-      <span className="h-4 flex-1 border-b border-outline-variant" />
-    </div>
-  )
-}
-
-function PreviewSignature({ label }) {
-  return (
-    <div className="flex w-40 flex-col items-center gap-1 pt-8">
-      <span className="w-full border-t border-on-surface-variant" />
-      <span className="text-center text-[11px] text-on-surface-variant">{label}</span>
-    </div>
-  )
-}
-
-function TemplatePreview({ form, logoUrl, tipo }) {
-  const minorSigners = [form.firma_jugador_menor && 'Firma del jugador', 'Firma del responsable legal'].filter(Boolean)
-  return (
-    <div className="flex flex-col rounded-lg border border-outline-variant/60 bg-white p-6 text-sm text-on-surface shadow-sm">
-      {logoUrl && <img src={logoUrl} alt="" className="mx-auto h-16 max-w-[10rem] object-contain" />}
-      <h4 className="mt-3 text-center text-lg font-bold">{form.titulo || 'Sin título'}</h4>
-      <MarkdownText text={form.cuerpo} className="mt-4 flex flex-col gap-2 leading-relaxed" />
-
-      <div className="mt-6 border-t border-dashed border-outline" />
-      <p className="mt-1 text-center text-[11px] italic text-outline">Recortar por la línea punteada y entregar el talón firmado al club</p>
-
-      <p className="mt-4 font-semibold">Talón de conformidad · {form.titulo || 'Sin título'}</p>
-      <div className="mt-2 flex flex-col gap-2">
-        <PreviewField label="Nombre y apellido" />
-        <PreviewField label="DNI" />
-        {tipo.aplica_jugador && form.mostrar_categoria && <PreviewField label="Categoría a la que ingresa" />}
-      </div>
-      <p className="mt-3 leading-relaxed"><MarkdownInline text={form.talon_leyenda} /></p>
-      <div className="mt-2"><PreviewField label="Fecha" /></div>
-      <div className="flex justify-center"><PreviewSignature label="Firma" /></div>
-
-      {tipo.aplica_jugador && (
-        <div className="mt-6 rounded-md bg-surface-container-low px-4 py-3">
-          <p className="text-xs font-semibold text-on-surface-variant">Si el jugador es menor de edad, el talón suma:</p>
-          <div className="mt-2 flex flex-col gap-2">
-            <PreviewField label="Responsable legal" />
-            <PreviewField label="DNI y vínculo" />
-          </div>
-          <div className="flex justify-center gap-6">
-            {minorSigners.map((label) => <PreviewSignature key={label} label={label} />)}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function DocumentTemplateForm({ tipo, logoUrl, onClose }) {
+export default function DocumentTemplateForm({ tipo, logoUrl, clubName, onClose }) {
   const [saved, setSaved] = useState(null)
   const [form, setForm] = useState(null)
   const [errors, setErrors] = useState({})
@@ -186,9 +131,7 @@ export default function DocumentTemplateForm({ tipo, logoUrl, onClose }) {
 
         <div className="flex min-w-0 flex-col gap-2">
           <BlockTitle>Vista previa</BlockTitle>
-          <div className="lg:max-h-[70vh] lg:overflow-y-auto">
-            <TemplatePreview form={form} logoUrl={logoUrl} tipo={tipo} />
-          </div>
+          <A4TemplatePreview form={form} tipo={tipo} logoUrl={logoUrl} clubName={clubName} />
         </div>
       </div>
 

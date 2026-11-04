@@ -158,7 +158,7 @@ function DocumentTypeRow({ tipo, onEdit, onEditTemplate, onUpdate, onDelete }) {
   )
 }
 
-function DocumentTypesSection({ tipos, logoUrl, onCreate, onUpdate, onDelete }) {
+function DocumentTypesSection({ tipos, logoUrl, clubName, onCreate, onUpdate, onDelete }) {
   const [modal, setModal] = useState({ opened: false, tipo: null, key: 0 })
   const [templateModal, setTemplateModal] = useState({ opened: false, tipo: null, key: 0 })
   const open = (tipo = null) => setModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
@@ -223,7 +223,7 @@ function DocumentTypesSection({ tipos, logoUrl, onCreate, onUpdate, onDelete }) 
         title={<Text fw={700} size="xl">{templateModal.tipo ? `Plantilla · ${templateModal.tipo.nombre}` : 'Plantilla'}</Text>}
       >
         {templateModal.opened && (
-          <DocumentTemplateForm key={templateModal.key} tipo={templateModal.tipo} logoUrl={logoUrl} onClose={closeTemplate} />
+          <DocumentTemplateForm key={templateModal.key} tipo={templateModal.tipo} logoUrl={logoUrl} clubName={clubName} onClose={closeTemplate} />
         )}
       </Modal>
     </SettingsSection>
@@ -260,7 +260,7 @@ function DocumentAlertsSection({ config }) {
 export default function DocumentSettings({ config }) {
   return (
     <div className="flex flex-col">
-      <DocumentTypesSection tipos={config.tipos} logoUrl={config.general?.club_logo} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
+      <DocumentTypesSection tipos={config.tipos} logoUrl={config.general?.club_logo} clubName={config.general?.club_nombre} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
       <DocumentAlertsSection config={config} />
     </div>
   )
