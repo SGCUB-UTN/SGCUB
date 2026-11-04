@@ -34,6 +34,8 @@ from .views import (
     talle_indumentaria_detail,
 )
 
+from . import views
+
 urlpatterns = [
     path("persona/", persona_list_create, name="persona-list"),
     path("persona/<int:pk>/", persona_detail, name="persona-detail"),
@@ -66,4 +68,6 @@ urlpatterns = [
     path("talle-indumentaria/<int:pk>/", talle_indumentaria_detail, name="talle-indumentaria-detail"),
     path("docente-categoria/", docente_categoria_list, name="docente-categoria-list"),
     path("docente-categoria/<int:pk>/", docente_categoria_detail, name="docente-categoria-detail"),
+    path("persona/<int:pk>/foto/", views.persona_foto, name="persona-foto"),
+
 ]

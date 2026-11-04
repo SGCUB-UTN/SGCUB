@@ -26,6 +26,8 @@ import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 const ORIGINS = {
   jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
@@ -201,6 +203,31 @@ function JugadorDetail() {
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
 
+  const handleDownloadPhoto = async () => {
+    if (!socio.foto_url) return
+    try {
+      await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
+    } catch (err) {
+      console.error(err)
+      alert('No se pudo descargar la foto.')
+    }
+  }
+
+  const handleUploadPhoto = async (file) => {
+    if (!socio.persona) return
+    const personaActualizada = await uploadPersonaFoto(socio.persona, file)
+    setCarga((actual) => ({
+      ...actual,
+      datos: {
+        ...actual.datos,
+        socio: {
+          ...actual.datos.socio,
+          foto_url: personaActualizada.foto_url,
+        },
+      },
+    }))
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -269,6 +296,9 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        photoUrl={socio.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={handleUploadPhoto}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
         tags={categoryTags(jugador)}

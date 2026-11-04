@@ -129,7 +129,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
                 />
               )}
               <TableFooter>
-                <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0}>Descargar ZIP</SecondaryButton>
+                <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0 && !personaInfo?.foto_url}>Descargar ZIP</SecondaryButton>
                 <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
               </TableFooter>
             </>
