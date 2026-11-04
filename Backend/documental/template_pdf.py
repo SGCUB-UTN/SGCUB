@@ -29,7 +29,7 @@ SIGNATURE_SPACE = 16 * mm
 BLANK = " "
 DATE_BLANK = "____ / ____ / ________"
 FIELD_LINE = colors.HexColor("#c4c9ce")
-CUT_HINT ="Recortar por la línea punteada y entregar el talón firmado al club"
+CUT_HINT = "Recortar por la línea punteada y entregar el talón firmado al club"
 
 STYLES = {
     "club": text_style("PlantillaClub", 10, "Helvetica-Bold", MUTED, TA_CENTER),
@@ -92,14 +92,14 @@ def cut_line():
     return line
 
 
-def fields_table(rows):
+def fields_table(rows, underline=True):
     content = Table(
         [[Paragraph(escape(label), STYLES["label"]), Paragraph(escape(value), STYLES["value"])] for label, value in rows],
         colWidths=[LABEL_WIDTH, CONTENT_WIDTH - LABEL_WIDTH],
     )
     content.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
-        ("LINEBELOW", (1, 0), (1, -1), 0.5, FIELD_LINE),
+        *([("LINEBELOW", (1, 0), (1, -1), 0.5, FIELD_LINE)] if underline else []),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
@@ -165,7 +165,7 @@ def stub_flowables(plantilla, subject):
         Spacer(1, 4 * mm),
         Paragraph(inline_markdown(plantilla.talon_leyenda), STYLES["legend"]),
         Spacer(1, 2 * mm),
-        fields_table([("Fecha", DATE_BLANK)]),
+        fields_table([("Fecha", DATE_BLANK)], underline=False),
     ]
 
     signatures = []

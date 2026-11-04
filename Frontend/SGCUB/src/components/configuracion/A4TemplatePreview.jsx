@@ -22,9 +22,9 @@ const SAMPLE = {
   [MINOR]: { nombre: 'Tomás Pérez', dni: '52.123.456' },
   [TEACHER]: { nombre: 'Laura Gómez', dni: '28.123.456' },
 }
+const DATE_BLANK = '____ / ____ / ________'
 const SAMPLE_CATEGORY = 'Sub 14 (Masculino)'
 const SAMPLE_GUARDIAN = [['Nombre y apellido', 'María Pérez'], ['DNI', '25.123.456'], ['Vínculo', 'Madre']]
-const DATE_BLANK = '____ / ____ / ________'
 
 const profileOptions = (tipo) => [
   ...(tipo.aplica_jugador ? [{ value: ADULT, label: 'Jugador' }, { value: MINOR, label: 'Jugador menor' }] : []),
@@ -45,13 +45,13 @@ function useElementSize(ref) {
   return size
 }
 
-function FieldRows({ rows }) {
+function FieldRows({ rows, underline = true }) {
   return (
     <div className="flex flex-col">
       {rows.map(([label, value]) => (
         <div key={label} className="flex items-end" style={{ paddingTop: 5 }}>
           <span className="shrink-0 text-[9px] leading-[12px]" style={{ width: LABEL_WIDTH, color: MUTED }}>{label}</span>
-          <span className="flex-1 text-[10px] font-bold leading-[13px]" style={{ borderBottom: `0.5px solid ${FIELD_LINE}`, paddingBottom: 3 }}>{value}</span>
+          <span className="flex-1 text-[10px] font-bold leading-[13px]" style={{ borderBottom: underline ? `0.5px solid ${FIELD_LINE}` : undefined, paddingBottom: 3 }}>{value}</span>
         </div>
       ))}
     </div>
@@ -94,7 +94,7 @@ function Stub({ form, profile, clubName }) {
       <div style={{ height: 4 * MM }} />
       <p className="text-[9.5px] leading-[13.5px]"><MarkdownInline text={form.talon_leyenda} /></p>
       <div style={{ height: 2 * MM }} />
-      <FieldRows rows={[['Fecha', DATE_BLANK]]} />
+      <FieldRows rows={[['Fecha', DATE_BLANK]]} underline={false} />
       <Signatures labels={signers} />
     </div>
   )
