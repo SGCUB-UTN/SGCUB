@@ -72,6 +72,8 @@ class Documento(models.Model):
     fecha_recepcion = models.DateTimeField(blank=True, null=True)
     fecha_vencimiento = models.DateTimeField(blank=True, null=True)
     requiere_firma = models.BooleanField(default=False)
+    alerta_previa_enviada = models.BooleanField(default=False)
+    alerta_vencido_enviada = models.BooleanField(default=False)
 
     class Meta:
         db_table = "documento"
@@ -80,8 +82,10 @@ class Documento(models.Model):
         return f"{self.nombre} - {self.persona}"
 
     def save(self, *args, **kwargs):
-        self.nombre = build_nombre(self.persona.dni, self.tipo_documento.nombre, self.fecha_vencimiento)
-        self.estado_documento = EstadoDocumento.objects.get(nombre=resolve_estado_nombre(self.fecha_vencimiento))
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "fecha_vencimiento" in update_fields or "tipo_documento" in update_fields:
+            self.nombre = build_nombre(self.persona.dni, self.tipo_documento.nombre, self.fecha_vencimiento)
+            self.estado_documento = EstadoDocumento.objects.get(nombre=resolve_estado_nombre(self.fecha_vencimiento))
         super().save(*args, **kwargs)
 
 

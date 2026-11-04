@@ -16,7 +16,7 @@ from configuracion.models import ConfiguracionGeneral
 from configuracion.services import address_text, club_name
 
 from .models import EstadoComprobanteChoices, MedioPago, TipoDevolucionChoices
-from .pdf_utils import format_amount
+from .pdf_utils import format_amount, format_phone
 from .services import receipt_code, receipt_detail, refund_code, socio_detail
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
@@ -185,7 +185,7 @@ def club_block(config):
         lines.append(Paragraph(labeled("Dirección:", address), STYLES["club_detail"]))
     contact = []
     if config.club_telefono:
-        contact.append(labeled("Tel:", config.club_telefono))
+        contact.append(labeled("Tel:", format_phone(config.club_telefono)))
     if config.club_email:
         contact.append(escape(config.club_email))
     if contact:

@@ -57,7 +57,7 @@ from .models import (
 	SecuenciaComprobante,
 	TipoTareaCuotaChoices,
 )
-from .pdf_utils import format_amount
+from .pdf_utils import format_amount, format_phone
 from .period_summary import period_summary
 from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
@@ -2785,6 +2785,32 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		self.assertEqual(format_amount(Decimal("0")), "$ 0,00")
 		self.assertEqual(format_amount(Decimal("-500")), "-$ 500,00")
 
+	def test_formato_de_telefonos(self):
+		casos = {
+			"+5492216755822": "+54 9 2216 75-5822",
+			"+54 9 221 675-5822": "+54 9 2216 75-5822",
+			"2214592810": "+54 2214 59-2810",
+			"02214592810": "+54 2214 59-2810",
+			"+541143214321": "+54 1143 21-4321",
+			"+34612345678": "+34612345678",
+			"12345": "12345",
+		}
+		for telefono, esperado in casos.items():
+			with self.subTest(telefono=telefono):
+				self.assertEqual(format_phone(telefono), esperado)
+
+	def test_recibo_muestra_el_telefono_del_club_formateado(self):
+		from configuracion.models import ConfiguracionGeneral
+		config = ConfiguracionGeneral.load()
+		config.club_telefono = "+5492216755822"
+		config.save()
+		detalle = self.pagar("1000.00")
+
+		contenido = self.descargar(detalle["numero"]).content
+
+		self.assertIn(b"+54 9 2216 75-5822", contenido)
+		self.assertNotIn(b"+5492216755822", contenido)
+
 
 class ProteccionRegistrosFinancierosTests(PagoTestBase):
 	def setUp(self):
@@ -5027,6 +5053,8 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_notificar_cuota_vencida_recargo_despacha_notificacion(self):
 		from datetime import timedelta
@@ -5057,6 +5085,46 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Recargo por mora:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
+
+	def test_notificar_cuota_con_beca_desglosa_conceptos_y_descuento(self):
+		from datetime import timedelta
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion
+		from finanzas.models import ItemCuota, ConceptoItemChoices
+		from finanzas.tasks import run_cuota_generation
+
+		hoy = timezone.localdate()
+		periodo_actual = hoy.strftime("%Y-%m")
+
+		cuota_actual = crear_cuota_con_cargo(
+			self.cuenta,
+			periodo_actual,
+			"1000.00",
+			venc1=hoy + timedelta(days=10),
+			venc2=hoy + timedelta(days=20),
+		)
+		ItemCuota.objects.create(
+			cuota=cuota_actual,
+			concepto=ConceptoItemChoices.BECA,
+			es_descuento=True,
+			fecha_aplicacion=hoy,
+			monto=Decimal("500.00"),
+			motivo="Beca Deportiva",
+		)
+		cuota_actual.movimiento.monto = Decimal("500.00")
+		cuota_actual.movimiento.save()
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			run_cuota_generation(today=hoy)
+			envio = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains=periodo_actual).first()
+			self.assertIsNotNone(envio)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Beca (Beca Deportiva): -$ 500,00", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_modificacion_configuracion_solo_notifica_primer_periodo_afectado(self):
 		from unittest.mock import patch

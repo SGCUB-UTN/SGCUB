@@ -1,4 +1,4 @@
-import { formatAmount, formatDate, formatDni } from '../personas/format'
+import { formatAmount, formatDate, formatDni, formatReceiptPhone } from '../personas/format'
 import DesgloseComprobante from './DesgloseComprobante'
 
 const DEFAULT_CLUB_NAME = 'Club Universitario de Berisso'
@@ -83,7 +83,7 @@ export function ReceiptLayout({
               {(clubConfig?.club_telefono || clubConfig?.club_email) && (
                 <p className="text-xs text-on-surface-variant">
                   {clubConfig?.club_telefono && (
-                    <span><span className="text-on-surface-variant/70">Tel:</span> {clubConfig.club_telefono}</span>
+                    <span><span className="text-on-surface-variant/70">Tel:</span> {formatReceiptPhone(clubConfig.club_telefono)}</span>
                   )}
                   {clubConfig?.club_telefono && clubConfig?.club_email && <span className="mx-1.5 opacity-40">·</span>}
                   {clubConfig?.club_email && <span>{clubConfig.club_email}</span>}
