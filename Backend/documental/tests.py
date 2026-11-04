@@ -171,6 +171,29 @@ class DescargaZipTests(APITestCase):
     def test_rechaza_un_alcance_desconocido(self):
         self.assertEqual(self.descargar(alcance="otros").status_code, 400)
 
+    def test_incluye_foto_carnet_en_zip_vigentes(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.persona.foto = SimpleUploadedFile("avatar.jpg", b"fake image content", content_type="image/jpeg")
+        self.persona.save()
+
+        response = self.descargar(alcance="vigentes")
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archivo:
+            nombres = archivo.namelist()
+            self.assertIn("Foto_Carnet_Paz_Ana.jpg", nombres)
+            self.assertEqual(len(nombres), 3)
+
+    def test_descarga_zip_con_solo_foto_carnet(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        Documento.objects.filter(persona=self.persona).delete()
+        self.persona.foto = SimpleUploadedFile("avatar.jpg", b"fake image content", content_type="image/jpeg")
+        self.persona.save()
+
+        response = self.descargar(alcance="vigentes")
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archivo:
+            self.assertEqual(archivo.namelist(), ["Foto_Carnet_Paz_Ana.jpg"])
+
 
 class PadronDocumentalTests(APITestCase):
     def setUp(self):

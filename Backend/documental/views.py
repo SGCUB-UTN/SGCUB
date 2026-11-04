@@ -9,6 +9,7 @@ from django.db.models import Max, OuterRef, Subquery
 from configuracion.models import ConfiguracionGeneral
 from configuracion.services import Seccion, record_catalog_update, record_change
 
+from padron.models import Persona
 from .models import Documento, TipoDocumento, EstadoDocumento
 from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
 from .padron_pdf import padron_filename, render_padron_pdf
@@ -233,22 +234,38 @@ def download_zip(request, persona_id):
     if scope not in ("", ZIP_VIGENTES, ZIP_HISTORIAL):
         return Response({'detail': 'El alcance debe ser vigentes o historial.'}, status=400)
     documentos = documents_in_scope(persona_id, scope)
-    if not documentos.exists():
+
+    person = Persona.objects.filter(pk=persona_id).first()
+    include_photo = bool(
+        scope in ("", ZIP_VIGENTES)
+        and person
+        and person.foto
+        and person.foto.storage.exists(person.foto.name)
+    )
+
+    if not documentos.exists() and not include_photo:
         return Response({'detail': 'No hay documentos con archivos adjuntos.'}, status=404)
-        
+
     zip_buffer = io.BytesIO()
     files_added = 0
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        if include_photo:
+            photo_path = person.foto.path
+            ext = os.path.splitext(photo_path)[1] or ".jpg"
+            clean_name = f"Foto_Carnet_{person.apellido}_{person.nombre}".strip("_")
+            zip_file.write(photo_path, arcname=f"{clean_name}{ext}")
+            files_added += 1
+
         for doc in documentos:
             if doc.archivoUrl and doc.archivoUrl.storage.exists(doc.archivoUrl.name):
                 file_path = doc.archivoUrl.path
                 file_name = os.path.basename(file_path)
                 zip_file.write(file_path, arcname=file_name)
                 files_added += 1
-                
+
     if files_added == 0:
         return Response({'detail': 'No hay documentos físicos válidos para descargar.'}, status=404)
-        
+
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
     suffix = f"_{scope}" if scope else ""
     response['Content-Disposition'] = f'attachment; filename="documentos_persona_{persona_id}{suffix}.zip"'
