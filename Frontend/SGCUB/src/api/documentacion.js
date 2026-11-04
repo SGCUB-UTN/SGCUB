@@ -38,6 +38,16 @@ export const deleteTipoDocumento = async (id) => {
   await api.delete(`documental/tipos/${id}/`)
 }
 
+export const getPlantillaDocumento = async (tipoId) => {
+  const { data } = await api.get(`documental/tipos/${tipoId}/plantilla/`)
+  return data
+}
+
+export const updatePlantillaDocumento = async (tipoId, plantilla) => {
+  const { data } = await api.patch(`documental/tipos/${tipoId}/plantilla/`, plantilla)
+  return data
+}
+
 export const getEstadosDocumento = async () => {
   const { data } = await api.get('documental/estados/')
   return data

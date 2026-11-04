@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
+import DocumentTemplateForm from './DocumentTemplateForm'
 import { IntegerInput } from './formattedInputs'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES, fieldErrors } from './settingsForm'
 import { Field, INPUT_CLASS, IconButton, Notice, SettingsSection, StatusPill } from './settingsParts'
@@ -94,7 +95,13 @@ function DocumentTypeForm({ tipo, onSave, onClose }) {
 
 const profilesLabel = (tipo) => PROFILES.filter(({ field }) => tipo[field]).map(({ label }) => label).join(', ')
 
-function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
+const deleteLabel = (tipo) => {
+  if (tipo.tiene_plantilla) return 'Tiene una plantilla para generar el documento: deshabilitalo en lugar de eliminarlo'
+  if (tipo.en_uso) return 'Ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo'
+  return 'Eliminar'
+}
+
+function DocumentTypeRow({ tipo, onEdit, onEditTemplate, onUpdate, onDelete }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -113,7 +120,15 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   return (
     <tr className={TABLE_CLASSES.row}>
       <td className={TABLE_CLASSES.cell}>
-        <p className={`font-medium ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={`font-medium ${tipo.activo ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{tipo.nombre}</p>
+          {tipo.tiene_plantilla && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-fixed/40 px-2 py-0.5 text-xs font-medium text-primary">
+              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">article</span>
+              Con plantilla
+            </span>
+          )}
+        </div>
         {error && <p className="mt-1 text-xs font-medium text-error" role="alert">{error}</p>}
       </td>
       <td className={`${TABLE_CLASSES.cell} text-on-surface-variant`}>{profilesLabel(tipo)}</td>
@@ -121,6 +136,9 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
       <td className={TABLE_CLASSES.cell}><StatusPill active={tipo.activo} /></td>
       <td className={TABLE_CLASSES.actionsCell}>
         <div className="flex justify-end">
+          {tipo.tiene_plantilla && (
+            <IconButton icon="edit_document" label="Editar plantilla" disabled={busy} onClick={() => onEditTemplate(tipo)} />
+          )}
           <IconButton icon="edit" label="Editar" disabled={busy} onClick={() => onEdit(tipo)} />
           <IconButton
             icon={tipo.activo ? 'toggle_on' : 'toggle_off'}
@@ -130,8 +148,8 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
           />
           <IconButton
             icon="delete"
-            label={tipo.en_uso ? 'Ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo' : 'Eliminar'}
-            disabled={busy || tipo.en_uso}
+            label={deleteLabel(tipo)}
+            disabled={busy || tipo.en_uso || tipo.tiene_plantilla}
             onClick={() => run(() => onDelete(tipo.id_tipo_documento))}
           />
         </div>
@@ -140,10 +158,13 @@ function DocumentTypeRow({ tipo, onEdit, onUpdate, onDelete }) {
   )
 }
 
-function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
+function DocumentTypesSection({ tipos, logoUrl, onCreate, onUpdate, onDelete }) {
   const [modal, setModal] = useState({ opened: false, tipo: null, key: 0 })
+  const [templateModal, setTemplateModal] = useState({ opened: false, tipo: null, key: 0 })
   const open = (tipo = null) => setModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
   const close = () => setModal((current) => ({ ...current, opened: false }))
+  const openTemplate = (tipo) => setTemplateModal((current) => ({ opened: true, tipo, key: current.key + 1 }))
+  const closeTemplate = () => setTemplateModal((current) => ({ ...current, opened: false }))
 
   const save = (data) => (modal.tipo ? onUpdate(modal.tipo.id_tipo_documento, data) : onCreate(data))
 
@@ -172,7 +193,14 @@ function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
           </thead>
           <tbody>
             {tipos.map((tipo) => (
-              <DocumentTypeRow key={tipo.id_tipo_documento} tipo={tipo} onEdit={open} onUpdate={onUpdate} onDelete={onDelete} />
+              <DocumentTypeRow
+                key={tipo.id_tipo_documento}
+                tipo={tipo}
+                onEdit={open}
+                onEditTemplate={openTemplate}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+              />
             ))}
           </tbody>
         </table>
@@ -185,6 +213,18 @@ function DocumentTypesSection({ tipos, onCreate, onUpdate, onDelete }) {
         title={<Text fw={700} size="xl">{modal.tipo ? 'Editar tipo de documento' : 'Nuevo tipo de documento'}</Text>}
       >
         {modal.opened && <DocumentTypeForm key={modal.key} tipo={modal.tipo} onSave={save} onClose={close} />}
+      </Modal>
+
+      <Modal
+        opened={templateModal.opened}
+        onClose={closeTemplate}
+        centered
+        size="72rem"
+        title={<Text fw={700} size="xl">{templateModal.tipo ? `Plantilla · ${templateModal.tipo.nombre}` : 'Plantilla'}</Text>}
+      >
+        {templateModal.opened && (
+          <DocumentTemplateForm key={templateModal.key} tipo={templateModal.tipo} logoUrl={logoUrl} onClose={closeTemplate} />
+        )}
       </Modal>
     </SettingsSection>
   )
@@ -220,7 +260,7 @@ function DocumentAlertsSection({ config }) {
 export default function DocumentSettings({ config }) {
   return (
     <div className="flex flex-col">
-      <DocumentTypesSection tipos={config.tipos} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
+      <DocumentTypesSection tipos={config.tipos} logoUrl={config.general?.club_logo} onCreate={config.createTipo} onUpdate={config.updateTipo} onDelete={config.deleteTipo} />
       <DocumentAlertsSection config={config} />
     </div>
   )
