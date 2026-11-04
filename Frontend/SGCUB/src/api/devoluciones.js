@@ -18,3 +18,8 @@ export const descargarDevolucionPdf = async (devolucionId) => {
   const response = await api.get(`${devolucionesEndpoint}${devolucionId}/pdf/`, { responseType: 'blob' })
   savePdfResponse(response, `devolucion-${devolucionId}.pdf`)
 }
+
+export const obtenerDevolucionImagenBlob = async (devolucionId) => {
+  const response = await api.get(`${devolucionesEndpoint}${devolucionId}/imagen/`, { responseType: 'blob' })
+  return response.data
+}

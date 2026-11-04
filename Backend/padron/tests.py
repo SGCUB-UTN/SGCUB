@@ -1935,3 +1935,86 @@ class RecategorizationServiceTests(TestCase):
         self.assertIn(f"[AÑO] 1RA: {current_year - 1} -> {current_year}, sin límite de edad", log)
         self.assertIn("Resultado: 11 categorías actualizadas", log)
         self.assertIn("no hubo cambios", repeated)
+
+
+class SaludosCumpleanosTest(TestCase):
+    def test_saludos_cumpleanos_despacha_notificacion(self):
+        from datetime import date
+        from unittest.mock import patch
+        from django.utils import timezone
+        from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+        from configuracion.models import ConfiguracionGeneral
+        from padron.tasks import send_scheduled_birthday_greetings
+
+        config = ConfiguracionGeneral.load()
+        config.notificar_cumpleanos = True
+        config.save()
+
+        hoy = timezone.localdate()
+        p1 = Persona.objects.create(
+            nombre="Carlos",
+            apellido="Cumpleañero",
+            dni="30111222",
+            email="carlos@example.com",
+            fecha_nacimiento=date(1995, hoy.month, hoy.day),
+        )
+        s1 = Socio.objects.create(persona=p1)
+
+        p2 = Persona.objects.create(
+            nombre="Juan",
+            apellido="SinEmail",
+            dni="30111333",
+            email="",
+            fecha_nacimiento=date(1998, hoy.month, hoy.day),
+        )
+        s2 = Socio.objects.create(persona=p2)
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+            res = send_scheduled_birthday_greetings(today=hoy)
+            self.assertEqual(res["cumpleanieros"], 2)
+            self.assertEqual(res["despachados"], 2)
+
+            envios_s1 = EnvioNotificacion.objects.filter(socio=s1)
+            self.assertTrue(envios_s1.exists())
+            self.assertEqual(envios_s1.first().estado, EstadoNotificacion.ENVIADA)
+
+            envios_s2 = EnvioNotificacion.objects.filter(socio=s2)
+            self.assertTrue(envios_s2.exists())
+            self.assertEqual(envios_s2.first().estado, EstadoNotificacion.FALLIDA)
+
+    def test_send_scheduled_birthday_greetings_con_mensaje_personalizado(self):
+        from unittest.mock import patch
+        from django.utils import timezone
+        from configuracion.models import ConfiguracionGeneral
+        from padron.models import Persona, Socio
+        from comunicaciones.models import EnvioNotificacion
+        from padron.tasks import send_scheduled_birthday_greetings
+
+        config = ConfiguracionGeneral.load()
+        config.notificar_cumpleanos = True
+        config.mensaje_cumpleanos = "¡Felicidades {nombre}! Que tengas un gran año en el {club}."
+        config.save()
+
+        hoy = timezone.localdate()
+        p = Persona.objects.create(
+            nombre="Lucas",
+            apellido="Gomez",
+            dni="45111222",
+            email="lucas@example.com",
+            fecha_nacimiento=date(2005, hoy.month, hoy.day),
+        )
+        s = Socio.objects.create(persona=p)
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True):
+            res = send_scheduled_birthday_greetings(today=hoy)
+            self.assertEqual(res["despachados"], 1)
+            envio = EnvioNotificacion.objects.filter(socio=s).first()
+            self.assertIsNotNone(envio)
+            self.assertIn("¡Felicidades Lucas!", envio.notificacion.contenido)
+            self.assertIn(config.club_nombre, envio.notificacion.contenido)
+
+            # Segunda ejecución en el mismo día no debe reenviar
+            res_repetido = send_scheduled_birthday_greetings(today=hoy)
+            self.assertEqual(res_repetido["despachados"], 0)
+            self.assertEqual(EnvioNotificacion.objects.filter(socio=s).count(), 1)
+

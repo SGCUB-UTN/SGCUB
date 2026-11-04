@@ -38,7 +38,14 @@ from .delinquency import ReporteMorosidadInvalidoError, delinquency_report, pars
 from .delinquency_pdf import delinquency_filename, render_delinquency_pdf
 from .financial_summary import financial_summary
 from .financial_summary_pdf import financial_summary_filename, render_financial_summary_pdf
-from .receipts import receipt_filename, refund_filename, render_receipt_pdf, render_refund_pdf
+from .receipts import (
+	receipt_filename,
+	refund_filename,
+	render_receipt_image,
+	render_receipt_pdf,
+	render_refund_image,
+	render_refund_pdf,
+)
 from .serializers import (
 	BecaSerializer,
 	OtorgarBecaSerializer,
@@ -290,6 +297,7 @@ def registrar_pago(request):
 			request.user if request.user.is_authenticated else None,
 			data["condonacion_mora"],
 			data["nota_credito"],
+			item_cuota_ids_descuento=data["item_cuota_ids_descuento"],
 		)
 	except CuentaCorriente.DoesNotExist:
 		return Response({"detail": "El socio no tiene cuenta corriente."}, status=status.HTTP_404_NOT_FOUND)
@@ -351,7 +359,11 @@ def comprobante_list(request):
 	)
 	comprobantes = Comprobante.objects.select_related(
 		"pago__movimiento__cuenta_corriente__socio__persona",
-	).prefetch_related("pago__items_pago").annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
+		"pago__movimiento__cuenta_corriente__socio__jugador",
+	).prefetch_related(
+		"pago__items_pago",
+		"pago__movimiento__cuenta_corriente__socio__jugador__vinculos_familiares__persona",
+	).annotate(monto_devuelto=Coalesce(Subquery(refunded), Decimal("0.00"))).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():
@@ -398,6 +410,18 @@ def comprobante_pdf(request, pk):
 	return response
 
 
+@extend_schema(tags=["Finanzas/Comprobante"], responses={(200, "image/png"): bytes})
+@api_view(["GET"])
+def comprobante_imagen(request, pk):
+	comprobante = get_object_or_404(
+		Comprobante.objects.select_related("pago__movimiento__cuenta_corriente__socio__persona"),
+		pk=pk,
+	)
+	response = HttpResponse(render_receipt_image(comprobante), content_type="image/png")
+	response["Content-Disposition"] = f'inline; filename="recibo-{comprobante.numero:08d}.png"'
+	return response
+
+
 @extend_schema(tags=["Finanzas/Devolucion"], request=NotaCreditoSerializer, responses=DevolucionSerializer)
 @api_view(["POST"])
 def emitir_nota_credito(request, pk):
@@ -419,7 +443,12 @@ def emitir_nota_credito(request, pk):
 
 def _refunds_queryset():
 	return Devolucion.objects.select_related(
-		"cuenta_corriente__socio__persona", "comprobante_anulado", "usuario",
+		"cuenta_corriente__socio__persona",
+		"cuenta_corriente__socio__jugador",
+		"comprobante_anulado",
+		"usuario",
+	).prefetch_related(
+		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	)
 
 
@@ -469,6 +498,15 @@ def devolucion_pdf(request, pk):
 	refund = get_object_or_404(_refunds_queryset(), pk=pk)
 	response = HttpResponse(render_refund_pdf(refund), content_type="application/pdf")
 	response["Content-Disposition"] = f'attachment; filename="{refund_filename(refund)}"'
+	return response
+
+
+@extend_schema(tags=["Finanzas/Devolucion"], responses={(200, "image/png"): bytes})
+@api_view(["GET"])
+def devolucion_imagen(request, pk):
+	refund = get_object_or_404(_refunds_queryset(), pk=pk)
+	response = HttpResponse(render_refund_image(refund), content_type="image/png")
+	response["Content-Disposition"] = f'inline; filename="{refund_filename(refund)}.png"'
 	return response
 
 

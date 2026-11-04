@@ -48,6 +48,7 @@ from .services import (
     receipt_detail,
     refund_code,
     refunded_amount,
+    resolver_contacto_socio_finanzas,
     revertible_settlement,
     surcharge_reason,
     user_name,
@@ -64,13 +65,7 @@ def monto_total_cuota(cuota):
 
 
 def socio_data(socio):
-    return {
-        "socio_id": socio.socio_id,
-        "numero_socio": socio.numero_socio,
-        "nombre": socio.persona.nombre,
-        "apellido": socio.persona.apellido,
-        "dni": socio.persona.dni,
-    }
+    return resolver_contacto_socio_finanzas(socio)
 
 
 def cuota_account(cuota):
@@ -216,6 +211,11 @@ class RegistroPagoSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
     )
+    item_cuota_ids_descuento = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        default=list,
+    )
     monto_total = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -229,6 +229,11 @@ class RegistroPagoSerializer(serializers.Serializer):
     def validate_cuota_ids(self, value):
         if len(value) != len(set(value)):
             raise serializers.ValidationError("No se deben repetir cuotas.")
+        return value
+
+    def validate_item_cuota_ids_descuento(self, value):
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("No se deben repetir detalles para descontar.")
         return value
 
     def validate(self, attrs):
@@ -349,6 +354,8 @@ def item_description(item):
         return f"Condonación del recargo por {item.vencimiento}° vencimiento"
     if item.concepto == ConceptoItemChoices.BECA and item.beca_id and item.beca.porcentaje is not None:
         return f"Beca {item.beca.porcentaje.normalize():f}%"
+    if item.concepto == ConceptoItemChoices.OTRO and item.motivo:
+        return item.motivo
     return item.get_concepto_display()
 
 
@@ -493,6 +500,10 @@ class DevolucionSerializer(serializers.ModelSerializer):
     medio_de_pago_nombre = serializers.SerializerMethodField()
     socio = serializers.SerializerMethodField()
     comprobante_anulado_codigo = serializers.SerializerMethodField()
+    comprobante_anulado_fecha = serializers.DateField(source="comprobante_anulado.fecha_emision", read_only=True, default=None)
+    comprobante_anulado_monto = serializers.DecimalField(
+        source="comprobante_anulado.monto_total", max_digits=10, decimal_places=2, read_only=True, default=None,
+    )
     usuario_nombre = serializers.SerializerMethodField()
 
     class Meta:
@@ -500,7 +511,7 @@ class DevolucionSerializer(serializers.ModelSerializer):
         fields = [
             "devolucion_id", "tipo", "tipo_nombre", "numero", "codigo", "fecha", "socio", "concepto", "monto",
             "medio_de_pago", "medio_de_pago_nombre", "comprobante_anulado", "comprobante_anulado_codigo",
-            "responsable", "usuario", "usuario_nombre",
+            "comprobante_anulado_fecha", "comprobante_anulado_monto", "responsable", "usuario", "usuario_nombre",
         ]
         read_only_fields = fields
 

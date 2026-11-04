@@ -17,7 +17,7 @@ from .services import PadronFilterError, build_padron_documental, padron_summary
 @extend_schema(tags=["Documental / Documentos"], request=DocumentoSerializer, responses=DocumentoSerializer)
 @api_view(["GET", "POST"])
 def documento_list_create(request):
-    refresh_document_states()
+    refresh_document_states(enviar_alertas=False)
     if request.method == "GET":
         persona_id = request.query_params.get('persona_id')
         documentos = Documento.objects.select_related(
@@ -132,7 +132,7 @@ from django.utils import timezone
 @extend_schema(tags=["Documental / Alertas"])
 @api_view(["GET"])
 def alertas_count(request):
-    refresh_document_states()
+    refresh_document_states(enviar_alertas=False)
     hoy = timezone.now().date()
     dias_alerta = ConfiguracionGeneral.load().dias_alerta_documentos
     
