@@ -75,6 +75,9 @@ CHANGE_KEYS_BY_FUNC = {
     "finanzas.tasks.generate_scheduled_cuotas": ("cuotas_creadas",),
     "finanzas.tasks.apply_scheduled_surcharges": ("recargos_primer_vencimiento", "recargos_segundo_vencimiento"),
     "finanzas.services.finish_expired_scholarships": ("becas_finalizadas",),
+    "finanzas.tasks.send_scheduled_due_reminders": ("avisos_enviados",),
+    "padron.tasks.send_scheduled_birthday_greetings": ("despachados",),
+    "documental.tasks.refresh_document_states": ("documentos_actualizados", "alertas_enviadas"),
 }
 
 

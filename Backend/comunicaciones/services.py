@@ -151,6 +151,63 @@ HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def obtener_contacto_socio(socio):
+    """
+    Retorna una tupla: (email, nombre_destinatario, detalle_error)
+    Si el socio es menor de 18 años, prioriza el contacto del responsable legal
+    registrado en sus vínculos familiares.
+    """
+    persona = getattr(socio, "persona", None)
+    if not persona:
+        return None, "", "El socio no posee persona asociada"
+
+    nombre_socio = f"{persona.nombre} {persona.apellido}".strip()
+    edad = persona.edad
+
+    # Si es menor de 18 años
+    if edad is not None and edad < 18:
+        jugador = getattr(socio, "jugador", None)
+        if jugador:
+            # Buscar responsable legal con email válido
+            tutor = (
+                jugador.vinculos_familiares.filter(
+                    responsable_legal=True,
+                    persona__email__isnull=False,
+                )
+                .exclude(persona__email="")
+                .select_related("persona")
+                .first()
+            )
+            if tutor and tutor.persona.email and "@" in tutor.persona.email:
+                nombre_tutor = f"{tutor.persona.nombre} {tutor.persona.apellido}".strip()
+                return tutor.persona.email.strip(), f"{nombre_tutor} (Responsable de {nombre_socio})", None
+
+            # Si no hay responsable legal con email, buscar cualquier vínculo familiar con email
+            otro_familiar = (
+                jugador.vinculos_familiares.filter(
+                    persona__email__isnull=False,
+                )
+                .exclude(persona__email="")
+                .select_related("persona")
+                .first()
+            )
+            if otro_familiar and otro_familiar.persona.email and "@" in otro_familiar.persona.email:
+                nombre_fam = f"{otro_familiar.persona.nombre} {otro_familiar.persona.apellido}".strip()
+                return otro_familiar.persona.email.strip(), f"{nombre_fam} (Contacto de {nombre_socio})", None
+
+        # Si el menor tiene email propio registrado
+        if persona.email and "@" in persona.email:
+            return persona.email.strip(), nombre_socio, None
+
+        return None, nombre_socio, "Socio menor de edad sin correo de contacto responsable registrado"
+
+    # Mayor de edad (o sin fecha de nacimiento informada)
+    if persona.email and "@" in persona.email:
+        return persona.email.strip(), nombre_socio, None
+
+    return None, nombre_socio, "El socio no tiene una dirección de correo electrónico válida"
+
+
 def _read_escudo_bytes(configuracion) -> bytes | None:
     try:
         if configuracion.club_logo and configuracion.club_logo.name:
@@ -166,10 +223,17 @@ def _read_escudo_bytes(configuracion) -> bytes | None:
     return None
 
 
-def enviar_email_individual(destinatario: str, asunto: str, contenido: str, envio_id: int = None) -> bool:
+def enviar_email_individual(
+    destinatario: str,
+    asunto: str,
+    contenido: str,
+    envio_id: int = None,
+    adjuntos: list = None,
+) -> bool:
     """
     Envía un correo electrónico institucional a través del servicio SMTP configurado.
     Actualiza el estado y detalle_fallo del EnvioNotificacion si se proporciona su ID.
+    `adjuntos` puede ser una lista de tuplas (filename, content_bytes, mimetype) o (filename, content_bytes).
     """
     configuracion = ConfiguracionGeneral.load()
     club_nombre = configuracion.club_nombre or "Club Universitario de Berisso"
@@ -219,6 +283,15 @@ def enviar_email_individual(destinatario: str, asunto: str, contenido: str, envi
         )
         msg.attach_alternative(html_content, "text/html")
 
+        if adjuntos:
+            for item in adjuntos:
+                if len(item) == 3:
+                    nombre_archivo, contenido_bytes, mimetype = item
+                    msg.attach(nombre_archivo, contenido_bytes, mimetype)
+                elif len(item) == 2:
+                    nombre_archivo, contenido_bytes = item
+                    msg.attach(nombre_archivo, contenido_bytes)
+
         if escudo_bytes:
             try:
                 img = MIMEImage(escudo_bytes)
@@ -252,6 +325,84 @@ def enviar_email_individual(destinatario: str, asunto: str, contenido: str, envi
         return False
 
 
+def crear_y_despachar_notificacion(
+    titulo: str,
+    asunto: str,
+    contenido: str,
+    socios: list,
+    adjuntos: list = None,
+    canal: str = CanalNotificacion.MAIL,
+) -> Notificacion:
+    """
+    Crea un registro de Notificación con sus EnvioNotificacion y despacha los correos.
+    Actualiza el estado de la notificación según los envíos resultantes.
+    """
+    notificacion = Notificacion.objects.create(
+        titulo=titulo,
+        asunto=asunto,
+        contenido=contenido,
+        estado=EstadoNotificacion.PROGRAMADA,
+    )
+
+    exitosos = 0
+    total = len(socios)
+
+    for socio in socios:
+        envio = EnvioNotificacion.objects.create(
+            socio=socio,
+            notificacion=notificacion,
+            canal=canal,
+            estado=EstadoNotificacion.PROGRAMADA,
+        )
+
+        email, _, error = obtener_contacto_socio(socio)
+        if email and "@" in email:
+            ok = enviar_email_individual(
+                destinatario=email,
+                asunto=asunto or titulo,
+                contenido=contenido,
+                envio_id=envio.pk,
+                adjuntos=adjuntos,
+            )
+            if ok:
+                envio.estado = EstadoNotificacion.ENVIADA
+                envio.save(update_fields=["estado"])
+                exitosos += 1
+        else:
+            envio.estado = EstadoNotificacion.FALLIDA
+            envio.detalle_fallo = error or "Formato de dirección de correo electrónico inválido"
+            envio.save(update_fields=["estado", "detalle_fallo"])
+
+    if total == 0 or exitosos > 0:
+        notificacion.estado = EstadoNotificacion.ENVIADA
+    else:
+        notificacion.estado = EstadoNotificacion.FALLIDA
+    notificacion.save(update_fields=["estado"])
+
+    return notificacion
+
+
+def despachar_notificacion_asincrona(
+    titulo: str,
+    asunto: str,
+    contenido: str,
+    socio_ids: list,
+    adjuntos: list = None,
+    canal: str = CanalNotificacion.MAIL,
+):
+    from padron.models import Socio
+
+    socios = list(Socio.objects.filter(pk__in=socio_ids).select_related("persona"))
+    return crear_y_despachar_notificacion(
+        titulo=titulo,
+        asunto=asunto,
+        contenido=contenido,
+        socios=socios,
+        adjuntos=adjuntos,
+        canal=canal,
+    )
+
+
 def despachar_envios_email_notificacion(notificacion_id: int, copia_secretaria: bool = False):
     """
     Busca todos los envíos de canal MAIL para una notificación y los despacha mediante SMTP.
@@ -276,7 +427,8 @@ def despachar_envios_email_notificacion(notificacion_id: int, copia_secretaria: 
     exitosos = 0
 
     for envio in envios_mail:
-        contacto = (envio.socio.persona.email or "").strip()
+        email, _, detalle_error = obtener_contacto_socio(envio.socio)
+        contacto = (email or "").strip()
         if "@" in contacto:
             resultado = enviar_email_individual(
                 destinatario=contacto,
@@ -288,7 +440,7 @@ def despachar_envios_email_notificacion(notificacion_id: int, copia_secretaria: 
                 exitosos += 1
         else:
             envio.estado = EstadoNotificacion.FALLIDA
-            envio.detalle_fallo = "Formato de dirección de correo electrónico inválido"
+            envio.detalle_fallo = detalle_error or "Formato de dirección de correo electrónico inválido"
             envio.save(update_fields=["estado", "detalle_fallo"])
 
     if copia_secretaria:
