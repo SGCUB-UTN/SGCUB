@@ -45,8 +45,22 @@ def send_scheduled_birthday_greetings(today=None):
             "Comisión Directiva"
         )
 
+    from comunicaciones.models import EnvioNotificacion
+
+    # Evitar saludos duplicados para socios que ya fueron saludados en el año actual
+    ya_saludados = set(
+        EnvioNotificacion.objects.filter(
+            socio__in=socios_cumple,
+            notificacion__titulo="¡Feliz Cumpleaños!",
+            notificacion__fecha_creacion__year=today.year,
+        ).values_list("socio_id", flat=True)
+    )
+
     enviados = 0
     for socio in socios_cumple:
+        if socio.pk in ya_saludados:
+            continue
+
         nombre = socio.persona.nombre
         titulo = "¡Feliz Cumpleaños!"
         asunto = f"¡Feliz Cumpleaños te desea {club}!"

@@ -2,13 +2,14 @@ import logging
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from configuracion.models import ConfiguracionGeneral
+from comunicaciones.models import EnvioNotificacion, Notificacion
 from comunicaciones.services import crear_y_despachar_notificacion, enviar_email_individual
 from .models import Documento, EstadoDocumento
 
 logger = logging.getLogger(__name__)
 
 
-def refresh_document_states():
+def refresh_document_states(enviar_alertas=True):
     """
     Tarea programada diaria (HU-16 / #75):
     1. Actualiza el estado documental entre 'Vigente' y 'Vencido' según la fecha actual.
@@ -32,6 +33,12 @@ def refresh_document_states():
         .update(estado_documento=estados["Vigente"])
     )
     total_actualizados = vencidos_actualizados + vigentes_actualizados
+
+    if not enviar_alertas:
+        return {
+            "documentos_actualizados": total_actualizados,
+            "alertas_enviadas": 0,
+        }
 
     # Alertas preventivas
     config = ConfiguracionGeneral.load()
@@ -90,6 +97,32 @@ def refresh_document_states():
 
             titulo = f"Vencimiento de documentación: {tipo_nombre}"
             asunto = f"Aviso de vencimiento: {tipo_nombre} - {club}"
+
+            # Evitar alertas duplicadas para el mismo documento y vencimiento
+            if socio:
+                if dias_restantes == 0:
+                    ya_notificado = EnvioNotificacion.objects.filter(
+                        socio=socio,
+                        notificacion__titulo=titulo,
+                        notificacion__fecha_creacion__date=today,
+                        notificacion__contenido__icontains="ha vencido en el día de hoy",
+                    ).exists()
+                else:
+                    ya_notificado = EnvioNotificacion.objects.filter(
+                        socio=socio,
+                        notificacion__titulo=titulo,
+                        notificacion__contenido__icontains=venc_str,
+                    ).exists()
+                if ya_notificado:
+                    continue
+            elif persona.email and "@" in persona.email:
+                ya_notificado = Notificacion.objects.filter(
+                    asunto=asunto,
+                    contenido__icontains=venc_str if dias_restantes > 0 else "ha vencido en el día de hoy",
+                ).exists()
+                if ya_notificado:
+                    continue
+
             contenido = (
                 f"Estimado/a {persona.nombre},\n\n"
                 f"Te informamos que tu documentación '{tipo_nombre}' {motivo}.\n\n"

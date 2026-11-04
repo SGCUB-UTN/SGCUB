@@ -2013,3 +2013,8 @@ class SaludosCumpleanosTest(TestCase):
             self.assertIn("¡Felicidades Lucas!", envio.notificacion.contenido)
             self.assertIn(config.club_nombre, envio.notificacion.contenido)
 
+            # Segunda ejecución en el mismo día no debe reenviar
+            res_repetido = send_scheduled_birthday_greetings(today=hoy)
+            self.assertEqual(res_repetido["despachados"], 0)
+            self.assertEqual(EnvioNotificacion.objects.filter(socio=s).count(), 1)
+

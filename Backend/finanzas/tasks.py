@@ -535,10 +535,21 @@ def send_scheduled_due_reminders(today=None):
             continue
 
         dias_restantes = (vencimiento - today).days
-        tiempo_str = f"en {dias_restantes} {'día' if dias_restantes == 1 else 'días'} (el {vencimiento.strftime('%d/%m/%Y')})"
+        venc_str = vencimiento.strftime('%d/%m/%Y')
+        tiempo_str = f"en {dias_restantes} {'día' if dias_restantes == 1 else 'días'} (el {venc_str})"
 
         titulo = f"Recordatorio de vencimiento de cuota {cuota.periodo}"
         asunto = f"Recordatorio de vencimiento - Cuota {cuota.periodo} - {club}"
+
+        # Evitar recordatorios duplicados para la misma cuota y vencimiento
+        from comunicaciones.models import EnvioNotificacion
+        ya_notificado = EnvioNotificacion.objects.filter(
+            socio=socio,
+            notificacion__titulo=titulo,
+            notificacion__contenido__icontains=venc_str,
+        ).exists()
+        if ya_notificado:
+            continue
         contenido = (
             f"Estimado/a {socio.persona.nombre},\n\n"
             f"Te recordamos que tu cuota social del período {cuota.periodo} vence {tiempo_str}.\n"
