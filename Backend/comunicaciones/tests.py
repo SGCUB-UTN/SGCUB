@@ -139,7 +139,6 @@ class ObtenerContactoYDespachoNotificacionTest(TestCase):
             mock_send.assert_called_once()
             self.assertEqual(mock_send.call_args[1]["destinatario"], "laura_tutor@example.com")
 
-
     def test_actualiza_estado_notificacion_a_fallida_si_todos_los_envios_fallan(self):
         persona = Persona.objects.create(
             nombre="Juan",
@@ -165,4 +164,3 @@ class ObtenerContactoYDespachoNotificacionTest(TestCase):
         despachar_envios_email_notificacion(notificacion.pk)
         notificacion.refresh_from_db()
         self.assertEqual(notificacion.estado, EstadoNotificacion.FALLIDA)
-

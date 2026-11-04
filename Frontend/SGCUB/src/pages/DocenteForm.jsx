@@ -20,6 +20,8 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 import { FormSkeleton } from '../components/shared/Skeleton'
+import PhotoUploadField from '../components/shared/PhotoUploadField'
+import { uploadPersonaFoto, deletePersonaFoto } from '../api/personaFoto'
 
 const CAMPOS_ASIGNACION = ['cargo', 'categorias']
 
@@ -181,6 +183,8 @@ function DocenteForm() {
   const [documentoExistente, setDocumentoExistente] = useState(null)
   // The criminal record may be handed in without attaching the PDF
   const [criminalRecordDelivered, setCriminalRecordDelivered] = useState(false)
+  const [foto, setFoto] = useState(null)
+  const [eliminarFoto, setEliminarFoto] = useState(false)
 
   const handleClearFile = () => {
     setArchivoAntecedente(null)
@@ -414,6 +418,20 @@ function DocenteForm() {
           vinculos_familiares: vinculosPayload,
         })
 
+        if (foto) {
+          try {
+            await uploadPersonaFoto(docenteOriginal.persona, foto)
+          } catch (photoError) {
+            console.error('No se pudo subir la foto de perfil:', photoError)
+          }
+        } else if (eliminarFoto) {
+          try {
+            await deletePersonaFoto(docenteOriginal.persona)
+          } catch (photoError) {
+            console.error('No se pudo eliminar la foto de perfil:', photoError)
+          }
+        }
+
         if (archivoAntecedente || criminalRecordDelivered) await saveCriminalRecord(docenteOriginal.persona)
 
         navigate(`/padron/docentes/${id}`)
@@ -441,6 +459,15 @@ function DocenteForm() {
         vinculos_familiares: vinculosPayload,
       })
       
+      if (foto) {
+        try {
+          await uploadPersonaFoto(personaId, foto)
+        } catch (photoError) {
+          // El docente ya fue creado; la foto falló. No bloqueamos el alta.
+          console.error('No se pudo subir la foto de perfil:', photoError)
+        }
+      } 
+
       if (archivoAntecedente || criminalRecordDelivered) {
         await saveCriminalRecord(personaId)
       }
@@ -534,6 +561,27 @@ function DocenteForm() {
 
         <form id="form-docente" className="p-6 md:p-8" onSubmit={guardar} noValidate>
           <div className="space-y-6">
+            {/* Foto de perfil: visible en edición o al crear una persona nueva */}
+            {(editando || (!socioVinculado && !personaEncontrada && !docenteSeleccionado)) && (
+              <div className="flex flex-col gap-3 pb-4 border-b border-outline-variant/20">
+                <SeccionTitulo icono="photo_camera" titulo="Foto de perfil" />
+                <PhotoUploadField
+                  value={foto}
+                  onChange={(nuevoArchivo) => {
+                    setFoto(nuevoArchivo)
+                    setEliminarFoto(false)
+                  }}
+                  disabled={guardando}
+                  currentUrl={editando ? docenteOriginal?.persona_detalle?.foto_url : null}
+                  onDeleteCurrent={() => {
+                    setFoto(null)
+                    setEliminarFoto(true)
+                  }}
+                  isDeleted={eliminarFoto}
+                  onRestoreCurrent={() => setEliminarFoto(false)}
+                />
+              </div>
+            )}
             <SeccionDatosPersonales
               bindInput={bindInput}
               errores={errores}

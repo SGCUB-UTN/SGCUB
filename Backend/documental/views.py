@@ -9,10 +9,27 @@ from django.db.models import Max, OuterRef, Subquery
 from configuracion.models import ConfiguracionGeneral
 from configuracion.services import Seccion, record_catalog_update, record_change
 
-from .models import Documento, TipoDocumento, EstadoDocumento
-from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer
+from padron.models import Persona
+from .models import Documento, TipoDocumento, EstadoDocumento, PlantillaDocumento
+from .serializers import (
+    DocumentoSerializer,
+    EstadoDocumentoSerializer,
+    PlantillaDocumentoSerializer,
+    TipoDocumentoSerializer,
+    has_template,
+)
 from .padron_pdf import padron_filename, render_padron_pdf
-from .services import PadronFilterError, build_padron_documental, padron_summary, parse_padron_filters
+from .services import (
+    PadronFilterError,
+    TemplateSubjectError,
+    build_padron_documental,
+    default_template_legend,
+    padron_summary,
+    parse_padron_filters,
+    template_recipient,
+    template_subject,
+)
+from .template_pdf import FULL, SCOPES, pdf_pages_to_png, render_template_pdf, template_filename
 
 @extend_schema(tags=["Documental / Documentos"], request=DocumentoSerializer, responses=DocumentoSerializer)
 @api_view(["GET", "POST"])
@@ -78,7 +95,7 @@ def request_user(request):
 @api_view(["GET", "POST"])
 def tipo_documento_list(request):
     if request.method == "GET":
-        tipos = TipoDocumento.objects.order_by('nombre')
+        tipos = TipoDocumento.objects.select_related('plantilla').order_by('nombre')
         if request.query_params.get('activos') in ('1', 'true'):
             tipos = tipos.filter(activo=True)
         return Response(TipoDocumentoSerializer(tipos, many=True).data)
@@ -96,6 +113,11 @@ def tipo_documento_list(request):
 def tipo_documento_detail(request, pk):
     tipo = get_object_or_404(TipoDocumento, pk=pk)
     if request.method == "DELETE":
+        if has_template(tipo):
+            return Response(
+                {"detail": "El tipo tiene una plantilla para generar el documento: deshabilitalo en lugar de eliminarlo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if tipo.documentos.exists():
             return Response(
                 {"detail": "El tipo ya tiene documentos cargados: deshabilitalo en lugar de eliminarlo."},
@@ -119,6 +141,106 @@ def tipo_documento_detail(request, pk):
         request_user(request),
     )
     return Response(TipoDocumentoSerializer(tipo).data)
+
+TEMPLATE_FIELDS = {
+    "titulo": "Título",
+    "cuerpo": "Contenido",
+    "talon_leyenda": "Leyenda del talón",
+    "firma_jugador_menor": "Firma del jugador menor",
+    "mostrar_categoria": "Mostrar categoría",
+}
+
+
+def template_for(tipo_id):
+    return get_object_or_404(PlantillaDocumento.objects.select_related("tipo_documento"), tipo_documento_id=tipo_id)
+
+
+def create_template(request, tipo_id):
+    tipo = get_object_or_404(TipoDocumento, pk=tipo_id)
+    if has_template(tipo):
+        return Response({"detail": "El tipo ya tiene una plantilla."}, status=status.HTTP_400_BAD_REQUEST)
+    plantilla = PlantillaDocumento.objects.create(
+        tipo_documento=tipo,
+        titulo=tipo.nombre,
+        talon_leyenda=default_template_legend(tipo.nombre),
+    )
+    record_change(Seccion.DOCUMENTACION, f"Plantilla {tipo.nombre}", "", "Alta", request_user(request))
+    return Response(PlantillaDocumentoSerializer(plantilla).data, status=status.HTTP_201_CREATED)
+
+
+def template_with_subject(tipo_id, persona_id):
+    plantilla = template_for(tipo_id)
+    persona = get_object_or_404(Persona.objects.select_related("socio__jugador__categoria", "docente"), pk=persona_id)
+    return plantilla, template_subject(plantilla.tipo_documento, persona)
+
+
+@extend_schema(tags=["Documental / Plantillas"], request=PlantillaDocumentoSerializer, responses=PlantillaDocumentoSerializer)
+@api_view(["GET", "POST", "PATCH", "DELETE"])
+def plantilla_documento_detail(request, pk):
+    if request.method == "POST":
+        return create_template(request, pk)
+
+    plantilla = template_for(pk)
+    label = f"Plantilla {plantilla.tipo_documento.nombre}"
+    if request.method == "GET":
+        return Response(PlantillaDocumentoSerializer(plantilla).data)
+    if request.method == "DELETE":
+        plantilla.delete()
+        record_change(Seccion.DOCUMENTACION, label, "Existente", "Eliminada", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    before = {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS}
+    serializer = PlantillaDocumentoSerializer(plantilla, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    plantilla = serializer.save()
+    record_catalog_update(
+        Seccion.DOCUMENTACION,
+        label,
+        before,
+        {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS},
+        TEMPLATE_FIELDS,
+        request_user(request),
+    )
+    return Response(PlantillaDocumentoSerializer(plantilla).data)
+
+
+@extend_schema(tags=["Documental / Plantillas"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def plantilla_documento_pdf(request, pk, persona_id):
+    scope = request.query_params.get("alcance", FULL)
+    if scope not in SCOPES:
+        return Response({"detail": "El alcance debe ser completo o talon."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        plantilla, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    response = HttpResponse(render_template_pdf(plantilla, subject, scope), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{template_filename(plantilla, subject, scope)}"'
+    return response
+
+
+@extend_schema(tags=["Documental / Plantillas"], responses={(200, "image/png"): bytes})
+@api_view(["GET"])
+def plantilla_documento_imagen(request, pk, persona_id):
+    try:
+        plantilla, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    response = HttpResponse(pdf_pages_to_png(render_template_pdf(plantilla, subject)), content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="{template_filename(plantilla, subject, FULL)}.png"'
+    return response
+
+
+@extend_schema(tags=["Documental / Plantillas"])
+@api_view(["GET"])
+def plantilla_documento_destinatario(request, pk, persona_id):
+    try:
+        _, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(template_recipient(subject))
+
 
 @extend_schema(tags=["Documental / Estados"], request=EstadoDocumentoSerializer, responses=EstadoDocumentoSerializer)
 @api_view(["GET"])
@@ -233,22 +355,38 @@ def download_zip(request, persona_id):
     if scope not in ("", ZIP_VIGENTES, ZIP_HISTORIAL):
         return Response({'detail': 'El alcance debe ser vigentes o historial.'}, status=400)
     documentos = documents_in_scope(persona_id, scope)
-    if not documentos.exists():
+
+    person = Persona.objects.filter(pk=persona_id).first()
+    include_photo = bool(
+        scope in ("", ZIP_VIGENTES)
+        and person
+        and person.foto
+        and person.foto.storage.exists(person.foto.name)
+    )
+
+    if not documentos.exists() and not include_photo:
         return Response({'detail': 'No hay documentos con archivos adjuntos.'}, status=404)
-        
+
     zip_buffer = io.BytesIO()
     files_added = 0
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        if include_photo:
+            photo_path = person.foto.path
+            ext = os.path.splitext(photo_path)[1] or ".jpg"
+            clean_name = f"Foto_Carnet_{person.apellido}_{person.nombre}".strip("_")
+            zip_file.write(photo_path, arcname=f"{clean_name}{ext}")
+            files_added += 1
+
         for doc in documentos:
             if doc.archivoUrl and doc.archivoUrl.storage.exists(doc.archivoUrl.name):
                 file_path = doc.archivoUrl.path
                 file_name = os.path.basename(file_path)
                 zip_file.write(file_path, arcname=file_name)
                 files_added += 1
-                
+
     if files_added == 0:
         return Response({'detail': 'No hay documentos físicos válidos para descargar.'}, status=404)
-        
+
     response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
     suffix = f"_{scope}" if scope else ""
     response['Content-Disposition'] = f'attachment; filename="documentos_persona_{persona_id}{suffix}.zip"'

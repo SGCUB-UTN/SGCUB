@@ -85,6 +85,7 @@ from .serializers import (
 )
 from .services import (
 	BeneficioInvalidoError,
+	CategoriaExentaError,
 	ComprobanteInvalidoError,
 	CuotaConPagosError,
 	CuotaDuplicadaError,
@@ -140,12 +141,12 @@ def cuota_list_create(request):
 
 	data = serializer.validated_data
 	socio = get_object_or_404(
-		Socio.objects.select_related("estado_administrativo", "jugador__estado"),
+		Socio.objects.select_related("estado_administrativo", "jugador__estado", "jugador__categoria"),
 		pk=data["socio_id"],
 	)
 	try:
 		cuota = create_cuota(socio, data["periodo"], data.get("fecha_venc1"), data.get("fecha_venc2"), user=_current_user(request))
-	except (CuotaDuplicadaError, SocioInactivoError) as error:
+	except (CuotaDuplicadaError, SocioInactivoError, CategoriaExentaError) as error:
 		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 	return Response(CuotaSerializer(_cuotas_queryset().get(pk=cuota.pk)).data, status=status.HTTP_201_CREATED)
 

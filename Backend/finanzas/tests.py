@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
+from unittest.mock import patch
 from importlib import import_module
 
 from django.contrib.auth import get_user_model
@@ -56,11 +57,13 @@ from .models import (
 	SecuenciaComprobante,
 	TipoTareaCuotaChoices,
 )
-from .pdf_utils import format_amount
+from .pdf_utils import format_amount, format_phone
 from .period_summary import period_summary
 from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
 from .services import (
+	CategoriaExentaError,
+	annul_exempt_cuotas,
 	apply_surcharges,
 	assign_benefit,
 	cancel_scholarship,
@@ -76,6 +79,7 @@ from .services import (
 	pending_amounts,
 	register_payment,
 	revert_payment,
+	schedule_exemption_sync,
 	sync_cuota_charge,
 	update_scholarship,
 )
@@ -1004,6 +1008,126 @@ class GeneracionCuotasMensualesTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["cuotas_creadas"], 3)
 		self.assertEqual(response.data["items_sociales"], 3)
+
+
+def eximir_categoria(socio, exenta=True):
+	categoria = socio.jugador.categoria
+	categoria.exenta_cuota = exenta
+	categoria.save(update_fields=["exenta_cuota"])
+	return Socio.objects.get(pk=socio.pk)
+
+
+def periodos_de(socio):
+	return list(
+		Cuota.objects.filter(movimiento__cuenta_corriente__socio=socio).order_by("periodo").values_list("periodo", flat=True)
+	)
+
+
+class CategoriaExentaTests(TestCase):
+	def test_generacion_no_crea_cuotas_a_jugadores_de_categoria_exenta(self):
+		socio = crear_socio("71000001")
+		exento_activo = eximir_categoria(crear_socio("71000002", con_jugador=True))
+		exento_de_baja = eximir_categoria(crear_socio("71000003", con_jugador=True, jugador_inactivo=True))
+
+		resultado = generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
+
+		self.assertEqual(resultado["cuotas_creadas"], 3)
+		self.assertEqual(resultado["cuotas_exentas"], 6)
+		self.assertEqual(len(periodos_de(socio)), 3)
+		self.assertEqual(periodos_de(exento_activo), [])
+		self.assertEqual(periodos_de(exento_de_baja), [])
+
+	def test_create_cuota_informa_la_categoria_exenta(self):
+		socio = eximir_categoria(crear_socio("71000011", con_jugador=True))
+
+		with self.assertRaisesMessage(CategoriaExentaError, "Categoria 71000011"):
+			create_cuota(socio, "2026-10")
+
+	def test_alta_de_socio_jugador_en_categoria_exenta_no_genera_cuotas(self):
+		categoria = Categoria.objects.create(nombre="Exenta", anio_vigente=2026, edad_maxima=18, exenta_cuota=True)
+		persona = Persona.objects.create(nombre="Socio", apellido="Prueba", dni="71000021")
+		with self.captureOnCommitCallbacks(execute=True):
+			with transaction.atomic():
+				socio = Socio.objects.create(persona=persona)
+				Jugador.objects.create(socio=socio, categoria=categoria)
+
+		self.assertEqual(periodos_de(socio), [])
+
+	def test_tarea_no_reporta_a_los_exentos_como_faltantes(self):
+		crear_socio("71000031")
+		exento = eximir_categoria(crear_socio("71000032", con_jugador=True))
+
+		run_cuota_generation(today=date(2026, 10, 5))
+
+		run = EjecucionTareaCuota.objects.get(tipo=TipoTareaCuotaChoices.GENERACION)
+		self.assertTrue(run.exitosa)
+		self.assertEqual(run.metricas["sin_cuota"], 0)
+		self.assertEqual(run.metricas["exentos"], 1)
+		self.assertIn("1 jugador está exento de pago por su categoría.", run.resumen)
+		self.assertIn("Exentos de pago por categoría (1):", run.registro)
+		self.assertIn(exento.jugador.categoria.nombre, run.registro)
+
+	def test_anula_las_cuotas_impagas_desde_el_mes_actual(self):
+		socio = crear_socio("71000041", con_jugador=True)
+		generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
+		paga = crear_cuota_con_cargo(account_for(socio), "2027-01", "1000.00", estado=EstadoCuotaChoices.PAGA)
+
+		anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
+
+		self.assertEqual(anuladas, 3)
+		self.assertEqual(periodos_de(socio), ["2027-01"])
+		self.assertTrue(Cuota.objects.filter(pk=paga.pk).exists())
+		self.assertEqual(
+			RegistroAuditoria.objects.filter(accion=AccionAuditoriaChoices.CUOTA_ELIMINADA).count(),
+			3,
+		)
+
+	def test_anulacion_conserva_cuotas_con_pagos(self):
+		socio = crear_socio("71000051", con_jugador=True)
+		generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=socio, periodo="2026-12")
+
+		with patch("finanzas.services.has_active_payments", side_effect=lambda c: c.pk == cuota.pk):
+			anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
+
+		self.assertEqual(anuladas, 2)
+		self.assertEqual(periodos_de(socio), ["2026-12"])
+
+	def test_pasar_a_categoria_exenta_anula_las_cuotas_desde_el_mes_actual(self):
+		socio = crear_socio("71000061", con_jugador=True)
+		hoy = timezone.localdate()
+		generar_cuotas_mensuales(hoy, today=hoy)
+		jugador = socio.jugador
+		anterior = jugador.categoria
+		jugador.categoria = Categoria.objects.create(nombre="Exenta", anio_vigente=2026, edad_maxima=18, exenta_cuota=True)
+		jugador.save(update_fields=["categoria"])
+
+		with self.captureOnCommitCallbacks(execute=True):
+			schedule_exemption_sync(socio.pk, anterior, jugador.categoria)
+
+		self.assertEqual(periodos_de(socio), [])
+
+	def test_salir_de_categoria_exenta_genera_las_cuotas(self):
+		socio = eximir_categoria(crear_socio("71000071", con_jugador=True))
+		jugador = socio.jugador
+		anterior = jugador.categoria
+		jugador.categoria = Categoria.objects.create(nombre="Paga", anio_vigente=2026, edad_maxima=18)
+		jugador.save(update_fields=["categoria"])
+
+		with self.captureOnCommitCallbacks(execute=True):
+			schedule_exemption_sync(socio.pk, anterior, jugador.categoria)
+
+		self.assertEqual(len(periodos_de(socio)), 3)
+
+	def test_cambio_entre_categorias_no_exentas_no_toca_cuotas(self):
+		socio = crear_socio("71000081", con_jugador=True)
+		anterior = socio.jugador.categoria
+		nueva = Categoria.objects.create(nombre="Otra", anio_vigente=2026, edad_maxima=18)
+
+		with self.captureOnCommitCallbacks() as callbacks:
+			schedule_exemption_sync(socio.pk, anterior, nueva)
+
+		self.assertEqual(callbacks, [])
 
 
 class CuotaEndpointTests(APITestCase):
@@ -2660,6 +2784,32 @@ class ComprobantePdfTests(ComprobanteTestBase):
 		self.assertEqual(format_amount(Decimal("1234567.5")), "$ 1.234.567,50")
 		self.assertEqual(format_amount(Decimal("0")), "$ 0,00")
 		self.assertEqual(format_amount(Decimal("-500")), "-$ 500,00")
+
+	def test_formato_de_telefonos(self):
+		casos = {
+			"+5492216755822": "+54 9 2216 75-5822",
+			"+54 9 221 675-5822": "+54 9 2216 75-5822",
+			"2214592810": "+54 2214 59-2810",
+			"02214592810": "+54 2214 59-2810",
+			"+541143214321": "+54 1143 21-4321",
+			"+34612345678": "+34612345678",
+			"12345": "12345",
+		}
+		for telefono, esperado in casos.items():
+			with self.subTest(telefono=telefono):
+				self.assertEqual(format_phone(telefono), esperado)
+
+	def test_recibo_muestra_el_telefono_del_club_formateado(self):
+		from configuracion.models import ConfiguracionGeneral
+		config = ConfiguracionGeneral.load()
+		config.club_telefono = "+5492216755822"
+		config.save()
+		detalle = self.pagar("1000.00")
+
+		contenido = self.descargar(detalle["numero"]).content
+
+		self.assertIn(b"+54 9 2216 75-5822", contenido)
+		self.assertNotIn(b"+5492216755822", contenido)
 
 
 class ProteccionRegistrosFinancierosTests(PagoTestBase):
@@ -4903,6 +5053,8 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_notificar_cuota_vencida_recargo_despacha_notificacion(self):
 		from datetime import timedelta
@@ -4933,6 +5085,46 @@ class AvisosAutomaticosCuotasTest(PagoTestBase):
 			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
 			self.assertIsNotNone(envio)
 			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Recargo por mora:", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
+
+	def test_notificar_cuota_con_beca_desglosa_conceptos_y_descuento(self):
+		from datetime import timedelta
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion
+		from finanzas.models import ItemCuota, ConceptoItemChoices
+		from finanzas.tasks import run_cuota_generation
+
+		hoy = timezone.localdate()
+		periodo_actual = hoy.strftime("%Y-%m")
+
+		cuota_actual = crear_cuota_con_cargo(
+			self.cuenta,
+			periodo_actual,
+			"1000.00",
+			venc1=hoy + timedelta(days=10),
+			venc2=hoy + timedelta(days=20),
+		)
+		ItemCuota.objects.create(
+			cuota=cuota_actual,
+			concepto=ConceptoItemChoices.BECA,
+			es_descuento=True,
+			fecha_aplicacion=hoy,
+			monto=Decimal("500.00"),
+			motivo="Beca Deportiva",
+		)
+		cuota_actual.movimiento.monto = Decimal("500.00")
+		cuota_actual.movimiento.save()
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			run_cuota_generation(today=hoy)
+			envio = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains=periodo_actual).first()
+			self.assertIsNotNone(envio)
+			self.assertIn("Detalle de la cuota:", envio.notificacion.contenido)
+			self.assertIn("Beca (Beca Deportiva): -$ 500,00", envio.notificacion.contenido)
+			self.assertIn("Total:", envio.notificacion.contenido)
 
 	def test_modificacion_configuracion_solo_notifica_primer_periodo_afectado(self):
 		from unittest.mock import patch

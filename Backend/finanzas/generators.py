@@ -14,6 +14,13 @@ def benefit_reason(reason):
     return reason[:200]
 
 
+def exempt_category(socio):
+    player = getattr(socio, "jugador", None)
+    if player is None or not player.categoria.exenta_cuota:
+        return None
+    return player.categoria
+
+
 def period_bounds(first_day):
     return first_day, first_day.replace(day=monthrange(first_day.year, first_day.month)[1])
 
@@ -36,7 +43,7 @@ class GeneradorItemsCuota:
         self.configuration = configuration or ConfiguracionFinanciera.load(application_date)
 
     def build_items(self):
-        if not self._is_member_active():
+        if not self._is_member_active() or exempt_category(self.socio) is not None:
             return []
 
         items = [self._item(ConceptoItemChoices.CUOTA_SOCIAL, self.configuration.monto_cuota_social)]

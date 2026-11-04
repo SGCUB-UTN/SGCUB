@@ -20,8 +20,18 @@ import useGeneros from '../hooks/useGeneros'
 import useLocalidades from '../hooks/useLocalidades'
 import useSocio from '../hooks/useSocio'
 import { FormSkeleton } from '../components/shared/Skeleton'
+import PhotoUploadField from '../components/shared/PhotoUploadField'
+import { uploadPersonaFoto, deletePersonaFoto } from '../api/personaFoto'
 
-const DEPORTIVO_INICIAL = { categoria: '', categoria_secundaria: '', estado: '', obra_social: '', tallaIndumentaria: '' }
+const DEPORTIVO_INICIAL = {
+  categoria: '',
+  categoria_secundaria: '',
+  estado: '',
+  obra_social: '',
+  tallaIndumentaria: '',
+  esquema_vacunacion: null,
+  nivel_educacion: null,
+}
 
 const OBRAS_SOCIALES = [
   'Sin obra social',
@@ -50,6 +60,8 @@ const TALLES = [
 
 const jugadorAFormulario = (jugador) => ({
   ...socioAFormulario(jugador.socio ?? {}),
+  esquema_vacunacion: jugador.esquema_vacunacion ?? null,
+  nivel_educacion: jugador.nivel_educacion ?? null,
   categoria: String(jugador.categoria?.categoria_id ?? ''),
   categoria_secundaria: String(jugador.categoria_secundaria?.categoria_id ?? ''),
   estado: String(jugador.estado?.estado_id ?? ''),
@@ -125,6 +137,8 @@ function JugadorForm() {
   const [personaEncontrada, setPersonaEncontrada] = useState(null)
   const [obrasSocialesLista, setObrasSocialesLista] = useState(OBRAS_SOCIALES)
   const [tallesLista, setTallesLista] = useState(TALLES)
+  const [foto, setFoto] = useState(null)
+  const [eliminarFoto, setEliminarFoto] = useState(false)
   const busqueda = usePersonaSearchDNI({ habilitada: !editando })
 
   useEffect(() => {
@@ -363,7 +377,16 @@ function JugadorForm() {
       return
     }
 
-    const { categoria, categoria_secundaria, estado, obra_social, tallaIndumentaria, ...datosSocio } = formulario
+    const {
+      categoria,
+      categoria_secundaria,
+      estado,
+      obra_social,
+      tallaIndumentaria,
+      esquema_vacunacion,
+      nivel_educacion,
+      ...datosSocio
+    } = formulario
     if (!datosSocio.estado_administrativo) delete datosSocio.estado_administrativo
     if (!esGeneroOtro) datosSocio.genero_otro = ''
 
@@ -372,6 +395,8 @@ function JugadorForm() {
       categoria_secundaria: categoria_secundaria || null,
       ...(editando ? { estado } : {}),
       obra_social,
+      esquema_vacunacion,
+      nivel_educacion,
       tallaIndumentaria,
       ...(editando ? {} : { vinculos_familiares: contactos.map((fila) => filaAContacto(fila, formulario, mostrarResponsableLegal)) }),
     }
@@ -379,15 +404,36 @@ function JugadorForm() {
     setGuardando(true)
     try {
       let jugadorId
+      let personaIdParaFoto = null
       if (editando) {
         await putSocio(socioActualId, datosSocio)
         await patchJugador(jugador.jugador_id, datosJugador)
         jugadorId = jugador.jugador_id
+        personaIdParaFoto = jugador.socio?.persona ?? null
       } else if (socioVinculado) {
         await putSocio(socioVinculado.socio_id, datosSocio)
-        jugadorId = (await postJugador({ ...datosJugador, socio: socioVinculado.socio_id })).jugador_id
+        const creado = await postJugador({ ...datosJugador, socio: socioVinculado.socio_id })
+        jugadorId = creado.jugador_id
+        personaIdParaFoto = creado.socio?.persona ?? socioVinculado.persona ?? null
       } else {
-        jugadorId = (await postJugador({ ...datosJugador, nuevo_socio: datosSocio })).jugador_id
+        const creado = await postJugador({ ...datosJugador, nuevo_socio: datosSocio })
+        jugadorId = creado.jugador_id
+        personaIdParaFoto = creado.socio?.persona ?? null
+      }
+      if (personaIdParaFoto) {
+        if (foto) {
+          try {
+            await uploadPersonaFoto(personaIdParaFoto, foto)
+          } catch (photoError) {
+            console.error('No se pudo subir la foto de perfil:', photoError)
+          }
+        } else if (eliminarFoto) {
+          try {
+            await deletePersonaFoto(personaIdParaFoto)
+          } catch (photoError) {
+            console.error('No se pudo eliminar la foto de perfil:', photoError)
+          }
+        }
       }
       navigate(`/padron/jugadores/${jugadorId}${editando ? '' : '?tab=financiero'}`)
     } catch (requestError) {
@@ -486,6 +532,27 @@ function JugadorForm() {
 
         <form id="form-jugador" className="p-6 md:p-8" onSubmit={guardar} noValidate>
           <div className="space-y-6">
+            {/* Foto de perfil: visible en edición o al crear una persona nueva */}
+            {(editando || (!socioVinculado && !personaEncontrada)) && (
+              <div className="flex flex-col gap-3 pb-4 border-b border-outline-variant/20">
+                <SeccionTitulo icono="photo_camera" titulo="Foto carnet" />
+                <PhotoUploadField
+                  value={foto}
+                  onChange={(nuevoArchivo) => {
+                    setFoto(nuevoArchivo)
+                    setEliminarFoto(false)
+                  }}
+                  disabled={guardando}
+                  currentUrl={editando ? jugador?.socio?.foto_url : null}
+                  onDeleteCurrent={() => {
+                    setFoto(null)
+                    setEliminarFoto(true)
+                  }}
+                  isDeleted={eliminarFoto}
+                  onRestoreCurrent={() => setEliminarFoto(false)}
+                />
+              </div>
+            )}
             <SeccionDatosPersonales
               bindInput={bindInput}
               errores={errores}
@@ -592,6 +659,54 @@ function JugadorForm() {
             />
 
             <SeccionDomicilio bindInput={bindInput} errores={errores} localidades={localidades} onCrearLocalidad={crearLocalidad} />
+
+            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
+              <SeccionTitulo icono="health_and_safety" titulo="Datos de Salud" />
+              <Campo id="esquema_vacunacion" label="¿Tiene el esquema de vacunación completo?" opcional>
+                <div className="flex items-center gap-6">
+                  {[
+                    { label: 'Sí', value: true },
+                    { label: 'No', value: false },
+                  ].map(({ label, value }) => (
+                    <label key={label} className="inline-flex items-center gap-2 text-base text-on-surface cursor-pointer">
+                      <input
+                        id={value ? 'esquema_vacunacion' : 'esquema_vacunacion-no'}
+                        type="radio"
+                        name="esquema_vacunacion"
+                        checked={formulario.esquema_vacunacion === value}
+                        onChange={() => actualizarCampo('esquema_vacunacion', value)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </Campo>
+            </div>
+
+            <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">
+              <SeccionTitulo icono="school" titulo="Datos Educativos" />
+              <Campo id="nivel_educacion" label="Nivel de educación" opcional>
+                <SelectConFlecha
+                  id="nivel_educacion"
+                  name="nivel_educacion"
+                  value={formulario.nivel_educacion ?? ''}
+                  onChange={(event) => actualizarCampo('nivel_educacion', event.target.value || null)}
+                  conError={false}
+                >
+                  <option value="">Sin especificar</option>
+                  <option value="primario_en_proceso">Primario en proceso</option>
+                  <option value="primario_incompleto">Primario incompleto</option>
+                  <option value="primario_completo">Primario completo</option>
+                  <option value="secundario_en_proceso">Secundario en proceso</option>
+                  <option value="secundario_incompleto">Secundario incompleto</option>
+                  <option value="secundario_completo">Secundario completo</option>
+                  <option value="universitario_en_proceso">Universitario en proceso</option>
+                  <option value="universitario_incompleto">Universitario incompleto</option>
+                  <option value="universitario_completo">Universitario completo</option>
+                </SelectConFlecha>
+              </Campo>
+            </div>
 
             {/* Datos deportivos */}
             <div className="flex flex-col gap-4 pt-4 border-t border-outline-variant/20">

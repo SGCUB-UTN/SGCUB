@@ -7,7 +7,7 @@ from django.utils import timezone
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 from padron.services import format_datetime, format_dni
 
-from .generators import PERIOD_FORMAT
+from .generators import PERIOD_FORMAT, exempt_category
 from .models import (
     ConfiguracionFinanciera,
     Cuota,
@@ -17,7 +17,15 @@ from .models import (
     TipoTareaCuotaChoices,
 )
 from .pdf_utils import format_amount
-from .services import apply_surcharges, due_date, generar_cuotas_mensuales, parse_period, pending_amounts, user_name
+from .services import (
+    apply_surcharges,
+    build_cuota_items_detail,
+    due_date,
+    generar_cuotas_mensuales,
+    parse_period,
+    pending_amounts,
+    user_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +96,7 @@ def record_failure(run, error):
 def active_socios():
     return list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-        .select_related("persona", "jugador__estado")
+        .select_related("persona", "jugador__estado", "jugador__categoria")
         .order_by("persona__apellido", "persona__nombre", "pk")
     )
 
@@ -101,25 +109,32 @@ def verify_generation(period):
     )
     counts = dict.fromkeys(MEMBER_GROUPS, 0)
     missing = []
+    exempt = []
     for socio in socios:
         counts[member_group(socio)] += 1
-        if socio.pk not in with_cuota:
+        if exempt_category(socio) is not None:
+            exempt.append(socio)
+        elif socio.pk not in with_cuota:
             missing.append(socio)
-    return counts, missing
+    return counts, missing, exempt
 
 
-def generation_summary(counts, missing):
+def generation_summary(counts, missing, exempt):
     population = (
         f"En el sistema existen {count_label(counts[MEMBERS], 'socio', 'socios')}, "
         f"{count_label(counts[PLAYERS], 'jugador', 'jugadores')} y "
         f"{count_label(counts[PARTIAL_LEAVE], 'jugador de baja parcial', 'jugadores de baja parcial')}."
     )
+    if exempt:
+        population += (
+            f" {count_label(len(exempt), 'jugador está exento', 'jugadores están exentos')} de pago por su categoría."
+        )
     if not missing:
         return f"{population} Todos con la cuota correctamente generada."
     return f"{population} {count_label(len(missing), 'socio no tiene', 'socios no tienen')} la cuota generada; revisá el registro."
 
 
-def generation_log(run, result, created, counts, missing):
+def generation_log(run, result, created, counts, missing, exempt):
     amounts = dict(
         MovimientoCuenta.objects.filter(cuota__in=[cuota.pk for _, _, cuota in created]).values_list("cuota_id", "monto")
     )
@@ -139,6 +154,9 @@ def generation_log(run, result, created, counts, missing):
         f"Verificación del período {run.periodo}",
         *(f"  {GROUP_LABELS[group]}: {counts[group]}" for group in MEMBER_GROUPS),
     ]
+    if exempt:
+        lines.append(f"  Exentos de pago por categoría ({len(exempt)}):")
+        lines += [f"    - {socio_label(socio)} — {socio.jugador.categoria.nombre}" for socio in exempt]
     if missing:
         lines.append(f"  Sin cuota generada ({len(missing)}):")
         lines += [f"    - {socio_label(socio)}" for socio in missing]
@@ -157,17 +175,18 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
         record_failure(run, error)
         raise
 
-    counts, missing = verify_generation(run.periodo)
+    counts, missing, exempt = verify_generation(run.periodo)
     run.exitosa = not missing
-    run.resumen = generation_summary(counts, missing)
+    run.resumen = generation_summary(counts, missing, exempt)
     run.metricas = {
         **counts,
         "periodos": result["periodos"],
         "cuotas_creadas": result["cuotas_creadas"],
         "cuotas_existentes": result["cuotas_existentes"],
         "sin_cuota": len(missing),
+        "exentos": len(exempt),
     }
-    finish_run(run, generation_log(run, result, created, counts, missing))
+    finish_run(run, generation_log(run, result, created, counts, missing, exempt))
 
     try:
         from configuracion.models import ConfiguracionGeneral
@@ -200,22 +219,7 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                 if socio.pk in notificados:
                     continue
 
-                monto = cuota.movimiento.monto if cuota.movimiento else Decimal("0.00")
-                items = list(cuota.items.all().order_by("item_cuota_id"))
-                lineas_detalle = []
-                for it in items:
-                    nombre_concepto = it.get_concepto_display()
-                    monto_fmt = format_amount(it.monto)
-                    if it.es_descuento:
-                        lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
-                    else:
-                        lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
-
-                if lineas_detalle:
-                    bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total: {format_amount(monto)}"
-                else:
-                    bloque_detalle = f"Importe total: {format_amount(monto)}"
-
+                bloque_detalle = build_cuota_items_detail(cuota)
                 venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
                 venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
                 asunto = f"Emisión de cuota social período {current_period} - {club}"
@@ -227,7 +231,8 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
                     f"  • Primer vencimiento: {venc1}\n"
                     f"  • Segundo vencimiento: {venc2}\n\n"
                     f"Podés abonarla mediante los canales habilitados del club.\n"
-                    f"¡Muchas gracias!"
+                    f"¡Muchas gracias!\n"
+                    f"{club}"
                 )
                 crear_y_despachar_notificacion(
                     titulo=titulo,
@@ -379,12 +384,15 @@ def run_surcharges(today, numbers, origin=OrigenEjecucionChoices.AUTOMATICA, use
                     ordinal = DUE_ORDINALS.get(num, f"{num}°")
                     titulo = f"Aviso de cuota vencida: período {cuota.periodo}"
                     asunto = f"Aviso de vencimiento y recargo - Cuota {cuota.periodo} - {club}"
+                    bloque_detalle = build_cuota_items_detail(cuota)
                     contenido = (
                         f"Estimado/a {socio.persona.nombre},\n\n"
                         f"Te informamos que ha operado el {ordinal} vencimiento de tu cuota del período {cuota.periodo}.\n"
                         f"Se ha aplicado un recargo por mora de {format_amount(item.monto)}.\n\n"
+                        f"{bloque_detalle}\n\n"
                         f"Te solicitamos regularizar tu estado de cuenta a la brevedad.\n"
-                        f"¡Muchas gracias!"
+                        f"¡Muchas gracias!\n"
+                        f"{club}"
                     )
                     crear_y_despachar_notificacion(
                         titulo=titulo,
@@ -550,12 +558,15 @@ def send_scheduled_due_reminders(today=None):
         ).exists()
         if ya_notificado:
             continue
+        bloque_detalle = build_cuota_items_detail(cuota)
         contenido = (
             f"Estimado/a {socio.persona.nombre},\n\n"
             f"Te recordamos que tu cuota social del período {cuota.periodo} vence {tiempo_str}.\n"
             f"El saldo pendiente de pago es de {format_amount(saldo)}.\n\n"
+            f"{bloque_detalle}\n\n"
             f"Te recomendamos regularizarla para evitar la aplicación de recargos por mora.\n"
-            f"¡Muchas gracias!"
+            f"¡Muchas gracias!\n"
+            f"{club}"
         )
 
         crear_y_despachar_notificacion(

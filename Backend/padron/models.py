@@ -110,6 +110,7 @@ class Persona(models.Model):
     genero = models.ForeignKey(Genero, on_delete=models.PROTECT, blank=True, null=True, related_name="personas")
     genero_otro = models.CharField(max_length=100, blank=True, null=True)
     domicilio = models.ForeignKey(Domicilio, on_delete=models.SET_NULL, blank=True, null=True, related_name="personas")
+    foto = models.ImageField(upload_to="personas/fotos/", blank=True, null=True)
 
     class Meta:
         db_table = "persona"
@@ -255,6 +256,7 @@ class Categoria(models.Model):
         blank=True,
         default="",
     )
+    exenta_cuota = models.BooleanField(default=False)
 
     class Meta:
         db_table = "categoria"
@@ -329,8 +331,27 @@ SIZES_CHOICES = [
 ]
 
 class Jugador(models.Model):
+    class NivelEducacionChoices(models.TextChoices):
+        PRIMARIO_EN_PROCESO = "primario_en_proceso", "Primario en proceso"
+        PRIMARIO_INCOMPLETO = "primario_incompleto", "Primario incompleto"
+        PRIMARIO_COMPLETO = "primario_completo", "Primario completo"
+        SECUNDARIO_EN_PROCESO = "secundario_en_proceso", "Secundario en proceso"
+        SECUNDARIO_INCOMPLETO = "secundario_incompleto", "Secundario incompleto"
+        SECUNDARIO_COMPLETO = "secundario_completo", "Secundario completo"
+        UNIVERSITARIO_EN_PROCESO = "universitario_en_proceso", "Universitario en proceso"
+        UNIVERSITARIO_INCOMPLETO = "universitario_incompleto", "Universitario incompleto"
+        UNIVERSITARIO_COMPLETO = "universitario_completo", "Universitario completo"
+
     jugador_id = models.AutoField(primary_key=True)
     obra_social = models.CharField(max_length=50, default="", blank=True)
+    esquema_vacunacion = models.BooleanField(null=True, blank=True, default=None)
+    nivel_educacion = models.CharField(
+        max_length=32,
+        choices=NivelEducacionChoices.choices,
+        null=True,
+        blank=True,
+        default=None,
+    )
     tallaIndumentaria = models.CharField(
         max_length=20, 
         choices=SIZES_CHOICES, 

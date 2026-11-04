@@ -14,15 +14,15 @@
 .app-sidebar {
   position: fixed;
   z-index: 50;
-  inset: 0 auto 0 0;
+  inset: 70px auto 0 0;
   width: 260px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--surface, #f8f9ff);
-  border-right: 1px solid var(--border, #bec8d2);
+  background: var(--color-surface-container-lowest, #ffffff);
+  border-right: 1px solid color-mix(in srgb, var(--border, #bec8d2) 30%, transparent);
   transition: width 220ms ease;
 }
 
@@ -31,49 +31,6 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-}
-
-.app-sidebar-brand {
-  height: 70px;
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border, #bec8d2);
-}
-
-.app-sidebar-brand-inner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: max-content;
-  color: inherit;
-  text-decoration: none;
-}
-
-.app-sidebar-logo {
-  width: auto;
-  height: 40px;
-}
-
-.app-sidebar-brand-copy {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.app-sidebar-brand-name {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.app-sidebar-brand-subtitle {
-  margin-top: 3px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .app-sidebar-scroll {
@@ -144,7 +101,7 @@
 .app-sidebar-subitem-icon {
   display: inline-flex;
   flex: 0 0 auto;
-  color: #7b8794;
+  color: var(--color-outline, #6e7882);
   font-size: 18px;
 }
 
@@ -159,8 +116,8 @@
 .app-sidebar-footer {
   flex: 0 0 auto;
   padding: 8px;
-  border-top: 1px solid var(--border, #bec8d2);
-  background: var(--surface, #f8f9ff);
+  border-top: 1px solid color-mix(in srgb, var(--border, #bec8d2) 20%, transparent);
+  background: var(--color-surface-container-lowest, #ffffff);
 }
 
 .app-sidebar-toggle {
@@ -173,13 +130,14 @@
   padding: 6px 8px;
   border: 0;
   border-radius: 4px;
-  color: var(--text, #24313a);
+  color: var(--color-on-surface-variant, #3e4850);
   background: transparent;
   cursor: pointer;
 }
 
 .app-sidebar-toggle:hover {
-  background: var(--accent-soft, #e5eeff);
+  color: var(--text, #0b1c30);
+  background: var(--surface-container-low, #eff4ff);
 }
 
 .app-sidebar-toggle-label {
@@ -198,7 +156,7 @@
   overflow: hidden;
   text-align: center;
   white-space: nowrap;
-  border: 1px solid color-mix(in srgb, var(--border, #bec8d2) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border, #bec8d2) 20%, transparent);
   border-radius: 4px;
   background: var(--surface-container-low, #eff4ff);
 }
@@ -218,7 +176,6 @@
 }
 
 .app-sidebar:not(.app-sidebar--collapsed, .app-sidebar--collapsing) :is(
-  .app-sidebar-brand-copy,
   .app-sidebar-toggle-label,
   .app-sidebar-version,
   .app-sidebar-label,
@@ -231,7 +188,6 @@
 }
 
 .app-sidebar--collapsing :is(
-  .app-sidebar-brand-copy,
   .app-sidebar-toggle-label,
   .app-sidebar-version,
   .app-sidebar-label,
@@ -273,7 +229,6 @@
   }
 }
 
-.app-sidebar--collapsed .app-sidebar-brand-copy,
 .app-sidebar--collapsed .app-sidebar-toggle-label,
 .app-sidebar--collapsed .app-sidebar-version,
 .app-sidebar--collapsed .app-sidebar-label,

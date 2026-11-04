@@ -23,6 +23,22 @@ class TipoDocumento(models.Model):
         return self.nombre
 
 
+class PlantillaDocumento(models.Model):
+    id_plantilla_documento = models.AutoField(primary_key=True)
+    tipo_documento = models.OneToOneField(TipoDocumento, on_delete=models.CASCADE, related_name='plantilla')
+    titulo = models.CharField(max_length=120)
+    cuerpo = models.TextField(blank=True)
+    talon_leyenda = models.TextField(max_length=500)
+    firma_jugador_menor = models.BooleanField(default=True)
+    mostrar_categoria = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "plantilla_documento"
+
+    def __str__(self):
+        return self.titulo
+
+
 class EstadoDocumento(models.Model):
     id_estado_documento = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=20)
@@ -56,6 +72,8 @@ class Documento(models.Model):
     fecha_recepcion = models.DateTimeField(blank=True, null=True)
     fecha_vencimiento = models.DateTimeField(blank=True, null=True)
     requiere_firma = models.BooleanField(default=False)
+    alerta_previa_enviada = models.BooleanField(default=False)
+    alerta_vencido_enviada = models.BooleanField(default=False)
 
     class Meta:
         db_table = "documento"
@@ -64,8 +82,10 @@ class Documento(models.Model):
         return f"{self.nombre} - {self.persona}"
 
     def save(self, *args, **kwargs):
-        self.nombre = build_nombre(self.persona.dni, self.tipo_documento.nombre, self.fecha_vencimiento)
-        self.estado_documento = EstadoDocumento.objects.get(nombre=resolve_estado_nombre(self.fecha_vencimiento))
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "fecha_vencimiento" in update_fields or "tipo_documento" in update_fields:
+            self.nombre = build_nombre(self.persona.dni, self.tipo_documento.nombre, self.fecha_vencimiento)
+            self.estado_documento = EstadoDocumento.objects.get(nombre=resolve_estado_nombre(self.fecha_vencimiento))
         super().save(*args, **kwargs)
 
 

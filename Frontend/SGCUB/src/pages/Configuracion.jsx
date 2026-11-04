@@ -18,12 +18,18 @@ import PageHeader from '../components/shared/PageHeader'
 import { SkeletonStatus, TabsSkeleton } from '../components/shared/Skeleton'
 import useConfiguracion from '../hooks/useConfiguracion'
 
+const annulledMessage = (annulled) => (
+  annulled ? ` Se ${annulled === 1 ? 'anuló 1 cuota' : `anularon ${annulled} cuotas`} de jugadores en categorías exentas.` : ''
+)
+
 const savedMessage = (result) => {
   const version = result.financiera
-  if (!version) return 'Los cambios se guardaron.'
+  const annulled = annulledMessage(result.cuotas_anuladas)
+  if (!version) return `Los cambios se guardaron.${annulled}`
   const updated = version.cuotas_actualizadas
   return `Los cambios se guardaron. Los aranceles y el calendario de facturación aplican ${formatVigencia(version.periodo_vigencia).toLowerCase()}`
     + (updated ? ` y se actualizaron ${updated} ${updated === 1 ? 'cuota' : 'cuotas'}.` : '.')
+    + annulled
 }
 
 const revertedMessage = (version) => {
@@ -42,6 +48,7 @@ export default function Configuracion() {
   const openHistory = (section = '') => setHistory({ opened: true, section })
   const isReady = !config.isLoading && !config.error && config.general && config.financiera
   const changesCount = config.changes.financiera.length
+    + config.changes.exentas.length
     + generalChangeLabels(config.changes.general).length
     + (config.changes.logo ? 1 : 0)
 
@@ -60,7 +67,7 @@ export default function Configuracion() {
   }
 
   return (
-    <div className="w-full flex flex-col gap-5">
+    <div className="w-full flex flex-col gap-5 min-h-[calc(100vh-70px-1.5rem)] max-[700px]:min-h-[calc(100vh-80px-1rem)]">
       <PageHeader
         breadcrumb={[{ label: 'Administración' }, { label: 'Configuración' }]}
         title="Configuración"

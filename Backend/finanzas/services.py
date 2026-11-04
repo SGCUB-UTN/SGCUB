@@ -10,7 +10,7 @@ from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .allocation import allocate_payment, charge_order, concept_totals
 from .audit import record_transaction
-from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, scholarships_for_period
+from .generators import PERIOD_FORMAT, GeneradorItemsCuota, benefit_reason, exempt_category, scholarships_for_period
 from .models import (
     AccionAuditoriaChoices as Accion,
     Beca,
@@ -47,6 +47,10 @@ class CuotaDuplicadaError(Exception):
 
 
 class SocioInactivoError(Exception):
+    pass
+
+
+class CategoriaExentaError(Exception):
     pass
 
 
@@ -144,6 +148,11 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
     configuration = configuration or ConfiguracionFinanciera.load(period)
+    category = exempt_category(socio)
+    if category is not None:
+        raise CategoriaExentaError(
+            f"El jugador juega en la categoría {category.nombre}, exenta de pago; no corresponde generar cuota."
+        )
     items = GeneradorItemsCuota(socio, first_day, configuration).build_items()
     if not items:
         raise SocioInactivoError("El socio no está activo; no corresponde generar cuota.")
@@ -204,7 +213,7 @@ def create_first_cuota(socio, today=None):
             created.append(create_cuota(socio, period, today=today))
         except CuotaDuplicadaError:
             continue
-        except SocioInactivoError:
+        except (SocioInactivoError, CategoriaExentaError):
             return None
     return created[0] if created else None
 
@@ -253,9 +262,47 @@ def _ensure_player_cuota_for_period(socio, period, today):
 @transaction.atomic
 def create_or_update_player_current_cuota(socio_id):
     today = timezone.localdate()
-    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado").get(pk=socio_id)
+    socio = Socio.objects.select_related("estado_administrativo", "jugador__estado", "jugador__categoria").get(pk=socio_id)
+    if exempt_category(socio) is not None:
+        annul_exempt_cuotas([socio.pk], today)
+        return None
     results = [_ensure_player_cuota_for_period(socio, period, today) for period in generation_periods(today)]
     return results[0] if results else None
+
+
+@transaction.atomic
+def update_category_exemption(category, exempt, user=None):
+    category.exenta_cuota = exempt
+    category.save(update_fields=["exenta_cuota"])
+    socio_ids = list(category.jugadores.values_list("socio_id", flat=True))
+    if exempt:
+        return annul_exempt_cuotas(socio_ids, user=user)
+    for socio_id in socio_ids:
+        create_or_update_player_current_cuota(socio_id)
+    return 0
+
+
+def schedule_exemption_sync(socio_id, previous_category, category):
+    if previous_category.exenta_cuota != category.exenta_cuota:
+        transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))
+
+
+@transaction.atomic
+def annul_exempt_cuotas(socio_ids, today=None, user=None):
+    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
+    cuotas = (
+        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento")
+        .order_by("periodo", "pk")
+    )
+    annulled = 0
+    for cuota in cuotas:
+        if is_locked(cuota):
+            continue
+        delete_cuota(cuota, user)
+        annulled += 1
+    return annulled
 
 
 def active_imputations():
@@ -263,8 +310,15 @@ def active_imputations():
     return Imputacion.objects.filter(movimiento_origen__pago__estado_pago=EstadoPagoChoices.ACREDITADO)
 
 
+def has_imputations(cuota):
+    movement = getattr(cuota, "movimiento", None)
+    if not movement:
+        return False
+    return movement.imputaciones_destino.exists() or movement.imputaciones_origen.exists()
+
+
 def is_locked(cuota):
-    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota)
+    return cuota.estado_cuota == EstadoCuotaChoices.PAGA or has_active_payments(cuota) or has_imputations(cuota)
 
 
 def applied_amount(cuota):
@@ -369,11 +423,46 @@ def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
     return True
 
 
+def build_cuota_items_detail(cuota, total_label="Total"):
+    """
+    Construye el bloque de texto con el desglose de conceptos vigentes de la cuota:
+    - Cuota social
+    - Cuota deportiva / disciplinas
+    - Becas y descuentos (con signo negativo)
+    - Recargos por mora
+    - Total de la cuota
+    """
+    from .pdf_utils import format_amount
+
+    items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
+    lineas_detalle = []
+    total = Decimal("0.00")
+    for it in items:
+        if it.concepto == ConceptoItemChoices.OTRO and it.motivo:
+            nombre = it.motivo
+        elif it.motivo and it.concepto in (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO):
+            nombre = f"{it.get_concepto_display()} ({it.motivo})"
+        else:
+            nombre = it.get_concepto_display()
+
+        monto_fmt = format_amount(it.monto)
+        if it.es_descuento:
+            lineas_detalle.append(f"  • {nombre}: -{monto_fmt}")
+            total -= it.monto
+        else:
+            lineas_detalle.append(f"  • {nombre}: {monto_fmt}")
+            total += it.monto
+
+    monto_final = cuota.movimiento.monto if (getattr(cuota, "movimiento", None) and cuota.movimiento.monto is not None) else total
+    if lineas_detalle:
+        return f"Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • {total_label}: {format_amount(monto_final)}"
+    return f"Importe {total_label.lower()}: {format_amount(monto_final)}"
+
+
 def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
     try:
         from configuracion.models import ConfiguracionGeneral
         from comunicaciones.services import crear_y_despachar_notificacion
-        from .pdf_utils import format_amount
 
         config = ConfiguracionGeneral.load()
         if not config.notificar_modificacion_cuota:
@@ -386,22 +475,7 @@ def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
         socio = cuota.movimiento.cuenta_corriente.socio
         club = config.club_nombre
 
-        total = nuevo_monto if nuevo_monto is not None else (cuota.movimiento.monto if cuota.movimiento else net_amount(ItemCuota.objects.filter(cuota=cuota)))
-
-        items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
-        lineas_detalle = []
-        for it in items:
-            nombre_concepto = it.get_concepto_display()
-            monto_fmt = format_amount(it.monto)
-            if it.es_descuento:
-                lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
-            else:
-                lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
-
-        if lineas_detalle:
-            bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total actualizado: {format_amount(total)}"
-        else:
-            bloque_detalle = f"Importe total actualizado: {format_amount(total)}"
+        bloque_detalle = build_cuota_items_detail(cuota, total_label="Total actualizado")
 
         venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
         venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
@@ -505,7 +579,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
     )
     socios = list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-        .select_related("estado_administrativo", "jugador__estado")
+        .select_related("estado_administrativo", "jugador__estado", "jugador__categoria")
         .prefetch_related(Prefetch(
             "becas",
             queryset=active_scholarships,
@@ -520,6 +594,7 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
         "cuotas_existentes": 0,
         "items_sociales": 0,
         "items_deportivos": 0,
+        "cuotas_exentas": 0,
     }
 
     for period in periods:
@@ -536,6 +611,9 @@ def generar_cuotas_mensuales(fecha=None, today=None, meses=CUOTA_WINDOW_MONTHS, 
                 cuota = create_cuota(socio, period, configuration=configuration, today=today, user=user)
             except CuotaDuplicadaError:
                 result["cuotas_existentes"] += 1
+                continue
+            except CategoriaExentaError:
+                result["cuotas_exentas"] += 1
                 continue
             except SocioInactivoError:
                 continue

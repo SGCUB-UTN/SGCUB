@@ -2,7 +2,6 @@ import logging
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from configuracion.models import ConfiguracionGeneral
-from comunicaciones.models import EnvioNotificacion, Notificacion
 from comunicaciones.services import crear_y_despachar_notificacion, enviar_email_individual
 from .models import Documento, EstadoDocumento
 
@@ -88,6 +87,11 @@ def refresh_document_states(enviar_alertas=True):
 
         # Notificar a los 'dias_alerta' días exactos (ej. 30 días) o el día exacto de vencimiento (0 días)
         if dias_restantes == dias_alerta or dias_restantes == 0:
+            if dias_restantes == dias_alerta and doc.alerta_previa_enviada:
+                continue
+            if dias_restantes == 0 and doc.alerta_vencido_enviada:
+                continue
+
             tipo_nombre = doc.tipo_documento.nombre
             venc_str = vencimiento.strftime("%d/%m/%Y")
             if dias_restantes == 0:
@@ -98,31 +102,6 @@ def refresh_document_states(enviar_alertas=True):
             titulo = f"Vencimiento de documentación: {tipo_nombre}"
             asunto = f"Aviso de vencimiento: {tipo_nombre} - {club}"
 
-            # Evitar alertas duplicadas para el mismo documento y vencimiento
-            if socio:
-                if dias_restantes == 0:
-                    ya_notificado = EnvioNotificacion.objects.filter(
-                        socio=socio,
-                        notificacion__titulo=titulo,
-                        notificacion__fecha_creacion__date=today,
-                        notificacion__contenido__icontains="ha vencido en el día de hoy",
-                    ).exists()
-                else:
-                    ya_notificado = EnvioNotificacion.objects.filter(
-                        socio=socio,
-                        notificacion__titulo=titulo,
-                        notificacion__contenido__icontains=venc_str,
-                    ).exists()
-                if ya_notificado:
-                    continue
-            elif persona.email and "@" in persona.email:
-                ya_notificado = Notificacion.objects.filter(
-                    asunto=asunto,
-                    contenido__icontains=venc_str if dias_restantes > 0 else "ha vencido en el día de hoy",
-                ).exists()
-                if ya_notificado:
-                    continue
-
             contenido = (
                 f"Estimado/a {persona.nombre},\n\n"
                 f"Te informamos que tu documentación '{tipo_nombre}' {motivo}.\n\n"
@@ -132,6 +111,7 @@ def refresh_document_states(enviar_alertas=True):
                 f"{club}"
             )
 
+            enviado = False
             if socio:
                 crear_y_despachar_notificacion(
                     titulo=titulo,
@@ -139,6 +119,7 @@ def refresh_document_states(enviar_alertas=True):
                     contenido=contenido,
                     socios=[socio],
                 )
+                enviado = True
                 alertas_enviadas += 1
             elif persona.email and "@" in persona.email:
                 enviar_email_individual(
@@ -146,8 +127,16 @@ def refresh_document_states(enviar_alertas=True):
                     asunto=asunto,
                     contenido=contenido,
                 )
+                enviado = True
                 alertas_enviadas += 1
 
+            if enviado:
+                if dias_restantes == dias_alerta:
+                    doc.alerta_previa_enviada = True
+                    doc.save(update_fields=["alerta_previa_enviada"])
+                elif dias_restantes == 0:
+                    doc.alerta_vencido_enviada = True
+                    doc.save(update_fields=["alerta_vencido_enviada"])
     return {
         "documentos_actualizados": total_actualizados,
         "alertas_enviadas": alertas_enviadas,

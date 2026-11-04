@@ -14,7 +14,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { categoryTags, memberStatuses } from '../components/personas/profileStatus'
+import { categoryTags, exemptCategory, memberStatuses } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -26,6 +26,8 @@ import useSocioFinances from '../hooks/useSocioFinances'
 import CometJugadorCard from '../components/comet/CometJugadorCard'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 const ORIGINS = {
   jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
@@ -199,6 +201,32 @@ function JugadorDetail() {
   const bajaTemporal = jugador.tipo_baja === 'parcial'
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
+  const categoriaExenta = exemptCategory(jugador)
+
+  const handleDownloadPhoto = async () => {
+    if (!socio.foto_url) return
+    try {
+      await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
+    } catch (err) {
+      console.error(err)
+      alert('No se pudo descargar la foto.')
+    }
+  }
+
+  const handleUploadPhoto = async (file) => {
+    if (!socio.persona) return
+    const personaActualizada = await uploadPersonaFoto(socio.persona, file)
+    setCarga((actual) => ({
+      ...actual,
+      datos: {
+        ...actual.datos,
+        socio: {
+          ...actual.datos.socio,
+          foto_url: personaActualizada.foto_url,
+        },
+      },
+    }))
+  }
 
   const tabs = [
     {
@@ -207,7 +235,11 @@ function JugadorDetail() {
       icon: 'person',
       content: (
         <PersonalDataTab
-          persona={socio}
+          persona={{
+            ...socio,
+            esquema_vacunacion: jugador.esquema_vacunacion,
+            nivel_educacion: jugador.nivel_educacion,
+          }}
           localidades={localidades}
           onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           deportivo={{
@@ -248,7 +280,7 @@ function JugadorDetail() {
       icon: 'account_balance_wallet',
       badge: cuotaBadges,
       content: socio.socio_id
-        ? <FinancialStatement socio={socio} finances={finances} />
+        ? <FinancialStatement socio={socio} finances={finances} exemptCategory={categoriaExenta} />
         : <EmptyState icon="account_balance_wallet" title="Sin datos de socio" description="El jugador no tiene un socio asociado." />,
     },
     {
@@ -268,6 +300,9 @@ function JugadorDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        photoUrl={socio.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={handleUploadPhoto}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
         tags={categoryTags(jugador)}
@@ -298,7 +333,9 @@ function JugadorDetail() {
               </>
             )}
           >
-            Sin actividad deportiva. Sigue como socio y abona la cuota social.
+            {categoriaExenta
+              ? `Sin actividad deportiva. Sigue como socio, sin cuotas por estar en la categoría ${categoriaExenta.nombre}.`
+              : 'Sin actividad deportiva. Sigue como socio y abona la cuota social.'}
           </HeaderNotice>
         )}
       />

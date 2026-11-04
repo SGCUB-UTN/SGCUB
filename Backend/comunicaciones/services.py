@@ -300,7 +300,6 @@ def enviar_email_individual(
                 msg.attach(img)
             except Exception:
                 pass
-
         msg.send(fail_silently=False)
 
         if envio_id:

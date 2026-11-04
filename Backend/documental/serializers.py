@@ -1,8 +1,17 @@
 from rest_framework import serializers
-from .models import TipoDocumento, EstadoDocumento, Documento, _local_date
+from .models import TipoDocumento, EstadoDocumento, Documento, PlantillaDocumento, _local_date
+
+
+def has_template(tipo):
+    try:
+        return tipo.plantilla is not None
+    except PlantillaDocumento.DoesNotExist:
+        return False
+
 
 class TipoDocumentoSerializer(serializers.ModelSerializer):
     en_uso = serializers.SerializerMethodField()
+    tiene_plantilla = serializers.SerializerMethodField()
 
     class Meta:
         model = TipoDocumento
@@ -11,6 +20,9 @@ class TipoDocumentoSerializer(serializers.ModelSerializer):
 
     def get_en_uso(self, obj) -> bool:
         return obj.documentos.exists()
+
+    def get_tiene_plantilla(self, obj) -> bool:
+        return has_template(obj)
 
     def validate_nombre(self, value):
         value = value.strip()
@@ -28,6 +40,27 @@ class TipoDocumentoSerializer(serializers.ModelSerializer):
         if not any(current(field) for field in ('aplica_jugador', 'aplica_socio', 'aplica_docente')):
             raise serializers.ValidationError({'perfiles': 'Elegí al menos un perfil al que aplica el documento.'})
         return attrs
+
+class PlantillaDocumentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlantillaDocumento
+        fields = ['tipo_documento', 'titulo', 'cuerpo', 'talon_leyenda', 'firma_jugador_menor', 'mostrar_categoria']
+        read_only_fields = ['tipo_documento']
+        extra_kwargs = {'cuerpo': {'max_length': 20000}}
+
+    def validate_titulo(self, value):
+        return required_text(value, 'Ingresá un título.')
+
+    def validate_talon_leyenda(self, value):
+        return required_text(value, 'Ingresá la leyenda del talón.')
+
+
+def required_text(value, message):
+    value = value.strip()
+    if not value:
+        raise serializers.ValidationError(message)
+    return value
+
 
 class EstadoDocumentoSerializer(serializers.ModelSerializer):
     class Meta:
