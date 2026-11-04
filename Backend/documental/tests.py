@@ -6,11 +6,13 @@ from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+import pypdfium2 as pdfium
 from rest_framework.test import APITestCase
 
+from configuracion.models import HistorialConfiguracion
 from padron.models import (
     ESTADO_ADMINISTRATIVO_INACTIVO,
     ESTADO_DEPORTIVO_INACTIVO,
@@ -22,8 +24,10 @@ from padron.models import (
     Jugador,
     Persona,
     Socio,
+    VinculoFamiliar,
 )
 
+from .markdown import inline_markdown, parse_markdown
 from .models import Documento, EstadoDocumento, TipoDocumento
 
 
@@ -434,3 +438,164 @@ class PadronDocumentalTests(APITestCase):
             [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in resumen["categorias_afectadas"]],
             [("Sub 12", 1, 3, 6), ("Sub 14", 1, 1, 2)],
         )
+
+
+class MarkdownTests(SimpleTestCase):
+    def test_convierte_negrita_cursiva_y_escapa_html(self):
+        self.assertEqual(inline_markdown("**Hola** *mundo* <b>"), "<b>Hola</b> <i>mundo</i> &lt;b&gt;")
+
+    def test_combina_negrita_y_cursiva_sin_cruzar_etiquetas(self):
+        self.assertEqual(inline_markdown("***ambas*** y **a *b* c**"), "<b><i>ambas</i></b> y <b>a <i>b</i> c</b>")
+
+    def test_agrupa_parrafos_y_listas(self):
+        bloques = parse_markdown("Primera línea\nsegunda\n\n1. Uno\n2. Dos\n- Viñeta\n\nFinal")
+
+        self.assertEqual(bloques, [
+            {"type": "paragraph", "text": "Primera línea<br/>segunda"},
+            {"type": "ordered", "items": ["Uno", "Dos"], "start": 1},
+            {"type": "bullet", "items": ["Viñeta"], "start": 1},
+            {"type": "paragraph", "text": "Final"},
+        ])
+
+
+class PlantillaDocumentoTests(APITestCase):
+    def setUp(self):
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="administrativo"))
+        self.tipo = TipoDocumento.objects.get(nombre="Pautas de Convivencia")
+        self.plantilla = self.tipo.plantilla
+        self.plantilla.cuerpo = "Texto **del reglamento**\n\n1. Respetar"
+        self.plantilla.talon_leyenda = "Recibí y acepto las pautas."
+        self.plantilla.save()
+        self.categoria = Categoria.objects.create(nombre="Sub 14")
+
+    def jugador(self, dni, edad, telefono="2215550000"):
+        nacimiento = timezone.localdate().replace(year=timezone.localdate().year - edad) - timedelta(days=1)
+        persona = Persona.objects.create(nombre="Lucas", apellido="Gómez", dni=dni, telefono=telefono, fecha_nacimiento=nacimiento)
+        return Jugador.objects.create(socio=Socio.objects.create(persona=persona), categoria=self.categoria)
+
+    def responsable(self, jugador):
+        persona = Persona.objects.create(nombre="Marta", apellido="Gómez", dni="20111222", telefono="2214440000")
+        return VinculoFamiliar.objects.create(persona=persona, jugador=jugador, responsable_legal=True, relacion="Madre")
+
+    def url(self, nombre, persona):
+        return reverse(nombre, args=[self.tipo.pk, persona.pk])
+
+    def texto_pdf(self, persona, **params):
+        response = self.client.get(self.url("plantilla_documento_pdf", persona), params)
+        self.assertEqual(response.status_code, 200, getattr(response, "data", None))
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        return " ".join(page.get_textpage().get_text_range() for page in pdfium.PdfDocument(response.content))
+
+    def test_edita_la_plantilla_y_registra_el_cambio(self):
+        url = reverse("plantilla_documento_detail", args=[self.tipo.pk])
+
+        response = self.client.patch(url, {"titulo": "Reglamento interno", "firma_jugador_menor": False}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.client.get(url).data["titulo"], "Reglamento interno")
+        self.assertTrue(HistorialConfiguracion.objects.filter(campo="Plantilla Pautas de Convivencia · Título").exists())
+        self.assertTrue(HistorialConfiguracion.objects.filter(campo="Plantilla Pautas de Convivencia · Firma del jugador menor").exists())
+
+    def test_exige_titulo_y_leyenda(self):
+        response = self.client.patch(
+            reverse("plantilla_documento_detail", args=[self.tipo.pk]), {"titulo": " ", "talon_leyenda": ""}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(set(response.data), {"titulo", "talon_leyenda"})
+
+    def test_un_tipo_sin_plantilla_no_tiene_plantilla(self):
+        tipo = TipoDocumento.objects.get(nombre="DNI")
+
+        self.assertEqual(self.client.get(reverse("plantilla_documento_detail", args=[tipo.pk])).status_code, 404)
+
+    def test_pdf_completo_de_un_jugador_mayor(self):
+        jugador = self.jugador("40111222", edad=20)
+
+        texto = self.texto_pdf(jugador.socio.persona)
+
+        for esperado in ("Pautas de Convivencia", "del reglamento", "Respetar", "Lucas Gómez", "40.111.222", "Sub 14", "Recibí y acepto", "Firma del jugador"):
+            self.assertIn(esperado, texto)
+        self.assertNotIn("RESPONSABLE LEGAL", texto)
+
+    def test_pdf_de_un_menor_incluye_al_responsable_legal(self):
+        jugador = self.jugador("50111222", edad=12)
+        self.responsable(jugador)
+
+        texto = self.texto_pdf(jugador.socio.persona)
+
+        for esperado in ("RESPONSABLE LEGAL", "Marta Gómez", "20.111.222", "Madre", "Firma del responsable legal", "Firma del jugador"):
+            self.assertIn(esperado, texto)
+
+    def test_el_menor_puede_no_firmar(self):
+        self.plantilla.firma_jugador_menor = False
+        self.plantilla.save()
+        jugador = self.jugador("50111223", edad=12)
+
+        texto = self.texto_pdf(jugador.socio.persona)
+
+        self.assertIn("Firma del responsable legal", texto)
+        self.assertNotIn("Firma del jugador", texto)
+
+    def test_la_plantilla_puede_omitir_la_categoria(self):
+        self.plantilla.mostrar_categoria = False
+        self.plantilla.save()
+        jugador = self.jugador("40111227", edad=20)
+
+        texto = self.texto_pdf(jugador.socio.persona)
+
+        self.assertIn("Lucas Gómez", texto)
+        self.assertNotIn("Categoría", texto)
+        self.assertNotIn("Sub 14", texto)
+
+    def test_el_talon_solo_no_incluye_el_cuerpo(self):
+        jugador = self.jugador("40111223", edad=20)
+
+        texto = self.texto_pdf(jugador.socio.persona, alcance="talon")
+
+        self.assertIn("Talón de conformidad", texto)
+        self.assertNotIn("Respetar", texto)
+
+    def test_pdf_de_un_docente_no_tiene_categoria(self):
+        self.tipo.aplica_docente = True
+        self.tipo.save()
+        docente = Docente.objects.create(persona=Persona.objects.create(nombre="Ana", apellido="Ruiz", dni="30111222"))
+
+        texto = self.texto_pdf(docente.persona)
+
+        self.assertIn("Firma del docente", texto)
+        self.assertNotIn("Categoría", texto)
+
+    def test_rechaza_a_quien_no_se_le_pide_el_documento(self):
+        docente = Docente.objects.create(persona=Persona.objects.create(nombre="Ana", apellido="Ruiz", dni="30111223"))
+
+        response = self.client.get(self.url("plantilla_documento_pdf", docente.persona))
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_rechaza_un_alcance_desconocido(self):
+        jugador = self.jugador("40111224", edad=20)
+
+        response = self.client.get(self.url("plantilla_documento_pdf", jugador.socio.persona), {"alcance": "otro"})
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_imagen_para_whatsapp(self):
+        jugador = self.jugador("40111225", edad=20)
+
+        response = self.client.get(self.url("plantilla_documento_imagen", jugador.socio.persona))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/png")
+        self.assertTrue(response.content.startswith(b"\x89PNG"))
+
+    def test_destinatario_es_el_responsable_legal_si_es_menor(self):
+        menor = self.jugador("50111224", edad=12)
+        self.responsable(menor)
+        mayor = self.jugador("40111226", edad=20, telefono="2213330000")
+
+        menor_data = self.client.get(self.url("plantilla_documento_destinatario", menor.socio.persona)).data
+        mayor_data = self.client.get(self.url("plantilla_documento_destinatario", mayor.socio.persona)).data
+
+        self.assertEqual(menor_data, {"nombre": "Marta Gómez", "telefono": "2214440000", "es_responsable_legal": True})
+        self.assertEqual(mayor_data, {"nombre": "Lucas Gómez", "telefono": "2213330000", "es_responsable_legal": False})

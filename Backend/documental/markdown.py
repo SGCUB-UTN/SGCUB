@@ -7,13 +7,33 @@ BULLET = "bullet"
 
 ORDERED_ITEM = re.compile(r"^\s*(\d+)[.)]\s+(.*)$")
 BULLET_ITEM = re.compile(r"^\s*[-*]\s+(.*)$")
-BOLD = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*")
+EMPHASIS = re.compile(r"\*\*\*(\S(?:.*?\S)?)\*\*\*|\*\*(\S(?:.*?\S)?)\*\*|\*(\S(?:.*?\S)?)\*")
 ITALIC = re.compile(r"\*(\S(?:.*?\S)?)\*")
 
 
+def italic_html(text):
+    return ITALIC.sub(r"<i>\1</i>", escape(text))
+
+
+def emphasis_html(match):
+    bold_italic, bold, italic = match.groups()
+    if bold_italic is not None:
+        return f"<b><i>{escape(bold_italic)}</i></b>"
+    if bold is not None:
+        return f"<b>{italic_html(bold)}</b>"
+    return f"<i>{escape(italic)}</i>"
+
+
 def inline_markdown(text):
-    html = BOLD.sub(r"<b>\1</b>", escape(text.strip()))
-    return ITALIC.sub(r"<i>\1</i>", html)
+    text = text.strip()
+    html = []
+    last = 0
+    for match in EMPHASIS.finditer(text):
+        html.append(escape(text[last:match.start()]))
+        html.append(emphasis_html(match))
+        last = match.end()
+    html.append(escape(text[last:]))
+    return "".join(html)
 
 
 def parse_markdown(text):

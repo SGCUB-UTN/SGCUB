@@ -9,10 +9,27 @@ from django.db.models import Max, OuterRef, Subquery
 from configuracion.models import ConfiguracionGeneral
 from configuracion.services import Seccion, record_catalog_update, record_change
 
-from .models import Documento, TipoDocumento, EstadoDocumento
-from .serializers import DocumentoSerializer, TipoDocumentoSerializer, EstadoDocumentoSerializer, has_template
+from padron.models import Persona
+
+from .models import Documento, TipoDocumento, EstadoDocumento, PlantillaDocumento
+from .serializers import (
+    DocumentoSerializer,
+    EstadoDocumentoSerializer,
+    PlantillaDocumentoSerializer,
+    TipoDocumentoSerializer,
+    has_template,
+)
 from .padron_pdf import padron_filename, render_padron_pdf
-from .services import PadronFilterError, build_padron_documental, padron_summary, parse_padron_filters
+from .services import (
+    PadronFilterError,
+    TemplateSubjectError,
+    build_padron_documental,
+    padron_summary,
+    parse_padron_filters,
+    template_recipient,
+    template_subject,
+)
+from .template_pdf import FULL, SCOPES, pdf_pages_to_png, render_template_pdf, template_filename
 
 @extend_schema(tags=["Documental / Documentos"], request=DocumentoSerializer, responses=DocumentoSerializer)
 @api_view(["GET", "POST"])
@@ -124,6 +141,85 @@ def tipo_documento_detail(request, pk):
         request_user(request),
     )
     return Response(TipoDocumentoSerializer(tipo).data)
+
+TEMPLATE_FIELDS = {
+    "titulo": "Título",
+    "cuerpo": "Contenido",
+    "talon_leyenda": "Leyenda del talón",
+    "firma_jugador_menor": "Firma del jugador menor",
+    "mostrar_categoria": "Mostrar categoría",
+}
+
+
+def template_for(tipo_id):
+    return get_object_or_404(PlantillaDocumento.objects.select_related("tipo_documento"), tipo_documento_id=tipo_id)
+
+
+def template_with_subject(tipo_id, persona_id):
+    plantilla = template_for(tipo_id)
+    persona = get_object_or_404(Persona.objects.select_related("socio__jugador__categoria", "docente"), pk=persona_id)
+    return plantilla, template_subject(plantilla.tipo_documento, persona)
+
+
+@extend_schema(tags=["Documental / Plantillas"], request=PlantillaDocumentoSerializer, responses=PlantillaDocumentoSerializer)
+@api_view(["GET", "PATCH"])
+def plantilla_documento_detail(request, pk):
+    plantilla = template_for(pk)
+    if request.method == "GET":
+        return Response(PlantillaDocumentoSerializer(plantilla).data)
+
+    before = {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS}
+    serializer = PlantillaDocumentoSerializer(plantilla, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    plantilla = serializer.save()
+    record_catalog_update(
+        Seccion.DOCUMENTACION,
+        f"Plantilla {plantilla.tipo_documento.nombre}",
+        before,
+        {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS},
+        TEMPLATE_FIELDS,
+        request_user(request),
+    )
+    return Response(PlantillaDocumentoSerializer(plantilla).data)
+
+
+@extend_schema(tags=["Documental / Plantillas"], responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def plantilla_documento_pdf(request, pk, persona_id):
+    scope = request.query_params.get("alcance", FULL)
+    if scope not in SCOPES:
+        return Response({"detail": "El alcance debe ser completo o talon."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        plantilla, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    response = HttpResponse(render_template_pdf(plantilla, subject, scope), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{template_filename(plantilla, subject, scope)}"'
+    return response
+
+
+@extend_schema(tags=["Documental / Plantillas"], responses={(200, "image/png"): bytes})
+@api_view(["GET"])
+def plantilla_documento_imagen(request, pk, persona_id):
+    try:
+        plantilla, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    response = HttpResponse(pdf_pages_to_png(render_template_pdf(plantilla, subject)), content_type="image/png")
+    response["Content-Disposition"] = f'inline; filename="{template_filename(plantilla, subject, FULL)}.png"'
+    return response
+
+
+@extend_schema(tags=["Documental / Plantillas"])
+@api_view(["GET"])
+def plantilla_documento_destinatario(request, pk, persona_id):
+    try:
+        _, subject = template_with_subject(pk, persona_id)
+    except TemplateSubjectError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(template_recipient(subject))
+
 
 @extend_schema(tags=["Documental / Estados"], request=EstadoDocumentoSerializer, responses=EstadoDocumentoSerializer)
 @api_view(["GET"])

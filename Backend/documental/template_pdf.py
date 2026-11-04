@@ -129,10 +129,10 @@ def signatures_table(labels):
     return content
 
 
-def person_rows(subject):
+def person_rows(plantilla, subject):
     persona = subject["persona"]
     rows = [("Nombre y apellido", f"{persona.nombre} {persona.apellido}"), ("DNI", format_dni(persona.dni))]
-    if subject["categoria"]:
+    if plantilla.mostrar_categoria and subject["categoria"]:
         rows.append(("Categoría a la que ingresa", subject["categoria"]))
     return rows
 
@@ -153,7 +153,7 @@ def stub_flowables(plantilla, subject):
         Paragraph(escape(club_name()), STYLES["stub_club"]),
         Paragraph(f"Talón de conformidad · {escape(plantilla.titulo)}", STYLES["stub_title"]),
         Spacer(1, 3 * mm),
-        fields_table(person_rows(subject)),
+        fields_table(person_rows(plantilla, subject)),
     ]
     if subject["menor"]:
         flowables += [

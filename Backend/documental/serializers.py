@@ -41,6 +41,27 @@ class TipoDocumentoSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'perfiles': 'Elegí al menos un perfil al que aplica el documento.'})
         return attrs
 
+class PlantillaDocumentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlantillaDocumento
+        fields = ['tipo_documento', 'titulo', 'cuerpo', 'talon_leyenda', 'firma_jugador_menor', 'mostrar_categoria']
+        read_only_fields = ['tipo_documento']
+        extra_kwargs = {'cuerpo': {'max_length': 20000}}
+
+    def validate_titulo(self, value):
+        return required_text(value, 'Ingresá un título.')
+
+    def validate_talon_leyenda(self, value):
+        return required_text(value, 'Ingresá la leyenda del talón.')
+
+
+def required_text(value, message):
+    value = value.strip()
+    if not value:
+        raise serializers.ValidationError(message)
+    return value
+
+
 class EstadoDocumentoSerializer(serializers.ModelSerializer):
     class Meta:
         model = EstadoDocumento

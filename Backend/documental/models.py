@@ -30,6 +30,7 @@ class PlantillaDocumento(models.Model):
     cuerpo = models.TextField(blank=True)
     talon_leyenda = models.TextField(max_length=500)
     firma_jugador_menor = models.BooleanField(default=True)
+    mostrar_categoria = models.BooleanField(default=True)
 
     class Meta:
         db_table = "plantilla_documento"
