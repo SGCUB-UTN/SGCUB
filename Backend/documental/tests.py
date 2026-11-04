@@ -474,3 +474,40 @@ class AlertasDocumentalesTaskTest(TestCase):
         )
         self.assertEqual(doc_nuevo.estado_documento.nombre, "Vigente")
 
+    def test_alertas_no_duplican_y_notifican_docentes_y_socios_simultaneos(self):
+        from datetime import timedelta
+        from unittest.mock import patch
+        from configuracion.models import ConfiguracionGeneral
+        from padron.models import Docente, EstadoAdministrativo, Persona, Socio
+        from .models import Documento, EstadoDocumento, TipoDocumento
+        from .tasks import refresh_document_states
+
+        EstadoDocumento.objects.get_or_create(nombre="Vigente")
+        EstadoDocumento.objects.get_or_create(nombre="Vencido")
+        est_adm, _ = EstadoAdministrativo.objects.get_or_create(nombre="Activo")
+        tipo = TipoDocumento.objects.create(nombre="Certificado Médico", requiere_vencimiento=True)
+
+        config = ConfiguracionGeneral.load()
+        config.dias_alerta_documentos = 30
+        config.save()
+
+        # Socio y Docente con el MISMO tipo de documento y MISMA fecha de vencimiento
+        p_socio = Persona.objects.create(nombre="Socio1", apellido="Test", dni="11111111", email="socio1@example.com")
+        socio = Socio.objects.create(persona=p_socio, estado_administrativo=est_adm)
+
+        p_docente = Persona.objects.create(nombre="Docente1", apellido="Test", dni="22222222", email="docente1@example.com")
+        docente = Docente.objects.create(persona=p_docente, estado=est_adm)
+
+        venc_30 = timezone.now() + timedelta(days=30)
+        doc_socio = Documento.objects.create(persona=p_socio, tipo_documento=tipo, fecha_vencimiento=venc_30)
+        doc_docente = Documento.objects.create(persona=p_docente, tipo_documento=tipo, fecha_vencimiento=venc_30)
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+            res1 = refresh_document_states()
+            # Ambos deben recibir su alerta
+            self.assertEqual(res1["alertas_enviadas"], 2)
+
+            # Segunda ejecución: no debe duplicar para nadie
+            res2 = refresh_document_states()
+            self.assertEqual(res2["alertas_enviadas"], 0)
+
