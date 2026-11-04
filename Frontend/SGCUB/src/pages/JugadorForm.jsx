@@ -390,9 +390,12 @@ function JugadorForm() {
         personaIdParaFoto = jugador.socio?.persona ?? null
       } else if (socioVinculado) {
         await putSocio(socioVinculado.socio_id, datosSocio)
-        jugadorId = (await postJugador({ ...datosJugador, socio: socioVinculado.socio_id })).jugador_id
+        const creado = await postJugador({ ...datosJugador, socio: socioVinculado.socio_id })
+        jugadorId = creado.jugador_id
+        personaIdParaFoto = creado.socio?.persona ?? socioVinculado.persona ?? null
       } else {
-        jugadorId = (await postJugador({ ...datosJugador, nuevo_socio: datosSocio })).jugador_id
+        const creado = await postJugador({ ...datosJugador, nuevo_socio: datosSocio })
+        jugadorId = creado.jugador_id
         personaIdParaFoto = creado.socio?.persona ?? null
       }
       if (foto && personaIdParaFoto) {
@@ -502,7 +505,7 @@ function JugadorForm() {
             {/* Foto de perfil: visible en edición o al crear una persona nueva */}
             {(editando || (!socioVinculado && !personaEncontrada)) && (
               <div className="flex flex-col gap-3 pb-4 border-b border-outline-variant/20">
-                <SeccionTitulo icono="photo_camera" titulo="Foto de perfil" />
+                <SeccionTitulo icono="photo_camera" titulo="Foto carnet" />
                 <PhotoUploadField
                   value={foto}
                   onChange={setFoto}
