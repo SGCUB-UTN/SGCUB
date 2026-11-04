@@ -125,11 +125,30 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return email
 
     def validate_role(self, value):
-        # Evita que un administrador se quite su propio acceso a esta pantalla
         request_user = self.context["request"].user
-        is_self = self.instance is not None and self.instance.pk == request_user.pk
-        if is_self and not self.instance.groups.filter(name=value).exists():
-            raise serializers.ValidationError("No podés cambiar tu propio rol.")
+        
+        # Regla 1: no cambiar el propio rol
+        if self.instance is not None and self.instance.pk == request_user.pk:
+            current_roles = set(self.instance.groups.values_list("name", flat=True))
+            if current_roles != {value}:
+                raise serializers.ValidationError("No podés cambiar tu propio rol.")
+        
+        # Regla 2: no dejar el sistema sin admins activos
+        if self.instance is not None and value != ADMINISTRADOR:
+            era_admin_activo = (
+                self.instance.is_active
+                and self.instance.groups.filter(name=ADMINISTRADOR).exists()
+            )
+            if era_admin_activo:
+                otros_admins = User.objects.filter(
+                    groups__name=ADMINISTRADOR,
+                    is_active=True,
+                ).exclude(pk=self.instance.pk)
+                if not otros_admins.exists():
+                    raise serializers.ValidationError(
+                        "No podés quitar el rol de administrador al último administrador activo."
+                    )
+        
         return value
 
     def create(self, validated_data):

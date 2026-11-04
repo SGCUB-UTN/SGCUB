@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairVi
 from .models import set_must_change_password
 from .permissions import CanChangeUsuarios, CanManageUsuarios
 from .serializers import ROLES, AutorizanteSerializer, CambioPasswordSerializer, LoginSerializer, UsuarioActualSerializer, UsuarioSerializer
+from .roles import ADMINISTRADOR
 
 User = get_user_model()
 
@@ -89,6 +90,18 @@ def usuario_detail(request, pk):
     # Baja lógica: el usuario deja de poder ingresar y sus tokens dejan de ser aceptados
     if user.pk == request.user.pk:
         return Response({"detail": "No podés darte de baja a vos mismo."}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user.is_active and user.groups.filter(name=ADMINISTRADOR).exists():
+        otros_admins = User.objects.filter(
+            groups__name=ADMINISTRADOR,
+            is_active=True,
+        ).exclude(pk=user.pk)
+        if not otros_admins.exists():
+            return Response(
+                {"detail": "No podés desactivar al último administrador activo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    
     user.is_active = False
     user.save(update_fields=["is_active"])
     return Response(status=status.HTTP_204_NO_CONTENT)
