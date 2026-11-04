@@ -405,3 +405,72 @@ class PadronDocumentalTests(APITestCase):
             [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in resumen["categorias_afectadas"]],
             [("Sub 12", 1, 3, 6), ("Sub 14", 1, 1, 2)],
         )
+
+
+from django.test import TestCase
+
+
+class AlertasDocumentalesTaskTest(TestCase):
+    def test_refresh_document_states_emite_alertas_preventivas_y_da_de_baja_con_renovacion(self):
+        from datetime import timedelta
+        from unittest.mock import patch
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+        from padron.models import (
+            Categoria,
+            EstadoAdministrativo,
+            EstadoDeportivo,
+            Jugador,
+            Persona,
+            Socio,
+        )
+        from .models import Documento, EstadoDocumento, TipoDocumento
+        from .tasks import refresh_document_states
+
+        EstadoDocumento.objects.get_or_create(nombre="Vigente")
+        EstadoDocumento.objects.get_or_create(nombre="Vencido")
+        est_adm, _ = EstadoAdministrativo.objects.get_or_create(nombre="Activo")
+        est_dep, _ = EstadoDeportivo.objects.get_or_create(nombre="Activo")
+        cat = Categoria.objects.create(nombre="Juveniles", anio_vigente=2026, genero="M")
+
+        persona = Persona.objects.create(
+            nombre="Marcos",
+            apellido="Docu",
+            dni="44111222",
+            email="marcos@example.com",
+        )
+        socio = Socio.objects.create(persona=persona, estado_administrativo=est_adm)
+        jugador = Jugador.objects.create(socio=socio, categoria=cat)
+        jugador.estado = est_dep
+        jugador.save()
+
+        tipo = TipoDocumento.objects.create(nombre="Apto Físico", requiere_vencimiento=True)
+
+        config = ConfiguracionGeneral.load()
+        config.dias_alerta_documentos = 30
+        config.save()
+
+        # Documento que vence exactamente en 30 días
+        venc_30 = timezone.now() + timedelta(days=30)
+        doc = Documento.objects.create(
+            persona=persona,
+            tipo_documento=tipo,
+            fecha_vencimiento=venc_30,
+        )
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+            res = refresh_document_states()
+            self.assertGreaterEqual(res["alertas_enviadas"], 1)
+
+            envios = EnvioNotificacion.objects.filter(socio=socio)
+            self.assertTrue(envios.exists())
+            self.assertEqual(envios.first().estado, EstadoNotificacion.ENVIADA)
+
+        # Renovación documental: se carga nuevo documento con vencimiento a 180 días
+        doc_nuevo = Documento.objects.create(
+            persona=persona,
+            tipo_documento=tipo,
+            fecha_vencimiento=timezone.now() + timedelta(days=180),
+        )
+        self.assertEqual(doc_nuevo.estado_documento.nombre, "Vigente")
+

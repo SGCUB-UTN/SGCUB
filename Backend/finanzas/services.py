@@ -369,6 +369,65 @@ def update_cuota_due_dates(cuota, configuration, reason, authorized_by, user):
     return True
 
 
+def notificar_modificacion_cuota_evento(cuota, motivo, nuevo_monto=None):
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.services import crear_y_despachar_notificacion
+        from .pdf_utils import format_amount
+
+        config = ConfiguracionGeneral.load()
+        if not config.notificar_modificacion_cuota:
+            return
+
+        cuota.refresh_from_db()
+        if getattr(cuota, "movimiento", None):
+            cuota.movimiento.refresh_from_db()
+
+        socio = cuota.movimiento.cuenta_corriente.socio
+        club = config.club_nombre
+
+        total = nuevo_monto if nuevo_monto is not None else (cuota.movimiento.monto if cuota.movimiento else net_amount(ItemCuota.objects.filter(cuota=cuota)))
+
+        items = list(ItemCuota.objects.filter(cuota=cuota).order_by("item_cuota_id"))
+        lineas_detalle = []
+        for it in items:
+            nombre_concepto = it.get_concepto_display()
+            monto_fmt = format_amount(it.monto)
+            if it.es_descuento:
+                lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
+            else:
+                lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
+
+        if lineas_detalle:
+            bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total actualizado: {format_amount(total)}"
+        else:
+            bloque_detalle = f"Importe total actualizado: {format_amount(total)}"
+
+        venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
+        venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
+
+        titulo = f"Modificación en cuota {cuota.periodo}"
+        asunto = f"Modificación en tu cuota social {cuota.periodo} - {club}"
+        contenido = (
+            f"Estimado/a {socio.persona.nombre},\n\n"
+            f"Te informamos que se ha registrado una actualización en tu cuota del período {cuota.periodo}.\n"
+            f"Motivo: {motivo}.\n\n"
+            f"{bloque_detalle}\n\n"
+            f"Vencimientos vigentes:\n"
+            f"  • Primer vencimiento: {venc1}\n"
+            f"  • Segundo vencimiento: {venc2}\n\n"
+            f"Podés consultar el detalle desde tu estado de cuenta o en la secretaría del club."
+        )
+        crear_y_despachar_notificacion(
+            titulo=titulo,
+            asunto=asunto,
+            contenido=contenido,
+            socios=[socio],
+        )
+    except Exception:
+        logger.exception("Error al notificar modificación de cuota")
+
+
 def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     cuota = lock_cuota(cuota_id)
     reason = f"Actualización de la configuración vigente desde {configuration.periodo_vigencia}"
@@ -383,6 +442,12 @@ def apply_configuration_to_cuota(cuota_id, configuration, user=None):
     rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
     sync_cuota_charge(cuota)
     apply_cuota_surcharges(cuota.pk, configuration=configuration, user=user)
+    cuota.refresh_from_db()
+    if getattr(cuota, "movimiento", None):
+        cuota.movimiento.refresh_from_db()
+    if cuota.periodo == configuration.periodo_vigencia:
+        monto_actualizado = cuota.movimiento.monto if cuota.movimiento else net_amount(ItemCuota.objects.filter(cuota=cuota))
+        notificar_modificacion_cuota_evento(cuota, reason, monto_actualizado)
     return True
 
 
@@ -592,17 +657,59 @@ def mark_partial_line(lines):
     return lines
 
 
-def socio_detail(socio):
+def resolver_contacto_socio_finanzas(socio):
     if socio is None:
         return None
+    persona = getattr(socio, "persona", None)
+    if not persona:
+        return {
+            "socio_id": socio.socio_id,
+            "numero_socio": socio.numero_socio,
+            "nombre": "",
+            "apellido": "",
+            "dni": "",
+            "telefono": "",
+            "telefono_socio": "",
+            "es_menor": False,
+            "responsable_nombre": None,
+            "telefono_responsable": None,
+        }
+
+    edad = persona.edad
+    es_menor = bool(edad is not None and edad < 18)
+    responsable_nombre = None
+    telefono_responsable = None
+    telefono_contacto = (persona.telefono or "").strip()
+
+    if es_menor:
+        jugador = getattr(socio, "jugador", None)
+        if jugador:
+            vinculos = list(jugador.vinculos_familiares.select_related("persona").all())
+            tutor = next((v for v in vinculos if v.responsable_legal and v.persona and (v.persona.telefono or "").strip()), None)
+            if not tutor:
+                tutor = next((v for v in vinculos if v.persona and (v.persona.telefono or "").strip()), None)
+
+            if tutor and tutor.persona and tutor.persona.telefono:
+                telefono_responsable = tutor.persona.telefono.strip()
+                responsable_nombre = f"{tutor.persona.nombre} {tutor.persona.apellido}".strip()
+                telefono_contacto = telefono_responsable
+
     return {
         "socio_id": socio.socio_id,
         "numero_socio": socio.numero_socio,
-        "nombre": socio.persona.nombre,
-        "apellido": socio.persona.apellido,
-        "dni": socio.persona.dni,
-        "telefono": socio.persona.telefono,
+        "nombre": persona.nombre,
+        "apellido": persona.apellido,
+        "dni": persona.dni,
+        "telefono": telefono_contacto,
+        "telefono_socio": (persona.telefono or "").strip(),
+        "es_menor": es_menor,
+        "responsable_nombre": responsable_nombre,
+        "telefono_responsable": telefono_responsable,
     }
+
+
+def socio_detail(socio):
+    return resolver_contacto_socio_finanzas(socio)
 
 
 def receipt_code(receipt):
@@ -907,6 +1014,15 @@ def register_payment(
             credit_note["responsable"],
             user,
         )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -925,6 +1041,15 @@ def register_income(socio_id, concept, payment_methods, total, user=None):
         reference=receipt_code(receipt),
         detail={"pago_id": payment.pk, "medios": payment_methods_detail(payment_methods)},
     )
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        if ConfiguracionGeneral.load().notificar_comprobante_pago:
+            from django_q.tasks import async_task
+            transaction.on_commit(
+                lambda: async_task("finanzas.tasks.enviar_comprobante_pago_email", receipt.pk)
+            )
+    except Exception:
+        pass
     return payment, receipt
 
 
@@ -1183,6 +1308,7 @@ def reschedule_cuota(cuota_id, first_due_date, second_due_date, today=None, user
         deleted, _ = cuota.items.filter(concepto=ConceptoItemChoices.MORA).delete()
         if deleted:
             sync_cuota_charge(cuota)
+        notificar_modificacion_cuota_evento(cuota, "Reprogramación de fechas de vencimiento")
     apply_cuota_surcharges(cuota.pk, today, user=user)
 
 

@@ -168,6 +168,77 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
         "sin_cuota": len(missing),
     }
     finish_run(run, generation_log(run, result, created, counts, missing))
+
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.models import EnvioNotificacion
+        from comunicaciones.services import crear_y_despachar_notificacion
+
+        config = ConfiguracionGeneral.load()
+        if config.notificar_generacion_cuota:
+            current_period = today.strftime(PERIOD_FORMAT)
+            titulo = f"Nueva cuota emitida: {current_period}"
+
+            cuotas_periodo = list(
+                Cuota.objects.filter(
+                    periodo=current_period,
+                    movimiento__cuenta_corriente__socio__estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO,
+                )
+                .select_related("movimiento__cuenta_corriente__socio__persona")
+            )
+
+            notificados = set(
+                EnvioNotificacion.objects.filter(
+                    notificacion__titulo=titulo,
+                    socio__in=[c.movimiento.cuenta_corriente.socio_id for c in cuotas_periodo],
+                ).values_list("socio_id", flat=True)
+            )
+
+            club = config.club_nombre
+            for cuota in cuotas_periodo:
+                socio = cuota.movimiento.cuenta_corriente.socio
+                if socio.pk in notificados:
+                    continue
+
+                monto = cuota.movimiento.monto if cuota.movimiento else Decimal("0.00")
+                items = list(cuota.items.all().order_by("item_cuota_id"))
+                lineas_detalle = []
+                for it in items:
+                    nombre_concepto = it.get_concepto_display()
+                    monto_fmt = format_amount(it.monto)
+                    if it.es_descuento:
+                        lineas_detalle.append(f"  • {nombre_concepto}: -{monto_fmt}")
+                    else:
+                        lineas_detalle.append(f"  • {nombre_concepto}: {monto_fmt}")
+
+                if lineas_detalle:
+                    bloque_detalle = "Detalle de la cuota:\n" + "\n".join(lineas_detalle) + f"\n  • Total: {format_amount(monto)}"
+                else:
+                    bloque_detalle = f"Importe total: {format_amount(monto)}"
+
+                venc1 = cuota.fecha_venc1.strftime("%d/%m/%Y") if cuota.fecha_venc1 else "—"
+                venc2 = cuota.fecha_venc2.strftime("%d/%m/%Y") if cuota.fecha_venc2 else "—"
+                asunto = f"Emisión de cuota social período {current_period} - {club}"
+                contenido = (
+                    f"Estimado/a {socio.persona.nombre},\n\n"
+                    f"Te informamos que ya se encuentra disponible para abonar tu cuota social del período {current_period}.\n\n"
+                    f"{bloque_detalle}\n\n"
+                    f"Fechas de vencimiento:\n"
+                    f"  • Primer vencimiento: {venc1}\n"
+                    f"  • Segundo vencimiento: {venc2}\n\n"
+                    f"Podés abonarla mediante los canales habilitados del club.\n"
+                    f"¡Muchas gracias!"
+                )
+                crear_y_despachar_notificacion(
+                    titulo=titulo,
+                    asunto=asunto,
+                    contenido=contenido,
+                    socios=[socio],
+                )
+                notificados.add(socio.pk)
+    except Exception:
+        logger.exception("Error al enviar notificaciones automáticas de generación de cuota")
+
     return result
 
 
@@ -284,6 +355,46 @@ def run_surcharges(today, numbers, origin=OrigenEjecucionChoices.AUTOMATICA, use
             "sin_recargo": len(missing),
         }
         finish_run(run, surcharge_log(number, due_dates[number], result, items, unpaid, missing, period))
+
+    try:
+        from configuracion.models import ConfiguracionGeneral
+        from comunicaciones.services import crear_y_despachar_notificacion
+
+        config = ConfiguracionGeneral.load()
+        if config.notificar_cuota_vencida and applied:
+            club = config.club_nombre
+            cuotas_con_recargo = Cuota.objects.select_related(
+                "movimiento__cuenta_corriente__socio__persona"
+            ).in_bulk([item.cuota_id for _, item in applied])
+
+            socio_recargos = defaultdict(list)
+            for num, item in applied:
+                cuota = cuotas_con_recargo.get(item.cuota_id)
+                if cuota:
+                    socio = cuota.movimiento.cuenta_corriente.socio
+                    socio_recargos[socio].append((num, cuota, item))
+
+            for socio, recs in socio_recargos.items():
+                for num, cuota, item in recs:
+                    ordinal = DUE_ORDINALS.get(num, f"{num}°")
+                    titulo = f"Aviso de cuota vencida: período {cuota.periodo}"
+                    asunto = f"Aviso de vencimiento y recargo - Cuota {cuota.periodo} - {club}"
+                    contenido = (
+                        f"Estimado/a {socio.persona.nombre},\n\n"
+                        f"Te informamos que ha operado el {ordinal} vencimiento de tu cuota del período {cuota.periodo}.\n"
+                        f"Se ha aplicado un recargo por mora de {format_amount(item.monto)}.\n\n"
+                        f"Te solicitamos regularizar tu estado de cuenta a la brevedad.\n"
+                        f"¡Muchas gracias!"
+                    )
+                    crear_y_despachar_notificacion(
+                        titulo=titulo,
+                        asunto=asunto,
+                        contenido=contenido,
+                        socios=[socio],
+                    )
+    except Exception:
+        logger.exception("Error al enviar notificaciones automáticas de cuota vencida")
+
     return result
 
 
@@ -306,3 +417,154 @@ def run_manual_surcharges(today=None, user=None):
     done = recorded_surcharges(period)
     numbers = [number for number in reached if SURCHARGE_TASKS[number] not in done] or reached[-1:]
     return run_surcharges(today, numbers, OrigenEjecucionChoices.MANUAL, user)
+
+
+def enviar_comprobante_pago_email(comprobante_id):
+    """
+    Tarea asíncrona de Django-Q (HU-08 / HU-13 / #73):
+    Envía el comprobante de pago en formato PDF al correo electrónico del socio
+    (o a su contacto responsable si es menor de edad).
+    Se ejecuta fuera de la transacción principal tras confirmarse el pago.
+    """
+    from configuracion.models import ConfiguracionGeneral
+    from comunicaciones.services import crear_y_despachar_notificacion, obtener_contacto_socio
+    from .models import Comprobante
+    from .receipts import receipt_filename, render_receipt_pdf
+
+    try:
+        comprobante = Comprobante.objects.select_related(
+            "pago__movimiento__cuenta_corriente__socio__persona"
+        ).get(pk=comprobante_id)
+    except Comprobante.DoesNotExist:
+        logger.error("Comprobante %s no encontrado para envío por email", comprobante_id)
+        return
+
+    socio = comprobante.pago.movimiento.cuenta_corriente.socio
+    pdf_bytes = render_receipt_pdf(comprobante)
+    filename = receipt_filename(comprobante)
+    club = ConfiguracionGeneral.load().club_nombre
+
+    titulo = f"Comprobante de pago N° {comprobante.numero:08d}"
+    asunto = f"Comprobante de pago N° {comprobante.numero:08d} - {club}"
+
+    persona_socio = socio.persona
+    nombre_socio = f"{persona_socio.nombre} {persona_socio.apellido}".strip()
+    edad = persona_socio.edad
+
+    # Si es menor de 18 años y se envía al responsable legal
+    if edad is not None and edad < 18:
+        email, nombre_dest, _ = obtener_contacto_socio(socio)
+        nombre_saludo = nombre_dest.split(" (")[0] if nombre_dest else "Responsable"
+        if nombre_saludo != nombre_socio:
+            saludo = (
+                f"Estimado/a {nombre_saludo},\n\n"
+                f"Te confirmamos la recepción del pago correspondiente a {nombre_socio} por un monto total de {format_amount(comprobante.monto_total)}."
+            )
+        else:
+            saludo = (
+                f"Estimado/a {persona_socio.nombre},\n\n"
+                f"Te confirmamos la recepción de tu pago por un monto total de {format_amount(comprobante.monto_total)}."
+            )
+    else:
+        saludo = (
+            f"Estimado/a {persona_socio.nombre},\n\n"
+            f"Te confirmamos la recepción de tu pago por un monto total de {format_amount(comprobante.monto_total)}."
+        )
+
+    contenido = (
+        f"{saludo}\n"
+        f"Adjuntamos a este correo tu comprobante oficial en formato PDF.\n\n"
+        f"¡Muchas gracias!"
+    )
+
+    return crear_y_despachar_notificacion(
+        titulo=titulo,
+        asunto=asunto,
+        contenido=contenido,
+        socios=[socio],
+        adjuntos=[(filename, pdf_bytes, "application/pdf")],
+    )
+
+
+def send_scheduled_due_reminders(today=None):
+    """
+    Tarea programada diaria (Issue #122 / #140):
+    Busca cuotas impagas que vencen en 'dias_recordatorio_vencimiento' días
+    o que operan su 1° o 2° vencimiento en el día de hoy, y despacha
+    recordatorios por correo electrónico a los socios correspondientes.
+    """
+    from datetime import timedelta
+    from django.db.models import Q
+    from configuracion.models import ConfiguracionGeneral
+    from comunicaciones.services import crear_y_despachar_notificacion
+
+    today = today or timezone.localdate()
+    config = ConfiguracionGeneral.load()
+    if not config.notificar_recordatorio_vencimiento:
+        return {"avisos_enviados": 0, "motivo": "notificar_recordatorio_vencimiento desactivado"}
+
+    dias = config.dias_recordatorio_vencimiento or 3
+    target_date = today + timedelta(days=dias)
+
+    # Cuotas que vencen preventivamente en 'dias' días
+    cuotas = list(
+        Cuota.objects.filter(
+            movimiento__isnull=False,
+        )
+        .filter(
+            Q(fecha_venc1=target_date)
+            | Q(fecha_venc2=target_date)
+        )
+        .select_related("movimiento__cuenta_corriente__socio__persona")
+    )
+
+    if not cuotas:
+        return {"avisos_enviados": 0, "cuotas_revisadas": 0}
+
+    pending = pending_amounts(cuotas)
+    cuotas_impagas = [c for c in cuotas if pending.get(c.pk, Decimal("0.00")) > Decimal("0.00")]
+
+    enviados = 0
+    club = config.club_nombre
+    for cuota in cuotas_impagas:
+        socio = cuota.movimiento.cuenta_corriente.socio
+        saldo = pending[cuota.pk]
+        vencimiento = cuota.fecha_venc1 if cuota.fecha_venc1 == target_date else cuota.fecha_venc2
+
+        if not vencimiento:
+            continue
+
+        dias_restantes = (vencimiento - today).days
+        venc_str = vencimiento.strftime('%d/%m/%Y')
+        tiempo_str = f"en {dias_restantes} {'día' if dias_restantes == 1 else 'días'} (el {venc_str})"
+
+        titulo = f"Recordatorio de vencimiento de cuota {cuota.periodo}"
+        asunto = f"Recordatorio de vencimiento - Cuota {cuota.periodo} - {club}"
+
+        # Evitar recordatorios duplicados para la misma cuota y vencimiento
+        from comunicaciones.models import EnvioNotificacion
+        ya_notificado = EnvioNotificacion.objects.filter(
+            socio=socio,
+            notificacion__titulo=titulo,
+            notificacion__contenido__icontains=venc_str,
+        ).exists()
+        if ya_notificado:
+            continue
+        contenido = (
+            f"Estimado/a {socio.persona.nombre},\n\n"
+            f"Te recordamos que tu cuota social del período {cuota.periodo} vence {tiempo_str}.\n"
+            f"El saldo pendiente de pago es de {format_amount(saldo)}.\n\n"
+            f"Te recomendamos regularizarla para evitar la aplicación de recargos por mora.\n"
+            f"¡Muchas gracias!"
+        )
+
+        crear_y_despachar_notificacion(
+            titulo=titulo,
+            asunto=asunto,
+            contenido=contenido,
+            socios=[socio],
+        )
+        enviados += 1
+
+    return {"avisos_enviados": enviados, "cuotas_impagas": len(cuotas_impagas)}
+

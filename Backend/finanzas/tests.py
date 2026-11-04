@@ -2496,6 +2496,41 @@ class ComprobanteListTests(ComprobanteTestBase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["socio"]["telefono"], "2215556677")
 
+	def test_comprobante_menor_resuelve_telefono_de_responsable_legal(self):
+		from datetime import date
+		from padron.models import Jugador, Persona, VinculoFamiliar
+
+		self.socio.persona.fecha_nacimiento = date.today().replace(year=date.today().year - 12)
+		self.socio.persona.telefono = "2210000000"
+		self.socio.persona.save()
+
+		jugador, _ = Jugador.objects.get_or_create(socio=self.socio)
+		mama = Persona.objects.create(
+			nombre="Laura",
+			apellido="Gomez",
+			dni="30111222",
+			telefono="2219998877",
+			email="mama@example.com",
+			fecha_nacimiento=date(1985, 1, 1),
+			genero=self.socio.persona.genero,
+		)
+		VinculoFamiliar.objects.create(
+			jugador=jugador,
+			persona=mama,
+			responsable_legal=True,
+			relacion="Madre",
+		)
+
+		detalle = self.pagar("2500.00")
+		comprobantes, _ = self.list_comprobantes()
+		self.assertEqual(comprobantes[0]["socio"]["telefono"], "2219998877")
+		self.assertTrue(comprobantes[0]["socio"]["es_menor"])
+		self.assertEqual(comprobantes[0]["socio"]["responsable_nombre"], "Laura Gomez")
+
+		response = self.client.get(reverse("comprobante-detail", args=[detalle["comprobante_id"]]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["socio"]["telefono"], "2219998877")
+
 	def list_by_cuota(self, cuota_id):
 		return self.client.get(reverse("comprobante-list"), {"cuota_id": cuota_id})
 
@@ -2605,12 +2640,12 @@ class ComprobantePdfTests(ComprobanteTestBase):
 
 		self.assertEqual(response.status_code, 404)
 
-	def test_recibo_pdf_incluye_telefono_si_esta_cargado(self):
+	def test_recibo_pdf_no_incluye_telefono(self):
 		self.socio.persona.telefono = "2215556677"
 		self.socio.persona.save()
 		detalle = self.pagar("2500.00")
 		response = self.descargar(detalle["numero"])
-		self.assertIn(b"2215556677", response.content)
+		self.assertNotIn(b"2215556677", response.content)
 
 	def test_comprobante_imagen_devuelve_png_del_recibo(self):
 		detalle = self.pagar("1000.00")
@@ -4791,3 +4826,143 @@ class FinancialAuditTests(PagoTestBase):
 		self.assertEqual(len(response.data), 1)
 		self.assertEqual(response.data[0]["usuario_nombre"], "tesorero")
 		self.assertEqual(response.data[0]["socio"]["socio_id"], self.socio.pk)
+
+
+class AvisosAutomaticosCuotasTest(PagoTestBase):
+	def setUp(self):
+		super().setUp()
+		self.socio.persona.email = "juan.paz@example.com"
+		self.socio.persona.save()
+		from configuracion.models import ConfiguracionGeneral
+		self.config = ConfiguracionGeneral.load()
+		self.config.notificar_generacion_cuota = True
+		self.config.notificar_recordatorio_vencimiento = True
+		self.config.dias_recordatorio_vencimiento = 3
+		self.config.notificar_cuota_vencida = True
+		self.config.notificar_modificacion_cuota = True
+		self.config.notificar_comprobante_pago = True
+		self.config.save()
+
+	def test_enviar_comprobante_pago_email_adjunta_pdf(self):
+		from unittest.mock import patch
+		from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+		from finanzas.tasks import enviar_comprobante_pago_email
+
+		pago, comprobante = register_payment(
+			self.socio.pk,
+			[self.agosto.pk],
+			[{"medio_de_pago": "Efectivo", "monto": Decimal("1000.00")}],
+			Decimal("1000.00"),
+			"Abono cuota agosto",
+		)
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			notif = enviar_comprobante_pago_email(comprobante.pk)
+			self.assertIsNotNone(notif)
+			mock_send.assert_called_once()
+			args, kwargs = mock_send.call_args
+			self.assertTrue(len(kwargs["adjuntos"]) > 0)
+			nombre_pdf, contenido_pdf, mimetype = kwargs["adjuntos"][0]
+			self.assertTrue(nombre_pdf.endswith(".pdf"))
+			self.assertEqual(mimetype, "application/pdf")
+			self.assertTrue(len(contenido_pdf) > 0)
+
+			envio = EnvioNotificacion.objects.filter(socio=self.socio, notificacion=notif).first()
+			self.assertIsNotNone(envio)
+			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+
+	def test_recordatorio_vencimiento_cuotas_despacha_aviso(self):
+		from datetime import timedelta
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+		from finanzas.tasks import send_scheduled_due_reminders
+
+		hoy = timezone.localdate()
+		self.agosto.fecha_venc1 = hoy + timedelta(days=3)
+		self.agosto.save(update_fields=["fecha_venc1"])
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			res = send_scheduled_due_reminders(today=hoy)
+			self.assertGreaterEqual(res["avisos_enviados"], 1)
+
+			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
+			self.assertIsNotNone(envio)
+			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+
+	def test_notificar_generacion_cuota_despacha_notificacion(self):
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+		from finanzas.tasks import run_cuota_generation
+
+		hoy = timezone.localdate()
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			run_cuota_generation(today=hoy)
+			mock_send.assert_called()
+			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
+			self.assertIsNotNone(envio)
+			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+
+	def test_notificar_cuota_vencida_recargo_despacha_notificacion(self):
+		from datetime import timedelta
+		from unittest.mock import patch
+		from django.utils import timezone
+		from comunicaciones.models import EnvioNotificacion, EstadoNotificacion
+		from finanzas.models import ConfiguracionFinanciera
+		from finanzas.tasks import run_surcharges
+
+		hoy = timezone.localdate()
+		periodo_actual = hoy.strftime("%Y-%m")
+		ConfiguracionFinanciera.objects.update_or_create(
+			periodo_vigencia=periodo_actual,
+			defaults={"valor_recargo_1": Decimal("200.00"), "dia_vencimiento_1": 5, "dia_vencimiento_2": 15},
+		)
+
+		cuota_actual = crear_cuota_con_cargo(
+			self.cuenta,
+			periodo_actual,
+			"1000.00",
+			venc1=hoy - timedelta(days=5),
+			venc2=hoy + timedelta(days=10),
+		)
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+			run_surcharges(hoy, [1])
+			mock_send.assert_called()
+			envio = EnvioNotificacion.objects.filter(socio=self.socio).first()
+			self.assertIsNotNone(envio)
+			self.assertEqual(envio.estado, EstadoNotificacion.ENVIADA)
+
+	def test_modificacion_configuracion_solo_notifica_primer_periodo_afectado(self):
+		from unittest.mock import patch
+		from comunicaciones.models import EnvioNotificacion
+		from finanzas.services import create_configuration_version
+
+		crear_cuota_con_cargo(self.cuenta, "2026-12", "1000.00")
+		crear_cuota_con_cargo(self.cuenta, "2027-01", "1000.00")
+
+		with patch("comunicaciones.services.enviar_email_individual", return_value=True):
+			params = {
+				"periodo_vigencia": "2026-12",
+				"monto_cuota_social": Decimal("1500.00"),
+				"monto_cuota_deportiva": Decimal("2500.00"),
+				"monto_inscripcion": Decimal("0.00"),
+				"valor_recargo_1": Decimal("200.00"),
+				"valor_recargo_2": Decimal("300.00"),
+				"dia_generacion": 1,
+				"dia_vencimiento_1": 10,
+				"dia_vencimiento_2": 20,
+			}
+			create_configuration_version(params, responsable="Tesorería")
+
+			envios = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains="2026-12")
+			self.assertEqual(envios.count(), 1)
+
+			envios_futuros = EnvioNotificacion.objects.filter(socio=self.socio, notificacion__titulo__icontains="2027-01")
+			self.assertEqual(envios_futuros.count(), 0)
+
+
+
+
+

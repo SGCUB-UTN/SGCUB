@@ -90,3 +90,52 @@ class DespacharEnviosEmailNotificacionTest(TestCase):
             contenido="Contenido",
             envio_id=envio.pk,
         )
+
+
+class ObtenerContactoYDespachoNotificacionTest(TestCase):
+    def test_socio_menor_prioriza_contacto_responsable(self):
+        from datetime import date
+        from padron.models import Categoria, Jugador, VinculoFamiliar
+        from .services import crear_y_despachar_notificacion, obtener_contacto_socio
+
+        # Menor de 10 años
+        menor = Persona.objects.create(
+            nombre="Lucas",
+            apellido="Gómez",
+            dni="50123456",
+            fecha_nacimiento=date(2016, 5, 10),
+            email="lucas_menor@example.com",
+        )
+        socio_menor = Socio.objects.create(persona=menor)
+        cat = Categoria.objects.create(nombre="Infantiles", anio_vigente=2026, genero="M")
+        jugador = Jugador.objects.create(socio=socio_menor, categoria=cat)
+
+        madre = Persona.objects.create(
+            nombre="Laura",
+            apellido="Gómez",
+            dni="28123456",
+            email="laura_tutor@example.com",
+        )
+        VinculoFamiliar.objects.create(
+            jugador=jugador,
+            persona=madre,
+            relacion="Madre",
+            responsable_legal=True,
+        )
+
+        email, destinatario, error = obtener_contacto_socio(socio_menor)
+        self.assertEqual(email, "laura_tutor@example.com")
+        self.assertIn("Laura Gómez", destinatario)
+        self.assertIsNone(error)
+
+        with patch("comunicaciones.services.enviar_email_individual", return_value=True) as mock_send:
+            notif = crear_y_despachar_notificacion(
+                titulo="Aviso Cuota",
+                asunto="Aviso Cuota",
+                contenido="Contenido aviso",
+                socios=[socio_menor],
+            )
+            self.assertEqual(notif.estado, EstadoNotificacion.ENVIADA)
+            mock_send.assert_called_once()
+            self.assertEqual(mock_send.call_args[1]["destinatario"], "laura_tutor@example.com")
+
