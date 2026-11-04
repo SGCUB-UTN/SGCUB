@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import useDashboard from '../hooks/useDashboard'
+import AlertCenterSection from '../components/dashboard/AlertCenterSection'
 import CuotaStatusSection from '../components/dashboard/CuotaStatusSection'
 import MemberCountsSection from '../components/dashboard/MemberCountsSection'
-import ProcessStatusSection from '../components/dashboard/ProcessStatusSection'
 import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
@@ -36,7 +36,7 @@ export default function Principal() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
         <CuotaStatusSection isLoading={isLoading} cuotas={data?.cuotas} />
-        <ProcessStatusSection />
+        <AlertCenterSection isLoading={isLoading} alerts={data?.alerts} />
       </div>
 
       <OtroMovimientoModal
