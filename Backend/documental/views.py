@@ -24,6 +24,7 @@ from .services import (
     PadronFilterError,
     TemplateSubjectError,
     build_padron_documental,
+    default_template_legend,
     padron_summary,
     parse_padron_filters,
     template_recipient,
@@ -155,6 +156,19 @@ def template_for(tipo_id):
     return get_object_or_404(PlantillaDocumento.objects.select_related("tipo_documento"), tipo_documento_id=tipo_id)
 
 
+def create_template(request, tipo_id):
+    tipo = get_object_or_404(TipoDocumento, pk=tipo_id)
+    if has_template(tipo):
+        return Response({"detail": "El tipo ya tiene una plantilla."}, status=status.HTTP_400_BAD_REQUEST)
+    plantilla = PlantillaDocumento.objects.create(
+        tipo_documento=tipo,
+        titulo=tipo.nombre,
+        talon_leyenda=default_template_legend(tipo.nombre),
+    )
+    record_change(Seccion.DOCUMENTACION, f"Plantilla {tipo.nombre}", "", "Alta", request_user(request))
+    return Response(PlantillaDocumentoSerializer(plantilla).data, status=status.HTTP_201_CREATED)
+
+
 def template_with_subject(tipo_id, persona_id):
     plantilla = template_for(tipo_id)
     persona = get_object_or_404(Persona.objects.select_related("socio__jugador__categoria", "docente"), pk=persona_id)
@@ -162,11 +176,19 @@ def template_with_subject(tipo_id, persona_id):
 
 
 @extend_schema(tags=["Documental / Plantillas"], request=PlantillaDocumentoSerializer, responses=PlantillaDocumentoSerializer)
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "POST", "PATCH", "DELETE"])
 def plantilla_documento_detail(request, pk):
+    if request.method == "POST":
+        return create_template(request, pk)
+
     plantilla = template_for(pk)
+    label = f"Plantilla {plantilla.tipo_documento.nombre}"
     if request.method == "GET":
         return Response(PlantillaDocumentoSerializer(plantilla).data)
+    if request.method == "DELETE":
+        plantilla.delete()
+        record_change(Seccion.DOCUMENTACION, label, "Existente", "Eliminada", request_user(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     before = {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS}
     serializer = PlantillaDocumentoSerializer(plantilla, data=request.data, partial=True)
@@ -175,7 +197,7 @@ def plantilla_documento_detail(request, pk):
     plantilla = serializer.save()
     record_catalog_update(
         Seccion.DOCUMENTACION,
-        f"Plantilla {plantilla.tipo_documento.nombre}",
+        label,
         before,
         {field: getattr(plantilla, field) for field in TEMPLATE_FIELDS},
         TEMPLATE_FIELDS,

@@ -243,6 +243,10 @@ class TemplateSubjectError(Exception):
     pass
 
 
+def default_template_legend(document_name):
+    return f"Declaro haber recibido y leído {document_name}, y presto conformidad con su contenido."
+
+
 def template_subject(tipo, persona):
     jugador = getattr(getattr(persona, "socio", None), "jugador", None)
     if jugador and tipo.aplica_jugador:

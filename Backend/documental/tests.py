@@ -504,6 +504,30 @@ class PlantillaDocumentoTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(set(response.data), {"titulo", "talon_leyenda"})
 
+    def test_agrega_una_plantilla_a_cualquier_tipo(self):
+        tipo = TipoDocumento.objects.get(nombre="Apto Físico")
+        url = reverse("plantilla_documento_detail", args=[tipo.pk])
+
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["titulo"], "Apto Físico")
+        self.assertIn("Apto Físico", response.data["talon_leyenda"])
+        self.assertEqual(self.client.post(url).status_code, 400)
+        self.assertTrue(HistorialConfiguracion.objects.filter(campo="Plantilla Apto Físico", valor_nuevo="Alta").exists())
+
+    def test_quita_la_plantilla_y_el_tipo_vuelve_a_poder_eliminarse(self):
+        tipo = TipoDocumento.objects.create(nombre="Autorización de viaje")
+        url = reverse("plantilla_documento_detail", args=[tipo.pk])
+        self.client.post(url)
+
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertTrue(HistorialConfiguracion.objects.filter(campo="Plantilla Autorización de viaje", valor_nuevo="Eliminada").exists())
+        self.assertEqual(self.client.delete(reverse("tipo_documento_detail", args=[tipo.pk])).status_code, 204)
+
     def test_un_tipo_sin_plantilla_no_tiene_plantilla(self):
         tipo = TipoDocumento.objects.get(nombre="DNI")
 
