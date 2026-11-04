@@ -331,8 +331,27 @@ SIZES_CHOICES = [
 ]
 
 class Jugador(models.Model):
+    class NivelEducacionChoices(models.TextChoices):
+        PRIMARIO_EN_PROCESO = "primario_en_proceso", "Primario en proceso"
+        PRIMARIO_INCOMPLETO = "primario_incompleto", "Primario incompleto"
+        PRIMARIO_COMPLETO = "primario_completo", "Primario completo"
+        SECUNDARIO_EN_PROCESO = "secundario_en_proceso", "Secundario en proceso"
+        SECUNDARIO_INCOMPLETO = "secundario_incompleto", "Secundario incompleto"
+        SECUNDARIO_COMPLETO = "secundario_completo", "Secundario completo"
+        UNIVERSITARIO_EN_PROCESO = "universitario_en_proceso", "Universitario en proceso"
+        UNIVERSITARIO_INCOMPLETO = "universitario_incompleto", "Universitario incompleto"
+        UNIVERSITARIO_COMPLETO = "universitario_completo", "Universitario completo"
+
     jugador_id = models.AutoField(primary_key=True)
     obra_social = models.CharField(max_length=50, default="", blank=True)
+    esquema_vacunacion = models.BooleanField(null=True, blank=True, default=None)
+    nivel_educacion = models.CharField(
+        max_length=32,
+        choices=NivelEducacionChoices.choices,
+        null=True,
+        blank=True,
+        default=None,
+    )
     tallaIndumentaria = models.CharField(
         max_length=20, 
         choices=SIZES_CHOICES, 

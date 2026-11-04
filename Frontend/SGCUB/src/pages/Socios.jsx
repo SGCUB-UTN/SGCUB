@@ -3,27 +3,30 @@ import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
+import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
+
+const MOSTRAR_RESUMEN_JUGADORES = false
 
 function Padron() {
   const { socios, isLoading, error } = useSocio({ onlyMembers: true })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
 
+  const sociosActivos = useMemo(() => socios.filter((socio) => {
+    const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
+    return estado.includes('activo') && !estado.includes('inactivo')
+  }), [socios])
+
   const totales = useMemo(() => {
-    const activos = socios.filter((socio) => {
-      const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
-      return estado.includes('activo') && !estado.includes('inactivo')
-    }).length
     const formato = (valor) => valor.toLocaleString('es-AR')
     return {
       total: formato(socios.length),
-      activos: formato(activos),
-      inactivos: formato(socios.length - activos),
+      activos: formato(sociosActivos.length),
+      inactivos: formato(socios.length - sociosActivos.length),
       exJugadores: formato(socios.filter((socio) => socio.es_ex_jugador).length),
     }
-  }, [socios])
-
+  }, [socios, sociosActivos])
   return (
     <>
       <div className="w-full flex flex-col gap-5">
@@ -48,6 +51,8 @@ function Padron() {
           <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
           <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
+
+        {MOSTRAR_RESUMEN_JUGADORES && <JugadorHealthEducationSummary />}
 
         <section aria-label="Socios">
           <SociosTable
