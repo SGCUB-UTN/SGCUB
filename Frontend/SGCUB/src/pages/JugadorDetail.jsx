@@ -14,7 +14,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { categoryTags, memberStatuses } from '../components/personas/profileStatus'
+import { categoryTags, exemptCategory, memberStatuses } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -200,6 +200,7 @@ function JugadorDetail() {
   const bajaTemporal = jugador.tipo_baja === 'parcial'
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
+  const categoriaExenta = exemptCategory(jugador)
 
   const handleDownloadPhoto = async () => {
     if (!socio.foto_url) return
@@ -259,7 +260,7 @@ function JugadorDetail() {
       icon: 'account_balance_wallet',
       badge: cuotaBadges,
       content: socio.socio_id
-        ? <FinancialStatement socio={socio} finances={finances} />
+        ? <FinancialStatement socio={socio} finances={finances} exemptCategory={categoriaExenta} />
         : <EmptyState icon="account_balance_wallet" title="Sin datos de socio" description="El jugador no tiene un socio asociado." />,
     },
     {
@@ -311,7 +312,9 @@ function JugadorDetail() {
               </>
             )}
           >
-            Sin actividad deportiva. Sigue como socio y abona la cuota social.
+            {categoriaExenta
+              ? `Sin actividad deportiva. Sigue como socio, sin cuotas por estar en la categoría ${categoriaExenta.nombre}.`
+              : 'Sin actividad deportiva. Sigue como socio y abona la cuota social.'}
           </HeaderNotice>
         )}
       />

@@ -7,7 +7,7 @@ from django.utils import timezone
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 from padron.services import format_datetime, format_dni
 
-from .generators import PERIOD_FORMAT
+from .generators import PERIOD_FORMAT, exempt_category
 from .models import (
     ConfiguracionFinanciera,
     Cuota,
@@ -88,7 +88,7 @@ def record_failure(run, error):
 def active_socios():
     return list(
         Socio.objects.filter(estado_administrativo__nombre__iexact=ESTADO_ADMINISTRATIVO_ACTIVO)
-        .select_related("persona", "jugador__estado")
+        .select_related("persona", "jugador__estado", "jugador__categoria")
         .order_by("persona__apellido", "persona__nombre", "pk")
     )
 
@@ -101,25 +101,32 @@ def verify_generation(period):
     )
     counts = dict.fromkeys(MEMBER_GROUPS, 0)
     missing = []
+    exempt = []
     for socio in socios:
         counts[member_group(socio)] += 1
-        if socio.pk not in with_cuota:
+        if exempt_category(socio) is not None:
+            exempt.append(socio)
+        elif socio.pk not in with_cuota:
             missing.append(socio)
-    return counts, missing
+    return counts, missing, exempt
 
 
-def generation_summary(counts, missing):
+def generation_summary(counts, missing, exempt):
     population = (
         f"En el sistema existen {count_label(counts[MEMBERS], 'socio', 'socios')}, "
         f"{count_label(counts[PLAYERS], 'jugador', 'jugadores')} y "
         f"{count_label(counts[PARTIAL_LEAVE], 'jugador de baja parcial', 'jugadores de baja parcial')}."
     )
+    if exempt:
+        population += (
+            f" {count_label(len(exempt), 'jugador está exento', 'jugadores están exentos')} de pago por su categoría."
+        )
     if not missing:
         return f"{population} Todos con la cuota correctamente generada."
     return f"{population} {count_label(len(missing), 'socio no tiene', 'socios no tienen')} la cuota generada; revisá el registro."
 
 
-def generation_log(run, result, created, counts, missing):
+def generation_log(run, result, created, counts, missing, exempt):
     amounts = dict(
         MovimientoCuenta.objects.filter(cuota__in=[cuota.pk for _, _, cuota in created]).values_list("cuota_id", "monto")
     )
@@ -139,6 +146,9 @@ def generation_log(run, result, created, counts, missing):
         f"Verificación del período {run.periodo}",
         *(f"  {GROUP_LABELS[group]}: {counts[group]}" for group in MEMBER_GROUPS),
     ]
+    if exempt:
+        lines.append(f"  Exentos de pago por categoría ({len(exempt)}):")
+        lines += [f"    - {socio_label(socio)} — {socio.jugador.categoria.nombre}" for socio in exempt]
     if missing:
         lines.append(f"  Sin cuota generada ({len(missing)}):")
         lines += [f"    - {socio_label(socio)}" for socio in missing]
@@ -157,17 +167,18 @@ def run_cuota_generation(today=None, origin=OrigenEjecucionChoices.AUTOMATICA, u
         record_failure(run, error)
         raise
 
-    counts, missing = verify_generation(run.periodo)
+    counts, missing, exempt = verify_generation(run.periodo)
     run.exitosa = not missing
-    run.resumen = generation_summary(counts, missing)
+    run.resumen = generation_summary(counts, missing, exempt)
     run.metricas = {
         **counts,
         "periodos": result["periodos"],
         "cuotas_creadas": result["cuotas_creadas"],
         "cuotas_existentes": result["cuotas_existentes"],
         "sin_cuota": len(missing),
+        "exentos": len(exempt),
     }
-    finish_run(run, generation_log(run, result, created, counts, missing))
+    finish_run(run, generation_log(run, result, created, counts, missing, exempt))
 
     try:
         from configuracion.models import ConfiguracionGeneral

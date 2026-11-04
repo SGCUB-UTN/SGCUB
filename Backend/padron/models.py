@@ -256,6 +256,7 @@ class Categoria(models.Model):
         blank=True,
         default="",
     )
+    exenta_cuota = models.BooleanField(default=False)
 
     class Meta:
         db_table = "categoria"

@@ -3,7 +3,7 @@ import re
 from rest_framework import serializers
 from django.db import transaction
 from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
-from finanzas.services import create_or_update_player_current_cuota
+from finanzas.services import create_or_update_player_current_cuota, schedule_exemption_sync
 
 from io import BytesIO
 
@@ -593,8 +593,9 @@ class CategoriaSerializer(serializers.ModelSerializer):
             "edad_maxima",
             "genero",
             "tipo",
+            "exenta_cuota",
         ]
-        read_only_fields = ["categoria_id"]
+        read_only_fields = ["categoria_id", "exenta_cuota"]
 
     def validate_nombre(self, value):
         value = value.strip()
@@ -867,7 +868,9 @@ class JugadorSerializer(serializers.ModelSerializer):
             validated_data["socio"] = member
 
         contacts_data = validated_data.pop("vinculos_familiares", None)
+        previous_category = instance.categoria
         player = super().update(instance, validated_data)
+        schedule_exemption_sync(player.socio_id, previous_category, player.categoria)
         if "estado" in validated_data:
             player.activate_member_if_inactive()
         if contacts_data is not None:

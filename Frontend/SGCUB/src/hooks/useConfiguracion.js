@@ -6,6 +6,7 @@ import {
   guardarConfiguracion,
   revertirVersionConfiguracionFinanciera,
 } from '../api/configuracion'
+import { getCategorias } from '../api/categorias'
 import { createTipoDocumento, deleteTipoDocumento, getTiposDocumento, updateTipoDocumento } from '../api/documentacion'
 import { deleteMedioPago, getMediosPago, patchMedioPago, postMedioPago } from '../api/mediosPago'
 import { CUOTA_FIELDS, validateCuotaForm } from '../components/configuracion/financialFields'
@@ -18,13 +19,17 @@ const fetchAll = () => Promise.all([
   getVersionesConfiguracionFinanciera(),
   getMediosPago(),
   getTiposDocumento(),
+  getCategorias(),
 ])
 
 const pick = (source, fields) => Object.fromEntries(fields.map((field) => [field, source?.[field] ?? '']))
 
-const emptyDraft = (general, financiera) => ({
+const exemptions = (categorias) => Object.fromEntries((categorias ?? []).map((categoria) => [categoria.categoria_id, categoria.exenta_cuota]))
+
+const emptyDraft = (general, financiera, categorias) => ({
   general: pick(general, GENERAL_FIELDS),
   financiera: pick(financiera, CUOTA_FIELDS),
+  exentas: exemptions(categorias),
   logo: null,
   removeLogo: false,
 })
@@ -34,24 +39,24 @@ const emptyDraft = (general, financiera) => ({
  * with `save`; payment methods and document types are catalogs that apply immediately.
  */
 function useConfiguracion() {
-  const [data, setData] = useState({ general: null, financiera: null, versiones: [], medios: [], tipos: [] })
-  const [draft, setDraft] = useState(() => emptyDraft(null, null))
+  const [data, setData] = useState({ general: null, financiera: null, versiones: [], medios: [], tipos: [], categorias: [] })
+  const [draft, setDraft] = useState(() => emptyDraft(null, null, null))
   const [errors, setErrors] = useState({ general: {}, financiera: {} })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const restart = useCallback((general, financiera) => {
-    setDraft(emptyDraft(general, financiera))
+  const restart = useCallback((general, financiera, categorias) => {
+    setDraft(emptyDraft(general, financiera, categorias))
     setErrors({ general: {}, financiera: {} })
   }, [])
 
   useEffect(() => {
     let cancelled = false
     fetchAll()
-      .then(([general, financiera, versiones, medios, tipos]) => {
+      .then(([general, financiera, versiones, medios, tipos, categorias]) => {
         if (cancelled) return
-        setData({ general, financiera, versiones, medios, tipos })
-        restart(general, financiera)
+        setData({ general, financiera, versiones, medios, tipos, categorias })
+        restart(general, financiera, categorias)
       })
       .catch((requestError) => {
         if (!cancelled) setError(requestError)
@@ -67,10 +72,13 @@ function useConfiguracion() {
   const changes = useMemo(() => ({
     general: data.general ? changedFields(draft.general, data.general, GENERAL_FIELDS) : [],
     financiera: data.financiera ? changedFields(draft.financiera, data.financiera, CUOTA_FIELDS) : [],
+    exentas: data.categorias
+      .filter((categoria) => draft.exentas[categoria.categoria_id] !== categoria.exenta_cuota)
+      .map((categoria) => categoria.categoria_id),
     logo: Boolean(draft.logo) || draft.removeLogo,
-  }), [data.general, data.financiera, draft])
+  }), [data.general, data.financiera, data.categorias, draft])
 
-  const isDirty = changes.general.length > 0 || changes.financiera.length > 0 || changes.logo
+  const isDirty = changes.general.length > 0 || changes.financiera.length > 0 || changes.exentas.length > 0 || changes.logo
 
   const setGeneralField = useCallback((field, value) => {
     setDraft((current) => ({ ...current, general: { ...current.general, [field]: value } }))
@@ -82,6 +90,10 @@ function useConfiguracion() {
     setErrors((current) => ({ ...current, financiera: { ...current.financiera, [field]: undefined } }))
   }, [])
 
+  const setExemptCategory = useCallback((categoriaId, value) => {
+    setDraft((current) => ({ ...current, exentas: { ...current.exentas, [categoriaId]: value } }))
+  }, [])
+
   const setLogo = useCallback((file) => {
     setDraft((current) => ({ ...current, logo: file, removeLogo: false }))
     setErrors((current) => ({ ...current, general: { ...current.general, club_logo: undefined } }))
@@ -91,7 +103,10 @@ function useConfiguracion() {
     setDraft((current) => ({ ...current, logo: null, removeLogo: Boolean(data.general?.club_logo) }))
   }, [data.general])
 
-  const discard = useCallback(() => restart(data.general, data.financiera), [restart, data.general, data.financiera])
+  const discard = useCallback(
+    () => restart(data.general, data.financiera, data.categorias),
+    [restart, data.general, data.financiera, data.categorias],
+  )
 
   // Checks the cuota parameters before asking for the responsable; returns whether they are valid
   const validate = useCallback(() => {
@@ -108,21 +123,24 @@ function useConfiguracion() {
         ? { periodo_vigencia: periodo, ...Object.fromEntries(changes.financiera.map((field) => [field, draft.financiera[field]])) }
         : null,
       quitar_logo: draft.removeLogo,
+      categorias_exentas: Object.fromEntries(changes.exentas.map((categoriaId) => [categoriaId, draft.exentas[categoriaId]])),
     }
     try {
       const result = await guardarConfiguracion(payload, draft.logo)
-      const [financiera, versiones] = result.financiera
-        ? await Promise.all([getConfiguracionFinanciera(), getVersionesConfiguracionFinanciera()])
-        : [data.financiera, data.versiones]
-      setData((current) => ({ ...current, general: result.general, financiera, versiones }))
-      restart(result.general, financiera)
+      const [financiera, versiones, categorias] = await Promise.all([
+        result.financiera ? getConfiguracionFinanciera() : data.financiera,
+        result.financiera ? getVersionesConfiguracionFinanciera() : data.versiones,
+        changes.exentas.length ? getCategorias() : data.categorias,
+      ])
+      setData((current) => ({ ...current, general: result.general, financiera, versiones, categorias }))
+      restart(result.general, financiera, categorias)
       return result
     } catch (requestError) {
       const received = requestError.response?.data ?? {}
       setErrors({ general: messagesByField(received.general), financiera: messagesByField(received.financiera) })
       throw requestError
     }
-  }, [changes, draft, data.financiera, data.versiones, restart])
+  }, [changes, draft, data.financiera, data.versiones, data.categorias, restart])
 
   const update = useCallback((changes) => setData((current) => ({ ...current, ...changes })), [])
 
@@ -145,9 +163,9 @@ function useConfiguracion() {
       getVersionesConfiguracionFinanciera(),
     ])
     setData((current) => ({ ...current, financiera, versiones }))
-    restart(data.general, financiera)
+    restart(data.general, financiera, data.categorias)
     return reverted
-  }, [data.general, restart])
+  }, [data.general, data.categorias, restart])
 
   return {
     ...data,
@@ -159,6 +177,7 @@ function useConfiguracion() {
     isDirty,
     setGeneralField,
     setFinancialField,
+    setExemptCategory,
     setLogo,
     removeLogo,
     discard,

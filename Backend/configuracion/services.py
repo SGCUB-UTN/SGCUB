@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
+from finanzas.services import update_category_exemption
 from padron.models import Domicilio
 
 from .models import ConfiguracionGeneral, HistorialConfiguracion, SeccionConfiguracionChoices
@@ -59,6 +60,27 @@ def record_catalog_update(section, label, before, after, field_labels, user=None
     for field, field_label in field_labels.items():
         if before.get(field) != after.get(field):
             record_change(section, f"{label} · {field_label}", before.get(field), after.get(field), user)
+
+
+def category_label(category):
+    if not category.genero:
+        return category.nombre
+    return f"{category.nombre} ({category.get_genero_display()})"
+
+
+def update_exempt_categories(changes, user=None, responsable=""):
+    annulled = 0
+    for category, exempt in changes:
+        record_change(
+            Seccion.FINANZAS,
+            f"Categoría exenta de pago · {category_label(category)}",
+            category.exenta_cuota,
+            exempt,
+            user,
+            responsable,
+        )
+        annulled += update_category_exemption(category, exempt, user)
+    return annulled
 
 
 def address_text(address):
