@@ -162,6 +162,18 @@ def clean_address_data(address_data):
     return {key: value for key, value in address_data.items() if value not in (None, "") or key == "barrio"}
 
 
+def persona_serializer_prefetches(prefix):
+    return [
+        f"{prefix}__genero",
+        f"{prefix}__domicilio__localidad",
+        f"{prefix}__domicilio__barrio",
+        f"{prefix}__socio__jugador",
+        f"{prefix}__docente",
+        f"{prefix}__vinculos_familiares__jugador__socio__persona",
+        f"{prefix}__vinculos_familiares__docente__persona",
+    ]
+
+
 def get_persona_profiles(person):
     member = getattr(person, "socio", None)
     player = getattr(member, "jugador", None) if member else None
@@ -945,7 +957,8 @@ class CargoDocenteSerializer(serializers.ModelSerializer):
         return normalize_name(value)
 
     def get_en_uso(self, obj):
-        return obj.asignaciones.exists()
+        in_use = getattr(obj, "en_uso", None)
+        return obj.asignaciones.exists() if in_use is None else in_use
 
 
 class AsignacionDocenteSerializer(serializers.Serializer):
