@@ -1,5 +1,5 @@
 import { api } from './conf'
-import { savePdfResponse } from './download'
+import { savePdfResponse, saveZipResponse } from './download'
 
 export const getDocumentos = async (personaId) => {
   const { data } = await api.get('documental/documentos/', { params: { persona_id: personaId } })
@@ -114,3 +114,15 @@ export const downloadPadronDocumentalPdf = async (filters) => {
   const response = await api.get('documental/padron/reporte/', { params: filters, responseType: 'blob' })
   savePdfResponse(response, 'reporte-documental.pdf')
 }
+
+export const downloadCategoriaDocumentosZip = async (categoriaId, categoriaNombre = '') => {
+  const response = await api.get(`documental/zip/categoria/${categoriaId}/`, {
+    responseType: 'blob',
+  })
+  const fallback = categoriaNombre
+    ? `documentacion_categoria_${categoriaNombre.toLowerCase().replace(/\s+/g, '_')}.zip`
+    : `documentacion_categoria_${categoriaId}.zip`
+  saveZipResponse(response, fallback)
+  return response
+}
+

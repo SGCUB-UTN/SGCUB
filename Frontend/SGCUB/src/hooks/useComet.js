@@ -1,91 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import {
-  getCometCompeticiones,
-  getCometEquipos,
-  getCometInscripciones,
-  getCometJugadores,
-  getCometLogs,
-  getCometPartidos,
-  getCometResultados,
-  getCometStatus,
-  getCometTablas,
-  exportarJugadorAComet,
-  getEstadoCometJugador,
-} from '../api/comet'
-
-function useCometRead(fetcher) {
-  const [data, setData] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const cargar = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      setData(await fetcher())
-    } catch (requestError) {
-      setError(requestError)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fetcher])
-
-  useEffect(() => {
-    cargar()
-  }, [cargar])
-
-  return { data, isLoading, error, recargar: cargar }
-}
-
-export const useCometJugadores = () => useCometRead(getCometJugadores)
-export const useCometInscripciones = () => useCometRead(getCometInscripciones)
-export const useCometCompeticiones = () => useCometRead(getCometCompeticiones)
-export const useCometEquipos = () => useCometRead(getCometEquipos)
-export const useCometPartidos = () => useCometRead(getCometPartidos)
-export const useCometResultados = () => useCometRead(getCometResultados)
-export const useCometTablas = () => useCometRead(getCometTablas)
-
-export function useCometStatus() {
-  const [status, setStatus] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    let activo = true
-    getCometStatus()
-      .then((data) => { if (activo) setStatus(data) })
-      .catch(() => { if (activo) setStatus({ modo: null, configurado: false }) })
-      .finally(() => { if (activo) setIsLoading(false) })
-    return () => { activo = false }
-  }, [])
-
-  return { status, isLoading }
-}
-export function useCometLogs(params = {}) {
-  const [data, setData] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const paramsKey = JSON.stringify(params)
-
-  const cargar = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      setData(await getCometLogs(params))
-    } catch (requestError) {
-      setError(requestError)
-    } finally {
-      setIsLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey])
-
-  useEffect(() => {
-    cargar()
-  }, [cargar])
-
-  return { data, isLoading, error, recargar: cargar }
-}
+import { getCometEstadoJugador, downloadPlanillaJugador } from '../api/comet'
 
 export function useCometJugadorEstado(jugadorId) {
   const [estado, setEstado] = useState(null)
@@ -97,7 +11,7 @@ export function useCometJugadorEstado(jugadorId) {
     setIsLoading(true)
     setError(null)
     try {
-      setEstado(await getEstadoCometJugador(jugadorId))
+      setEstado(await getCometEstadoJugador(jugadorId))
     } catch (requestError) {
       setError(requestError)
     } finally {
@@ -112,30 +26,27 @@ export function useCometJugadorEstado(jugadorId) {
   return { estado, isLoading, error, recargar: cargar }
 }
 
-/**
- * Hook para disparar la exportación de un jugador.
- * Devuelve { exportar, exporting, resultado }.
- */
-export function useExportarJugadorAComet() {
-  const [exporting, setExporting] = useState(false)
-  const [resultado, setResultado] = useState(null)
+export function useDownloadPlanillaJugador() {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState(null)
 
-  const exportar = useCallback(async (jugadorId) => {
-    setExporting(true)
-    setResultado(null)
+  const descargar = useCallback(async (jugadorId) => {
+    setDownloading(true)
+    setError(null)
     try {
-      const data = await exportarJugadorAComet(jugadorId)
-      setResultado({ ok: true, data })
-      return data
-    } catch (requestError) {
-      // El backend devuelve 400 con un log que tiene exitoso=false
-      const data = requestError.response?.data
-      setResultado({ ok: false, data })
-      return data
+      await downloadPlanillaJugador(jugadorId)
+      return { ok: true }
+    } catch (err) {
+      let msg = 'No se pudo descargar la planilla.'
+      if (err.response?.data?.detail) {
+        msg = err.response.data.detail
+      }
+      setError(msg)
+      return { ok: false, error: msg }
     } finally {
-      setExporting(false)
+      setDownloading(false)
     }
   }, [])
 
-  return { exportar, exporting, resultado }
+  return { descargar, downloading, error, setError }
 }
