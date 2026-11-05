@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '../auth/tokens'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/'
@@ -13,6 +13,29 @@ export const api = axios.create({
   baseURL,
   headers,
 })
+
+const baseAdapter = axios.getAdapter(api.defaults.adapter)
+const pendingGets = new Map()
+
+const getRequestKey = (config) =>
+  [config.responseType ?? '', String(config.headers?.Authorization ?? ''), api.getUri(config)].join(' ')
+
+api.defaults.adapter = (config) => {
+  if (config.method !== 'get' || config.signal) return baseAdapter(config)
+
+  const key = getRequestKey(config)
+  let shared = pendingGets.get(key)
+  if (!shared) {
+    shared = baseAdapter(config).finally(() => pendingGets.delete(key))
+    pendingGets.set(key, shared)
+  }
+  return shared.then(
+    (response) => ({ ...response, config }),
+    (error) => Promise.reject(
+      error instanceof AxiosError ? AxiosError.from(error, error.code, config, error.request, error.response) : error,
+    ),
+  )
+}
 
 // Instancia sin interceptores: renovar el token no debe disparar otra renovación
 const authClient = axios.create({
