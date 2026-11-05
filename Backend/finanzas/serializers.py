@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.db.models import Prefetch
 from django.utils import timezone
+from django.utils.functional import cached_property
 from rest_framework import serializers
 
 from .generators import PERIOD_FORMAT
@@ -255,6 +256,10 @@ class CuotaSerializer(serializers.ModelSerializer):
     saldo_pendiente = serializers.SerializerMethodField()
     saldo_sin_recargo = serializers.SerializerMethodField()
 
+    @cached_property
+    def _item_serializer(self):
+        return ItemCuotaSerializer(many=True)
+
     class Meta:
         model = Cuota
         fields = [
@@ -282,13 +287,13 @@ class CuotaSerializer(serializers.ModelSerializer):
         return {**socio_data(account.socio), "jugador_id": player.pk if player else None}
 
     def get_items(self, obj):
-        return ItemCuotaSerializer(obj.items.all(), many=True).data
+        return self._item_serializer.to_representation(obj.items.all())
 
     def get_items_anulados(self, obj):
         annulled = getattr(obj, "items_anulados", None)
         if annulled is None:
             annulled = ItemCuota.all_objects.anulados().filter(cuota=obj).select_related("beca")
-        return ItemCuotaSerializer(annulled, many=True).data
+        return self._item_serializer.to_representation(annulled)
 
     def get_monto_total(self, obj):
         return monto_total_cuota(obj)
