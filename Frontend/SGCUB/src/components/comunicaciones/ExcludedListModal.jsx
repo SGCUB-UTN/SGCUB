@@ -1,81 +1,90 @@
-import { formatDni } from '../personas/format'
+import { formatDni, formatPhone } from '../personas/format'
+import { SecondaryButton } from '../personas/tabs/parts'
 
-export default function ExcludedListModal({ isOpen, onClose, excluidos = [] }) {
+export default function ExcludedListModal({ isOpen, onClose, excludedList = [] }) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-on-surface/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-xl max-w-2xl w-full p-6 shadow-xl flex flex-col gap-4 max-h-[85vh] overflow-hidden">
-        {/* Encabezado */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-error-container text-error flex items-center justify-center">
-              <span className="material-symbols-outlined text-[24px]">phonelink_erase</span>
-            </div>
-            <div className="flex flex-col">
-              <h3 className="text-lg font-bold text-on-surface">
-                Socios Sin Contacto Validado
-              </h3>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="excluded-modal-title"
+    >
+      <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-outline-variant/40 bg-surface-container-low flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-[20px] text-warning" aria-hidden="true">
+              person_off
+            </span>
+            <div>
+              <h2 id="excluded-modal-title" className="text-base font-bold text-on-surface">
+                Personas sin datos de contacto ({excludedList.length})
+              </h2>
               <p className="text-xs text-on-surface-variant">
-                No recibirán las notificaciones electrónicas hasta regularizar sus datos en Secretaría.
+                Socios que no poseen correo electrónico o teléfono válido para el envío.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
+            aria-label="Cerrar listado de excluidos"
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
           </button>
         </div>
 
-        {/* Tabla / Lista de excluidos */}
-        <div className="overflow-y-auto flex-1 pr-1 border border-outline-variant/30 rounded-lg">
-          {excluidos.length === 0 ? (
-            <div className="p-8 text-center flex flex-col items-center gap-2">
-              <span className="material-symbols-outlined text-emerald-600 text-[32px]">
-                verified
-              </span>
-              <p className="text-sm font-semibold text-on-surface">
-                ¡Todos los socios cuentan con datos de contacto!
-              </p>
-              <p className="text-xs text-on-surface-variant max-w-md">
-                Todos los socios registrados en la base de datos tienen al menos un correo electrónico o teléfono válido.
-              </p>
-            </div>
+        <div className="overflow-y-auto flex-1">
+          {excludedList.length === 0 ? (
+            <p className="p-8 text-center text-sm text-on-surface-variant">
+              Todas las personas seleccionadas poseen datos de contacto válidos.
+            </p>
           ) : (
-            <div className="flex flex-col divide-y divide-outline-variant/20">
-              {excluidos.map((item) => (
-                <div key={item.id} className="p-3.5 flex items-center justify-between gap-4 hover:bg-surface-container-low transition-colors">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-on-surface">
-                      {item.nombre}
-                    </span>
-                    <span className="text-xs text-on-surface-variant">
-                      DNI {formatDni(item.dni)} • {item.categoria}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-error-container text-error border border-error/20 px-2.5 py-0.5 rounded-full text-xs font-medium">
-                      {item.motivo}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <table className="data-table w-full text-sm">
+              <thead>
+                <tr>
+                  <th scope="col">Socio</th>
+                  <th scope="col">DNI</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Teléfono</th>
+                </tr>
+              </thead>
+              <tbody>
+                {excludedList.map((s, idx) => (
+                  <tr key={s.socio_id || s.id || idx}>
+                    <td className="font-semibold text-on-surface">
+                      {s.nombre} {s.apellido}
+                    </td>
+                    <td className="tabular-nums text-on-surface-variant">
+                      {formatDni(s.dni) || '—'}
+                    </td>
+                    <td className="text-xs">
+                      {s.email && s.email.includes('@') ? (
+                        <span className="text-on-surface">{s.email}</span>
+                      ) : (
+                        <span className="text-error font-medium">Faltante</span>
+                      )}
+                    </td>
+                    <td className="text-xs tabular-nums">
+                      {s.telefono && String(s.telefono).trim() ? (
+                        <span className="text-on-surface">{formatPhone(s.telefono)}</span>
+                      ) : (
+                        <span className="text-error font-medium">Faltante</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
 
-        {/* Pie */}
-        <div className="flex items-center justify-end pt-2 border-t border-outline-variant/20">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center px-4 py-2 rounded-lg border border-outline-variant/40 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low text-sm font-medium transition-colors cursor-pointer"
-          >
-            Entendido, cerrar
-          </button>
+        <div className="px-6 py-3.5 border-t border-outline-variant/40 bg-surface-container-low flex justify-end">
+          <SecondaryButton type="button" onClick={onClose}>
+            Cerrar
+          </SecondaryButton>
         </div>
       </div>
     </div>

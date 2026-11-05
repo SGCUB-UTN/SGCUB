@@ -18,6 +18,20 @@ import sys
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Carga las variables del archivo .env si existen (para ejecución local fuera de Docker)
+for _env_candidate in (BASE_DIR.parent / '.env', BASE_DIR / '.env'):
+    if _env_candidate.is_file():
+        with open(_env_candidate, encoding='utf-8') as _env_file:
+            for _line in _env_file:
+                _line = _line.strip()
+                if not _line or _line.startswith('#') or '=' not in _line:
+                    continue
+                _key, _val = _line.split('=', 1)
+                _key = _key.strip()
+                _val = _val.strip().strip('"').strip("'")
+                os.environ.setdefault(_key, _val)
+        break
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

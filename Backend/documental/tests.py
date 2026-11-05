@@ -789,4 +789,3 @@ class CategoriaZipDownloadTests(APITestCase):
             nombres = z.namelist()
             self.assertTrue(any("Gomez_Pedro_55667788" in n for n in nombres))
 
-

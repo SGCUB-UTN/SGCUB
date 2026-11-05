@@ -1,87 +1,79 @@
-export default function CanalesSelector({
-  canalesSeleccionados,
-  onToggleCanal,
-}) {
-  const hasEmail = canalesSeleccionados.has('email')
-  const hasWhatsApp = canalesSeleccionados.has('whatsapp')
+export default function CanalesSelector({ canales, setCanales, remitente }) {
+  const toggleEmail = () => {
+    setCanales((prev) => ({ ...prev, email: !prev.email, whatsapp: false }))
+  }
+
+  const emailRemitente = remitente?.email_remitente || ''
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <label className="text-xs uppercase tracking-wider font-semibold text-on-surface-variant">
-          Canales de Difusión Masiva
-        </label>
-        <span className="text-xs text-on-surface-variant">
-          Seleccioná uno o ambos canales oficiales
-        </span>
-      </div>
-
+      <span className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+        Canales de envío
+      </span>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Opción Email */}
         <label
-          className={`flex items-center justify-between p-3.5 border rounded-lg cursor-pointer transition-colors ${
-            hasEmail
-              ? 'border-primary bg-primary/5 shadow-xs'
-              : 'border-outline-variant/40 hover:bg-surface-container-low'
+          className={`flex items-center justify-between gap-3 p-3.5 rounded-lg border transition-colors cursor-pointer select-none ${
+            canales.email
+              ? 'border-primary bg-primary/8 text-on-surface shadow-2xs'
+              : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low text-on-surface'
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <input
               type="checkbox"
-              checked={hasEmail}
-              onChange={() => onToggleCanal('email')}
-              className="w-4 h-4 rounded text-primary accent-primary cursor-pointer"
+              checked={canales.email}
+              onChange={toggleEmail}
+              className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
             />
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-primary">
-                mail
-              </span>
-              <span className="text-sm font-semibold text-on-surface">
-                Correo Electrónico (Email)
-              </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-on-surface">Correo electrónico (SMTP)</p>
+              <p className="text-xs text-on-surface-variant truncate">
+                {emailRemitente ? `Desde ${emailRemitente}` : 'Envío institucional por correo electrónico'}
+              </p>
             </div>
           </div>
-          <span className="text-xs text-on-surface-variant font-medium">
-            Avisos formales
+          <span
+            className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+              canales.email ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+              mail
+            </span>
           </span>
         </label>
 
-        {/* Opción WhatsApp */}
-        <label
-          className={`flex items-center justify-between p-3.5 border rounded-lg cursor-pointer transition-colors ${
-            hasWhatsApp
-              ? 'border-emerald-600 bg-emerald-50/50 shadow-xs'
-              : 'border-outline-variant/40 hover:bg-surface-container-low'
-          }`}
+        <div
+          aria-disabled="true"
+          className="flex items-center justify-between gap-3 p-3.5 rounded-lg border border-outline-variant/30 bg-surface-container/50 opacity-65 cursor-default select-none"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <input
               type="checkbox"
-              checked={hasWhatsApp}
-              onChange={() => onToggleCanal('whatsapp')}
-              className="w-4 h-4 rounded text-emerald-600 accent-emerald-600 cursor-pointer"
+              disabled
+              checked={false}
+              readOnly
+              className="w-4 h-4 rounded cursor-default shrink-0"
             />
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-emerald-600">
-                chat
-              </span>
-              <span className="text-sm font-semibold text-on-surface">
-                WhatsApp Directo
-              </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-on-surface-variant">WhatsApp</p>
+                <span className="px-2 py-0.5 rounded bg-surface-container-high text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                  No configurado
+                </span>
+              </div>
+              <p className="text-xs text-on-surface-variant truncate">
+                Servicio de mensajería no vinculado en el servidor
+              </p>
             </div>
           </div>
-          <span className="text-xs text-on-surface-variant font-medium">
-            Notificación móvil
+          <span className="w-8 h-8 rounded-md bg-surface-container-high text-on-surface-variant flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+              chat
+            </span>
           </span>
-        </label>
+        </div>
       </div>
-
-      {!hasEmail && !hasWhatsApp && (
-        <p className="text-xs text-error font-medium">
-          ⚠️ Debe seleccionar al menos un canal para realizar la difusión.
-        </p>
-      )}
     </div>
   )
 }
-

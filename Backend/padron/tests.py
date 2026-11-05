@@ -2182,4 +2182,3 @@ class PersonaFotoTests(APITestCase):
         self.assertEqual(res_docente.status_code, status.HTTP_200_OK)
         self.assertIn("foto_url", res_docente.data["persona_detalle"])
         self.assertTrue(res_docente.data["persona_detalle"]["foto_url"].startswith("http"))
-

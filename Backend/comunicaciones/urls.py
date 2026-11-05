@@ -5,11 +5,13 @@ from .views import (
     notificacion_detail,
     notificacion_list_create,
     opciones_comunicacion,
+    resumen_comunicaciones,
 )
 
 urlpatterns = [
+    path("resumen/", resumen_comunicaciones, name="comunicaciones-resumen"),
     path("opciones/", opciones_comunicacion, name="comunicaciones-opciones"),
     path("notificacion/", notificacion_list_create, name="notificacion-list-create"),
     path("notificacion/<int:pk>/", notificacion_detail, name="notificacion-detail"),
-   path("envio-notificacion/<int:pk>/", envio_notificacion_detail, name="envio-notificacion-detail"),
+    path("envio-notificacion/<int:pk>/", envio_notificacion_detail, name="envio-notificacion-detail"),
 ]
