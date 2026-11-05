@@ -33,7 +33,7 @@ function DebtKpi({ rows, total }) {
   const surcharges = sumBy(rows, 'recargos')
   const capitalShare = total > 0 ? (capital / total) * 100 : 0
   return (
-    <div className="min-w-0 h-full flex flex-col justify-center">
+    <div className="min-w-0 h-full flex flex-col">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Monto total adeudado</h3>
       <p className={`mt-1 text-2xl font-bold tabular-nums leading-tight ${total > 0 ? 'text-error' : 'text-on-surface'}`} title={formatMoney(total)}>
         {formatWholeMoney(total)}
