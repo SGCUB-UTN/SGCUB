@@ -164,7 +164,7 @@ def cuota_situation(period, today=None):
     today = today or timezone.localdate()
     due_dates = period_due_dates(period)
     passed = due_dates_passed(due_dates, today)
-    cuotas = period_cuotas(period)
+    cuotas = list(Cuota.objects.filter(periodo=period, movimiento__isnull=False).select_related("movimiento"))
     pending = pending_amounts(cuotas)
     paid = Counter(min(cuota.recargos_aplicados, passed) for cuota in cuotas if pending[cuota.pk] <= 0)
     return {
