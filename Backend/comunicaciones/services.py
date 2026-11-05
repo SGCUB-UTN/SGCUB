@@ -1,5 +1,4 @@
 import logging
-from email.mime.image import MIMEImage
 from email.utils import formataddr
 from pathlib import Path
 from django.conf import settings
@@ -12,8 +11,6 @@ from configuracion.models import ConfiguracionGeneral
 from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion, OrigenNotificacion
 
 logger = logging.getLogger(__name__)
-
-ESCUDO_DEFAULT_PATH = Path(__file__).resolve().parent / "escudo.png"
 
 HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -119,19 +116,8 @@ HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="header">
-      <table class="header-table" role="presentation">
-        <tr>
-          {% if tiene_escudo %}
-          <td class="header-logo-cell">
-            <img src="cid:escudo_club" alt="Escudo" class="header-logo" />
-          </td>
-          {% endif %}
-          <td class="header-text-cell">
-            <h1>{{ club }}</h1>
-            <p>Comunicado institucional</p>
-          </td>
-        </tr>
-      </table>
+      <h1>{{ club }}</h1>
+      <p>Comunicado institucional</p>
     </div>
     <div class="content">
       <h2 class="subject-title">{{ asunto }}</h2>
@@ -208,21 +194,6 @@ def obtener_contacto_socio(socio):
     return None, nombre_socio, "El socio no tiene una dirección de correo electrónico válida"
 
 
-def _read_escudo_bytes(configuracion) -> bytes | None:
-    try:
-        if configuracion.club_logo and configuracion.club_logo.name:
-            with configuracion.club_logo.open("rb") as f:
-                return f.read()
-    except Exception:
-        pass
-    try:
-        if ESCUDO_DEFAULT_PATH.is_file():
-            return ESCUDO_DEFAULT_PATH.read_bytes()
-    except Exception:
-        pass
-    return None
-
-
 def enviar_email_individual(
     destinatario: str,
     asunto: str,
@@ -254,7 +225,6 @@ def enviar_email_individual(
         configuracion.club_email or "",
     ]
     contacto_club = " · ".join([d for d in datos_contacto if d])
-    escudo_bytes = _read_escudo_bytes(configuracion)
 
     try:
         template = Template(HTML_EMAIL_TEMPLATE)
@@ -264,7 +234,6 @@ def enviar_email_individual(
             "contenido": contenido,
             "firma_linea": firma_linea,
             "contacto_club": contacto_club,
-            "tiene_escudo": bool(escudo_bytes),
         })
         html_content = template.render(context)
         text_content = (
@@ -292,14 +261,6 @@ def enviar_email_individual(
                     nombre_archivo, contenido_bytes = item
                     msg.attach(nombre_archivo, contenido_bytes)
 
-        if escudo_bytes:
-            try:
-                img = MIMEImage(escudo_bytes)
-                img.add_header("Content-ID", "<escudo_club>")
-                img.add_header("Content-Disposition", "inline", filename="escudo.png")
-                msg.attach(img)
-            except Exception:
-                pass
         msg.send(fail_silently=False)
 
         if envio_id:
