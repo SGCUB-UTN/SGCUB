@@ -11,7 +11,7 @@ import {
   selectedCategory,
 } from './categoryFilters'
 
-const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full sm:w-auto pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const GENDER_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-9 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed'
 const GENDER_BUTTON_STYLES = {
   M: { idle: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100', active: 'bg-sky-600 text-white border-sky-600' },
@@ -41,22 +41,34 @@ export default function CategoryFilter({
   disabled = false,
   disabledReason,
   genderGroups = true,
+  fullWidth = false,
+  multiple = false,
 }) {
   const [opened, setOpened] = useState(false)
   const [gender, setGender] = useState(null)
-  const selected = selectedCategory(value, categories)
+  const summaryValue = multiple ? (value.length === 1 ? value[0] : ALL_CATEGORIES) : value
+  const selected = selectedCategory(summaryValue, categories)
   const selectedGender = findGender(selected.gender)
   const activeGender = findGender(gender)
   const ungendered = categories.filter((category) => !findGender(category.gender))
+  const summaryLabel = multiple && value.length > 1 ? `${value.length} seleccionadas` : selected.label
+  const isSelected = (option) => (multiple
+    ? (option === ALL_CATEGORIES ? value.length === 0 : value.includes(option))
+    : value === option)
 
   const toggle = () => {
-    if (!opened) setGender(selected.gender)
+    if (!opened) setGender(multiple ? selectedCategory(value[0] ?? ALL_CATEGORIES, categories).gender : selected.gender)
     setOpened((current) => !current)
   }
 
   const select = (nextValue) => {
-    onChange(nextValue)
-    setOpened(false)
+    if (!multiple) {
+      onChange(nextValue)
+      setOpened(false)
+      return
+    }
+    if (nextValue === ALL_CATEGORIES) onChange([])
+    else onChange(value.includes(nextValue) ? value.filter((current) => current !== nextValue) : [...value, nextValue])
   }
 
   return (
@@ -69,11 +81,11 @@ export default function CategoryFilter({
           title={disabled ? disabledReason : undefined}
           aria-haspopup="dialog"
           aria-expanded={opened && !disabled}
-          className={TRIGGER_CLASS}
+          className={`${TRIGGER_CLASS} ${fullWidth ? 'w-full min-w-0' : 'w-full sm:w-auto'}`}
         >
           <span className="text-on-surface-variant">Categoría:</span>
-          <span className="truncate">{selected.label}</span>
-          {selectedGender && value !== genderFilterValue(selectedGender.value) && (
+          <span className="truncate">{summaryLabel}</span>
+          {selectedGender && summaryValue !== genderFilterValue(selectedGender.value) && (
             <span className={`${BADGE_CLASS} ${GENERO_BADGE_CLASSES[selectedGender.value]}`}>{selectedGender.shortLabel}</span>
           )}
           <span className="material-symbols-outlined text-outline ml-auto" style={{ fontSize: 18 }} aria-hidden="true">expand_more</span>
@@ -107,7 +119,7 @@ export default function CategoryFilter({
               {genderGroups && (
                 <OptionButton
                   label={activeGender.allLabel}
-                  selected={value === genderFilterValue(activeGender.value)}
+                  selected={isSelected(genderFilterValue(activeGender.value))}
                   onSelect={() => select(genderFilterValue(activeGender.value))}
                 />
               )}
@@ -115,7 +127,7 @@ export default function CategoryFilter({
                 <OptionButton
                   key={category.value}
                   label={category.name}
-                  selected={value === category.value}
+                  selected={isSelected(category.value)}
                   onSelect={() => select(category.value)}
                 />
               ))}
@@ -125,12 +137,12 @@ export default function CategoryFilter({
           )}
 
           <div className="flex flex-col pt-2 border-t border-outline-variant/30">
-            <OptionButton label="Todas las categorías" selected={value === ALL_CATEGORIES} onSelect={() => select(ALL_CATEGORIES)} />
+            <OptionButton label="Todas las categorías" selected={isSelected(ALL_CATEGORIES)} onSelect={() => select(ALL_CATEGORIES)} />
             {ungendered.map((category) => (
-              <OptionButton key={category.value} label={category.name} selected={value === category.value} onSelect={() => select(category.value)} />
+              <OptionButton key={category.value} label={category.name} selected={isSelected(category.value)} onSelect={() => select(category.value)} />
             ))}
             {hasUncategorized && (
-              <OptionButton label={NO_CATEGORY} selected={value === NO_CATEGORY_VALUE} onSelect={() => select(NO_CATEGORY_VALUE)} />
+              <OptionButton label={NO_CATEGORY} selected={isSelected(NO_CATEGORY_VALUE)} onSelect={() => select(NO_CATEGORY_VALUE)} />
             )}
           </div>
         </div>

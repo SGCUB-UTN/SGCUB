@@ -21,6 +21,7 @@ import Cuotas from './pages/Cuotas'
 import ResumenFinanciero from './pages/ResumenFinanciero'
 import Caja from './pages/Caja'
 import Morosidad from './pages/Morosidad'
+import ReportesPadron from './pages/ReportesPadron'
 
 import CategoriaDetail from './pages/CategoriaDetail'
 
@@ -116,6 +117,10 @@ export const router = createBrowserRouter([
               {
                 path: 'categorias/:id',
                 element: <CategoriaDetail />,
+              },
+              {
+                path: 'reportes',
+                element: <ReportesPadron />,
               },
             ],
           },

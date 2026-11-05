@@ -1,11 +1,15 @@
 from django.db import models as django_models, transaction
 from django.db.models import Count, ProtectedError, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
+from .report_export import render_report_csv, render_report_pdf, report_filename
+from .reports import ReportFilterError, build_report, parse_report_filters
 from .search import normalize_text, normalized_field
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import serializers as drf_serializers
@@ -892,3 +896,36 @@ def docente_categoria_create(request):
             status=status.HTTP_201_CREATED,
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(tags=["Padron / Reportes"], summary="Reporte del padrón agrupado por criterios")
+@api_view(["GET"])
+def padron_report(request):
+    try:
+        filters = parse_report_filters(request.query_params)
+    except ReportFilterError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(build_report(filters))
+
+
+def report_download(request, extension, content_type, render):
+    try:
+        filters = parse_report_filters(request.query_params)
+    except ReportFilterError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    generated_at = timezone.localtime()
+    response = HttpResponse(render(build_report(filters), filters, generated_at), content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{report_filename(generated_at, extension)}"'
+    return response
+
+
+@extend_schema(tags=["Padron / Reportes"], summary="Reporte del padrón en PDF", responses={(200, "application/pdf"): bytes})
+@api_view(["GET"])
+def padron_report_pdf(request):
+    return report_download(request, "pdf", "application/pdf", render_report_pdf)
+
+
+@extend_schema(tags=["Padron / Reportes"], summary="Listado del reporte del padrón en CSV", responses={(200, "text/csv"): bytes})
+@api_view(["GET"])
+def padron_report_csv(request):
+    return report_download(request, "csv", "text/csv; charset=utf-8", lambda report, filters, generated_at: render_report_csv(report))

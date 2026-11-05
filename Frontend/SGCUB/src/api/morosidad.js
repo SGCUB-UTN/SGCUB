@@ -1,5 +1,5 @@
 import { api } from './conf'
-import { savePdfResponse } from './download'
+import { errorDetailFrom, savePdfResponse } from './download'
 
 const reportEndpoint = 'finanzas/morosidad/'
 
@@ -11,17 +11,6 @@ const buildReportParams = ({ tipo, periodo, referencia, categoriaId }) => {
   if (byCategory) params.categoria_id = categoriaId
   if (byGender) params.genero = categoriaId.replace('gender:', '')
   return params
-}
-
-const errorDetailFrom = async (requestError) => {
-  const data = requestError.response?.data
-  if (!(data instanceof Blob)) return requestError
-  try {
-    requestError.response.data = JSON.parse(await data.text())
-  } catch {
-    requestError.response.data = null
-  }
-  return requestError
 }
 
 export const getReporteMorosidad = async (filters) => {
