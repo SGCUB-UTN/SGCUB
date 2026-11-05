@@ -1,78 +1,81 @@
-const OPTIONS = [
-  {
-    value: 'individual',
-    icon: 'person',
-    label: 'Individual',
-    description: 'Envío directo a jugador y sus responsables familiares asociados.',
-  },
-  {
-    value: 'segmentada',
-    icon: 'groups',
-    label: 'Masiva / Segmentada',
-    description: 'Difusión por planteles, divisiones y categorías deportivas del club.',
-  },
-  {
-    value: 'lista',
-    icon: 'checklist',
-    label: 'Morosos del reporte',
-    description: 'Envío a los socios con deuda vencida del reporte de morosidad.',
-  },
-]
-
-export default function ScopeSelector({ scope, onChange, showList = false }) {
-  const options = OPTIONS.filter((option) => showList || option.value !== 'lista')
+export default function ScopeSelector({ scope, setScope, hasListSelection = false }) {
+  const options = [
+    ...(hasListSelection
+      ? [
+          {
+            id: 'lista',
+            label: 'Selección de listado',
+            description: 'Destinatarios seleccionados desde otro módulo',
+            icon: 'checklist',
+          },
+        ]
+      : []),
+    {
+      id: 'individual',
+      label: 'Socio individual',
+      description: 'Enviar a una persona puntual del padrón',
+      icon: 'person',
+    },
+    {
+      id: 'segmentada',
+      label: 'Por categorías',
+      description: 'Jugadores activos de una o más categorías',
+      icon: 'sports_soccer',
+    },
+    {
+      id: 'padron',
+      label: 'Todo el padrón activo',
+      description: 'Comunicado general a todos los socios activos',
+      icon: 'groups',
+    },
+  ]
 
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="text-xs uppercase tracking-wider font-semibold text-on-surface-variant">
-        Alcance de Difusión
-      </legend>
-      <div className={`grid grid-cols-1 gap-3 ${showList ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-        {options.map((option) => {
-          const isSelected = scope === option.value
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+        Alcance del envío
+      </span>
+      <div
+        role="radiogroup"
+        aria-label="Alcance del envío"
+        className={`grid grid-cols-1 ${options.length === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'} gap-3`}
+      >
+        {options.map((opt) => {
+          const active = scope === opt.id
           return (
-            <label
-              key={option.value}
-              onClick={() => onChange(option.value)}
-              className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                isSelected
-                  ? 'border-primary bg-primary/5 shadow-xs'
-                  : 'border-outline-variant/40 hover:bg-surface-container-low'
+            <button
+              key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setScope(opt.id)}
+              className={`flex items-start gap-3 p-3.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                active
+                  ? 'border-primary bg-primary/8 text-on-surface shadow-2xs'
+                  : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low text-on-surface'
               }`}
             >
-              <input
-                type="radio"
-                name="scope_type"
-                value={option.value}
-                checked={isSelected}
-                onChange={() => onChange(option.value)}
-                className="mt-1 accent-primary cursor-pointer w-4 h-4"
-              />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`material-symbols-outlined text-[20px] ${
-                      isSelected ? 'text-primary' : 'text-on-surface-variant'
-                    }`}
-                  >
-                    {option.icon}
-                  </span>
-                  <span
-                    className={`font-semibold text-base ${
-                      isSelected ? 'text-primary' : 'text-on-surface'
-                    }`}
-                  >
-                    {option.label}
-                  </span>
-                </div>
-                <p className="text-sm text-on-surface-variant mt-0.5">
-                  {option.description}
+              <span
+                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  active ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                  {opt.icon}
+                </span>
+              </span>
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${active ? 'text-primary' : 'text-on-surface'}`}>
+                  {opt.label}
+                </p>
+                <p className="text-xs text-on-surface-variant mt-0.5 leading-snug">
+                  {opt.description}
                 </p>
               </div>
-            </label>
+            </button>
           )
         })}
       </div>
-    </fieldset>
+    </div>
   )
 }

@@ -46,6 +46,41 @@ class EnvioNotificacionSerializerTest(TestCase):
         self.assertEqual(data["socio"], self.socio.pk)
         self.assertEqual(data["destinatario_contacto"], self.persona.email)
 
+    def test_serializa_contacto_responsable_legal_si_socio_es_menor(self):
+        from datetime import date
+        from padron.models import Jugador, VinculoFamiliar
+
+        persona_menor = Persona.objects.create(
+            nombre="Nene",
+            apellido="Pérez",
+            dni="99887766",
+            email="menor@example.com",
+            fecha_nacimiento=date(2018, 1, 1),
+        )
+        socio_menor = Socio.objects.create(persona=persona_menor)
+        jugador = Jugador.objects.create(socio=socio_menor)
+
+        madre = Persona.objects.create(
+            nombre="Mamá",
+            apellido="Pérez",
+            dni="22334455",
+            email="mama@example.com",
+        )
+        VinculoFamiliar.objects.create(
+            jugador=jugador,
+            persona=madre,
+            relacion="Madre",
+            responsable_legal=True,
+        )
+
+        envio = EnvioNotificacion.objects.create(
+            notificacion=self.notificacion,
+            socio=socio_menor,
+            canal=CanalNotificacion.MAIL,
+        )
+        data = EnvioNotificacionSerializer(envio).data
+        self.assertEqual(data["destinatario_contacto"], "mama@example.com")
+
     def test_valida_socio_en_el_payload(self):
         serializer = EnvioNotificacionSerializer(
             data={
@@ -139,3 +174,28 @@ class ObtenerContactoYDespachoNotificacionTest(TestCase):
             mock_send.assert_called_once()
             self.assertEqual(mock_send.call_args[1]["destinatario"], "laura_tutor@example.com")
 
+    def test_actualiza_estado_notificacion_a_fallida_si_todos_los_envios_fallan(self):
+        persona = Persona.objects.create(
+            nombre="Juan",
+            apellido="Gómez",
+            dni="11223344",
+            email="",
+            telefono="",
+        )
+        socio = Socio.objects.create(persona=persona)
+        notificacion = Notificacion.objects.create(
+            titulo="Aviso",
+            contenido="Contenido",
+            estado=EstadoNotificacion.ENVIADA,
+        )
+        EnvioNotificacion.objects.create(
+            notificacion=notificacion,
+            socio=socio,
+            canal=CanalNotificacion.MAIL,
+        )
+
+        from .services import despachar_envios_email_notificacion
+
+        despachar_envios_email_notificacion(notificacion.pk)
+        notificacion.refresh_from_db()
+        self.assertEqual(notificacion.estado, EstadoNotificacion.FALLIDA)

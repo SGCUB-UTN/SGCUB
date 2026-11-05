@@ -748,4 +748,3 @@ class AlertasDocumentalesTaskTest(APITestCase):
             # Segunda ejecución: no debe duplicar para nadie
             res2 = refresh_document_states()
             self.assertEqual(res2["alertas_enviadas"], 0)
-

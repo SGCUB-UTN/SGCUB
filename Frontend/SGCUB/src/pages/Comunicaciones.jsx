@@ -1,500 +1,529 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import PageHeader from '../components/shared/PageHeader'
-import ComunicacionesKPIs from '../components/comunicaciones/ComunicacionesKPIs'
-import ScopeSelector from '../components/comunicaciones/ScopeSelector'
+import { getCategorias } from '../api/categorias'
+import { getComunicacionesKPIs, postEnviarNotificacion } from '../api/comunicaciones'
+import { getJugadores } from '../api/jugadores'
+import { getSocios } from '../api/socios'
 import CanalesSelector from '../components/comunicaciones/CanalesSelector'
-import SegmentedCategoriesSelector from '../components/comunicaciones/SegmentedCategoriesSelector'
-import IndividualPlayerSelector from '../components/comunicaciones/IndividualPlayerSelector'
+import ConfirmSendModal from '../components/comunicaciones/ConfirmSendModal'
 import CoverageAlerts from '../components/comunicaciones/CoverageAlerts'
+import ExcludedListModal from '../components/comunicaciones/ExcludedListModal'
+import IndividualPlayerSelector from '../components/comunicaciones/IndividualPlayerSelector'
 import ListRecipientsSummary from '../components/comunicaciones/ListRecipientsSummary'
 import MessageComposer from '../components/comunicaciones/MessageComposer'
-import ConfirmSendModal from '../components/comunicaciones/ConfirmSendModal'
-import ExcludedListModal from '../components/comunicaciones/ExcludedListModal'
 import PreviewModal from '../components/comunicaciones/PreviewModal'
-import useCategorias from '../hooks/useCategorias'
-import useSocio from '../hooks/useSocio'
-import { getComunicacionesKPIs, postEnviarNotificacion } from '../api/comunicaciones'
+import ScopeSelector from '../components/comunicaciones/ScopeSelector'
+import SegmentedCategoriesSelector from '../components/comunicaciones/SegmentedCategoriesSelector'
+import { SecondaryButton } from '../components/personas/tabs/parts'
+import PageHeader from '../components/shared/PageHeader'
+import { PANEL_BODY_CLASS, PANEL_CLASS } from '../components/shared/panel'
+import SectionHeading from '../components/shared/SectionHeading'
+import { HeadingSkeleton, LineSkeletons, SkeletonStatus } from '../components/shared/Skeleton'
 
-const initialScope = (debtNotice) => {
-  if (debtNotice?.socioIds) return 'lista'
-  return debtNotice ? 'individual' : 'segmentada'
+function NuevoEnvioSkeleton() {
+  return (
+    <SkeletonStatus label="Cargando formulario de nuevo envío..." className="flex flex-col gap-5">
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton />
+        <div className={PANEL_BODY_CLASS}>
+          <LineSkeletons count={4} className="flex flex-col gap-4" />
+        </div>
+      </div>
+      <div className={PANEL_CLASS}>
+        <HeadingSkeleton />
+        <div className={PANEL_BODY_CLASS}>
+          <LineSkeletons count={3} className="flex flex-col gap-4" />
+        </div>
+      </div>
+    </SkeletonStatus>
+  )
 }
 
-const withoutContact = (socios) => socios
-  .filter((s) => !s.email && !s.telefono)
-  .map((s) => ({
-    id: s.socio_id,
-    dni: s.dni || 'Sin DNI',
-    nombre: `${s.nombre || ''} ${s.apellido || ''}`.trim() || 'Socio sin nombre',
-    categoria: s.numero_socio ? `Socio #${s.numero_socio}` : 'Socio',
-    motivo: 'Sin teléfono ni correo electrónico registrado',
-  }))
-
-const reachableBy = (canales) => (s) => (
-  (canales.has('email') && Boolean(s.email)) || (canales.has('whatsapp') && Boolean(s.telefono))
-)
-
 export default function Comunicaciones() {
+  const location = useLocation()
   const navigate = useNavigate()
-  const debtNotice = useLocation().state?.debtNotice
-  const listIds = debtNotice?.socioIds
+  const debtNotice = location.state?.debtNotice
+  const initialRecipients = debtNotice?.recipients
 
-  // Datos reales del padrón obtenidos directamente del Backend
-  const { categorias } = useCategorias()
-  const { socios, isLoading: isLoadingSocios } = useSocio()
+  const [isLoading, setIsLoading] = useState(true)
+  const [remitente, setRemitente] = useState(null)
+  const [categorias, setCategorias] = useState([])
+  const [socios, setSocios] = useState([])
+  const [jugadores, setJugadores] = useState([])
 
-  // Estados de datos de comunicaciones
-  const [kpis, setKpis] = useState(null)
-
-  // Alcance: 'segmentada' o 'individual'
-  const [scope, setScope] = useState(initialScope(debtNotice))
-
-  // Canales de difusión seleccionados para envío masivo (Email, WhatsApp o ambos)
-  const [canalesMasivos, setCanalesMasivos] = useState(new Set(['email', 'whatsapp']))
-
-  // Selección de categorías de fútbol reales (para alcance segmentado)
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState(new Set())
-
-  // Selección de socio real para alcance individual
+  const [scope, setScope] = useState(() =>
+    initialRecipients?.length === 1
+      ? 'individual'
+      : initialRecipients?.length > 1
+        ? 'lista'
+        : 'segmentada'
+  )
+  const [canales, setCanales] = useState({ email: true, whatsapp: false })
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([])
   const [selectedSocio, setSelectedSocio] = useState(null)
-  const [selectedContactos, setSelectedContactos] = useState(new Set(['socio_tel', 'socio_email']))
+  const [listSelection, setListSelection] = useState(() => initialRecipients ?? [])
 
-  // Formulario del mensaje
-  const [asunto, setAsunto] = useState(debtNotice?.subject ?? '')
-  const [cuerpo, setCuerpo] = useState(debtNotice?.body ?? '')
-  const [copiaSecretaria, setCopiaSecretaria] = useState(true)
+  const [asunto, setAsunto] = useState(() => debtNotice?.subject ?? '')
+  const [cuerpo, setCuerpo] = useState(() => debtNotice?.body ?? '')
+  const [copiaSecretaria, setCopiaSecretaria] = useState(false)
+  const [validationError, setValidationError] = useState('')
 
-  // Modales
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
-  const [isExcluidosOpen, setIsExcluidosOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [isExcludedOpen, setIsExcludedOpen] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
-  // Cargar métricas al inicio
   useEffect(() => {
-    getComunicacionesKPIs().then(setKpis)
+    const fetchAllData = async () => {
+      setIsLoading(true)
+      try {
+        const [kpisRes, catRes, socRes, jugRes] = await Promise.allSettled([
+          getComunicacionesKPIs(),
+          getCategorias(),
+          getSocios(),
+          getJugadores(),
+        ])
+
+        if (kpisRes.status === 'fulfilled' && kpisRes.value?.remitente) {
+          setRemitente(kpisRes.value.remitente)
+        }
+        if (catRes.status === 'fulfilled' && Array.isArray(catRes.value)) {
+          setCategorias(catRes.value)
+        }
+        if (socRes.status === 'fulfilled' && Array.isArray(socRes.value)) {
+          setSocios(socRes.value)
+        }
+        if (jugRes.status === 'fulfilled' && Array.isArray(jugRes.value)) {
+          setJugadores(jugRes.value)
+        }
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchAllData()
   }, [])
 
-  // Inicializar selección de categorías con las primeras cargadas del backend
-  useEffect(() => {
-    if (categorias && categorias.length > 0) {
-      const validas = categorias.filter((c) => c.nombre.toLowerCase() !== 'no asignado')
-      if (validas.length > 0) {
-        setSelectedCategoryIds(new Set(validas.slice(0, 3).map((c) => c.categoria_id)))
-      }
-    }
-  }, [categorias])
+  const activeSocios = useMemo(() => {
+    return socios.filter(
+      (s) => !s.estado_administrativo_nombre || s.estado_administrativo_nombre === 'Activo'
+    )
+  }, [socios])
 
-  // Seleccionar automáticamente el primer socio real si hay cargados
-  useEffect(() => {
-    if (socios && socios.length > 0 && selectedSocio === null) {
-      const requested = socios.find((s) => String(s.socio_id) === String(debtNotice?.socioId))
-      setSelectedSocio(requested ?? socios[0])
-    }
-  }, [socios, selectedSocio, debtNotice])
+  // Mapa de categoria_id -> array de socios activos pertenecientes a esa categoría
+  const { categorySociosMap, categoryCounts } = useMemo(() => {
+    const map = {}
+    const counts = {}
+    const socioById = new Map(activeSocios.map((s) => [String(s.socio_id || s.id), s]))
 
-  // Socios reales que NO tienen ningún dato de contacto cargado en la BD
-  const excluidos = useMemo(() => withoutContact(socios || []), [socios])
+    jugadores.forEach((jug) => {
+      const isJugadorActivo = !jug.estado?.nombre || jug.estado.nombre === 'Activo'
+      if (!isJugadorActivo) return
+
+      const rawSocio = jug.socio
+      if (!rawSocio) return
+      const socioId = String(rawSocio.socio_id || rawSocio.id || rawSocio)
+      const socioObj =
+        socioById.get(socioId) ||
+        (typeof rawSocio === 'object' ? rawSocio : null)
+      if (!socioObj) return
+
+      const catIds = [
+        jug.categoria?.categoria_id ?? jug.categoria,
+        jug.categoria_secundaria?.categoria_id ?? jug.categoria_secundaria,
+      ].filter(Boolean)
+
+      catIds.forEach((catId) => {
+        if (!map[catId]) {
+          map[catId] = new Map()
+        }
+        map[catId].set(socioId, socioObj)
+      })
+    })
+
+    Object.keys(map).forEach((catId) => {
+      counts[catId] = map[catId].size
+    })
+
+    return { categorySociosMap: map, categoryCounts: counts }
+  }, [jugadores, activeSocios])
+
+  // Resolución cuando viene un destinatario individual desde otro módulo
+  useEffect(() => {
+    if (initialRecipients?.length !== 1 || selectedSocio || socios.length === 0) return
+    const target = initialRecipients[0]
+    const matched = socios.find(
+      (s) =>
+        (target.socio_id && String(s.socio_id || s.id) === String(target.socio_id)) ||
+        (target.dni && String(s.dni) === String(target.dni))
+    )
+    if (!matched) return
+    setSelectedSocio(matched)
+    setCanales({
+      email: Boolean(matched.email && matched.email.includes('@')),
+      whatsapp: false,
+    })
+  }, [initialRecipients, selectedSocio, socios])
 
   const listSocios = useMemo(() => {
-    if (!listIds) return []
-    const ids = new Set(listIds.map(String))
-    return (socios || []).filter((s) => ids.has(String(s.socio_id)))
-  }, [socios, listIds])
+    if (listSelection.length === 0) return []
+    const seen = new Set()
+    return listSelection.reduce((acc, target) => {
+      const matched = socios.find(
+        (s) =>
+          (target.socio_id && String(s.socio_id || s.id) === String(target.socio_id)) ||
+          (target.dni && String(s.dni) === String(target.dni))
+      )
+      const id = matched?.socio_id || matched?.id
+      if (matched && id && !seen.has(id)) {
+        seen.add(id)
+        acc.push(matched)
+      }
+      return acc
+    }, [])
+  }, [listSelection, socios])
 
-  const listExcluidos = useMemo(() => withoutContact(listSocios), [listSocios])
+  const missingSocioCount = Math.max(0, listSelection.length - listSocios.length)
 
-  // Métricas calculadas basadas en los socios reales cargados
-  const computedKPIs = useMemo(() => {
-    const totalSocios = socios?.length || 0
-    const sinContactoCount = excluidos.length
-    const conContactoCount = totalSocios - sinContactoCount
-    const tasa = totalSocios > 0 ? ((conContactoCount / totalSocios) * 100).toFixed(1) : 100
-    const envios_mes = kpis?.envios_mes ?? 0
+  // Destinatarios objetivo según el alcance seleccionado
+  const targetSocios = useMemo(() => {
+    if (scope === 'individual') {
+      return selectedSocio ? [selectedSocio] : []
+    }
+    if (scope === 'lista') {
+      return listSocios
+    }
+    if (scope === 'padron') {
+      return activeSocios
+    }
+    if (scope === 'segmentada') {
+      const uniqueMap = new Map()
+      selectedCategoryIds.forEach((catId) => {
+        const catMap = categorySociosMap[catId]
+        if (catMap) {
+          catMap.forEach((socioObj, socioId) => {
+            uniqueMap.set(socioId, socioObj)
+          })
+        }
+      })
+      return Array.from(uniqueMap.values())
+    }
+    return []
+  }, [scope, selectedSocio, listSocios, activeSocios, selectedCategoryIds, categorySociosMap])
+
+  // Cobertura y exclusiones según los canales elegidos
+  const coverage = useMemo(() => {
+    let emailReachable = 0
+    let whatsappReachable = 0
+    const reachable = []
+    const excluded = []
+
+    targetSocios.forEach((s) => {
+      const hasEmail = Boolean(s.email && s.email.includes('@'))
+      const hasPhone = Boolean(s.telefono && String(s.telefono).trim().length > 0)
+      if (hasEmail) emailReachable += 1
+      if (hasPhone) whatsappReachable += 1
+
+      const canReceiveEmail = canales.email && hasEmail
+      const canReceiveWhatsapp = canales.whatsapp && hasPhone
+
+      if (canReceiveEmail || canReceiveWhatsapp) {
+        reachable.push(s)
+      } else {
+        excluded.push(s)
+      }
+    })
 
     return {
-      envios_mes,
-      mensajes_entregados: kpis?.mensajes_entregados ?? 0,
-      tasa_entrega: tasa,
-      canales_activos_texto: 'Email corporativo y WhatsApp',
-      sin_contacto: sinContactoCount,
+      totalCount: targetSocios.length,
+      validCount: reachable.length,
+      excludedCount: excluded.length,
+      emailReachable,
+      whatsappReachable,
+      reachableSocios: reachable,
+      excludedSocios: excluded,
     }
-  }, [kpis, excluidos, socios])
+  }, [targetSocios, canales])
 
-  // Manejo de categorías
-  const handleToggleCategory = (id) => {
-    setSelectedCategoryIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const handleToggleCategory = (catId) => {
+    setValidationError('')
+    setSelectedCategoryIds((prev) =>
+      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId]
+    )
   }
 
-  const handleSelectAllCategories = () => {
-    const valid = (categorias || [])
-      .filter((c) => c.nombre.toLowerCase() !== 'no asignado')
-      .map((c) => c.categoria_id)
-    setSelectedCategoryIds(new Set(valid))
+  const handleSelectAllCategories = (ids) => {
+    setValidationError('')
+    setSelectedCategoryIds((prev) => Array.from(new Set([...prev, ...ids])))
   }
 
-  const handleSelectCategoryGroup = (categoryIds, shouldSelect) => {
-    setSelectedCategoryIds((prev) => {
-      const next = new Set(prev)
-      categoryIds.forEach((id) => {
-        if (shouldSelect) next.add(id)
-        else next.delete(id)
-      })
-      return next
-    })
+  const handleClearCategories = (ids) => {
+    setValidationError('')
+    setSelectedCategoryIds((prev) => prev.filter((id) => !ids.includes(id)))
   }
 
-  const handleClearAllCategories = () => {
-    setSelectedCategoryIds(new Set())
-  }
-
-  const handleToggleCanalMasivo = (canal) => {
-    setCanalesMasivos((prev) => {
-      const next = new Set(prev)
-      if (next.has(canal)) next.delete(canal)
-      else next.add(canal)
-      return next
-    })
-  }
-
-  // Manejo de contactos del socio
-  const handleToggleContacto = (id) => {
-    setSelectedContactos((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const handleSelectSocio = (socio) => {
-    setSelectedSocio(socio)
-    const iniciales = new Set()
-    if (socio.telefono) iniciales.add('socio_tel')
-    if (socio.email) iniciales.add('socio_email')
-    setSelectedContactos(iniciales)
-  }
-
-  // Texto legible de canales activos según el modo
-  const canalesTexto = useMemo(() => {
+  const getScopeText = () => {
     if (scope === 'individual') {
-      const tieneTel = selectedContactos.has('socio_tel')
-      const tieneEmail = selectedContactos.has('socio_email')
-      if (tieneTel && tieneEmail) return 'Email y WhatsApp'
-      if (tieneTel) return 'WhatsApp directo'
-      if (tieneEmail) return 'Correo Electrónico (Email)'
-      return 'Ningún canal seleccionado'
+      return selectedSocio
+        ? `${selectedSocio.nombre} ${selectedSocio.apellido}`
+        : 'Socio individual'
     }
-    const hasEmail = canalesMasivos.has('email')
-    const hasWhatsApp = canalesMasivos.has('whatsapp')
-    if (hasEmail && hasWhatsApp) return 'Email y WhatsApp'
-    if (hasEmail) return 'Correo Electrónico (Email)'
-    if (hasWhatsApp) return 'WhatsApp directo'
-    return 'Ningún canal seleccionado'
-  }, [scope, selectedContactos, canalesMasivos])
-
-  // Canales activos para la vista previa
-  const canalesParaPreview = useMemo(() => {
-    if (scope === 'individual') {
-      const canales = new Set()
-      if (selectedContactos.has('socio_email')) canales.add('email')
-      if (selectedContactos.has('socio_tel')) canales.add('whatsapp')
-      return canales
-    }
-    return canalesMasivos
-  }, [scope, selectedContactos, canalesMasivos])
-
-  // Cálculo de destinatarios efectivos teniendo en cuenta los canales elegidos
-  const destinatariosCount = useMemo(() => {
-    if (scope === 'individual') {
-      return selectedSocio ? selectedContactos.size : 0
-    }
-
-    // En masiva, si no seleccionó ningún canal, no hay destinatarios
-    if (canalesMasivos.size === 0) {
-      return 0
-    }
-
     if (scope === 'lista') {
-      return listSocios.filter(reachableBy(canalesMasivos)).length
+      return debtNotice?.scopeLabel
+        ? `Listado (${debtNotice.scopeLabel})`
+        : `Selección de listado (${listSocios.length})`
     }
-
-    const hasEmail = canalesMasivos.has('email')
-    const hasWhatsApp = canalesMasivos.has('whatsapp')
-
-    // Filtrar socios reales según los canales elegidos
-    const sociosValidos = (socios || []).filter((s) => {
-      if (hasEmail && hasWhatsApp) return Boolean(s.email || s.telefono)
-      if (hasEmail) return Boolean(s.email)
-      if (hasWhatsApp) return Boolean(s.telefono)
-      return false
-    })
-
-    let total = 0
-    if (categorias && categorias.length > 0) {
-      categorias.forEach((c) => {
-        if (selectedCategoryIds.has(c.categoria_id)) {
-          total += (c.cantidad_jugadores ?? 0)
-        }
-      })
+    if (scope === 'padron') {
+      return `Todo el padrón activo (${activeSocios.length} socios)`
     }
-    // Si aún no hay jugadores asignados a las categorías, calculamos sobre socios válidos
-    if (total === 0 && sociosValidos.length > 0) {
-      total = sociosValidos.length
-    }
-    return total
-  }, [scope, selectedSocio, selectedContactos, selectedCategoryIds, categorias, socios, canalesMasivos, listSocios])
-
-  // Descartar borrador
-  const handleDiscard = () => {
-    setAsunto('')
-    setCuerpo('')
+    return `${selectedCategoryIds.length} ${
+      selectedCategoryIds.length === 1 ? 'categoría deportiva' : 'categorías deportivas'
+    }`
   }
 
-  // Despacho de la notificación
+  const validateBeforeAction = () => {
+    if (!canales.email && !canales.whatsapp) {
+      setValidationError('Seleccioná al menos un canal de envío (Correo electrónico o WhatsApp).')
+      return false
+    }
+    if (scope === 'individual' && !selectedSocio) {
+      setValidationError('Seleccioná un socio destinatario para el envío individual.')
+      return false
+    }
+    if (scope === 'segmentada' && selectedCategoryIds.length === 0) {
+      setValidationError('Seleccioná al menos una categoría deportiva para el envío.')
+      return false
+    }
+    if (coverage.validCount === 0) {
+      setValidationError(
+        'Ninguno de los destinatarios seleccionados posee datos de contacto válidos para el canal elegido.'
+      )
+      return false
+    }
+    if (!asunto.trim()) {
+      setValidationError('Ingresá un asunto para el comunicado antes de continuar.')
+      return false
+    }
+    if (!cuerpo.trim()) {
+      setValidationError('Escribí el cuerpo del mensaje antes de continuar.')
+      return false
+    }
+    setValidationError('')
+    return true
+  }
+
+  const handleOpenPreview = () => {
+    if (!canales.email && !canales.whatsapp) {
+      setValidationError('Seleccioná al menos un canal para visualizar la vista previa.')
+      return
+    }
+    setValidationError('')
+    setIsPreviewOpen(true)
+  }
+
+  const handleOpenConfirm = () => {
+    if (validateBeforeAction()) {
+      setIsConfirmOpen(true)
+    }
+  }
+
   const handleConfirmSend = async () => {
-    if (!asunto.trim() || !cuerpo.trim()) {
-      alert('Por favor ingrese el asunto y cuerpo del mensaje.')
-      return
-    }
-
-    if (scope !== 'individual' && canalesMasivos.size === 0) {
-      alert('Debe seleccionar al menos un canal de difusión (Email o WhatsApp).')
-      return
-    }
-
-    if (destinatariosCount === 0) {
-      alert('No hay destinatarios válidos seleccionados para este envío.')
-      return
-    }
-
     setIsSending(true)
+    setValidationError('')
     try {
-      // Construir la lista de envíos asociados para persistir en EnvioNotificacion
-      const envios = []
-      if (scope === 'individual' && selectedSocio) {
-        if (selectedContactos.has('socio_tel') && selectedSocio.telefono) {
-          envios.push({
-            socio: selectedSocio.socio_id,
-            canal: 'WHATSAPP',
-            estado: 'ENVIADA',
-          })
+      const enviosList = []
+      coverage.reachableSocios.forEach((s) => {
+        const socioId = s.socio_id || s.id
+        if (!socioId) return
+        const hasEmail = Boolean(s.email && s.email.includes('@'))
+        const hasPhone = Boolean(s.telefono && String(s.telefono).trim().length > 0)
+        if (canales.email && hasEmail) {
+          enviosList.push({ socio: socioId, canal: 'MAIL', estado: 'ENVIADA' })
         }
-        if (selectedContactos.has('socio_email') && selectedSocio.email) {
-          envios.push({
-            socio: selectedSocio.socio_id,
-            canal: 'MAIL',
-            estado: 'ENVIADA',
-          })
+        if (canales.whatsapp && hasPhone) {
+          enviosList.push({ socio: socioId, canal: 'WHATSAPP', estado: 'ENVIADA' })
         }
-      } else {
-        const hasEmail = canalesMasivos.has('email')
-        const hasWhatsApp = canalesMasivos.has('whatsapp')
-        ;(scope === 'lista' ? listSocios : socios || []).forEach((s) => {
-          if (hasWhatsApp && s.telefono) {
-            envios.push({
-              socio: s.socio_id,
-              canal: 'WHATSAPP',
-              estado: 'ENVIADA',
-            })
-          }
-          if (hasEmail && s.email) {
-            envios.push({
-              socio: s.socio_id,
-              canal: 'MAIL',
-              estado: 'ENVIADA',
-            })
-          }
-        })
-      }
+      })
 
-      const payload = {
-        titulo: asunto,
-        asunto,
-        contenido: cuerpo,
-        tipo_alcance: scope,
-        canales: Array.from(scope === 'individual' ? canalesParaPreview : canalesMasivos),
-        categorias: Array.from(selectedCategoryIds),
-        socio_id: scope === 'individual' ? selectedSocio?.socio_id : null,
+      const created = await postEnviarNotificacion({
+        titulo: asunto.trim(),
+        asunto: asunto.trim(),
+        contenido: cuerpo.trim(),
         copia_secretaria: copiaSecretaria,
-        destinatarios_count: destinatariosCount,
-        envios,
-      }
+        envios: enviosList,
+      })
 
-      await postEnviarNotificacion(payload)
       setIsConfirmOpen(false)
-
-      // Limpiar el formulario y abrir la vista del historial
-      setAsunto('')
-      setCuerpo('')
-      const successMessage = `Notificación despachada y guardada con éxito (${destinatariosCount} destinatarios)`
-      navigate('/comunicaciones/historial', { state: { toastMessage: successMessage } })
+      navigate('/comunicaciones', { state: { flashResult: created } })
     } catch (err) {
-      console.error('Error al persistir notificación:', err)
-      alert('Ocurrió un error al enviar la notificación. Verifique la conexión con el backend.')
+      const detail =
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Ocurrió un error al procesar el envío de la notificación.'
+      setValidationError(String(detail))
+      setIsConfirmOpen(false)
     } finally {
       setIsSending(false)
     }
   }
 
   return (
-    <div className="w-full flex flex-col gap-5 pb-8">
-      <div className="flex flex-col gap-1 max-w-full">
-        <PageHeader
-          breadcrumb={[{ label: 'Comunicaciones' }]}
-          title="Nueva notificación"
-        />
-        <p className="text-sm text-on-surface-variant -mt-1.5">
-          Canal oficial de avisos y notificaciones operativas institucionales para socios y familias vinculadas.
-        </p>
-      </div>
-
-      <ComunicacionesKPIs kpis={computedKPIs} />
-
-      <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm p-5 md:p-6 flex flex-col gap-6">
-        {/* Encabezado de la tarjeta */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-outline-variant/20">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-[20px]">edit_note</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-on-surface">
-                Componer Notificación Institucional
-              </h2>
-              <p className="text-xs text-on-surface-variant">
-                Configure los destinatarios del padrón y defina el comunicado oficial.
-              </p>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-surface-container-high text-on-surface self-start sm:self-auto border border-outline-variant/20">
-            <span className="w-2 h-2 rounded-full bg-primary"></span>
-            Modo Redacción
-          </span>
-        </div>
-
-        {/* Selector de Alcance */}
-        <ScopeSelector scope={scope} onChange={setScope} showList={Boolean(listIds)} />
-
-        {/* Vista Individual con Socios Reales */}
-        {scope === 'individual' && (
-          <IndividualPlayerSelector
-            socios={socios}
-            selectedSocio={selectedSocio}
-            onSelectSocio={handleSelectSocio}
-            contactosSeleccionados={selectedContactos}
-            onToggleContacto={handleToggleContacto}
-            isLoading={isLoadingSocios}
-          />
-        )}
-
-        {/* Vista Masiva / Segmentada */}
-        {scope === 'segmentada' && (
-          <div className="flex flex-col gap-4">
-            <CanalesSelector
-              canalesSeleccionados={canalesMasivos}
-              onToggleCanal={handleToggleCanalMasivo}
-            />
-
-            <SegmentedCategoriesSelector
-              categorias={categorias}
-              selectedCategoryIds={selectedCategoryIds}
-              onToggleCategory={handleToggleCategory}
-              onSelectGroup={handleSelectCategoryGroup}
-              onSelectAll={handleSelectAllCategories}
-              onClearAll={handleClearAllCategories}
-            />
-
-            <CoverageAlerts
-              validCount={destinatariosCount}
-              totalCount={Math.max(destinatariosCount, socios?.length || 0)}
-              categoriesCount={selectedCategoryIds.size}
-              excludedCount={excluidos.length}
-              onOpenExcluidos={() => setIsExcluidosOpen(true)}
-            />
-          </div>
-        )}
-
-        {scope === 'lista' && (
-          <div className="flex flex-col gap-4">
-            <CanalesSelector
-              canalesSeleccionados={canalesMasivos}
-              onToggleCanal={handleToggleCanalMasivo}
-            />
-
-            <ListRecipientsSummary
-              validCount={destinatariosCount}
-              totalCount={listSocios.length}
-              excludedCount={listExcluidos.length}
-              onOpenExcluidos={() => setIsExcluidosOpen(true)}
-            />
-          </div>
-        )}
-
-        {/* Bloque 2: Contenido del Mensaje */}
-        <MessageComposer
-          asunto={asunto}
-          cuerpo={cuerpo}
-          copiaSecretaria={copiaSecretaria}
-          onAsuntoChange={setAsunto}
-          onCuerpoChange={setCuerpo}
-          onCopiaSecretariaChange={setCopiaSecretaria}
-          onDiscard={handleDiscard}
-          onPreview={() => setIsPreviewOpen(true)}
-          onSubmit={() => {
-            if (!asunto.trim() || !cuerpo.trim()) {
-              alert('Por favor ingrese el asunto y cuerpo del mensaje.')
-              return
-            }
-            if (scope === 'individual' && !selectedSocio) {
-              alert('Por favor seleccione un socio para el envío individual.')
-              return
-            }
-            if (scope === 'individual' && selectedContactos.size === 0) {
-              alert('El socio seleccionado no tiene canales de contacto habilitados o seleccionados.')
-              return
-            }
-            if (scope !== 'individual' && canalesMasivos.size === 0) {
-              alert('Debe seleccionar al menos un canal de difusión (Email o WhatsApp).')
-              return
-            }
-            setIsConfirmOpen(true)
-          }}
-        />
-      </div>
-
-      {/* Modales */}
-      <ConfirmSendModal
-        isOpen={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
-        onConfirm={handleConfirmSend}
-        destinatariosCount={destinatariosCount}
-        canalesTexto={canalesTexto}
-        asunto={asunto}
-        cuerpo={cuerpo}
-        isSending={isSending}
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        breadcrumb={[
+          { label: 'Comunicaciones', to: '/comunicaciones' },
+          { label: 'Nuevo envío' },
+        ]}
+        title="Nuevo envío"
+        subtitle="Seleccioná los destinatarios y canales para redactar y enviar un comunicado oficial."
+        actions={
+          <SecondaryButton
+            type="button"
+            icon="arrow_back"
+            onClick={() => navigate('/comunicaciones')}
+          >
+            Volver al panel
+          </SecondaryButton>
+        }
       />
 
-      <ExcludedListModal
-        isOpen={isExcluidosOpen}
-        onClose={() => setIsExcluidosOpen(false)}
-        excluidos={scope === 'lista' ? listExcluidos : excluidos}
-      />
+      {isLoading ? (
+        <NuevoEnvioSkeleton />
+      ) : (
+        <>
+          <section className={PANEL_CLASS} aria-labelledby="destinatarios-heading">
+            <SectionHeading
+              id="destinatarios-heading"
+              icon="group"
+              title="1. Destinatarios y canales de envío"
+            />
+            <div className={`${PANEL_BODY_CLASS} flex flex-col gap-5`}>
+              <ScopeSelector
+                scope={scope}
+                setScope={(newScope) => {
+                  setValidationError('')
+                  setScope(newScope)
+                }}
+                hasListSelection={listSelection.length > 0}
+              />
+
+              {scope === 'lista' && (
+                <ListRecipientsSummary
+                  recipients={listSocios}
+                  scopeLabel={debtNotice?.scopeLabel}
+                  missingSocioCount={missingSocioCount}
+                  onClearList={() => {
+                    setListSelection([])
+                    setScope('segmentada')
+                  }}
+                />
+              )}
+
+              {scope === 'individual' && (
+                <IndividualPlayerSelector
+                  socios={activeSocios}
+                  selectedSocio={selectedSocio}
+                  onSelectSocio={(socio) => {
+                    setValidationError('')
+                    setSelectedSocio(socio)
+                  }}
+                  canales={canales}
+                  setCanales={setCanales}
+                />
+              )}
+
+              {scope === 'segmentada' && (
+                <SegmentedCategoriesSelector
+                  categorias={categorias}
+                  categoryCounts={categoryCounts}
+                  selectedCategoryIds={selectedCategoryIds}
+                  onToggleCategory={handleToggleCategory}
+                  onSelectAll={handleSelectAllCategories}
+                  onClearAll={handleClearCategories}
+                />
+              )}
+
+              {scope !== 'individual' && (
+                <CanalesSelector
+                  canales={canales}
+                  setCanales={(updater) => {
+                    setValidationError('')
+                    setCanales(updater)
+                  }}
+                  remitente={remitente}
+                />
+              )}
+
+              <CoverageAlerts
+                validCount={coverage.validCount}
+                totalCount={coverage.totalCount}
+                excludedCount={coverage.excludedCount}
+                emailReachable={coverage.emailReachable}
+                whatsappReachable={coverage.whatsappReachable}
+                canales={canales}
+                onOpenExcluded={
+                  coverage.excludedCount > 0 ? () => setIsExcludedOpen(true) : undefined
+                }
+              />
+            </div>
+          </section>
+
+          <section className={PANEL_CLASS} aria-labelledby="mensaje-heading">
+            <SectionHeading
+              id="mensaje-heading"
+              icon="mail"
+              title="2. Redacción del comunicado"
+            />
+            <div className={PANEL_BODY_CLASS}>
+              <MessageComposer
+                asunto={asunto}
+                setAsunto={(val) => {
+                  if (validationError) setValidationError('')
+                  setAsunto(val)
+                }}
+                cuerpo={cuerpo}
+                setCuerpo={(val) => {
+                  if (validationError) setValidationError('')
+                  setCuerpo(val)
+                }}
+                copiaSecretaria={copiaSecretaria}
+                setCopiaSecretaria={setCopiaSecretaria}
+                remitente={remitente}
+                validationError={validationError}
+                onOpenPreview={handleOpenPreview}
+                onOpenConfirm={handleOpenConfirm}
+              />
+            </div>
+          </section>
+        </>
+      )}
 
       <PreviewModal
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         asunto={asunto}
         cuerpo={cuerpo}
-        canales={canalesParaPreview}
+        canales={canales}
+        remitente={remitente}
       />
 
+      <ConfirmSendModal
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleConfirmSend}
+        isSending={isSending}
+        asunto={asunto}
+        canales={canales}
+        validCount={coverage.validCount}
+        scopeText={getScopeText()}
+        remitente={remitente}
+        copiaSecretaria={copiaSecretaria}
+      />
+
+      <ExcludedListModal
+        isOpen={isExcludedOpen}
+        onClose={() => setIsExcludedOpen(false)}
+        excludedList={coverage.excludedSocios}
+      />
     </div>
   )
 }

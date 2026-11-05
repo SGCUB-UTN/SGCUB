@@ -40,6 +40,7 @@ import { CHANGE_PASSWORD_PATH } from './auth/paths'
 import DocumentacionDashboard from './pages/DocumentacionDashboard'
 import Comunicaciones from './pages/Comunicaciones'
 import HistorialComunicaciones from './pages/HistorialComunicaciones'
+import NotificacionDetail from './pages/NotificacionDetail'
 import Automatizaciones from './pages/Automatizaciones'
 import RecategorizacionRevision from './pages/RecategorizacionRevision'
 import Configuracion from './pages/Configuracion'
@@ -159,11 +160,19 @@ export const router = createBrowserRouter([
           },
           {
             path: 'comunicaciones',
+            element: <HistorialComunicaciones />,
+          },
+          {
+            path: 'comunicaciones/nuevo',
             element: <Comunicaciones />,
           },
           {
+            path: 'comunicaciones/:id',
+            element: <NotificacionDetail />,
+          },
+          {
             path: 'comunicaciones/historial',
-            element: <HistorialComunicaciones />,
+            element: <Navigate to="/comunicaciones" replace />,
           },
           {
             path: 'reportes',
