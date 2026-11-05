@@ -1,18 +1,7 @@
 import { api } from './conf'
-import { savePdfResponse } from './download'
+import { errorDetailFrom, savePdfResponse } from './download'
 
 const RESUMEN_ENDPOINT = 'finanzas/resumen/'
-
-const errorDetailFrom = async (requestError) => {
-  const data = requestError.response?.data
-  if (!(data instanceof Blob)) return requestError
-  try {
-    requestError.response.data = JSON.parse(await data.text())
-  } catch {
-    requestError.response.data = null
-  }
-  return requestError
-}
 
 // Monthly summary of `periodo` ('YYYY-MM', current month by default) plus the current debt overview
 export const getResumenFinanciero = async (periodo) => {

@@ -43,7 +43,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   }, [contrayendo]);
 
   const claseEstado = contrayendo ? 'app-sidebar--collapsing' : collapsed ? 'app-sidebar--collapsed' : '';
-  const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes']
+  const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/reportes']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
@@ -113,6 +113,12 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">school</span>
                     <span className="app-sidebar-label text-base">Docentes</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/padron/reportes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">monitoring</span>
+                    <span className="app-sidebar-label text-base">Reportes</span>
                   </span>
                 </NavLink>
               </div>

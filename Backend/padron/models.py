@@ -177,7 +177,29 @@ class SequentialNumberMixin:
                     raise
 
 
-class Socio(SequentialNumberMixin, models.Model):
+class LeaveDateMixin:
+
+    status_field = None
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        instance._stored_status_id = instance.__dict__.get(f"{cls.status_field}_id")
+        return instance
+
+    def save(self, *args, **kwargs):
+        status_id = self.__dict__.get(f"{self.status_field}_id")
+        if status_id != getattr(self, "_stored_status_id", None):
+            self.fecha_baja = django.utils.timezone.localdate() if self.is_inactive else None
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = {*update_fields, "fecha_baja"}
+        result = super().save(*args, **kwargs)
+        self._stored_status_id = status_id
+        return result
+
+
+class Socio(LeaveDateMixin, SequentialNumberMixin, models.Model):
     socio_id = models.AutoField(primary_key=True)
     persona = models.OneToOneField(
         Persona,
@@ -193,9 +215,11 @@ class Socio(SequentialNumberMixin, models.Model):
         default=get_default_estado_administrativo,
     )
     fecha_alta = models.DateField(default=django.utils.timezone.localdate)
+    fecha_baja = models.DateField(null=True, blank=True)
     numero_socio = models.PositiveIntegerField(unique=True, null=True, blank=True)
 
     sequential_field = "numero_socio"
+    status_field = "estado_administrativo"
 
     class Meta:
         db_table = "socio"
@@ -330,7 +354,7 @@ SIZES_CHOICES = [
     ("XXL", "Doble extra grande"),
 ]
 
-class Jugador(models.Model):
+class Jugador(LeaveDateMixin, models.Model):
     class NivelEducacionChoices(models.TextChoices):
         PRIMARIO_EN_PROCESO = "primario_en_proceso", "Primario en proceso"
         PRIMARIO_INCOMPLETO = "primario_incompleto", "Primario incompleto"
@@ -389,6 +413,9 @@ class Jugador(models.Model):
         blank=False,
         default=get_default_estado_deportivo,
     )
+    fecha_baja = models.DateField(null=True, blank=True)
+
+    status_field = "estado"
 
     class Meta:
         db_table = "jugador"
@@ -398,6 +425,10 @@ class Jugador(models.Model):
     @property
     def is_active(self):
         return self.estado.nombre == ESTADO_DEPORTIVO_ACTIVO
+
+    @property
+    def is_inactive(self):
+        return not self.is_active
 
     @property
     def deactivation_type(self):
@@ -428,7 +459,7 @@ class CargoDocente(models.Model):
         return self.nombre
 
 
-class Docente(SequentialNumberMixin, models.Model):
+class Docente(LeaveDateMixin, SequentialNumberMixin, models.Model):
     docente_id = models.AutoField(primary_key=True)
     persona = models.OneToOneField(
         Persona,
@@ -443,8 +474,10 @@ class Docente(SequentialNumberMixin, models.Model):
         related_name="docentes",
         default=get_default_estado_administrativo,
     )
+    fecha_baja = models.DateField(null=True, blank=True)
 
     sequential_field = "legajo"
+    status_field = "estado"
 
     class Meta:
         db_table = "docente"
