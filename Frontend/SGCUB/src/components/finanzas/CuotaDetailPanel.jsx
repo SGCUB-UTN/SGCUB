@@ -7,6 +7,8 @@ import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
 import { isAdjustment, itemLabel, itemTone } from './cuotaItems'
 import { ListSkeleton } from '../shared/Skeleton'
+import { WhatsAppIcon, WhatsAppToast } from './WhatsAppComprobanteButton'
+import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
 const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm'
 
@@ -32,6 +34,8 @@ const LAYOUTS = {
 const CARD_TITLE_CLASS = `${SUMMARY_GROUP_CLASS} mb-0`
 
 const ICON_BUTTON_CLASS = 'w-9 h-9 shrink-0 inline-flex items-center justify-center rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+const WHATSAPP_ICON_BUTTON_CLASS = 'w-9 h-9 shrink-0 inline-flex items-center justify-center rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60'
+const WHATSAPP_DISABLED_BUTTON_CLASS = 'w-9 h-9 shrink-0 inline-flex items-center justify-center rounded-lg border border-outline-variant/30 text-on-surface-variant/30 cursor-not-allowed'
 
 const isAnnulled = (comprobante) => comprobante.estado === 'Anulado'
 
@@ -39,10 +43,14 @@ const PAID_HINT = 'La cuota ya está paga'
 
 const sumItems = (items) => items.reduce((total, item) => total + Number(item.monto ?? 0) * (item.es_descuento ? -1 : 1), 0)
 
-function ReceiptRow({ comprobante, onOpen }) {
+function ReceiptRow({ comprobante, onOpen, fallbackSocio, onToast }) {
   const [downloading, setDownloading] = useState(false)
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false)
   const [error, setError] = useState('')
   const annulled = isAnnulled(comprobante)
+  const targetSocio = comprobante.socio || fallbackSocio
+  const phone = targetSocio?.telefono
+  const hasPhone = Boolean(phone && String(phone).trim().length >= 6)
 
   const download = async () => {
     setDownloading(true)
@@ -56,9 +64,40 @@ function ReceiptRow({ comprobante, onOpen }) {
     }
   }
 
+  const handleSendWhatsApp = async (e) => {
+    e.stopPropagation()
+    if (!hasPhone || sharingWhatsApp) return
+    setSharingWhatsApp(true)
+    try {
+      await sendReceiptToWhatsApp({
+        socio: targetSocio,
+        phone,
+        comprobanteId: comprobante.comprobante_id,
+        comprobanteCodigo: comprobante.codigo || `COM-${String(comprobante.numero).padStart(8, '0')}`,
+        montoTotal: comprobante.monto_total,
+        tipo: annulled ? 'anulado' : 'comprobante',
+        onToast,
+      })
+    } finally {
+      setSharingWhatsApp(false)
+    }
+  }
+
   return (
-    <li className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0">
-      <div className="flex items-center gap-3">
+    <li className="py-1 first:pt-0 last:pb-0">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(comprobante)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onOpen(comprobante)
+          }
+        }}
+        title={`Ver comprobante #${comprobante.numero}`}
+        className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-surface-container/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      >
         <span className={`material-symbols-outlined text-[22px] shrink-0 ${annulled ? 'text-outline' : 'text-primary'}`} aria-hidden="true">receipt_long</span>
         <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -73,16 +112,47 @@ function ReceiptRow({ comprobante, onOpen }) {
             {formatDate(comprobante.fecha_emision)} · <span className="font-semibold text-on-surface">{formatAmount(comprobante.monto_total)}</span>
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button type="button" onClick={() => onOpen(comprobante)} title="Ver detalle" aria-label={`Ver comprobante ${comprobante.numero}`} className={ICON_BUTTON_CLASS}>
-            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">visibility</span>
+        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={handleSendWhatsApp}
+            disabled={!hasPhone || sharingWhatsApp}
+            title={
+              hasPhone
+                ? targetSocio.es_menor && targetSocio.responsable_nombre
+                  ? `Enviar por WhatsApp a ${targetSocio.responsable_nombre} (${phone})`
+                  : `Enviar por WhatsApp (${phone})`
+                : 'Sin teléfono registrado'
+            }
+            aria-label={`Enviar comprobante ${comprobante.codigo || comprobante.numero} por WhatsApp`}
+            className={hasPhone ? WHATSAPP_ICON_BUTTON_CLASS : WHATSAPP_DISABLED_BUTTON_CLASS}
+          >
+            {sharingWhatsApp ? (
+              <span className="material-symbols-outlined text-[18px] animate-spin" aria-hidden="true">
+                progress_activity
+              </span>
+            ) : (
+              <WhatsAppIcon className="w-4 h-4 shrink-0" />
+            )}
           </button>
-          <button type="button" onClick={download} disabled={downloading} title="Descargar PDF" aria-label={`Descargar comprobante ${comprobante.numero}`} className={ICON_BUTTON_CLASS}>
-            <span className={`material-symbols-outlined text-[20px] ${downloading ? 'animate-spin' : ''}`} aria-hidden="true">{downloading ? 'progress_activity' : 'download'}</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              download()
+            }}
+            disabled={downloading}
+            title="Descargar PDF"
+            aria-label={`Descargar comprobante ${comprobante.numero}`}
+            className={ICON_BUTTON_CLASS}
+          >
+            <span className={`material-symbols-outlined text-[20px] ${downloading ? 'animate-spin' : ''}`} aria-hidden="true">
+              {downloading ? 'progress_activity' : 'download'}
+            </span>
           </button>
         </div>
       </div>
-      {error && <p className="text-sm text-error pl-9" role="alert">{error}</p>}
+      {error && <p className="text-sm text-error pl-4 mt-1" role="alert">{error}</p>}
     </li>
   )
 }
@@ -202,7 +272,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, class
   )
 }
 
-function ReceiptsCard({ cuotaId, onOpen, className }) {
+function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio, onToast }) {
   const [receipts, setReceipts] = useState({ loading: true, error: '', items: [] })
 
   useEffect(() => {
@@ -221,7 +291,13 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
       {!receipts.loading && !receipts.error && (receipts.items.length ? (
         <ul className="flex flex-col divide-y divide-outline-variant/20">
           {receipts.items.map((comprobante) => (
-            <ReceiptRow key={comprobante.comprobante_id} comprobante={comprobante} onOpen={onOpen} />
+            <ReceiptRow
+              key={comprobante.comprobante_id}
+              comprobante={comprobante}
+              onOpen={onOpen}
+              fallbackSocio={fallbackSocio}
+              onToast={onToast}
+            />
           ))}
         </ul>
       ) : (
@@ -237,6 +313,7 @@ function ReceiptsCard({ cuotaId, onOpen, className }) {
 function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
+  const [toast, setToast] = useState(null)
 
   return (
     <tr className="bg-surface-container-low/60">
@@ -246,7 +323,13 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
             <ConceptsCard cuota={cuota} className={layout.concepts} />
           </div>
           <div className={layout.side}>
-            <ReceiptsCard cuotaId={cuota.cuota_id} onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)} className={layout.receipts} />
+            <ReceiptsCard
+              cuotaId={cuota.cuota_id}
+              fallbackSocio={cuota?.socio}
+              onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)}
+              className={layout.receipts}
+              onToast={setToast}
+            />
             <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
           </div>
         </div>
@@ -257,6 +340,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
         />
+        <WhatsAppToast toast={toast} onClose={() => setToast(null)} />
       </td>
     </tr>
   )
