@@ -6,7 +6,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from padron.serializers import SocioSerializer
 
+import csv
 from datetime import date, timedelta
+from io import StringIO
 from unittest.mock import Mock, patch
 
 from configuracion.models import HistorialConfiguracion
@@ -2351,4 +2353,58 @@ class PadronReportTests(APITestCase):
         for params in ({"status": "otros"}, {"vaccination": "vencida"}, {"locality": "abc"}, {"age_min": "20", "age_max": "10"}):
             with self.subTest(params=params):
                 response = self.client.get(self.URL, params)
+                self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+    def test_csv_export_lists_filtered_people_with_readable_values(self):
+        player = self.player(vaccination=None, health_insurance="", age=15)
+        self.member(age=40)
+
+        response = self.client.get(f"{self.URL}csv/", {"entity": "jugadores"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn('filename="reporte-padron-', response["Content-Disposition"])
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
+        self.assertEqual(["Apellido", "Nombre", "DNI"], rows[0][:3])
+        self.assertEqual(2, len(rows))
+        record = dict(zip(rows[0], rows[1]))
+        self.assertEqual(player.socio.persona.dni, record["DNI"])
+        self.assertEqual("Jugador", record["Rol"])
+        self.assertEqual("Sin datos", record["Vacunación"])
+        self.assertEqual("Sin obra social", record["Obra social"])
+        self.assertEqual(self.today.strftime("%d/%m/%Y"), record["Fecha de alta"])
+
+    def test_csv_export_marks_player_data_as_not_applicable_for_members(self):
+        self.member()
+
+        response = self.client.get(f"{self.URL}csv/")
+
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
+        record = dict(zip(rows[0], rows[1]))
+        self.assertEqual("Socio", record["Rol"])
+        self.assertEqual("No aplica", record["Vacunación"])
+        self.assertEqual("No aplica", record["Obra social"])
+
+    def test_pdf_export_includes_applied_filters_and_listing(self):
+        self.player(locality=self.berisso)
+        self.member()
+
+        response = self.client.get(f"{self.URL}pdf/", {"locality": str(self.berisso.pk), "vaccination": "al_dia"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("application/pdf", response["Content-Type"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn(b"Localidad: Berisso", response.content)
+        self.assertIn(b"Listado \(1\)", response.content)
+
+    def test_pdf_export_without_people_renders_empty_message(self):
+        response = self.client.get(f"{self.URL}pdf/", {"status": "inactivos"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn(b"No hay personas para los filtros seleccionados.", response.content)
+
+    def test_exports_reject_invalid_filters(self):
+        for suffix in ("pdf/", "csv/"):
+            with self.subTest(suffix=suffix):
+                response = self.client.get(f"{self.URL}{suffix}", {"entity": "otros"})
                 self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
