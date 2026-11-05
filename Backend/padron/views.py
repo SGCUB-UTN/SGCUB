@@ -6,6 +6,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
+from .reports import ReportFilterError, build_report, parse_report_filters
 from .search import normalize_text, normalized_field
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import serializers as drf_serializers
@@ -892,3 +893,13 @@ def docente_categoria_create(request):
             status=status.HTTP_201_CREATED,
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(tags=["Padron / Reportes"], summary="Reporte del padrón agrupado por criterios")
+@api_view(["GET"])
+def padron_report(request):
+    try:
+        filters = parse_report_filters(request.query_params)
+    except ReportFilterError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(build_report(filters))
