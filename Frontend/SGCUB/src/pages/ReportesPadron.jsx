@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { downloadReportePadron } from '../api/reportesPadron'
 import PadronReportCharts from '../components/reportes/PadronReportCharts'
 import PadronReportFilters from '../components/reportes/PadronReportFilters'
+import PadronReportTable from '../components/reportes/PadronReportTable'
 import { INITIAL_FILTERS, activeFilterCount, sameFilters } from '../components/reportes/reportFilters'
 import { EmptyState, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
@@ -144,7 +145,10 @@ function ReportesPadron() {
           {report.kpis.total === 0 ? (
             <EmptyState icon="person_search" title="Sin resultados" description="No hay personas que cumplan con los filtros aplicados." />
           ) : (
-            <PadronReportCharts report={report} />
+            <div className="flex flex-col gap-4">
+              <PadronReportCharts report={report} />
+              <PadronReportTable key={JSON.stringify(applied)} people={report.people} />
+            </div>
           )}
         </div>
       )}
