@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
-import useDocumentacion from '../../../hooks/useDocumentacion'
 import useDocumentUploadForm from '../../../hooks/useDocumentUploadForm'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
@@ -20,7 +19,7 @@ const PANEL_ID = 'documentation-section-panel'
 
 const countByStatus = (documents, status) => documents.filter((doc) => doc.status === status).length
 
-export default function DocumentationTab({ personaId, personaType, personaInfo }) {
+export default function DocumentationTab({ documentation, personaId, personaType, personaInfo }) {
   const {
     tipos,
     isLoading: loading,
@@ -30,7 +29,7 @@ export default function DocumentationTab({ personaId, personaType, personaInfo }
     getNombreTipo,
     documentosActivos,
     documentosHistoricos
-  } = useDocumentacion(personaId)
+  } = documentation
   const upload = useDocumentUploadForm({ tipos, create: subirDocumento, update: actualizarDocumento })
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
