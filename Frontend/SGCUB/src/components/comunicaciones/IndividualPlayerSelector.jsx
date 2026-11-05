@@ -128,7 +128,6 @@ export default function IndividualPlayerSelector({
               className="text-xs font-medium text-on-surface-variant hover:text-error flex items-center gap-1 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
-              Cambiar
             </button>
           </div>
 
