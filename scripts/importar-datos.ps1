@@ -28,17 +28,13 @@ try {
     Invoke-Docker compose up -d
 
     # Si la base restaurada referencia un logo que no existe en /media, restauramos el escudo oficial
-    try {
-        $logoQuery = 'psql -tA -U $POSTGRES_USER -d ${BASE:-$POSTGRES_DB} -c "SELECT club_logo FROM configuracion_general LIMIT 1;"'
-        $logoPath = (& docker compose exec -T -e "BASE=$Base" db sh -c $logoQuery 2>$null)
-        if ($logoPath) {
-            $logoPath = $logoPath.Trim()
-            if ($logoPath) {
-                $cmd = 'TARGET="/app/media/' + $logoPath + '"; if [ ! -f "$TARGET" ]; then mkdir -p "$(dirname "$TARGET")" && cp /app/configuracion/fixtures/escudo-sin-fondo.png "$TARGET"; fi'
-                & docker compose exec -T backend sh -c $cmd
-            }
-        }
-    } catch {}
+    $logoQuery = 'psql -tA -U $POSTGRES_USER -d ${BASE:-$POSTGRES_DB} -c ''SELECT club_logo FROM configuracion_general LIMIT 1;'''
+    $logoPath = (& docker compose exec -T -e "BASE=$Base" db sh -c $logoQuery | Out-String).Trim()
+    if ($logoPath) {
+        $restoreLogo = 'T=/app/media/$LOGO; if [ ! -f $T ]; then mkdir -p ${T%/*} && cp /app/configuracion/fixtures/escudo-sin-fondo.png $T; fi'
+        & docker compose exec -T -e "LOGO=$logoPath" backend sh -c $restoreLogo
+        if ($LASTEXITCODE -ne 0) { Write-Host 'No se pudo restaurar el logo del club.' -ForegroundColor Yellow }
+    }
 
     if ($diferencias) {
         Write-Host 'Los datos NO coinciden con la PC de origen en estas tablas:' -ForegroundColor Red
