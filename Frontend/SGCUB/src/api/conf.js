@@ -16,18 +16,34 @@ export const api = axios.create({
 
 const baseAdapter = axios.getAdapter(api.defaults.adapter)
 const pendingGets = new Map()
+const catalogResponses = new Map()
+
+const CATALOG_PATHS = new Set([
+  'configuracion/',
+  'documental/estados/',
+  'documental/tipos/',
+  'finanzas/medio-pago/',
+  'finanzas/movimiento-cuenta/conceptos/',
+  'padron/barrio/',
+  'padron/cargo-docente/',
+  'padron/categoria/',
+  'padron/estado/',
+  'padron/estado-socio/',
+  'padron/genero/',
+  'padron/localidad/',
+  'padron/tipo-relacion-familiar/',
+])
+
+const isCatalog = (config) => CATALOG_PATHS.has(config.url.replace(/^\/+/, '').split('?')[0])
 
 const getRequestKey = (config) =>
   [config.responseType ?? '', String(config.headers?.Authorization ?? ''), api.getUri(config)].join(' ')
 
-api.defaults.adapter = (config) => {
-  if (config.method !== 'get' || config.signal) return baseAdapter(config)
-
-  const key = getRequestKey(config)
-  let shared = pendingGets.get(key)
+const shareResponse = (config, store, key, load) => {
+  let shared = store.get(key)
   if (!shared) {
-    shared = baseAdapter(config).finally(() => pendingGets.delete(key))
-    pendingGets.set(key, shared)
+    shared = load()
+    store.set(key, shared)
   }
   return shared.then(
     (response) => ({ ...response, config }),
@@ -35,6 +51,22 @@ api.defaults.adapter = (config) => {
       error instanceof AxiosError ? AxiosError.from(error, error.code, config, error.request, error.response) : error,
     ),
   )
+}
+
+api.defaults.adapter = (config) => {
+  if (config.method !== 'get') return baseAdapter(config).finally(() => catalogResponses.clear())
+  if (config.signal) return baseAdapter(config)
+
+  if (isCatalog(config)) {
+    const key = api.getUri(config)
+    return shareResponse(config, catalogResponses, key, () => baseAdapter(config).catch((error) => {
+      catalogResponses.delete(key)
+      throw error
+    }))
+  }
+
+  const key = getRequestKey(config)
+  return shareResponse(config, pendingGets, key, () => baseAdapter(config).finally(() => pendingGets.delete(key)))
 }
 
 // Instancia sin interceptores: renovar el token no debe disparar otra renovación
