@@ -18,20 +18,10 @@ import SocioForm from './pages/SocioForm'
 import Categorias from './pages/Categorias'
 import Docentes from './pages/Docentes'
 import Cuotas from './pages/Cuotas'
-import EnDesarrollo from './pages/EnDesarrollo'
 import ResumenFinanciero from './pages/ResumenFinanciero'
 import Caja from './pages/Caja'
 import Morosidad from './pages/Morosidad'
 import ReportesPadron from './pages/ReportesPadron'
-
-import CometHub from './pages/comet/CometHub'
-import CometCompeticiones from './pages/comet/CometCompeticiones'
-import CometEquipos from './pages/comet/CometEquipos'
-import CometPartidos from './pages/comet/CometPartidos'
-import CometTablas from './pages/comet/CometTablas'
-import CometInscripciones from './pages/comet/CometInscripciones'
-import CometJugadores from './pages/comet/CometJugadores'
-import CometLogs from './pages/comet/CometLogs'
 
 import CategoriaDetail from './pages/CategoriaDetail'
 
@@ -180,10 +170,6 @@ export const router = createBrowserRouter([
             element: <Navigate to="/comunicaciones" replace />,
           },
           {
-            path: 'reportes',
-            element: <EnDesarrollo title="Reportes y COMET" />,
-          },
-          {
             path: 'administracion',
             element: <Navigate to="/configuracion" replace />,
           },
@@ -233,19 +219,6 @@ export const router = createBrowserRouter([
           {
             path: 'categorias/:id',
             element: <CategoriaDetail />,
-          },
-          {
-            path: 'comet',
-            children: [
-              { index: true, element: <CometHub /> },
-              { path: 'competiciones', element: <CometCompeticiones /> },
-              { path: 'equipos', element: <CometEquipos /> },
-              { path: 'partidos', element: <CometPartidos /> },
-              { path: 'tablas', element: <CometTablas /> },
-              { path: 'inscripciones', element: <CometInscripciones /> },
-              { path: 'jugadores', element: <CometJugadores /> },
-              { path: 'logs', element: <CometLogs /> },
-            ],
           },
         ],
       },

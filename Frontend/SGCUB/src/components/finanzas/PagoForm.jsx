@@ -134,7 +134,7 @@ function CuotaBreakdownRow({
                   tone={tone.className}
                   action={blocker === null ? null : (
                     <RemoveItemButton
-                      label={`Remover ${itemLabel(item)}`}
+                      label={`Eliminar ${itemLabel(item)}`}
                       blocker={blocker}
                       onClick={() => onRemoveItem(cuota, item)}
                       isDiscount={item.es_descuento}

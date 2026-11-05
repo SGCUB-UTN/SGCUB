@@ -2,7 +2,7 @@ import io
 import shutil
 import tempfile
 import zipfile
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -748,3 +748,44 @@ class AlertasDocumentalesTaskTest(APITestCase):
             # Segunda ejecución: no debe duplicar para nadie
             res2 = refresh_document_states()
             self.assertEqual(res2["alertas_enviadas"], 0)
+
+
+class CategoriaZipDownloadTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="doc_admin")
+        self.client.force_authenticate(user=self.user)
+
+        self.categoria = Categoria.objects.create(nombre="Sub 15", anio_vigente=date.today().year)
+        self.persona = Persona.objects.create(nombre="Pedro", apellido="Gomez", dni="55667788")
+        est_adm = EstadoAdministrativo.objects.first() or EstadoAdministrativo.objects.create(nombre="Activo")
+        est_dep = EstadoDeportivo.objects.first() or EstadoDeportivo.objects.create(nombre="Activo")
+        socio = Socio.objects.create(persona=self.persona, estado_administrativo=est_adm)
+        self.jugador = Jugador.objects.create(socio=socio, categoria=self.categoria, estado=est_dep)
+
+        self.tipo_doc = TipoDocumento.objects.first()
+        self.estado_doc = EstadoDocumento.objects.first()
+
+    def test_descargar_zip_categoria_vacia_retorna_404(self):
+        url = reverse("download_categoria_zip", args=[self.categoria.pk])
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 404)
+
+    def test_descargar_zip_categoria_con_documentos(self):
+        doc = Documento(
+            persona=self.persona,
+            tipo_documento=self.tipo_doc,
+            estado_documento=self.estado_doc,
+            nombre="ficha.pdf",
+        )
+        doc.archivoUrl.save("ficha.pdf", ContentFile(b"%PDF mock"), save=True)
+
+        url = reverse("download_categoria_zip", args=[self.categoria.pk])
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Content-Type"], "application/zip")
+        self.assertIn("documentacion_categoria_sub_15.zip", res["Content-Disposition"])
+
+        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+            nombres = z.namelist()
+            self.assertTrue(any("Gomez_Pedro_55667788" in n for n in nombres))
+

@@ -19,4 +19,5 @@ urlpatterns = [
     path('padron/', views.padron_documental, name='padron_documental'),
     path('padron/reporte/', views.padron_documental_pdf, name='padron_documental_pdf'),
     path('zip/<int:persona_id>/', views.download_zip, name='download_zip'),
+    path('zip/categoria/<int:categoria_id>/', views.download_categoria_zip, name='download_categoria_zip'),
 ]

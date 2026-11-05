@@ -47,11 +47,11 @@ function RemoveCuotaItemModal({ cuota, item, onClose, onRemoved }) {
   return (
     <AuthorizationModal
       opened={Boolean(cuota && item)}
-      title={item && isLateFee(item) ? 'Remover recargo' : 'Remover beneficio'}
+      title={item && isLateFee(item) ? 'Eliminar recargo' : 'Eliminar beneficio'}
       description={cuota && item ? removalDescription(cuota, item) : null}
-      confirmLabel="Remover"
+      confirmLabel="Eliminar"
       confirmIcon={null}
-      errorMessage="No se pudo remover el concepto de la cuota."
+      errorMessage="No se pudo eliminar el concepto de la cuota."
       onConfirm={confirm}
       onClose={onClose}
     />

@@ -391,3 +391,59 @@ def download_zip(request, persona_id):
     suffix = f"_{scope}" if scope else ""
     response['Content-Disposition'] = f'attachment; filename="documentos_persona_{persona_id}{suffix}.zip"'
     return response
+
+
+@extend_schema(tags=["Documental / Exportar"])
+@api_view(["GET"])
+def download_categoria_zip(request, categoria_id):
+    """
+    Descarga un ZIP con la documentación vigente (y fotos carnet)
+    de todos los jugadores activos de una categoría, organizados en carpetas.
+    """
+    from padron.models import Categoria, Jugador, ESTADO_DEPORTIVO_ACTIVO
+    categoria = get_object_or_404(Categoria, pk=categoria_id)
+    jugadores = list(
+        Jugador.objects.filter(
+            categoria=categoria,
+            estado__nombre=ESTADO_DEPORTIVO_ACTIVO,
+        ).select_related("socio__persona")
+    )
+
+    zip_buffer = io.BytesIO()
+    files_added = 0
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for jugador in jugadores:
+            persona = jugador.socio.persona
+            folder_name = f"{persona.apellido}_{persona.nombre}_{persona.dni}".strip("_")
+            docs = documents_in_scope(persona.pk, ZIP_VIGENTES)
+
+            if persona.foto and persona.foto.storage.exists(persona.foto.name):
+                photo_path = persona.foto.path
+                ext = os.path.splitext(photo_path)[1] or ".jpg"
+                zip_file.write(
+                    photo_path,
+                    arcname=f"{folder_name}/Foto_Carnet_{persona.apellido}_{persona.nombre}{ext}",
+                )
+                files_added += 1
+
+            for doc in docs:
+                if doc.archivoUrl and doc.archivoUrl.storage.exists(doc.archivoUrl.name):
+                    file_path = doc.archivoUrl.path
+                    tipo_slug = doc.tipo_documento.nombre.strip().replace(" ", "_") if doc.tipo_documento else "Documento"
+                    ext = os.path.splitext(file_path)[1] or ""
+                    file_name = f"{tipo_slug}_{persona.apellido}_{persona.nombre}{ext}"
+                    zip_file.write(file_path, arcname=f"{folder_name}/{file_name}")
+                    files_added += 1
+
+    if files_added == 0:
+        return Response(
+            {'detail': f'No hay documentos ni fotos cargadas para los jugadores de la categoría {categoria.nombre}.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    cat_slug = categoria.nombre.strip().lower().replace(" ", "_")
+    response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="documentacion_categoria_{cat_slug}.zip"'
+    response["Access-Control-Expose-Headers"] = "Content-Disposition"
+    return response

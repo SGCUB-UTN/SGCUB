@@ -22,3 +22,5 @@ export const errorDetailFrom = async (requestError) => {
 }
 
 export const savePdfResponse = (response, fallbackName) => saveFileResponse(response, fallbackName, 'application/pdf')
+
+export const saveZipResponse = (response, fallbackName) => saveFileResponse(response, fallbackName, 'application/zip')
