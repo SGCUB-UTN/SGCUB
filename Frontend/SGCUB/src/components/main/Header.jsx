@@ -20,7 +20,7 @@ export default function Header({ collapsed = false }) {
           <img alt="Escudo C.U.B." className="app-header-logo object-contain shrink-0" src="/escudo-sin-fondo.png" />
           <div className="app-header-brand-copy">
             <span className="app-header-brand-name text-on-surface">C.U.B.</span>
-            <span className="app-header-brand-subtitle text-on-surface-variant">Club Univ. Berisso</span>
+            <span className="app-header-brand-subtitle text-on-surface-variant">Club Univ. de Berisso</span>
           </div>
         </Link>
       </div>
