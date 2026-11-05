@@ -19,8 +19,13 @@ class EnvioNotificacionSerializer(serializers.ModelSerializer):
 
     def get_destinatario_contacto(self, envio):
         if envio.canal == CanalNotificacion.MAIL:
-            return envio.socio.persona.email or ""
-        return envio.socio.persona.telefono
+            from .services import obtener_contacto_socio
+
+            email, _, _ = obtener_contacto_socio(envio.socio)
+            if email:
+                return email
+            return getattr(getattr(envio.socio, "persona", None), "email", "") or ""
+        return getattr(getattr(envio.socio, "persona", None), "telefono", "") or ""
 
     class Meta:
         model = EnvioNotificacion
