@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import timedelta
 from decimal import Decimal
 
@@ -152,6 +153,30 @@ def period_summary(period, today=None):
         "totals": {**total, "collection_rate": collection_rate(total)},
         "members": members,
         "players": {**players, "partial_leave": partial_leave},
+    }
+
+
+def due_dates_passed(due_dates, today):
+    return sum(today > due for due in due_dates.values())
+
+
+def cuota_situation(period, today=None):
+    today = today or timezone.localdate()
+    due_dates = period_due_dates(period)
+    passed = due_dates_passed(due_dates, today)
+    cuotas = period_cuotas(period)
+    pending = pending_amounts(cuotas)
+    paid = Counter(min(cuota.recargos_aplicados, passed) for cuota in cuotas if pending[cuota.pk] <= 0)
+    return {
+        "period": period,
+        "due_dates_passed": passed,
+        "first_due": due_dates[1],
+        "second_due": due_dates[2],
+        "generated": len(cuotas),
+        "paid_on_time": paid[0],
+        "paid_first_surcharge": paid[1],
+        "paid_second_surcharge": paid[2],
+        "unpaid": len(cuotas) - sum(paid.values()),
     }
 
 
