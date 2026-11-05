@@ -21,12 +21,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from configuracion.models import ConfiguracionGeneral
-from configuracion.services import address_text, club_name
+from configuracion.services import club_name
+from documental.models import Documento
 from finanzas.pdf_utils import format_phone
 from finanzas.receipts import format_dni, get_club_logo_flowable
 from padron.models import VinculoFamiliar
-from .eligibility import apto_fisico_vencimiento
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
 PAGE_GUTTER = 12 * mm
@@ -40,12 +39,10 @@ BORDER = colors.HexColor("#eceff2")
 DIVIDER = colors.HexColor("#f2f4f6")
 HEADER_BACKGROUND = colors.HexColor("#f9fbff")
 SECTION_BACKGROUND = colors.HexColor("#eff4ff")
-BULLET_HEX = "#dee3e8"
-FAINT_HEX = "#787f85"
 
 HEADER, PLAIN, SECTION, ITEM, FOOTER, FILL = "header", "plain", "section", "item", "footer", "fill"
 ROW_PADDING = {
-    HEADER: (8 * mm, 12),
+    HEADER: (4 * mm, 4 * mm),
     PLAIN: (8, 8),
     SECTION: (5, 6),
     ITEM: (5, 5),
@@ -71,12 +68,9 @@ def text_style(name, size=9, font="Helvetica", color=ON_SURFACE, alignment=0, le
 
 
 STYLES = {
-    "club": text_style("Club", 12, "Helvetica-Bold", leading=15),
-    "club_detail": text_style("ClubDetalle", 7.5, color=MUTED),
-    "title": text_style("Titulo", 12, "Helvetica-Bold", PRIMARY, TA_RIGHT, leading=15),
-    "subtitle": text_style("Subtitulo", 8, "Helvetica-Bold", ON_SURFACE, TA_RIGHT),
-    "date": text_style("Fecha", 7.5, color=MUTED, alignment=TA_RIGHT),
-    "disclaimer": text_style("Aclaracion", 7, "Helvetica-Oblique", FAINT, TA_RIGHT),
+    "title": text_style("Titulo", 12, "Helvetica-Bold", PRIMARY, alignment=0, leading=15),
+    "subtitle": text_style("Subtitulo", 8.5, "Helvetica-Bold", ON_SURFACE, alignment=0, leading=11),
+    "date": text_style("Fecha", 7.5, color=MUTED, alignment=0, leading=10),
     "section": text_style("Seccion", 9.5, "Helvetica-Bold"),
     "caption": text_style("Rotulo", 7.5, "Helvetica-Bold", MUTED),
     "label": text_style("Etiqueta", 7, color=MUTED),
@@ -124,10 +118,6 @@ def paragraph(text, style):
     return Paragraph(escape(str(text)), STYLES[style])
 
 
-def labeled(label, value):
-    return f'<font color="{FAINT_HEX}">{escape(label)}</font> {escape(value)}'
-
-
 def grid(rows, widths, extra_style=()):
     content = Table(rows, colWidths=widths)
     content.setStyle(TableStyle([
@@ -150,48 +140,7 @@ def field_cell(label, value):
     ]
 
 
-def club_block(config):
-    lines = [paragraph(config.club_nombre or "Club Universitario de Berisso", "club")]
-    if config.club_cuit:
-        lines.append(Paragraph(labeled("CUIT:", config.club_cuit), STYLES["club_detail"]))
-    if (address := address_text(config.club_domicilio)):
-        lines.append(Paragraph(labeled("Dirección:", address), STYLES["club_detail"]))
-    contact = []
-    if config.club_telefono:
-        contact.append(labeled("Tel:", format_phone(config.club_telefono)))
-    if config.club_email:
-        contact.append(escape(config.club_email))
-    if contact:
-        lines.append(Paragraph(f' <font color="{BULLET_HEX}">·</font> '.join(contact), STYLES["club_detail"]))
-    return lines
-
-
-def header_block():
-    config = ConfiguracionGeneral.load()
-    logo = get_club_logo_flowable(max_width=26 * mm, max_height=14 * mm)
-    club = club_block(config)
-    title_block = [
-        paragraph("PLANILLA DE DATOS DEL JUGADOR", "title"),
-        Spacer(1, 2),
-        paragraph("FICHA PARA COMET / LIGA", "subtitle"),
-        Spacer(1, 2),
-        paragraph(f"Emisión: {timezone.localtime():%d/%m/%Y %H:%M}", "date"),
-        Spacer(1, 1),
-        paragraph("Documento de uso interno para carga federativa", "disclaimer"),
-    ]
-    right_width = 80 * mm
-    align_right = [("ALIGN", (-1, 0), (-1, 0), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]
-    if logo is None:
-        return grid([[club, title_block]], [INNER_WIDTH - right_width, right_width], align_right)
-    logo_width = logo.drawWidth + 8
-    return grid(
-        [[logo, club, title_block]],
-        [logo_width, INNER_WIDTH - logo_width - right_width, right_width],
-        align_right,
-    )
-
-
-def photo_carnet(persona, width=26 * mm, height=32 * mm):
+def photo_carnet(persona, width=24 * mm, height=30 * mm):
     if persona and persona.foto:
         try:
             if hasattr(persona.foto, "path") and os.path.exists(persona.foto.path):
@@ -215,10 +164,42 @@ def photo_carnet(persona, width=26 * mm, height=32 * mm):
     return t
 
 
+def header_block(jugador):
+    persona = jugador.socio.persona
+    logo = get_club_logo_flowable(max_width=26 * mm, max_height=20 * mm)
+    foto = photo_carnet(persona, width=24 * mm, height=30 * mm)
+
+    title_block = [
+        paragraph("PLANILLA DE DATOS DEL JUGADOR", "title"),
+        Spacer(1, 2),
+        paragraph("FICHA PARA COMET / LIGA", "subtitle"),
+        Spacer(1, 2),
+        paragraph(f"Emisión: {timezone.localtime():%d/%m/%Y %H:%M}", "date"),
+    ]
+
+    photo_col_width = 28 * mm
+    alignments = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (-1, 0), (-1, 0), "RIGHT"),
+    ]
+
+    if logo is None:
+        return grid(
+            [[title_block, foto]],
+            [INNER_WIDTH - photo_col_width, photo_col_width],
+            alignments,
+        )
+
+    logo_width = logo.drawWidth + 8
+    return grid(
+        [[logo, title_block, foto]],
+        [logo_width, INNER_WIDTH - logo_width - photo_col_width, photo_col_width],
+        alignments,
+    )
+
+
 def personal_data_block(jugador):
     persona = jugador.socio.persona
-    foto = photo_carnet(persona)
-
     genero_str = persona.genero.nombre if persona.genero else (persona.genero_otro or "—")
     nac_edad = f"{_format_fecha(persona.fecha_nacimiento)}"
     if persona.edad is not None:
@@ -233,40 +214,25 @@ def personal_data_block(jugador):
         [
             field_cell("Fecha de nacimiento", nac_edad),
             field_cell("Género", genero_str),
-            field_cell("Nacionalidad", "Argentina"),
+            field_cell("Nivel de educación", jugador.get_nivel_educacion_display() or "—"),
         ],
         [
             field_cell("Teléfono", format_phone(persona.telefono) if persona.telefono else "—"),
             field_cell("Correo electrónico", persona.email or "—"),
-            field_cell("Nivel de educación", jugador.get_nivel_educacion_display() or "—"),
-        ],
-        [
             field_cell("Domicilio", _domicilio_texto(persona.domicilio)),
-            field_cell(
-                "Esquema de vacunación",
-                "Completo" if jugador.esquema_vacunacion else ("Incompleto" if jugador.esquema_vacunacion is not None else "—"),
-            ),
-            field_cell("Categoría actual", jugador.categoria.nombre if jugador.categoria else "—"),
         ],
     ]
 
-    photo_col_w = 28 * mm
-    fields_w = INNER_WIDTH - photo_col_w
-    col_w = fields_w / 3.0
-
-    fields_table = Table(fields, colWidths=[col_w, col_w, col_w])
-    fields_table.setStyle(TableStyle([
+    col_w = INNER_WIDTH / 3.0
+    t = Table(fields, colWidths=[col_w, col_w, col_w])
+    t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-
-    return grid([[fields_table, foto]], [fields_w, photo_col_w], [
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-    ])
+    return t
 
 
 def deportivos_block(jugador):
@@ -277,17 +243,12 @@ def deportivos_block(jugador):
         [
             field_cell("Club", club_name()),
             field_cell("N° de socio", str(jugador.socio.numero_socio or "—")),
-            field_cell("Estado deportivo", jugador.estado.nombre if jugador.estado else "Activo"),
+            field_cell("Obra social", jugador.obra_social or "—"),
         ],
         [
             field_cell("Categoría principal", cat_ppal),
             field_cell("Categoría secundaria", cat_sec),
-            field_cell("Obra social", jugador.obra_social or "—"),
-        ],
-        [
-            field_cell("Disciplina", "Fútbol (Aficionado)"),
             field_cell("Talle indumentaria", jugador.tallaIndumentaria or "—"),
-            field_cell("Posición / Rol", "Jugador"),
         ],
     ]
 
@@ -305,7 +266,7 @@ def deportivos_block(jugador):
 
 def vinculos_rows(jugador):
     vinculos = list(VinculoFamiliar.objects.filter(jugador=jugador).select_related("persona"))
-    col_widths = [INNER_WIDTH * 0.28, INNER_WIDTH * 0.36, INNER_WIDTH * 0.36]
+    col_widths = [INNER_WIDTH * 0.22, INNER_WIDTH * 0.38, INNER_WIDTH * 0.18, INNER_WIDTH * 0.22]
 
     if not vinculos:
         empty_content = grid([[paragraph("No se registran vínculos familiares o contactos cargados en el legajo.", "empty")]], [INNER_WIDTH])
@@ -314,7 +275,8 @@ def vinculos_rows(jugador):
     header_cells = [
         paragraph("VÍNCULO", "caption"),
         paragraph("NOMBRE Y APELLIDO", "caption"),
-        paragraph("TELÉFONO / DNI", "caption"),
+        paragraph("DNI", "caption"),
+        paragraph("TELÉFONO", "caption"),
     ]
     header_grid = grid([header_cells], col_widths, [("BOTTOMPADDING", (0, 0), (-1, -1), 2)])
 
@@ -328,7 +290,8 @@ def vinculos_rows(jugador):
         cells = [
             paragraph(rel or "Tutor", "strong"),
             paragraph(nombre_v, "value"),
-            paragraph(f"{tel_fmt} · DNI {dni_fmt}", "text"),
+            paragraph(dni_fmt, "text"),
+            paragraph(tel_fmt, "text"),
         ]
         rows.append((
             grid([cells], col_widths, [("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]),
@@ -337,25 +300,45 @@ def vinculos_rows(jugador):
     return rows
 
 
-def apto_block(jugador):
-    venc_apto = apto_fisico_vencimiento(jugador)
-    fields = [
-        [
-            field_cell("Apto Físico", "VIGENTE (Habilitado para competir)"),
-            field_cell("Fecha de vencimiento", _format_fecha(venc_apto)),
-            field_cell("Habilitación de planilla", "Autorizada"),
-        ]
+def documentacion_rows(jugador):
+    persona = jugador.socio.persona
+    docs = list(
+        Documento.objects.filter(persona=persona)
+        .select_related("tipo_documento", "estado_documento")
+        .order_by("tipo_documento__nombre", "-id_documento")
+    )
+    col_widths = [INNER_WIDTH * 0.34, INNER_WIDTH * 0.22, INNER_WIDTH * 0.22, INNER_WIDTH * 0.22]
+
+    if not docs:
+        empty_content = grid([[paragraph("No se registra documentación cargada en el legajo.", "empty")]], [INNER_WIDTH])
+        return [(empty_content, ITEM)]
+
+    header_cells = [
+        paragraph("DOCUMENTO", "caption"),
+        paragraph("ESTADO", "caption"),
+        paragraph("FECHA EMISIÓN", "caption"),
+        paragraph("FECHA VENCIMIENTO", "caption"),
     ]
-    col_w = INNER_WIDTH / 3.0
-    t = Table(fields, colWidths=[col_w, col_w, col_w])
-    t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    return t
+    header_grid = grid([header_cells], col_widths, [("BOTTOMPADDING", (0, 0), (-1, -1), 2)])
+
+    rows = [(header_grid, ITEM)]
+    for d in docs:
+        doc_nombre = d.tipo_documento.nombre if d.tipo_documento else (d.nombre or "Documento")
+        estado_nombre = d.estado_documento.nombre if d.estado_documento else "—"
+        emision_str = _format_fecha(d.fecha_emision)
+        venc_str = _format_fecha(d.fecha_vencimiento) if d.fecha_vencimiento else "Sin vencimiento"
+
+        cells = [
+            paragraph(doc_nombre, "strong"),
+            paragraph(estado_nombre, "value" if estado_nombre.lower() == "vigente" else "text"),
+            paragraph(emision_str, "text"),
+            paragraph(venc_str, "text"),
+        ]
+        rows.append((
+            grid([cells], col_widths, [("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]),
+            ITEM,
+        ))
+    return rows
 
 
 def frame(rows):
@@ -388,22 +371,16 @@ def page_frame(rows):
 
 def build_player_rows(jugador):
     return [
-        (header_block(), HEADER),
+        (header_block(jugador), HEADER),
         (paragraph("1. DATOS PERSONALES", "section"), SECTION),
         (personal_data_block(jugador), PLAIN),
         (paragraph("2. DATOS DEPORTIVOS Y DEL CLUB", "section"), SECTION),
         (deportivos_block(jugador), PLAIN),
         (paragraph("3. VÍNCULOS FAMILIARES Y CONTACTOS DE EMERGENCIA", "section"), SECTION),
         *vinculos_rows(jugador),
-        (paragraph("4. DOCUMENTACIÓN Y APTO MÉDICO", "section"), SECTION),
-        (apto_block(jugador), PLAIN),
-        (
-            paragraph(
-                f"Planilla de datos para uso administrativo · {club_name()} · Documento no válido como carnet habilitante",
-                "footer",
-            ),
-            FOOTER,
-        ),
+        (paragraph("4. DOCUMENTACIÓN", "section"), SECTION),
+        *documentacion_rows(jugador),
+        (paragraph(f"Planilla de datos para uso administrativo · {club_name()}", "footer"), FOOTER),
     ]
 
 
