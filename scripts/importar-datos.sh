@@ -43,6 +43,18 @@ HUELLA_ORIGEN=$(cat "$CARPETA/huella.txt" | tr -d '\r' | sed '/^[[:space:]]*$/d'
 
 docker compose up -d
 
+# Si la base restaurada referencia un logo que no estaba en el volumen /media,
+# restauramos el escudo oficial desde los fixtures para que no dé 404.
+LOGO_PATH=$(docker compose exec -T db psql -U sgcub_user -d sgcub_db -tA -c "SELECT club_logo FROM configuracion_general LIMIT 1;" 2>/dev/null | tr -d '\r\n' || true)
+if [ -n "$LOGO_PATH" ]; then
+    docker compose exec -T backend sh -c '
+        if [ ! -f "/app/media/'"$LOGO_PATH"'" ]; then
+            mkdir -p "/app/media/$(dirname "'"$LOGO_PATH"'")"
+            cp /app/configuracion/fixtures/escudo-sin-fondo.png "/app/media/'"$LOGO_PATH"'"
+        fi
+    '
+fi
+
 DIFERENCIAS=$(diff -u <(echo "$HUELLA_ORIGEN") <(echo "$HUELLA_ACTUAL") || true)
 
 if [ -n "$DIFERENCIAS" ]; then
