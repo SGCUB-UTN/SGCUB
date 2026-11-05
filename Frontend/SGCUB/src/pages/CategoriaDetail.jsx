@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { deleteCategoria, getCategoria, patchCategoria } from '../api/categorias'
+import { downloadPlanillasCategoria } from '../api/comet'
+import { downloadCategoriaDocumentosZip } from '../api/documentacion'
 import { deleteDocenteCategoria, docenteCategoriaByCategoria } from '../api/docenteCategoria'
 import { getCargosDocente } from '../api/docentes'
 import { getJugadoresByCategoria } from '../api/jugadores'
@@ -50,6 +52,43 @@ function CategoriaDetail() {
   const [isDeletionOpen, setIsDeletionOpen] = useState(false)
   const [isAssignOpen, setIsAssignOpen] = useState(false)
   const [removal, setRemoval] = useState({ opened: false, docenteCategoria: null })
+  const [downloadingComet, setDownloadingComet] = useState(false)
+  const [downloadingZip, setDownloadingZip] = useState(false)
+  const [actionFeedback, setActionFeedback] = useState(null)
+
+  const handleDownloadPlanillas = async () => {
+    if (!categoria?.categoria_id) return
+    setDownloadingComet(true)
+    setActionFeedback(null)
+    try {
+      const res = await downloadPlanillasCategoria(categoria.categoria_id, categoria.nombre)
+      let msg = `Planillas COMET de ${categoria.nombre} descargadas.`
+      if (res?.totalExcluidos && Number(res.totalExcluidos) > 0) {
+        msg += ` (${res.totalExcluidos} jugador${Number(res.totalExcluidos) > 1 ? 'es' : ''} omitido${Number(res.totalExcluidos) > 1 ? 's' : ''} por no poseer apto físico vigente).`
+      }
+      setActionFeedback({ tone: 'success', message: msg })
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'No se pudieron descargar las planillas COMET.'
+      setActionFeedback({ tone: 'error', message: msg })
+    } finally {
+      setDownloadingComet(false)
+    }
+  }
+
+  const handleDownloadZip = async () => {
+    if (!categoria?.categoria_id) return
+    setDownloadingZip(true)
+    setActionFeedback(null)
+    try {
+      await downloadCategoriaDocumentosZip(categoria.categoria_id, categoria.nombre)
+      setActionFeedback({ tone: 'success', message: `Documentación de ${categoria.nombre} descargada en ZIP.` })
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'No se pudo descargar la documentación.'
+      setActionFeedback({ tone: 'error', message: msg })
+    } finally {
+      setDownloadingZip(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -144,7 +183,60 @@ function CategoriaDetail() {
           <TabHeader
             title="Jugadores"
             description={`Total asignado a esta categoría: ${jugadores?.length ?? 0}`}
+            actions={(
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleDownloadPlanillas}
+                  disabled={downloadingComet || !jugadores?.length}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium border border-outline-variant/40 hover:bg-surface-container-low text-primary transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Descargar planillas COMET de los jugadores con apto vigente"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {downloadingComet ? 'progress_activity' : 'description'}
+                  </span>
+                  <span>{downloadingComet ? 'Descargando...' : 'Planillas COMET'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadZip}
+                  disabled={downloadingZip || !jugadores?.length}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium border border-outline-variant/40 hover:bg-surface-container-low text-on-surface-variant transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Descargar documentación de los jugadores en ZIP"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {downloadingZip ? 'progress_activity' : 'folder_zip'}
+                  </span>
+                  <span>{downloadingZip ? 'Descargando...' : 'Documentación (ZIP)'}</span>
+                </button>
+              </div>
+            )}
           />
+          {actionFeedback && (
+            <div
+              className={`p-3 rounded-lg flex items-center justify-between gap-2.5 text-sm font-medium ${
+                actionFeedback.tone === 'success'
+                  ? 'bg-[#e6f4ea] text-[#0d652d] border border-[#ceead6]'
+                  : 'bg-error-container/40 text-on-error-container border border-error/30'
+              }`}
+              role="status"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">
+                  {actionFeedback.tone === 'success' ? 'check_circle' : 'error'}
+                </span>
+                <span>{actionFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionFeedback(null)}
+                className="p-0.5 rounded hover:bg-black/10 transition-colors cursor-pointer"
+                aria-label="Cerrar aviso"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
           {!jugadores && <ErrorAlert message="No se pudieron cargar los jugadores de la categoría." />}
           {jugadores?.length === 0 && (
             <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
