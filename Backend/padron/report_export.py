@@ -14,6 +14,8 @@ from finanzas.pdf_utils import table
 from .models import Categoria, Genero, Localidad
 from .reports import (
     ACTIVE,
+    CATEGORY_GENDER_PREFIX,
+    NO_CATEGORY,
     AGE_RANGE_LABELS,
     ALL,
     COVERAGE_LABELS,
@@ -118,12 +120,22 @@ def render_report_csv(report):
     return ("﻿" + buffer.getvalue()).encode("utf-8")
 
 
-def names_of(model, ids, label=str):
-    return ", ".join(sorted(label(item) for item in model.objects.filter(pk__in=ids)))
+def names_of(model, ids):
+    return ", ".join(sorted(str(item) for item in model.objects.filter(pk__in=ids)))
 
 
 def category_name(category):
     return f"{category.nombre} ({category.get_genero_display()})" if category.genero else category.nombre
+
+
+def category_filter_label(value):
+    if value == NO_CATEGORY:
+        return "Sin categoría"
+    if value.startswith(CATEGORY_GENDER_PREFIX):
+        gender = value.removeprefix(CATEGORY_GENDER_PREFIX)
+        return "Todas las masculinas" if gender == Categoria.GENERO_MASCULINO else "Todas las femeninas"
+    category = Categoria.objects.filter(pk=int(value)).first()
+    return category_name(category) if category else value
 
 
 def chosen(values, labels):
@@ -151,7 +163,7 @@ def filter_parts(filters):
     if filters["locality"]:
         parts.append(f"Localidad: {names_of(Localidad, filters['locality'])}")
     if filters["category"]:
-        parts.append(f"Categoría: {names_of(Categoria, filters['category'], category_name)}")
+        parts.append(f"Categoría: {', '.join(sorted(category_filter_label(value) for value in filters['category']))}")
     if filters["education"]:
         parts.append(f"Nivel educativo: {chosen(filters['education'], EDUCATION_LABELS)}")
     if filters["coverage"]:

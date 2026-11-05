@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { downloadReportePadron } from '../api/reportesPadron'
+import PadronReportCharts from '../components/reportes/PadronReportCharts'
 import PadronReportFilters from '../components/reportes/PadronReportFilters'
 import { INITIAL_FILTERS, activeFilterCount, sameFilters } from '../components/reportes/reportFilters'
-import { SecondaryButton } from '../components/personas/tabs/parts'
+import { EmptyState, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
+import { SkeletonBlock, SkeletonStatus } from '../components/shared/Skeleton'
 import { PANEL_BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS } from '../components/shared/panel'
 import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import useReportePadron from '../hooks/useReportePadron'
@@ -17,6 +19,20 @@ function FilterCountBadge({ count }) {
     <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold tabular-nums">
       {count} {count === 1 ? 'filtro activo' : 'filtros activos'}
     </span>
+  )
+}
+
+function ReportSkeleton() {
+  return (
+    <SkeletonStatus label="Generando reporte..." className="flex flex-col gap-4">
+      <SkeletonBlock className="h-28 w-full" soft />
+      <div className="grid gap-4 lg:grid-cols-3">
+        {[0, 1, 2].map((index) => <SkeletonBlock key={index} className="h-52" soft />)}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {[0, 1].map((index) => <SkeletonBlock key={index} className="h-52" soft />)}
+      </div>
+    </SkeletonStatus>
   )
 }
 
@@ -121,10 +137,16 @@ function ReportesPadron() {
 
       {error ? (
         <p className="text-sm text-error" role="alert">{error}</p>
+      ) : !report ? (
+        <ReportSkeleton />
       ) : (
-        <p className="text-sm text-on-surface-variant" aria-live="polite">
-          {isLoading || !report ? 'Generando reporte...' : `${report.kpis.total} personas en el reporte.`}
-        </p>
+        <div aria-busy={isLoading} className={`transition-opacity duration-150 ${isLoading ? 'opacity-60 pointer-events-none' : ''}`}>
+          {report.kpis.total === 0 ? (
+            <EmptyState icon="person_search" title="Sin resultados" description="No hay personas que cumplan con los filtros aplicados." />
+          ) : (
+            <PadronReportCharts report={report} />
+          )}
+        </div>
       )}
     </div>
   )

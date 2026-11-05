@@ -2325,6 +2325,10 @@ class PadronReportTests(APITestCase):
         self.assertEqual(33.3, data["kpis"]["vaccination_up_to_date"])
         self.assertEqual(66.7, data["kpis"]["with_health_insurance"])
         self.assertEqual({"al_dia": 1, "pendiente": 1, "sin_datos": 1}, self.counts(data["charts"]["vaccination"]))
+        genders = self.counts(data["charts"]["gender"])
+        self.assertEqual(4, genders[self.male.genero_id])
+        self.assertEqual(0, genders["sin_datos"])
+        self.assertEqual(Genero.objects.count() + 1, len(genders))
 
     def test_filters_combine_age_vaccination_and_locality(self):
         expected = self.player(vaccination=False, age=15, locality=self.berisso)
@@ -2384,8 +2388,36 @@ class PadronReportTests(APITestCase):
             self.counts(self.report(status="todos")["charts"]["seniority"]),
         )
 
+    def test_category_filter_accepts_categories_and_gender_groups(self):
+        female_category = Categoria.objects.create(nombre="Reporte SUB17", genero="F", edad_maxima=17)
+        male_player = self.player()
+        female_player = self.player()
+        Jugador.objects.filter(pk=female_player.pk).update(categoria=female_category)
+        teacher = self.teacher()
+        DocenteCategoria.objects.create(docente=teacher, categoria=female_category)
+
+        by_category = self.report(category=str(self.category.pk))["people"]
+        female = self.report(category="gender:F")["people"]
+        combined = self.report(category=f"{self.category.pk},{female_category.pk}", entity="jugadores")["people"]
+
+        self.assertEqual([male_player.socio.persona_id], [row["persona_id"] for row in by_category])
+        self.assertEqual(
+            {female_player.socio.persona_id, teacher.persona_id},
+            {row["persona_id"] for row in female},
+        )
+        self.assertEqual(
+            {male_player.socio.persona_id, female_player.socio.persona_id},
+            {row["persona_id"] for row in combined},
+        )
+
     def test_invalid_filters_are_rejected(self):
-        for params in ({"status": "otros"}, {"vaccination": "vencida"}, {"locality": "abc"}, {"age_min": "20", "age_max": "10"}):
+        for params in (
+            {"status": "otros"},
+            {"vaccination": "vencida"},
+            {"locality": "abc"},
+            {"category": "gender:X"},
+            {"age_min": "20", "age_max": "10"},
+        ):
             with self.subTest(params=params):
                 response = self.client.get(self.URL, params)
                 self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)

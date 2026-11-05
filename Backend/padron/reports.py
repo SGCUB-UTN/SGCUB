@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from documental.services import build_padron_documental
 
-from .models import Jugador, Persona, age_from
+from .models import Categoria, Genero, Jugador, Persona, age_from
 
 MEMBERS = "socios"
 PLAYERS = "jugadores"
@@ -67,6 +67,11 @@ ENABLED = "habilitado"
 DISABLED = "inhabilitado"
 DOCUMENTATION_LABELS = {ENABLED: "Habilitados", DISABLED: "Inhabilitados"}
 
+ALL_CATEGORIES = "all"
+NO_CATEGORY = "none"
+CATEGORY_GENDER_PREFIX = "gender:"
+CATEGORY_GENDERS = dict(Categoria.GENERO_CHOICES)
+
 EVOLUTION_MONTHS = 12
 EVOLUTION_YEARS = 10
 
@@ -116,7 +121,7 @@ def vaccination_of(player):
 
 def category_item(category):
     label = f"{category.nombre} ({category.get_genero_display()})" if category.genero else category.nombre
-    return {"id": category.categoria_id, "name": label}
+    return {"id": category.categoria_id, "name": label, "gender": category.genero}
 
 
 def categories_of(player, teacher):
@@ -240,6 +245,18 @@ def _ids(params, name):
     return {int(value) for value in values}
 
 
+def _valid_category(value):
+    gender = value.removeprefix(CATEGORY_GENDER_PREFIX) if value.startswith(CATEGORY_GENDER_PREFIX) else None
+    return value == NO_CATEGORY or gender in CATEGORY_GENDERS or value.isdigit()
+
+
+def _categories(params):
+    values = {value for value in params.get("category", "").split(",") if value and value != ALL_CATEGORIES}
+    if not all(_valid_category(value) for value in values):
+        raise ReportFilterError("Cada categoría debe ser un número, none o gender:M/F.")
+    return values
+
+
 def _age(params, name):
     value = params.get(name, "")
     if not value:
@@ -265,7 +282,7 @@ def parse_report_filters(params):
         "seniority": _choices(params, "seniority", SENIORITY_LABELS),
         "gender": _ids(params, "gender"),
         "locality": _ids(params, "locality"),
-        "category": _ids(params, "category"),
+        "category": _categories(params),
         "education": _choices(params, "education", EDUCATION_LABELS),
         "coverage": _choices(params, "coverage", COVERAGE_LABELS),
         "health_insurance": {value.strip().lower() for value in params.get("health_insurance", "").split(",") if value.strip()},
@@ -293,6 +310,18 @@ def _insured(row, coverage, names):
     return row["coverage"] in coverage or (row["health_insurance"] or "").lower() in names
 
 
+def category_matches(categories, values):
+    return not values or any(_matches_category(categories, value) for value in values)
+
+
+def _matches_category(categories, value):
+    if value == NO_CATEGORY:
+        return not categories
+    if value.startswith(CATEGORY_GENDER_PREFIX):
+        return any(item["gender"] == value.removeprefix(CATEGORY_GENDER_PREFIX) for item in categories)
+    return any(item["id"] == int(value) for item in categories)
+
+
 def matches(row, filters):
     status = filters["status"]
     return (
@@ -303,7 +332,7 @@ def matches(row, filters):
         and _selected(row["seniority_range"], filters["seniority"])
         and _selected(row["gender_id"], filters["gender"])
         and _selected(row["locality_id"], filters["locality"])
-        and (not filters["category"] or any(item["id"] in filters["category"] for item in row["categories"]))
+        and category_matches(row["categories"], filters["category"])
         and _selected(row["education"], filters["education"])
         and _insured(row, filters["coverage"], filters["health_insurance"])
         and _selected(row["vaccination"], filters["vaccination"])
@@ -344,6 +373,12 @@ def ranked_distribution(values, empty_label=NO_DATA_LABEL):
     ]
 
 
+def gender_distribution(rows):
+    counts = Counter(row["gender_id"] for row in rows)
+    genders = [{"key": gender.genero_id, "label": gender.nombre, "count": counts[gender.genero_id]} for gender in Genero.objects.order_by("pk")]
+    return genders + [{"key": NO_DATA, "label": NO_DATA_LABEL, "count": counts[None]}]
+
+
 def category_distribution(rows):
     counts = Counter()
     labels = {}
@@ -362,7 +397,7 @@ def summary_charts(rows):
     return {
         "roles": fixed_distribution(rows, "role", ROLE_LABELS),
         "vaccination": fixed_distribution(rows, "vaccination", VACCINATION_LABELS),
-        "gender": ranked_distribution(row["gender"] for row in rows),
+        "gender": gender_distribution(rows),
         "education": fixed_distribution(rows, "education", EDUCATION_LABELS),
         "documentation": fixed_distribution(rows, "documentation", DOCUMENTATION_LABELS),
         "age_ranges": fixed_distribution(rows, "age_range", AGE_RANGE_LABELS),

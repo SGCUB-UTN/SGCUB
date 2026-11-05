@@ -3,7 +3,7 @@ import { getObrasSociales } from '../../api/personasConfig'
 import useCategorias from '../../hooks/useCategorias'
 import useGeneros from '../../hooks/useGeneros'
 import useLocalidades from '../../hooks/useLocalidades'
-import { GENDERS } from '../shared/categoryFilters'
+import CategoryFilter from '../shared/CategoryFilter'
 import SegmentedControl from '../shared/SegmentedControl'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import AgeFilter from './AgeFilter'
@@ -21,21 +21,12 @@ import {
 
 const COVERAGE_PREFIX = 'coverage:'
 const NAME_PREFIX = 'name:'
-const NO_GENDER_GROUP = 'Sin género'
 
 const byLabel = (first, second) => first.label.localeCompare(second.label, 'es', { numeric: true })
 
-const categoryOptionsOf = (categorias) => {
-  const groups = [...GENDERS.map((gender) => gender.value), '']
-  return categorias
-    .map((categoria) => ({
-      value: String(categoria.categoria_id),
-      label: categoria.nombre,
-      group: GENDERS.find((gender) => gender.value === categoria.genero)?.label ?? NO_GENDER_GROUP,
-      order: groups.indexOf(categoria.genero ?? ''),
-    }))
-    .sort((first, second) => first.order - second.order || byLabel(first, second))
-}
+const categoryOptionsOf = (categorias) => categorias
+  .map((categoria) => ({ value: String(categoria.categoria_id), name: categoria.nombre, gender: categoria.genero ?? '' }))
+  .sort((first, second) => first.name.localeCompare(second.name, 'es', { numeric: true }))
 
 const healthInsuranceOptionsOf = (obrasSociales) => [
   ...COVERAGE_OPTIONS.map((option) => ({ value: `${COVERAGE_PREFIX}${option.value}`, label: option.label, group: 'Cobertura' })),
@@ -148,7 +139,14 @@ export default function PadronReportFilters({ filters, onChange, onApply, onClea
         </FilterGroup>
 
         <FilterGroup icon="sports_soccer" title="Deportivos">
-          {multi('category', 'Categoría', categoryOptions, 'Todas')}
+          <CategoryFilter
+            value={filters.category}
+            categories={categoryOptions}
+            hasUncategorized={false}
+            fullWidth
+            multiple
+            onChange={(category) => onChange({ category })}
+          />
         </FilterGroup>
       </div>
 
