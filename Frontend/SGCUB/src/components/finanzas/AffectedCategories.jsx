@@ -2,7 +2,7 @@ import useEntered from '../../hooks/useEntered'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import { ROW_HOVER, WIDTH_MOTION, grown } from '../shared/chartMotion'
 
-const LIST_HEIGHT_CLASS = 'max-h-[10.75rem]'
+const LIST_HEIGHT_CLASS = 'max-h-[8rem]'
 
 const plural = (count) => `${formatCount(count)} ${count === 1 ? 'moroso' : 'morosos'}`
 
