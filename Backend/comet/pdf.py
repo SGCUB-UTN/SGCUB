@@ -3,6 +3,7 @@ from io import BytesIO
 from xml.sax.saxutils import escape
 
 from django.conf import settings
+from django.db.models import Max
 from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -302,15 +303,21 @@ def vinculos_rows(jugador):
 
 def documentacion_rows(jugador):
     persona = jugador.socio.persona
-    docs = list(
+    latest_ids = (
         Documento.objects.filter(persona=persona)
+        .values("tipo_documento")
+        .annotate(latest=Max("id_documento"))
+        .values("latest")
+    )
+    docs = list(
+        Documento.objects.filter(id_documento__in=latest_ids, estado_documento__nombre="Vigente")
         .select_related("tipo_documento", "estado_documento")
-        .order_by("tipo_documento__nombre", "-id_documento")
+        .order_by("tipo_documento__nombre")
     )
     col_widths = [INNER_WIDTH * 0.34, INNER_WIDTH * 0.22, INNER_WIDTH * 0.22, INNER_WIDTH * 0.22]
 
     if not docs:
-        empty_content = grid([[paragraph("No se registra documentación cargada en el legajo.", "empty")]], [INNER_WIDTH])
+        empty_content = grid([[paragraph("No se registra documentación vigente cargada en el legajo.", "empty")]], [INNER_WIDTH])
         return [(empty_content, ITEM)]
 
     header_cells = [
