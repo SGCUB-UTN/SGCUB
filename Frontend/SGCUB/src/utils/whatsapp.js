@@ -1,5 +1,7 @@
 import { toBlob } from 'html-to-image'
 import { formatAmount } from '../components/personas/format'
+import { descargarComprobantePdf, obtenerComprobanteImagenBlob } from '../api/comprobantes'
+import { descargarDevolucionPdf, obtenerDevolucionImagenBlob } from '../api/devoluciones'
 
 /**
  * Limpia el 15 local para números argentinos.
@@ -185,5 +187,100 @@ export async function copyReceiptImageToClipboard(element) {
     new ClipboardItem({ 'image/png': blob }),
   ])
 
+  return true
+}
+
+/**
+ * Envía el comprobante por WhatsApp: copia la imagen al portapapeles,
+ * abre WhatsApp Web con el texto preparado y opcionalmente descarga el PDF de respaldo.
+ */
+export async function sendReceiptToWhatsApp({
+  socio,
+  phone: customPhone,
+  comprobanteId,
+  devolucionId,
+  comprobanteCodigo,
+  montoTotal,
+  clubNombre,
+  tipo,
+  comprobanteRef,
+  autoDownload = false,
+  onToast,
+}) {
+  const phone = customPhone || socio?.telefono || socio?.persona?.telefono || ''
+  if (!phone || String(phone).trim().length < 6) return false
+
+  const isRefund = Boolean(devolucionId)
+  const effectiveTipo = tipo || (isRefund ? 'devolucion' : 'comprobante')
+  const message = buildWhatsAppMessage({
+    socio,
+    comprobanteCodigo,
+    montoTotal,
+    clubNombre,
+    tipo: effectiveTipo,
+  })
+
+  let imagenCopiada = false
+
+  if (devolucionId) {
+    try {
+      const blob = await obtenerDevolucionImagenBlob(devolucionId)
+      await copyReceiptBlobToClipboard(blob)
+      imagenCopiada = true
+      onToast?.({
+        type: 'success',
+        title: '¡Comprobante copiado al portapapeles!',
+        description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+      })
+    } catch (err) {
+      console.warn('No se pudo obtener/copiar la imagen de la devolución desde el backend:', err)
+    }
+  } else if (comprobanteId) {
+    try {
+      const blob = await obtenerComprobanteImagenBlob(comprobanteId)
+      await copyReceiptBlobToClipboard(blob)
+      imagenCopiada = true
+      onToast?.({
+        type: 'success',
+        title: '¡Comprobante copiado al portapapeles!',
+        description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+      })
+    } catch (err) {
+      console.warn('No se pudo obtener/copiar la imagen del PDF desde el backend:', err)
+    }
+  }
+
+  if (!imagenCopiada && comprobanteRef?.current) {
+    try {
+      await copyReceiptImageToClipboard(comprobanteRef.current)
+      imagenCopiada = true
+      onToast?.({
+        type: 'success',
+        title: '¡Comprobante copiado al portapapeles!',
+        description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
+      })
+    } catch (err) {
+      console.warn('Fallo capturando imagen del DOM:', err)
+    }
+  }
+
+  if (!imagenCopiada && autoDownload) {
+    try {
+      if (devolucionId) {
+        await descargarDevolucionPdf(devolucionId)
+      } else if (comprobanteId) {
+        await descargarComprobantePdf(comprobanteId)
+      }
+      onToast?.({
+        type: 'info',
+        title: 'Comprobante descargado',
+        description: 'Descargamos el PDF para que lo adjuntes directamente en WhatsApp.',
+      })
+    } catch (pdfErr) {
+      console.error('Error descargando PDF:', pdfErr)
+    }
+  }
+
+  openWhatsAppChat({ phone, message })
   return true
 }
