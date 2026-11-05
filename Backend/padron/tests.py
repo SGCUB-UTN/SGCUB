@@ -2349,6 +2349,41 @@ class PadronReportTests(APITestCase):
         self.assertEqual(self.today.year, evolution["yearly"][-1]["year"])
         self.assertEqual(2, evolution["yearly"][-1]["joins"])
 
+    def test_coverage_and_health_insurance_filters_add_up(self):
+        uninsured = self.player(health_insurance="")
+        ioma = self.player(health_insurance="IOMA")
+        self.player(health_insurance="OSDE")
+        self.member()
+
+        people = self.report(coverage="sin", health_insurance="ioma")["people"]
+
+        self.assertEqual(
+            {uninsured.socio.persona_id, ioma.socio.persona_id},
+            {row["persona_id"] for row in people},
+        )
+
+    def test_seniority_counts_full_years_as_member_until_leave(self):
+        recent = self.member()
+        Socio.objects.filter(pk=recent.pk).update(fecha_alta=date(self.today.year - 4, 1, 1))
+        former = self.member()
+        former.deactivate()
+        Socio.objects.filter(pk=former.pk).update(
+            fecha_alta=date(self.today.year - 12, 1, 1),
+            fecha_baja=date(self.today.year - 2, 1, 1),
+        )
+        self.teacher()
+
+        everyone = {row["persona_id"]: row for row in self.report(status="todos")["people"]}
+        filtered = self.report(status="todos", seniority="3-4")["people"]
+
+        self.assertEqual(4, everyone[recent.persona_id]["seniority"])
+        self.assertEqual("10-mas", everyone[former.persona_id]["seniority_range"])
+        self.assertEqual([recent.persona_id], [row["persona_id"] for row in filtered])
+        self.assertEqual(
+            {"menos-1": 0, "1-2": 0, "3-4": 1, "5-9": 0, "10-mas": 1},
+            self.counts(self.report(status="todos")["charts"]["seniority"]),
+        )
+
     def test_invalid_filters_are_rejected(self):
         for params in ({"status": "otros"}, {"vaccination": "vencida"}, {"locality": "abc"}, {"age_min": "20", "age_max": "10"}):
             with self.subTest(params=params):

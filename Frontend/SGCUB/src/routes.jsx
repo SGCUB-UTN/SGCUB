@@ -22,6 +22,7 @@ import EnDesarrollo from './pages/EnDesarrollo'
 import ResumenFinanciero from './pages/ResumenFinanciero'
 import Caja from './pages/Caja'
 import Morosidad from './pages/Morosidad'
+import ReportesPadron from './pages/ReportesPadron'
 
 import CometHub from './pages/comet/CometHub'
 import CometCompeticiones from './pages/comet/CometCompeticiones'
@@ -126,6 +127,10 @@ export const router = createBrowserRouter([
               {
                 path: 'categorias/:id',
                 element: <CategoriaDetail />,
+              },
+              {
+                path: 'reportes',
+                element: <ReportesPadron />,
               },
             ],
           },

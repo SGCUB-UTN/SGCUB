@@ -43,6 +43,15 @@ AGE_RANGES = (
 )
 AGE_RANGE_LABELS = {key: label for key, label, _, _ in AGE_RANGES} | {NO_DATA: NO_DATA_LABEL}
 
+SENIORITY_RANGES = (
+    ("menos-1", "Menos de 1 año", 0, 0),
+    ("1-2", "1 a 2 años", 1, 2),
+    ("3-4", "3 a 4 años", 3, 4),
+    ("5-9", "5 a 9 años", 5, 9),
+    ("10-mas", "10 años o más", 10, None),
+)
+SENIORITY_LABELS = {key: label for key, label, _, _ in SENIORITY_RANGES}
+
 UP_TO_DATE = "al_dia"
 PENDING = "pendiente"
 VACCINATION_LABELS = {UP_TO_DATE: "Al día", PENDING: "Vacunas pendientes", NO_DATA: NO_DATA_LABEL}
@@ -70,10 +79,23 @@ def is_active(profile):
     return profile is not None and not profile.is_inactive
 
 
+def range_of(value, ranges):
+    return next(key for key, _, low, high in ranges if value >= low and (high is None or value <= high))
+
+
 def age_range_of(age):
-    if age is None:
-        return NO_DATA
-    return next(key for key, _, low, high in AGE_RANGES if age >= low and (high is None or age <= high))
+    return NO_DATA if age is None else range_of(age, AGE_RANGES)
+
+
+def full_years(start, end):
+    return end.year - start.year - ((end.month, end.day) < (start.month, start.day))
+
+
+def seniority_of(member, today):
+    if member is None:
+        return None
+    end = member.fecha_baja if member.is_inactive and member.fecha_baja else today
+    return max(full_years(member.fecha_alta, end), 0)
 
 
 def role_of(member, player, teacher):
@@ -132,7 +154,7 @@ def documentation_by_person():
     return {persona_id: ENABLED if value else DISABLED for persona_id, value in enabled.items()}
 
 
-def build_row(persona, documentation):
+def build_row(persona, documentation, today):
     member = getattr(persona, "socio", None)
     teacher = getattr(persona, "docente", None)
     active = is_active(member) or is_active(teacher)
@@ -146,6 +168,7 @@ def build_row(persona, documentation):
         player = None
 
     age = age_from(persona.fecha_nacimiento)
+    seniority = seniority_of(member, today)
     locality = getattr(persona.domicilio, "localidad", None)
     health_insurance = player.obra_social.strip() if player is not None else ""
     profiles = [
@@ -162,6 +185,8 @@ def build_row(persona, documentation):
         "active": active,
         "age": age,
         "age_range": age_range_of(age),
+        "seniority": seniority,
+        "seniority_range": None if seniority is None else range_of(seniority, SENIORITY_RANGES),
         "gender_id": persona.genero_id,
         "gender": persona.genero.nombre if persona.genero else None,
         "locality_id": locality.localidad_id if locality else None,
@@ -195,9 +220,9 @@ def report_people():
     )
 
 
-def report_rows():
+def report_rows(today):
     documentation = documentation_by_person()
-    return [build_row(persona, documentation) for persona in report_people()]
+    return [build_row(persona, documentation, today) for persona in report_people()]
 
 
 def _choices(params, name, allowed):
@@ -237,6 +262,7 @@ def parse_report_filters(params):
         "age_range": _choices(params, "age_range", AGE_RANGE_LABELS),
         "age_min": _age(params, "age_min"),
         "age_max": _age(params, "age_max"),
+        "seniority": _choices(params, "seniority", SENIORITY_LABELS),
         "gender": _ids(params, "gender"),
         "locality": _ids(params, "locality"),
         "category": _ids(params, "category"),
@@ -261,6 +287,12 @@ def _within_ages(age, low, high):
     return age is not None and (low is None or age >= low) and (high is None or age <= high)
 
 
+def _insured(row, coverage, names):
+    if not coverage and not names:
+        return True
+    return row["coverage"] in coverage or (row["health_insurance"] or "").lower() in names
+
+
 def matches(row, filters):
     status = filters["status"]
     return (
@@ -268,12 +300,12 @@ def matches(row, filters):
         and (not filters["entity"] or ENTITY_PROFILES[filters["entity"]] in row["profiles"])
         and _selected(row["age_range"], filters["age_range"])
         and _within_ages(row["age"], filters["age_min"], filters["age_max"])
+        and _selected(row["seniority_range"], filters["seniority"])
         and _selected(row["gender_id"], filters["gender"])
         and _selected(row["locality_id"], filters["locality"])
         and (not filters["category"] or any(item["id"] in filters["category"] for item in row["categories"]))
         and _selected(row["education"], filters["education"])
-        and _selected(row["coverage"], filters["coverage"])
-        and _selected((row["health_insurance"] or "").lower(), filters["health_insurance"])
+        and _insured(row, filters["coverage"], filters["health_insurance"])
         and _selected(row["vaccination"], filters["vaccination"])
         and _selected(row["documentation"], filters["documentation"])
     )
@@ -334,6 +366,7 @@ def summary_charts(rows):
         "education": fixed_distribution(rows, "education", EDUCATION_LABELS),
         "documentation": fixed_distribution(rows, "documentation", DOCUMENTATION_LABELS),
         "age_ranges": fixed_distribution(rows, "age_range", AGE_RANGE_LABELS),
+        "seniority": fixed_distribution(rows, "seniority_range", SENIORITY_LABELS),
         "localities": ranked_distribution(row["locality"] for row in rows),
         "health_insurance": ranked_distribution((row["health_insurance"] for row in players), NO_COVERAGE_LABEL),
         "categories": category_distribution(rows),
@@ -371,7 +404,7 @@ def evolution(rows, today):
 
 def build_report(filters, today=None):
     today = today or timezone.localdate()
-    rows = report_rows()
+    rows = report_rows(today)
     selected = filter_rows(rows, filters)
     history = filter_rows(rows, {**filters, "status": ALL})
     return {

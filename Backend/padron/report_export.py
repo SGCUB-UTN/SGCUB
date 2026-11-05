@@ -23,6 +23,7 @@ from .reports import (
     MEMBERS,
     PARTIAL_LEAVE,
     PLAYERS,
+    SENIORITY_LABELS,
     TEACHER_MEMBERS,
     TEACHERS,
     VACCINATION_LABELS,
@@ -38,7 +39,7 @@ LIST_HEADERS = ["Apellido y nombre", "DNI", "Rol", "Edad", "Localidad", "Vacunac
 LIST_COLUMN_SHARES = (0.20, 0.09, 0.15, 0.05, 0.11, 0.11, 0.12, 0.17)
 CSV_HEADERS = [
     "Apellido", "Nombre", "DNI", "Rol", "Estado", "Edad", "Género", "Localidad", "Vacunación", "Obra social",
-    "Nivel educativo", "Categorías", "Estado documental", "Fecha de alta", "Fecha de baja",
+    "Nivel educativo", "Categorías", "Estado documental", "Fecha de alta", "Fecha de baja", "Antigüedad como socio (años)",
 ]
 ENTITY_LABELS = {None: "Todos", "socios": "Socios", "jugadores": "Jugadores", "docentes": "Docentes"}
 STATUS_LABELS = {ACTIVE: "Activos", "inactivos": "Inactivos", ALL: "Activos e inactivos"}
@@ -55,6 +56,7 @@ DISTRIBUTIONS = (
     ("vaccination", "Vacunación (jugadores)"),
     ("gender", "Género"),
     ("age_ranges", "Rangos de edad"),
+    ("seniority", "Antigüedad como socio"),
     ("localities", "Localidades"),
     ("education", "Nivel educativo (jugadores)"),
     ("health_insurance", "Obra social (jugadores)"),
@@ -111,6 +113,7 @@ def render_report_csv(report):
             display["gender"], display["locality"], display["vaccination"], display["health_insurance"],
             display["education"], display["categories"], display["documentation"],
             format_date(row["join_date"]), format_date(row["leave_date"]),
+            "" if row["seniority"] is None else row["seniority"],
         ])
     return ("﻿" + buffer.getvalue()).encode("utf-8")
 
@@ -141,6 +144,8 @@ def filter_parts(filters):
         parts.append(f"Rango de edad: {chosen(filters['age_range'], AGE_RANGE_LABELS)}")
     if filters["age_min"] is not None or filters["age_max"] is not None:
         parts.append(f"Edad: {age_limits_text(filters['age_min'], filters['age_max'])}")
+    if filters["seniority"]:
+        parts.append(f"Antigüedad como socio: {chosen(filters['seniority'], SENIORITY_LABELS)}")
     if filters["gender"]:
         parts.append(f"Género: {names_of(Genero, filters['gender'])}")
     if filters["locality"]:
