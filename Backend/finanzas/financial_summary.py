@@ -17,7 +17,7 @@ from .models import (
     TipoDevolucionChoices,
     TipoMovimientoChoices,
 )
-from .period_summary import period_summary
+from .period_summary import period_totals
 from .services import parse_period, pending_amounts
 
 ZERO = Decimal("0.00")
@@ -134,7 +134,7 @@ def refunds_summary(first_day):
 
 
 def cuota_kpis(period):
-    totals = period_summary(period)["totals"]
+    totals = period_totals(period)
     surcharges = ItemCuota.objects.filter(cuota__periodo=period, cuota__movimiento__isnull=False)
     applied = surcharges.filter(concepto=ConceptoItemChoices.MORA).aggregate(total=Sum("monto"))["total"] or ZERO
     waived = surcharges.filter(concepto=ConceptoItemChoices.CONDONACION_MORA).aggregate(total=Sum("monto"))["total"] or ZERO

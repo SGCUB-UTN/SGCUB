@@ -54,7 +54,8 @@ function JugadorDetail() {
 
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
-  const { documentosActivos: activos, tipos: tiposDocumento } = useDocumentacion(jugador?.socio?.persona)
+  const documentation = useDocumentacion(jugador?.socio?.persona)
+  const { documentosActivos: activos, tipos: tiposDocumento } = documentation
   const badgeConfig = React.useMemo(
     () => buildDocumentBadges(activos, findMissingDocumentTypes(tiposDocumento, activos, 'jugador').length),
     [activos, tiposDocumento],
@@ -273,7 +274,7 @@ function JugadorDetail() {
       label: 'Documentación',
       icon: 'folder_shared',
       badge: badgeConfig,
-      content: <DocumentationTab personaId={socio?.persona?.persona_id || socio?.persona} personaInfo={socio} personaType="jugador" />,
+      content: <DocumentationTab documentation={documentation} personaId={socio?.persona?.persona_id || socio?.persona} personaInfo={socio} personaType="jugador" />,
     },
     {
       id: 'financiero',

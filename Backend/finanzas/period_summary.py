@@ -43,6 +43,10 @@ def period_cuotas(period):
     )
 
 
+def period_cuota_amounts(period):
+    return list(Cuota.objects.filter(periodo=period, movimiento__isnull=False).select_related("movimiento"))
+
+
 def cuota_socio(cuota):
     return cuota.movimiento.cuenta_corriente.socio
 
@@ -156,6 +160,15 @@ def period_summary(period, today=None):
     }
 
 
+def period_totals(period):
+    cuotas = period_cuota_amounts(period)
+    pending = pending_amounts(cuotas)
+    total = empty_group()
+    for cuota in cuotas:
+        add_to_group(total, cuota, pending[cuota.pk])
+    return {**total, "collection_rate": collection_rate(total)}
+
+
 def due_dates_passed(due_dates, today):
     return sum(today > due for due in due_dates.values())
 
@@ -164,7 +177,7 @@ def cuota_situation(period, today=None):
     today = today or timezone.localdate()
     due_dates = period_due_dates(period)
     passed = due_dates_passed(due_dates, today)
-    cuotas = period_cuotas(period)
+    cuotas = period_cuota_amounts(period)
     pending = pending_amounts(cuotas)
     paid = Counter(min(cuota.recargos_aplicados, passed) for cuota in cuotas if pending[cuota.pk] <= 0)
     return {

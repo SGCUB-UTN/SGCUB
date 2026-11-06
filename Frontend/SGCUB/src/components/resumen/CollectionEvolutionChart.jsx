@@ -6,7 +6,8 @@ import { formatPeriod } from '../shared/periodFormat'
 import { formatCompactMoney } from './chartFormat'
 
 const CHART_HEIGHT = 220
-const STAGGER_MS = 40
+const STAGGER_MS = 20
+const COLLECTED_DELAY_MS = 60
 const BILLED_CLASS = 'bg-primary-fixed'
 const COLLECTED_CLASS = 'bg-primary'
 
@@ -116,7 +117,7 @@ export default function CollectionEvolutionChart({ evolution }) {
                     />
                     <div
                       className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-2/5 max-w-5 rounded-t ${COLLECTED_CLASS} ${HEIGHT_MOTION}`}
-                      style={{ height: grown(entered, share(row.cobrado, max)), transitionDelay: `${index * STAGGER_MS + 120}ms` }}
+                      style={{ height: grown(entered, share(row.cobrado, max)), transitionDelay: `${index * STAGGER_MS + COLLECTED_DELAY_MS}ms` }}
                     />
                   </div>
                 </div>
