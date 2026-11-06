@@ -4592,6 +4592,32 @@ class CuotaItemAnnulmentTests(APITestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertEqual(self.charge(), Decimal("2500.00"))
 
+	def test_registration_item_can_be_annulled_when_cuota_has_no_payments(self):
+		registration = self.add_item("Otro", "5000.00")
+		registration.motivo = "Inscripción"
+		registration.save(update_fields=["motivo"])
+		sync_cuota_charge(self.cuota)
+		self.assertEqual(self.charge(), Decimal("7500.00"))
+
+		response = self.annul(registration)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], EstadoItemCuotaChoices.ANULADO)
+		self.assertEqual(self.charge(), Decimal("2500.00"))
+		self.assertFalse(self.cuota.items.filter(concepto="Otro", motivo="Inscripción").exists())
+
+	def test_registration_item_cannot_be_annulled_if_cuota_has_payments(self):
+		registration = self.add_item("Otro", "5000.00")
+		registration.motivo = "Inscripción"
+		registration.save(update_fields=["motivo"])
+		sync_cuota_charge(self.cuota)
+		self.pay("1000.00")
+
+		response = self.annul(registration)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("pagos", response.data["detail"].lower())
+
 	def test_requires_reason_and_authorizer(self):
 		discount = self.add_item("DescuentoUnico", "500.00", is_discount=True)
 
