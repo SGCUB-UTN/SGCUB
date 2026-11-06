@@ -8,7 +8,7 @@ import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { isAdjustment, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
@@ -113,12 +113,20 @@ function CuotaBreakdownRow({
           </div>
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
             {items.filter((item) => !isAdjustment(item)).map((item) => {
+              const blocker = onRemoveItem && isRegistration(item) ? removalBlocker(cuota, item) : null
               return (
                 <BreakdownLine
                   key={item.item_cuota_id}
                   label={itemLabel(item)}
                   value={formatAmount(Number(item.monto || 0))}
                   tone="text-on-surface"
+                  action={blocker === null ? null : (
+                    <RemoveItemButton
+                      label={`Eliminar ${itemLabel(item)}`}
+                      blocker={blocker}
+                      onClick={() => onRemoveItem(cuota, item)}
+                    />
+                  )}
                 />
               )
             })}
