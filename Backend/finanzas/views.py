@@ -125,7 +125,10 @@ def _cuotas_queryset():
 	return Cuota.objects.select_related(
 		"movimiento__cuenta_corriente__socio__persona",
 		"movimiento__cuenta_corriente__socio__jugador",
-	).prefetch_related(*CUOTA_ITEM_PREFETCHES)
+	).prefetch_related(
+		*CUOTA_ITEM_PREFETCHES,
+		"movimiento__cuenta_corriente__socio__jugador__vinculos_familiares__persona",
+	)
 
 
 @extend_schema(tags=["Finanzas/Cuota"], request=CuotaCreateSerializer, responses=CuotaSerializer)
@@ -577,8 +580,11 @@ def delinquency_report_pdf(request):
 def movimiento_cuenta_list(request):
 	movements = MovimientoCuenta.objects.select_related(
 		"cuenta_corriente__socio__persona",
+		"cuenta_corriente__socio__jugador",
 		"cuota",
 		"pago__comprobante",
+	).prefetch_related(
+		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	).order_by("pk")
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
@@ -653,7 +659,9 @@ def movimiento_cuenta_detail(request, pk):
 @api_view(["GET"])
 def registro_auditoria_list(request):
 	"""Financial audit trail, newest first. Filters: socio_id, accion, desde and hasta (YYYY-MM-DD)."""
-	entries = RegistroAuditoria.objects.select_related("usuario", "socio__persona")
+	entries = RegistroAuditoria.objects.select_related("usuario", "socio__persona", "socio__jugador").prefetch_related(
+		"socio__jugador__vinculos_familiares__persona",
+	)
 	socio_id = request.query_params.get("socio_id")
 	if socio_id:
 		if not socio_id.isdigit():

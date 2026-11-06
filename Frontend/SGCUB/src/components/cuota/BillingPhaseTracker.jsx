@@ -3,9 +3,9 @@ import useEntered from '../../hooks/useEntered'
 import { SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { formatCount, formatDayMonth } from './cuotaPeriod'
 
-const SEQUENCE_MS = 220
-const STEP_MOTION = 'transition-[opacity,translate] duration-500 ease-out motion-reduce:transition-none'
-const LINE_MOTION = 'transition-transform duration-500 ease-out motion-reduce:transition-none'
+const SEQUENCE_MS = 90
+const STEP_MOTION = 'transition-[opacity,translate] duration-300 ease-out motion-reduce:transition-none'
+const LINE_MOTION = 'transition-transform duration-300 ease-out motion-reduce:transition-none'
 
 const DONE = 'done'
 const PENDING = 'pending'

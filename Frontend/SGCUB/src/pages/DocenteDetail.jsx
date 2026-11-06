@@ -36,7 +36,8 @@ function DocenteDetail() {
   const loading = carga.id !== id
   const { docente, error } = carga
 
-  const { documentosActivos: activos, tipos: tiposDocumento } = useDocumentacion(docente?.persona)
+  const documentation = useDocumentacion(docente?.persona)
+  const { documentosActivos: activos, tipos: tiposDocumento } = documentation
   const badgeConfig = React.useMemo(
     () => buildDocumentBadges(activos, findMissingDocumentTypes(tiposDocumento, activos, 'docente').length),
     [activos, tiposDocumento],
@@ -221,7 +222,7 @@ function DocenteDetail() {
       label: 'Documentación',
       icon: 'folder_shared',
       badge: badgeConfig,
-      content: <DocumentationTab personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" />,
+      content: <DocumentationTab documentation={documentation} personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" />,
     },
     {
       id: 'categorias',

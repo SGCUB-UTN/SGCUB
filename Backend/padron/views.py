@@ -1,5 +1,5 @@
 from django.db import models as django_models, transaction
-from django.db.models import Count, ProtectedError, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, ProtectedError, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -35,6 +35,7 @@ from .serializers import (
     ObraSocialSerializer,
     TalleIndumentariaSerializer,
     TipoRelacionFamiliarSerializer,
+    persona_serializer_prefetches,
     player_contacts_error,
     resize_uploaded_image,
 )
@@ -453,9 +454,7 @@ def jugador_list_create(request):
             "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
             "categoria", "categoria_secundaria", "estado",
         ).prefetch_related(
-            "vinculos_familiares__persona__genero",
-            "vinculos_familiares__persona__domicilio__localidad",
-            "vinculos_familiares__persona__domicilio__barrio",
+            *persona_serializer_prefetches("vinculos_familiares__persona"),
         )
         category_id = request.query_params.get("categoria")
         if category_id:
@@ -842,7 +841,26 @@ def docente_categoria_list(request):
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    teacher_categories = DocenteCategoria.objects.select_related("docente", "categoria", "cargo")
+    teacher_categories = DocenteCategoria.objects.select_related(
+        "docente__persona__genero",
+        "docente__persona__domicilio__localidad",
+        "docente__persona__domicilio__barrio",
+        "docente__persona__socio__jugador",
+        "docente__estado",
+        "categoria",
+    ).prefetch_related(
+        Prefetch(
+            "cargo",
+            queryset=CargoDocente.objects.annotate(
+                en_uso=Exists(DocenteCategoria.objects.filter(cargo=OuterRef("pk")))
+            ),
+        ),
+        "docente__categorias_docente__cargo",
+        "docente__categorias_docente__categoria",
+        "docente__persona__vinculos_familiares__jugador__socio__persona",
+        "docente__persona__vinculos_familiares__docente__persona",
+        *persona_serializer_prefetches("docente__vinculos_familiares__persona"),
+    ).order_by("pk")
 
     teacher_id = (
         request.query_params.get("idDocente")

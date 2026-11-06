@@ -772,7 +772,7 @@ def resolver_contacto_socio_finanzas(socio):
     if es_menor:
         jugador = getattr(socio, "jugador", None)
         if jugador:
-            vinculos = list(jugador.vinculos_familiares.select_related("persona").all())
+            vinculos = list(jugador.vinculos_familiares.all())
             tutor = next((v for v in vinculos if v.responsable_legal and v.persona and (v.persona.telefono or "").strip()), None)
             if not tutor:
                 tutor = next((v for v in vinculos if v.persona and (v.persona.telefono or "").strip()), None)

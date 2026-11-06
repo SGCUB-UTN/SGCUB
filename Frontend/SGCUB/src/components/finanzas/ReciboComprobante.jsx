@@ -2,6 +2,11 @@ import { formatAmount, formatDate, formatDni, formatReceiptPhone } from '../pers
 import DesgloseComprobante from './DesgloseComprobante'
 
 const DEFAULT_CLUB_NAME = 'Club Universitario de Berisso'
+const DEFAULT_CLUB_LOGO = '/escudo-sin-fondo.png'
+
+function showDefaultLogo(event) {
+  if (!event.currentTarget.src.endsWith(DEFAULT_CLUB_LOGO)) event.currentTarget.src = DEFAULT_CLUB_LOGO
+}
 
 function formatClubAddress(cfg) {
   if (!cfg) return ''
@@ -61,13 +66,12 @@ export function ReceiptLayout({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           {/* Lado izquierdo: Identidad y datos del Club */}
           <div className="flex items-start gap-4 min-w-0">
-            {clubConfig?.club_logo && (
-              <img
-                src={clubConfig.club_logo}
-                alt={clubNombre}
-                className="h-16 w-auto max-w-[130px] max-h-16 object-contain rounded-lg border border-outline-variant/30 bg-surface p-1 shrink-0"
-              />
-            )}
+            <img
+              src={clubConfig?.club_logo || DEFAULT_CLUB_LOGO}
+              alt={clubNombre}
+              onError={showDefaultLogo}
+              className="h-16 w-auto max-w-[130px] max-h-16 object-contain rounded-lg border border-outline-variant/30 bg-surface p-1 shrink-0"
+            />
             <div className="flex flex-col gap-0.5 min-w-0">
               <h3 className="font-bold text-xl text-on-surface leading-tight">{clubNombre}</h3>
               {clubConfig?.club_cuit && (
