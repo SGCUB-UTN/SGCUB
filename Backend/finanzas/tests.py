@@ -3578,6 +3578,47 @@ class CuotaVencimientosManualesTests(APITestCase):
 		self.assert_cuota(response, EstadoCuotaChoices.VENCIDA_2, "2950.00")
 		self.assertEqual(ItemCuota.objects.filter(cuota_id=cuota_id, concepto="Mora").count(), 2)
 
+	def test_primera_cuota_alta_socio_despues_de_vencimientos_no_aplica_recargos(self):
+		from finanzas.models import ConceptoItemChoices
+		from finanzas.services import create_first_cuota, apply_surcharges
+		ConfiguracionFinanciera.objects.update_or_create(pk=1, defaults={
+			"dia_generacion": 1,
+			"dia_vencimiento_1": 10,
+			"dia_vencimiento_2": 20,
+			"tipo_recargo_1": "Fijo",
+			"valor_recargo_1": Decimal("200.00"),
+			"tipo_recargo_2": "Fijo",
+			"valor_recargo_2": Decimal("300.00"),
+		})
+		socio_1 = crear_socio("40000001", con_jugador=False)
+		dia_15 = date(2026, 11, 15)
+		cuota_15 = create_first_cuota(socio_1, today=dia_15)
+		self.assertEqual(cuota_15.recargos_aplicados, 1)
+		self.assertFalse(cuota_15.items.filter(concepto=ConceptoItemChoices.MORA).exists())
+
+		apply_surcharges(today=date(2026, 11, 16))
+		cuota_15.refresh_from_db()
+		self.assertEqual(cuota_15.recargos_aplicados, 1)
+		self.assertFalse(cuota_15.items.filter(concepto=ConceptoItemChoices.MORA).exists())
+
+		apply_surcharges(today=date(2026, 11, 21))
+		cuota_15.refresh_from_db()
+		self.assertEqual(cuota_15.recargos_aplicados, 2)
+		self.assertEqual(cuota_15.items.filter(concepto=ConceptoItemChoices.MORA).count(), 1)
+		self.assertEqual(cuota_15.items.filter(concepto=ConceptoItemChoices.MORA).first().monto, Decimal("300.00"))
+
+		socio_2 = crear_socio("40000002", con_jugador=False)
+		dia_24 = date(2026, 11, 24)
+		cuota_24 = create_first_cuota(socio_2, today=dia_24)
+		self.assertEqual(cuota_24.recargos_aplicados, 2)
+		self.assertFalse(cuota_24.items.filter(concepto=ConceptoItemChoices.MORA).exists())
+
+		apply_surcharges(today=date(2026, 11, 25))
+		cuota_24.refresh_from_db()
+		self.assertEqual(cuota_24.recargos_aplicados, 2)
+		self.assertFalse(cuota_24.items.filter(concepto=ConceptoItemChoices.MORA).exists())
+
+
 
 class TareasProgramadasTests(TestCase):
 	migracion = import_module("finanzas.migrations.0019_tareas_programadas")

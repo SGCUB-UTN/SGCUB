@@ -205,6 +205,13 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
         # instead of waiting for the daily task.
         apply_cuota_surcharges(cuota.pk, today, configuration, user)
         cuota.refresh_from_db()
+    elif not apply_surcharges_on_creation:
+        # Initial cuota for a newly registered socio/player: waive past surcharges
+        # so daily tasks won't apply surcharges retroactively for dates prior to registration.
+        passed_surcharges = 2 if today > cuota.fecha_venc2 else (1 if today > cuota.fecha_venc1 else 0)
+        if passed_surcharges > 0:
+            cuota.recargos_aplicados = passed_surcharges
+            cuota.save(update_fields=["recargos_aplicados"])
     return cuota
 
 
