@@ -3,9 +3,10 @@ import { descargarComprobantePdf, getComprobantesByCuota } from '../../api/compr
 import { formatAmount, formatDate } from '../personas/format'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import ComprobanteDetailModal from './ComprobanteDetailModal'
+import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
-import { isAdjustment, itemLabel, itemTone } from './cuotaItems'
+import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { ListSkeleton } from '../shared/Skeleton'
 import { WhatsAppIcon, WhatsAppToast } from './WhatsAppComprobanteButton'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
@@ -182,7 +183,7 @@ function DueDatesBar({ cuota }) {
   )
 }
 
-function ConceptsCard({ cuota, className }) {
+function ConceptsCard({ cuota, onRemove, className }) {
   const items = cuota.items ?? []
   const charges = items.filter((item) => !isAdjustment(item))
   const adjustments = items.filter(isAdjustment)
@@ -194,14 +195,29 @@ function ConceptsCard({ cuota, className }) {
         <DueDatesBar cuota={cuota} />
       </div>
       <div className="flex flex-col text-base">
-        {charges.map((item) => (
-          <ConceptLine key={item.item_cuota_id} label={itemLabel(item)} value={formatAmount(Number(item.monto ?? 0))} />
-        ))}
+        {charges.map((item) => {
+          const blocker = onRemove && isRegistration(item) ? removalBlocker(cuota, item) : null
+          return (
+            <ConceptLine
+              key={item.item_cuota_id}
+              label={itemLabel(item)}
+              value={formatAmount(Number(item.monto ?? 0))}
+              action={blocker === null ? null : (
+                <RemoveItemButton
+                  label={`Eliminar ${itemLabel(item)}`}
+                  blocker={blocker}
+                  onClick={() => onRemove(item)}
+                />
+              )}
+            />
+          )
+        })}
         {adjustments.length > 0 && (
           <>
             <ConceptLine label="Subtotal" value={formatAmount(sumItems(charges))} className="font-semibold text-on-surface" />
             {adjustments.map((item) => {
               const tone = itemTone(item)
+              const blocker = onRemove ? removalBlocker(cuota, item) : null
               return (
                 <ConceptLine
                   key={item.item_cuota_id}
@@ -209,6 +225,13 @@ function ConceptsCard({ cuota, className }) {
                   detail={item.es_descuento ? item.motivo : ''}
                   value={`${tone.sign}${formatAmount(Number(item.monto ?? 0))}`}
                   className={tone.className}
+                  action={blocker === null ? null : (
+                    <RemoveItemButton
+                      label={`Eliminar ${itemLabel(item)}`}
+                      blocker={blocker}
+                      onClick={() => onRemove(item)}
+                    />
+                  )}
                 />
               )
             })}
@@ -313,6 +336,7 @@ function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio, onToast }) {
 function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
+  const [removingItem, setRemovingItem] = useState(null)
   const [toast, setToast] = useState(null)
 
   return (
@@ -320,7 +344,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
         <div className={layout.grid}>
           <div className={layout.main}>
-            <ConceptsCard cuota={cuota} className={layout.concepts} />
+            <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemovingItem : undefined} className={layout.concepts} />
           </div>
           <div className={layout.side}>
             <ReceiptsCard
@@ -339,6 +363,12 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
           opened={Boolean(selectedId)}
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
+        />
+        <RemoveCuotaItemModal
+          cuota={removingItem ? cuota : null}
+          item={removingItem}
+          onClose={() => setRemovingItem(null)}
+          onRemoved={onChanged}
         />
         <WhatsAppToast toast={toast} onClose={() => setToast(null)} />
       </td>

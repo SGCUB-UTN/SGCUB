@@ -124,6 +124,9 @@ def has_previous_sports_cuota(socio, period):
     ).exists()
 
 
+MOTIVO_INSCRIPCION = "Inscripción"
+
+
 def registration_item_for_first_sports_cuota(socio, period, first_day, configuration):
     if configuration.monto_inscripcion <= 0 or has_previous_sports_cuota(socio, period):
         return None
@@ -131,7 +134,7 @@ def registration_item_for_first_sports_cuota(socio, period, first_day, configura
         concepto=ConceptoItemChoices.OTRO,
         fecha_aplicacion=first_day,
         monto=configuration.monto_inscripcion,
-        motivo="Inscripción",
+        motivo=MOTIVO_INSCRIPCION,
     )
 
 
@@ -143,7 +146,7 @@ def lock_cuota_charge(cuota):
 
 
 @transaction.atomic
-def create_cuota(socio, period, first_due_date=None, second_due_date=None, configuration=None, today=None, user=None):
+def create_cuota(socio, period, first_due_date=None, second_due_date=None, configuration=None, today=None, user=None, apply_surcharges_on_creation=True):
     today = today or timezone.localdate()
     first_day = parse_period(period)
     period = first_day.strftime(PERIOD_FORMAT)
@@ -197,11 +200,18 @@ def create_cuota(socio, period, first_due_date=None, second_due_date=None, confi
     )
     if amount <= 0:
         refresh_cuota_state(cuota, amount)
-    elif today > cuota.fecha_venc1:
+    elif apply_surcharges_on_creation and today > cuota.fecha_venc1:
         # A cuota created with due dates already past gets its surcharges and state now,
         # instead of waiting for the daily task.
         apply_cuota_surcharges(cuota.pk, today, configuration, user)
         cuota.refresh_from_db()
+    elif not apply_surcharges_on_creation:
+        # Initial cuota for a newly registered socio/player: waive past surcharges
+        # so daily tasks won't apply surcharges retroactively for dates prior to registration.
+        passed_surcharges = 2 if today > cuota.fecha_venc2 else (1 if today > cuota.fecha_venc1 else 0)
+        if passed_surcharges > 0:
+            cuota.recargos_aplicados = passed_surcharges
+            cuota.save(update_fields=["recargos_aplicados"])
     return cuota
 
 
@@ -210,7 +220,7 @@ def create_first_cuota(socio, today=None):
     created = []
     for period in generation_periods(today):
         try:
-            created.append(create_cuota(socio, period, today=today))
+            created.append(create_cuota(socio, period, today=today, apply_surcharges_on_creation=False))
         except CuotaDuplicadaError:
             continue
         except (SocioInactivoError, CategoriaExentaError):
@@ -225,7 +235,7 @@ def _ensure_player_cuota_for_period(socio, period, today):
     ).first()
     if cuota is None:
         try:
-            return create_cuota(socio, period, today=today)
+            return create_cuota(socio, period, today=today, apply_surcharges_on_creation=False)
         except SocioInactivoError:
             return None
 
@@ -250,7 +260,7 @@ def _ensure_player_cuota_for_period(socio, period, today):
     )
     if registration_item and not cuota.items.filter(
         concepto=ConceptoItemChoices.OTRO,
-        motivo="Inscripción",
+        motivo=MOTIVO_INSCRIPCION,
     ).exists():
         registration_item.cuota = cuota
         registration_item.save()
@@ -1719,6 +1729,7 @@ def finish_expired_scholarships(today=None):
 
 
 REMOVABLE_BENEFITS = (ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
+MOTIVO_INSCRIPCION = "Inscripción"
 
 
 def remove_late_fee(cuota, item, reason, authorized_by, user):
@@ -1822,8 +1833,12 @@ def remove_cuota_item(item_id, reason, authorized_by, user=None):
         remove_late_fee(cuota, item, reason, authorized_by, user)
     elif item.concepto in REMOVABLE_BENEFITS:
         remove_benefit(cuota, item, reason, authorized_by, user)
+    elif item.concepto == ConceptoItemChoices.OTRO and item.motivo == MOTIVO_INSCRIPCION:
+        if has_active_payments(cuota):
+            raise CuotaConPagosError("La cuota tiene pagos aplicados: no se puede quitar la inscripción.")
+        annul_item(item, reason, authorized_by, user)
     else:
-        raise BeneficioInvalidoError("Solo se pueden quitar recargos, becas y descuentos de la cuota.")
+        raise BeneficioInvalidoError("Solo se pueden quitar recargos, becas, descuentos o la inscripción de la cuota.")
     sync_cuota_charge(cuota)
     record_transaction(
         Accion.ITEM_ANULADO,

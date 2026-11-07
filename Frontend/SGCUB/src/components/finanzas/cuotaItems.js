@@ -8,6 +8,9 @@ export const SCHOLARSHIP_CONCEPT = 'Beca'
 
 export const DISCOUNT_CONCEPT = 'DescuentoUnico'
 
+export const REGISTRATION_CONCEPT = 'Otro'
+export const REGISTRATION_MOTIVO = 'Inscripción'
+
 const BENEFIT_CONCEPTS = [SCHOLARSHIP_CONCEPT, DISCOUNT_CONCEPT]
 
 const PAID_BLOCKER = 'La cuota está paga'
@@ -15,6 +18,11 @@ const PAID_BLOCKER = 'La cuota está paga'
 export const itemLabel = (item) => item.descripcion ?? item.concepto_nombre ?? item.concepto
 
 export const isLateFee = (item) => item.concepto === LATE_FEE_CONCEPT
+
+export const isRegistration = (item) => (
+  (item.concepto === REGISTRATION_CONCEPT || item.concepto_nombre === REGISTRATION_CONCEPT) &&
+  (item.motivo === REGISTRATION_MOTIVO || item.descripcion === REGISTRATION_MOTIVO)
+)
 
 export const isAdjustment = (item) => item.es_descuento || isLateFee(item)
 
@@ -34,6 +42,10 @@ export const removalBlocker = (cuota, item) => {
     return hasPayments(cuota) && unpaidLateFee(cuota) <= 0 ? 'El recargo ya fue pagado' : ''
   }
   if (BENEFIT_CONCEPTS.includes(item.concepto)) {
+    if (isPaid(cuota)) return PAID_BLOCKER
+    return hasPayments(cuota) ? 'La cuota tiene pagos aplicados' : ''
+  }
+  if (isRegistration(item)) {
     if (isPaid(cuota)) return PAID_BLOCKER
     return hasPayments(cuota) ? 'La cuota tiene pagos aplicados' : ''
   }

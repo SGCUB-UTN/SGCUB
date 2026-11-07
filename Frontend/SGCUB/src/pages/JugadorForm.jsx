@@ -204,14 +204,16 @@ function JugadorForm() {
   const categoriaPorDefecto = String(categoriaSugerida?.categoria_id ?? '')
   const formulario = useMemo(() => {
     if (!formularioEditado) return null
-    const categoria = formularioEditado.categoria || categoriaPorDefecto
+    const categoriaValida = !editando && (!anioNacimiento || !generoLetra)
+      ? ''
+      : formularioEditado.categoria || categoriaPorDefecto
     return {
       ...formularioEditado,
       domicilio_localidad: formularioEditado.domicilio_localidad || localidadPorDefecto,
-      categoria,
-      categoria_secundaria: formularioEditado.categoria_secundaria === categoria ? '' : formularioEditado.categoria_secundaria,
+      categoria: categoriaValida,
+      categoria_secundaria: formularioEditado.categoria_secundaria === categoriaValida ? '' : formularioEditado.categoria_secundaria,
     }
-  }, [formularioEditado, localidadPorDefecto, categoriaPorDefecto])
+  }, [formularioEditado, localidadPorDefecto, categoriaPorDefecto, anioNacimiento, generoLetra, editando])
 
   const socioActualId = jugador?.socio?.socio_id
   const generoOtroId = generos.find((g) => g.nombre === 'Otro')?.genero_id
@@ -244,14 +246,22 @@ function JugadorForm() {
 
   const categoriasDisponibles = useMemo(() => {
     if (!formulario) return []
-    if (!anioNacimiento || !generoLetra) return categorias
+    if (!anioNacimiento || !generoLetra) {
+      if (editando) {
+        return categorias.filter((c) => {
+          const categoriaId = String(c.categoria_id)
+          return categoriaId === formulario.categoria || categoriaId === formulario.categoria_secundaria
+        })
+      }
+      return []
+    }
 
     return categorias.filter((c) => {
       const categoriaId = String(c.categoria_id)
       if (categoriaId === formulario.categoria || categoriaId === formulario.categoria_secundaria) return true
       return c.genero === generoLetra && categoriaAdmiteEdad(c, anioNacimiento)
     })
-  }, [categorias, formulario, anioNacimiento, generoLetra])
+  }, [categorias, formulario, anioNacimiento, generoLetra, editando])
 
   const categoriasSecundarias = categoriasDisponibles.filter((c) => String(c.categoria_id) !== formulario?.categoria)
 
@@ -716,11 +726,26 @@ function JugadorForm() {
                   id="categoria"
                   label="Categoría"
                   requerido
-                  hint={categoriasDisponibles.length < categorias.length ? '(según edad y género)' : undefined}
+                  hint={
+                    !anioNacimiento || !generoLetra
+                      ? '(ingrese fecha de nacimiento y género para ver categorías)'
+                      : categoriasDisponibles.length < categorias.length
+                        ? '(según edad y género)'
+                        : undefined
+                  }
                   error={errores.categoria}
                 >
-                  <SelectConFlecha {...bindInput('categoria')} onChange={cambiarCategoriaPrincipal} conError={Boolean(errores.categoria)}>
-                    <option value="" disabled>Seleccione categoría...</option>
+                  <SelectConFlecha
+                    {...bindInput('categoria')}
+                    onChange={cambiarCategoriaPrincipal}
+                    conError={Boolean(errores.categoria)}
+                    disabled={!editando && (!anioNacimiento || !generoLetra)}
+                  >
+                    <option value="" disabled>
+                      {!anioNacimiento || !generoLetra
+                        ? 'Ingrese fecha de nacimiento y género primero...'
+                        : 'Seleccione categoría...'}
+                    </option>
                     {categoriasDisponibles.map((c) => (
                       <option key={c.categoria_id} value={String(c.categoria_id)}>{c.nombre}</option>
                     ))}
@@ -732,8 +757,16 @@ function JugadorForm() {
                   )}
                 </Campo>
                 <Campo id="categoria_secundaria" label="Categoría secundaria" opcional>
-                  <SelectConFlecha {...bindInput('categoria_secundaria')} conError={false}>
-                    <option value="">Sin categoría secundaria</option>
+                  <SelectConFlecha
+                    {...bindInput('categoria_secundaria')}
+                    conError={false}
+                    disabled={!editando && (!anioNacimiento || !generoLetra)}
+                  >
+                    <option value="">
+                      {!anioNacimiento || !generoLetra
+                        ? 'Ingrese fecha de nacimiento y género primero...'
+                        : 'Sin categoría secundaria'}
+                    </option>
                     {categoriasSecundarias.map((c) => (
                       <option key={c.categoria_id} value={String(c.categoria_id)}>{c.nombre}</option>
                     ))}

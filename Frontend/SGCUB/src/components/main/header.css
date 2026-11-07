@@ -111,10 +111,4 @@
   .app-header-actions {
     gap: 0.5rem;
   }
-
-  .app-header-actions > div:nth-of-type(2),
-  .app-header-actions > div:nth-of-type(3) > div:last-child,
-  .app-header-actions > button:last-child > span:last-child {
-    display: none;
-  }
 }
