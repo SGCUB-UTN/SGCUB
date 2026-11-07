@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -113,15 +113,32 @@ def billing_phases(period, cuotas, pending, today):
     runs = successful_runs(period)
     generation_run = runs.get(TipoTareaCuotaChoices.GENERACION)
     generation_date = due_date(parse_period(period), ConfiguracionFinanciera.load(period).dia_generacion)
-    if generation_run is not None:
-        generated_at = generation_run.fecha_inicio
+
+    if today < generation_date:
+        generation_status = PENDING
+        executed_at = None
+    elif generation_run is not None:
+        generation_status = DONE
+        executed_at = generation_run.fecha_inicio
+    elif cuotas:
+        generation_status = DONE
+        earliest_creation = min((cuota.fecha_creacion for cuota in cuotas), default=None)
+        if earliest_creation is not None:
+            if earliest_creation.date() < generation_date:
+                executed_at = timezone.make_aware(datetime.combine(generation_date, time(0, 0)))
+            else:
+                executed_at = earliest_creation
+        else:
+            executed_at = timezone.make_aware(datetime.combine(generation_date, time(0, 0)))
     else:
-        generated_at = min((cuota.fecha_creacion for cuota in cuotas), default=None)
+        generation_status = MISSED
+        executed_at = None
+
     phases = [{
         "key": "generation",
         "date": generation_date,
-        "executed_at": generated_at,
-        "status": DONE if cuotas else (PENDING if today <= generation_date else MISSED),
+        "executed_at": executed_at,
+        "status": generation_status,
     }]
     for number, due in period_due_dates(period).items():
         run = runs.get(SURCHARGE_TASKS[number])
