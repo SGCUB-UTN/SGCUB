@@ -122,8 +122,7 @@ function BulkActionsBar({ rows, onExport, onClear }) {
       aria-label="Acciones sobre la selección"
       className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-sky-100 border-b border-sky-300 border-l-4 border-l-sky-600"
     >
-      <p className="flex items-center gap-2 text-sm text-sky-900">
-        <span className="material-symbols-outlined text-sky-700" style={{ fontSize: 20 }} aria-hidden="true">check_box</span>
+      <p className="flex items-center gap-2 text-sm text-sky-900 pl-1">
         <span>
           <strong className="font-bold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'cuota seleccionada' : 'cuotas seleccionadas'}
           <span className="text-sky-800"> · Saldo <strong className="font-semibold">{formatMoney(sumBy(rows, 'pending'))}</strong></span>

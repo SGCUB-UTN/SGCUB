@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import useEntered from '../../hooks/useEntered'
 import { WIDTH_MOTION, grown } from '../shared/chartMotion'
 import { KpiGrid } from '../shared/Kpi'
@@ -6,14 +6,13 @@ import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonSt
 import SectionHeading from '../shared/SectionHeading'
 import { formatCount, formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import AffectedCategories from './AffectedCategories'
-import { bulkDebtNotice } from './debtNotices'
 import MorosidadTable from './MorosidadTable'
+import NotifyMorosidadModal from './NotifyMorosidadModal'
 import PadronStatusChart from './PadronStatusChart'
 
 const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
-const NOTIFY_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded bg-primary text-on-primary hover:bg-primary/90 text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
 const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
 
@@ -99,7 +98,34 @@ function ReportSkeleton() {
 }
 
 function MorosidadReport({ reporte, isLoading, error }) {
-  const navigate = useNavigate()
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [notifyOpen, setNotifyOpen] = useState(false)
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [reporte])
+
+  const selectedRows = useMemo(
+    () => reporte?.filas?.filter((fila) => selectedIds.has(fila.socio_id)) ?? [],
+    [reporte, selectedIds],
+  )
+
+  const toggleRow = (socioId) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(socioId)) next.delete(socioId)
+      else next.add(socioId)
+      return next
+    })
+  }
+
+  const toggleAll = (select, rowsToToggle) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      rowsToToggle.forEach((fila) => (select ? next.add(fila.socio_id) : next.delete(fila.socio_id)))
+      return next
+    })
+  }
 
   if (error) {
     return <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">{error}</p>
@@ -138,17 +164,6 @@ function MorosidadReport({ reporte, isLoading, error }) {
           icon="receipt_long"
           title="Detalle de morosidad"
           className={HEADING_CLASS}
-          actions={reporte.filas.length > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate('/comunicaciones', { state: { debtNotice: bulkDebtNotice(reporte.filas) } })}
-              className={NOTIFY_BUTTON_CLASS}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">campaign</span>
-              Notificar a todos
-              <span className="tabular-nums">({formatCount(reporte.filas.length)})</span>
-            </button>
-          )}
         />
         {reporte.filas.length === 0 ? (
           <div className="py-12 text-center text-on-surface-variant">
@@ -156,9 +171,25 @@ function MorosidadReport({ reporte, isLoading, error }) {
             <p className="mt-2 font-semibold text-on-surface">No hay socios con deuda vencida para los filtros seleccionados.</p>
           </div>
         ) : (
-          <MorosidadTable filas={reporte.filas} />
+          <MorosidadTable
+            filas={reporte.filas}
+            selectedIds={selectedIds}
+            onToggleRow={toggleRow}
+            onToggleAll={toggleAll}
+            onNotify={() => setNotifyOpen(true)}
+            onClearSelection={() => setSelectedIds(new Set())}
+          />
         )}
       </section>
+
+      {notifyOpen && (
+        <NotifyMorosidadModal
+          opened
+          rows={selectedRows}
+          onClose={() => setNotifyOpen(false)}
+          onSent={() => setSelectedIds(new Set())}
+        />
+      )}
 
       <p className="text-sm text-on-surface-variant">
         Las cuotas se consideran vencidas desde su primer vencimiento; el monto incluye los recargos por mora aplicados.
