@@ -23,7 +23,15 @@ const ACTION_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-md
 function ActionButton({ label, icon, className, onClick }) {
   return (
     <Tooltip label={label} withArrow position="top">
-      <button type="button" onClick={onClick} aria-label={label} className={`${ACTION_CLASS} ${className}`}>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick?.(event)
+        }}
+        aria-label={label}
+        className={`${ACTION_CLASS} ${className}`}
+      >
         <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">{icon}</span>
       </button>
     </Tooltip>
@@ -49,7 +57,20 @@ function MorosidadTable({ filas }) {
       )}
     >
       {sorted.map((fila) => (
-        <tr key={fila.socio_id} className="hover:bg-surface-container-low/70">
+        <tr
+          key={fila.socio_id}
+          onClick={() => navigate(profilePath(fila))}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              navigate(profilePath(fila))
+            }
+          }}
+          tabIndex={0}
+          role="button"
+          title={`Ver estado financiero de ${fila.apellido}, ${fila.nombre}`}
+          className="hover:bg-surface-container-low/80 focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+        >
           <td className="px-4 py-3">
             <span className="flex items-center gap-2">
               <span className="font-semibold text-on-surface">{fila.apellido}, {fila.nombre}</span>
@@ -64,12 +85,6 @@ function MorosidadTable({ filas }) {
           <td className="px-4 py-3 whitespace-nowrap font-semibold text-error">{formatAmount(fila.monto_adeudado)}</td>
           <td className="px-4 py-3">
             <div className="flex justify-end gap-1">
-              <ActionButton
-                label="Ver estado de cuenta"
-                icon="visibility"
-                className="text-primary hover:bg-primary-fixed/30"
-                onClick={() => navigate(profilePath(fila))}
-              />
               <ActionButton
                 label="Notificar deuda"
                 icon="campaign"
