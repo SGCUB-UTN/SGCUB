@@ -1,158 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
-import { getResumenFinanciero } from '../api/resumenFinanciero'
-import { getSocios } from '../api/socios'
-import { parseDueDate } from '../components/documental/dueDate'
-import { getDocumentos, getTiposDocumento } from '../api/documentacion'
-import { DEFAULT_DOCUMENT_ALERT_DAYS, getDocumentAlertDays } from '../api/configuracion'
+import { useCallback, useEffect, useState } from 'react'
+import { getResumenInicio } from '../api/inicio'
 
-/**
- * Classifies active documents into expired and upcoming-to-expire groups.
- *
- * @param {Array} documentos - Active documents from the documentacion API.
- * @param {number} alertDays - Days before the due date a document counts as upcoming to expire.
- * @returns {{ vencidos: Array, proximosAVencer: Array }}
- */
-function clasificarDocumentos(documentos, alertDays) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const docsConFecha = documentos.filter(
-    (doc) => doc.persona_es_activo && doc.fecha_vencimiento,
-  )
-
-  const vencidos = []
-  const proximosAVencer = []
-
-  docsConFecha.forEach((doc) => {
-    const parsed = parseDueDate(doc, today)
-    const enriched = { ...doc, ...parsed }
-
-    if (parsed.daysFromToday < 0) {
-      vencidos.push({ ...enriched, diasVencido: Math.floor(-parsed.daysFromToday) })
-    } else if (parsed.daysFromToday <= alertDays) {
-      proximosAVencer.push({ ...enriched, diasRestantes: Math.ceil(parsed.daysFromToday) })
-    }
-  })
-
-  return { vencidos, proximosAVencer }
-}
-
-/**
- * Central data hook for the dashboard home page.
- *
- * Fetches all required data sources in parallel and exposes derived KPIs
- * for the financial summary, delinquency metrics and document alerts sections.
- */
 export default function useDashboard() {
-  const [resumenFinanciero, setResumenFinanciero] = useState(null)
-  const [socios, setSocios] = useState([])
-  const [documentos, setDocumentos] = useState([])
-  const [tiposDocumento, setTiposDocumento] = useState([])
-  const [alertDays, setAlertDays] = useState(DEFAULT_DOCUMENT_ALERT_DAYS)
-
-  const [isLoading, setIsLoading] = useState(true)
-  const [errors, setErrors] = useState({
-    resumenFinanciero: null,
-    socios: null,
-    documentos: null,
-  })
+  const [load, setLoad] = useState({ data: null, error: null })
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     let active = true
-
-    const cargar = async () => {
-      setIsLoading(true)
-
-      const results = await Promise.allSettled([
-        getResumenFinanciero(),
-        getSocios(),
-        getDocumentos(''),
-        getTiposDocumento(),
-        getDocumentAlertDays(),
-      ])
-
-      if (!active) return
-
-      const [
-        resumenResult,
-        sociosResult,
-        documentosResult,
-        tiposResult,
-        alertDaysResult,
-      ] = results
-
-      setResumenFinanciero(resumenResult.status === 'fulfilled' ? resumenResult.value : null)
-      setSocios(sociosResult.status === 'fulfilled' ? (sociosResult.value ?? []) : [])
-      setDocumentos(documentosResult.status === 'fulfilled' ? (documentosResult.value ?? []) : [])
-      setTiposDocumento(tiposResult.status === 'fulfilled' ? (tiposResult.value ?? []) : [])
-      if (alertDaysResult.status === 'fulfilled') setAlertDays(alertDaysResult.value)
-
-      setErrors({
-        resumenFinanciero: resumenResult.status === 'rejected' ? resumenResult.reason : null,
-        socios: sociosResult.status === 'rejected' ? sociosResult.reason : null,
-        documentos: documentosResult.status === 'rejected' ? documentosResult.reason : null,
-      })
-
-      setIsLoading(false)
-    }
-
-    cargar()
+    getResumenInicio()
+      .then((data) => active && setLoad({ data, error: null }))
+      .catch((error) => active && setLoad((current) => ({ data: current.data, error })))
     return () => { active = false }
-  }, [])
+  }, [version])
 
-  // --- Derived: socios activos ---
-  const sociosActivos = useMemo(
-    () => socios.filter((socio) => {
-      const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
-      return estado.includes('activo') && !estado.includes('inactivo')
-    }),
-    [socios],
-  )
-
-  // --- Derived: documentos activos agrupados (most recent per person+type) ---
-  const documentosActivos = useMemo(() => {
-    if (!documentos.length) return []
-
-    const grupos = {}
-    documentos.forEach((doc) => {
-      const clave = `${doc.persona}_${doc.tipo_documento}`
-      if (!grupos[clave]) grupos[clave] = []
-      grupos[clave].push(doc)
-    })
-
-    return Object.values(grupos).map(
-      (grupo) => [...grupo].sort((a, b) => b.id_documento - a.id_documento)[0],
-    )
-  }, [documentos])
-
-  const { vencidos, proximosAVencer } = useMemo(
-    () => clasificarDocumentos(documentosActivos, alertDays),
-    [documentosActivos, alertDays],
-  )
-
-  // --- Utility: resolve tipo documento name ---
-  const getNombreTipo = (id) => {
-    const tipo = tiposDocumento.find((t) => String(t.id_tipo_documento) === String(id))
-    return tipo ? tipo.nombre : '—'
-  }
+  const reload = useCallback(() => setVersion((current) => current + 1), [])
 
   return {
-    isLoading,
-    errors,
-
-    // Financial KPIs: money that came in this month (receipts in force, cuotas and incomes)
-    totalRecaudadoMes: resumenFinanciero ? Number(resumenFinanciero.ingresos.total) : 0,
-    mesLabel: new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }),
-    sociosEnMora: resumenFinanciero?.socios_en_mora ?? null,
-    montoAdeudadoTotal: resumenFinanciero?.monto_adeudado_total ?? null,
-    cuotasVencidas: resumenFinanciero?.cuotas_vencidas ?? null,
-    cuotasVencidas1: resumenFinanciero?.cuotas_vencidas_1 ?? null,
-    cuotasVencidas2: resumenFinanciero?.cuotas_vencidas_2 ?? null,
-    totalSociosActivos: sociosActivos.length,
-
-    // Document alerts
-    vencidos,
-    proximosAVencer,
-    getNombreTipo,
+    isLoading: load.data === null && load.error === null,
+    data: load.data,
+    error: load.error,
+    reload,
   }
 }

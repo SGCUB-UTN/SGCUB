@@ -137,7 +137,6 @@ def refresh_document_states(enviar_alertas=True):
                 elif dias_restantes == 0:
                     doc.alerta_vencido_enviada = True
                     doc.save(update_fields=["alerta_vencido_enviada"])
-
     return {
         "documentos_actualizados": total_actualizados,
         "alertas_enviadas": alertas_enviadas,

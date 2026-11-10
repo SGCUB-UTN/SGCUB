@@ -18,6 +18,20 @@ import sys
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Carga las variables del archivo .env si existen (para ejecución local fuera de Docker)
+for _env_candidate in (BASE_DIR.parent / '.env', BASE_DIR / '.env'):
+    if _env_candidate.is_file():
+        with open(_env_candidate, encoding='utf-8') as _env_file:
+            for _line in _env_file:
+                _line = _line.strip()
+                if not _line or _line.startswith('#') or '=' not in _line:
+                    continue
+                _key, _val = _line.split('=', 1)
+                _key = _key.strip()
+                _val = _val.strip().strip('"').strip("'")
+                os.environ.setdefault(_key, _val)
+        break
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -56,6 +70,7 @@ INSTALLED_APPS = [
     'django_cleanup.apps.CleanupConfig',
     'comet',
     'configuracion',
+    'inicio',
 ]
 Q_CLUSTER = {
     'name': 'django_q_cluster',
@@ -230,10 +245,6 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'sgcub.notificaciones@gmail.com')
 
-COMET_MODE = os.getenv("COMET_MODE", "mock")
-COMET_BASE_URL = os.getenv("COMET_BASE_URL", "")
-COMET_API_KEY = os.getenv("COMET_API_KEY", "")
-COMET_TIMEOUT = int(os.getenv("COMET_TIMEOUT", "30"))
 #Conf de logging
 LOGGING = {
     "version": 1,

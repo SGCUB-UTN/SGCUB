@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -14,6 +15,11 @@ class EstadoNotificacion(models.TextChoices):
     #LEIDO = "LEIDO", "Leido"
 
 
+class OrigenNotificacion(models.TextChoices):
+    MANUAL = "MANUAL", "Manual"
+    AUTOMATICA = "AUTOMATICA", "Automática"
+
+
 class Notificacion(models.Model):
     titulo = models.CharField(max_length=150)
     asunto = models.CharField(max_length=150, blank=True, null=True)
@@ -22,6 +28,18 @@ class Notificacion(models.Model):
         max_length=20,
         choices=EstadoNotificacion.choices,
         default=EstadoNotificacion.ENVIADA,
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notificaciones_creadas",
+    )
+    origen = models.CharField(
+        max_length=20,
+        choices=OrigenNotificacion.choices,
+        default=OrigenNotificacion.MANUAL,
     )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 

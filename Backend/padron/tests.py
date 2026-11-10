@@ -6,7 +6,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from padron.serializers import SocioSerializer
 
+import csv
 from datetime import date, timedelta
+from io import StringIO
 from unittest.mock import Mock, patch
 
 from configuracion.models import HistorialConfiguracion
@@ -17,6 +19,7 @@ from .models import (
     Categoria,
     Docente,
     DocenteCategoria,
+    Domicilio,
     EstadoAdministrativo,
     EstadoDeportivo,
     Genero,
@@ -2183,3 +2186,292 @@ class PersonaFotoTests(APITestCase):
         self.assertIn("foto_url", res_docente.data["persona_detalle"])
         self.assertTrue(res_docente.data["persona_detalle"]["foto_url"].startswith("http"))
 
+
+class PadronReportTests(APITestCase):
+    URL = "/api/padron/reportes/"
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="30999888", password="Clave-segura-123")
+        self.client.force_authenticate(self.user)
+        self.today = timezone.localdate()
+        self.la_plata = Localidad.objects.create(nombre="La Plata")
+        self.berisso = Localidad.objects.create(nombre="Berisso")
+        self.male, _ = Genero.objects.get_or_create(nombre="Masculino")
+        self.category = Categoria.objects.create(nombre="Reporte 5TA", genero="M", edad_maxima=17)
+        self.dni = 50000000
+
+    def person(self, age=30, locality=None):
+        self.dni += 1
+        address = Domicilio.objects.create(calle="7", numero="100", localidad=locality or self.la_plata)
+        return Persona.objects.create(
+            nombre="Persona",
+            apellido=str(self.dni),
+            dni=str(self.dni),
+            fecha_nacimiento=date(self.today.year - age, 1, 1),
+            genero=self.male,
+            domicilio=address,
+        )
+
+    def member(self, **kwargs):
+        return Socio.objects.create(persona=self.person(**kwargs))
+
+    def player(self, vaccination=True, health_insurance="IOMA", **kwargs):
+        return Jugador.objects.create(
+            socio=self.member(**kwargs),
+            categoria=self.category,
+            esquema_vacunacion=vaccination,
+            obra_social=health_insurance,
+        )
+
+    def teacher(self, persona=None):
+        return Docente.objects.create(persona=persona or self.person())
+
+    def report(self, **params):
+        response = self.client.get(self.URL, params)
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        return response.data
+
+    def counts(self, chart):
+        return {item["key"]: item["count"] for item in chart}
+
+    def test_deactivation_records_leave_date_and_reactivation_clears_it(self):
+        player = self.player()
+
+        player.socio.deactivate()
+        player.refresh_from_db()
+        self.assertEqual(self.today, player.fecha_baja)
+        self.assertEqual(self.today, player.socio.fecha_baja)
+
+        player.socio.activate()
+        player.socio.refresh_from_db()
+        self.assertIsNone(player.socio.fecha_baja)
+
+    def test_editing_an_inactive_member_keeps_its_leave_date(self):
+        member = self.member()
+        member.deactivate()
+        Socio.objects.filter(pk=member.pk).update(fecha_baja=date(2020, 5, 1))
+        member = Socio.objects.get(pk=member.pk)
+
+        member.fecha_alta = date(2019, 1, 1)
+        member.save()
+
+        member.refresh_from_db()
+        self.assertEqual(date(2020, 5, 1), member.fecha_baja)
+
+    def test_status_change_through_api_records_leave_date(self):
+        teacher = self.teacher()
+        inactive, _ = EstadoAdministrativo.objects.get_or_create(nombre="Inactivo")
+
+        response = self.client.patch(f"/api/padron/docente/{teacher.pk}/", {"estado": inactive.pk}, format="json")
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        teacher.refresh_from_db()
+        self.assertEqual(self.today, teacher.fecha_baja)
+
+    def test_people_are_grouped_by_role(self):
+        self.member()
+        self.player()
+        self.player().deactivate()
+        self.teacher()
+        teacher_member = self.person()
+        Socio.objects.create(persona=teacher_member)
+        self.teacher(teacher_member)
+
+        data = self.report()
+
+        self.assertEqual(
+            {"socios": 1, "jugadores": 1, "baja_parcial": 1, "docentes": 1, "docentes_socios": 1},
+            self.counts(data["charts"]["roles"]),
+        )
+        self.assertEqual(5, data["kpis"]["total"])
+
+    def test_inactive_people_are_only_listed_on_request(self):
+        self.player()
+        former = self.player()
+        former.socio.deactivate()
+
+        active_ids = [row["persona_id"] for row in self.report()["people"]]
+        inactive = self.report(status="inactivos")["people"]
+
+        self.assertNotIn(former.socio.persona_id, active_ids)
+        self.assertEqual([former.socio.persona_id], [row["persona_id"] for row in inactive])
+        self.assertEqual("jugadores", inactive[0]["role"])
+        self.assertEqual(self.today, inactive[0]["leave_date"])
+
+    def test_entity_filter_selects_people_by_active_profile(self):
+        self.member()
+        player = self.player()
+        self.player().deactivate()
+        teacher = self.teacher(player.socio.persona)
+
+        players = self.report(entity="jugadores")["people"]
+        teachers = self.report(entity="docentes")["people"]
+
+        self.assertEqual([player.socio.persona_id], [row["persona_id"] for row in players])
+        self.assertEqual([teacher.persona_id], [row["persona_id"] for row in teachers])
+        self.assertEqual("docentes_socios", teachers[0]["role"])
+
+    def test_kpis_are_computed_over_players(self):
+        self.member(age=40)
+        self.player(vaccination=True, age=10)
+        self.player(vaccination=False, health_insurance="", age=12)
+        self.player(vaccination=None, age=14)
+
+        data = self.report()
+
+        self.assertEqual(4, data["kpis"]["total"])
+        self.assertEqual(19.0, data["kpis"]["average_age"])
+        self.assertEqual(3, data["kpis"]["players"])
+        self.assertEqual(33.3, data["kpis"]["vaccination_up_to_date"])
+        self.assertEqual(66.7, data["kpis"]["with_health_insurance"])
+        self.assertEqual({"al_dia": 1, "pendiente": 1, "sin_datos": 1}, self.counts(data["charts"]["vaccination"]))
+        genders = self.counts(data["charts"]["gender"])
+        self.assertEqual(4, genders[self.male.genero_id])
+        self.assertEqual(0, genders["sin_datos"])
+        self.assertEqual(Genero.objects.count() + 1, len(genders))
+
+    def test_filters_combine_age_vaccination_and_locality(self):
+        expected = self.player(vaccination=False, age=15, locality=self.berisso)
+        self.player(vaccination=False, age=15)
+        self.player(vaccination=True, age=15, locality=self.berisso)
+        self.player(vaccination=False, age=30, locality=self.berisso)
+
+        people = self.report(age_range="13-17", vaccination="pendiente", locality=str(self.berisso.pk))["people"]
+        minors = self.report(age_max="17", locality=str(self.berisso.pk))["people"]
+
+        self.assertEqual([expected.socio.persona_id], [row["persona_id"] for row in people])
+        self.assertEqual(2, len(minors))
+
+    def test_evolution_counts_joins_and_leaves_of_every_status(self):
+        self.member()
+        self.member().deactivate()
+
+        evolution = self.report()["evolution"]
+
+        self.assertEqual(f"{self.today:%Y-%m}", evolution["monthly"][-1]["period"])
+        self.assertEqual({"joins": 2, "leaves": 1}, {key: evolution["monthly"][-1][key] for key in ("joins", "leaves")})
+        self.assertEqual(self.today.year, evolution["yearly"][-1]["year"])
+        self.assertEqual(2, evolution["yearly"][-1]["joins"])
+
+    def test_coverage_and_health_insurance_filters_add_up(self):
+        uninsured = self.player(health_insurance="")
+        ioma = self.player(health_insurance="IOMA")
+        self.player(health_insurance="OSDE")
+        self.member()
+
+        people = self.report(coverage="sin", health_insurance="ioma")["people"]
+
+        self.assertEqual(
+            {uninsured.socio.persona_id, ioma.socio.persona_id},
+            {row["persona_id"] for row in people},
+        )
+
+    def test_seniority_counts_full_years_as_member_until_leave(self):
+        recent = self.member()
+        Socio.objects.filter(pk=recent.pk).update(fecha_alta=date(self.today.year - 4, 1, 1))
+        former = self.member()
+        former.deactivate()
+        Socio.objects.filter(pk=former.pk).update(
+            fecha_alta=date(self.today.year - 12, 1, 1),
+            fecha_baja=date(self.today.year - 2, 1, 1),
+        )
+        self.teacher()
+
+        everyone = {row["persona_id"]: row for row in self.report(status="todos")["people"]}
+        filtered = self.report(status="todos", seniority="3-4")["people"]
+
+        self.assertEqual(4, everyone[recent.persona_id]["seniority"])
+        self.assertEqual("10-mas", everyone[former.persona_id]["seniority_range"])
+        self.assertEqual([recent.persona_id], [row["persona_id"] for row in filtered])
+        self.assertEqual(
+            {"menos-1": 0, "1-2": 0, "3-4": 1, "5-9": 0, "10-mas": 1},
+            self.counts(self.report(status="todos")["charts"]["seniority"]),
+        )
+
+    def test_category_filter_accepts_categories_and_gender_groups(self):
+        female_category = Categoria.objects.create(nombre="Reporte SUB17", genero="F", edad_maxima=17)
+        male_player = self.player()
+        female_player = self.player()
+        Jugador.objects.filter(pk=female_player.pk).update(categoria=female_category)
+        teacher = self.teacher()
+        DocenteCategoria.objects.create(docente=teacher, categoria=female_category)
+
+        by_category = self.report(category=str(self.category.pk))["people"]
+        female = self.report(category="gender:F")["people"]
+        combined = self.report(category=f"{self.category.pk},{female_category.pk}", entity="jugadores")["people"]
+
+        self.assertEqual([male_player.socio.persona_id], [row["persona_id"] for row in by_category])
+        self.assertEqual(
+            {female_player.socio.persona_id, teacher.persona_id},
+            {row["persona_id"] for row in female},
+        )
+        self.assertEqual(
+            {male_player.socio.persona_id, female_player.socio.persona_id},
+            {row["persona_id"] for row in combined},
+        )
+
+    def test_invalid_filters_are_rejected(self):
+        for params in (
+            {"status": "otros"},
+            {"vaccination": "vencida"},
+            {"locality": "abc"},
+            {"category": "gender:X"},
+            {"age_min": "20", "age_max": "10"},
+        ):
+            with self.subTest(params=params):
+                response = self.client.get(self.URL, params)
+                self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+    def test_csv_export_lists_filtered_people_with_readable_values(self):
+        player = self.player(vaccination=None, health_insurance="", age=15)
+        self.member(age=40)
+
+        response = self.client.get(f"{self.URL}csv/", {"entity": "jugadores"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn('filename="reporte-padron-', response["Content-Disposition"])
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
+        self.assertEqual(["Apellido", "Nombre", "DNI"], rows[0][:3])
+        self.assertEqual(2, len(rows))
+        record = dict(zip(rows[0], rows[1]))
+        self.assertEqual(player.socio.persona.dni, record["DNI"])
+        self.assertEqual("Jugador", record["Rol"])
+        self.assertEqual("Sin datos", record["Vacunación"])
+        self.assertEqual("Sin obra social", record["Obra social"])
+        self.assertEqual(self.today.strftime("%d/%m/%Y"), record["Fecha de alta"])
+
+    def test_csv_export_marks_player_data_as_not_applicable_for_members(self):
+        self.member()
+
+        response = self.client.get(f"{self.URL}csv/")
+
+        rows = list(csv.reader(StringIO(response.content.decode("utf-8-sig")), delimiter=";"))
+        record = dict(zip(rows[0], rows[1]))
+        self.assertEqual("Socio", record["Rol"])
+        self.assertEqual("No aplica", record["Vacunación"])
+        self.assertEqual("No aplica", record["Obra social"])
+
+    def test_pdf_export_includes_applied_filters_and_listing(self):
+        self.player(locality=self.berisso)
+        self.member()
+
+        response = self.client.get(f"{self.URL}pdf/", {"locality": str(self.berisso.pk), "vaccination": "al_dia"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("application/pdf", response["Content-Type"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn(b"Localidad: Berisso", response.content)
+        self.assertIn(b"Listado \(1\)", response.content)
+
+    def test_pdf_export_without_people_renders_empty_message(self):
+        response = self.client.get(f"{self.URL}pdf/", {"status": "inactivos"})
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn(b"No hay personas para los filtros seleccionados.", response.content)
+
+    def test_exports_reject_invalid_filters(self):
+        for suffix in ("pdf/", "csv/"):
+            with self.subTest(suffix=suffix):
+                response = self.client.get(f"{self.URL}{suffix}", {"entity": "otros"})
+                self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)

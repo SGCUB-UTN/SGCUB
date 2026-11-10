@@ -84,6 +84,21 @@ def extra_income_rows(receipts):
     return [{"concepto": receipt.pago.movimiento.concepto, "monto": receipt.monto_total} for receipt in incomes]
 
 
+def cuota_income(receipts):
+    return (
+        receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
+        .aggregate(total=Sum("monto_total"))["total"] or ZERO
+    )
+
+
+def month_income(period):
+    receipts = month_receipts(parse_period(period))
+    return {
+        "cuotas": cuota_income(receipts),
+        "other": sum((row["monto"] for row in extra_income_rows(receipts)), ZERO),
+    }
+
+
 def payment_method_rows(receipts, total):
     amounts = dict(
         ItemPago.objects.filter(pago__comprobante__in=receipts)
@@ -180,10 +195,7 @@ def financial_summary(period):
     or went out in the month; the cuota indicators and the evolution follow the cuota period."""
     first_day = parse_period(period)
     receipts = month_receipts(first_day)
-    cuotas_total = (
-        receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
-        .aggregate(total=Sum("monto_total"))["total"] or ZERO
-    )
+    cuotas_total = cuota_income(receipts)
     extra = extra_income_rows(receipts)
     extra_total = sum((row["monto"] for row in extra), ZERO)
     total = cuotas_total + extra_total

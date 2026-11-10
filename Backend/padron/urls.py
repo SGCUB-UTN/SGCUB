@@ -69,5 +69,8 @@ urlpatterns = [
     path("docente-categoria/", docente_categoria_list, name="docente-categoria-list"),
     path("docente-categoria/<int:pk>/", docente_categoria_detail, name="docente-categoria-detail"),
     path("persona/<int:pk>/foto/", views.persona_foto, name="persona-foto"),
+    path("reportes/", views.padron_report, name="padron-report"),
+    path("reportes/pdf/", views.padron_report_pdf, name="padron-report-pdf"),
+    path("reportes/csv/", views.padron_report_csv, name="padron-report-csv"),
 
 ]

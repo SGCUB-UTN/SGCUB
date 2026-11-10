@@ -23,7 +23,7 @@ import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import useSocioFinances from '../hooks/useSocioFinances'
-import CometJugadorCard from '../components/comet/CometJugadorCard'
+import CometDescargarButton from '../components/comet/CometDescargarButton'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
 import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
@@ -242,6 +242,7 @@ function JugadorDetail() {
           }}
           localidades={localidades}
           onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
+          extraActions={<CometDescargarButton jugadorId={jugador.jugador_id} />}
           deportivo={{
             categoria: jugador.categoria?.nombre,
             categoria_secundaria: jugador.categoria_secundaria?.nombre,
@@ -282,12 +283,6 @@ function JugadorDetail() {
       content: socio.socio_id
         ? <FinancialStatement socio={socio} finances={finances} exemptCategory={categoriaExenta} />
         : <EmptyState icon="account_balance_wallet" title="Sin datos de socio" description="El jugador no tiene un socio asociado." />,
-    },
-    {
-      id: 'comet',
-      label: 'COMET',
-      icon: 'cloud_sync',
-      content: <CometJugadorCard jugador={jugador} />,
     },
   ]
 

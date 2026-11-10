@@ -43,12 +43,11 @@ export default function Sidebar({ collapsed, onToggle }) {
   }, [contrayendo]);
 
   const claseEstado = contrayendo ? 'app-sidebar--collapsing' : collapsed ? 'app-sidebar--collapsed' : '';
-  const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes']
+  const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/reportes']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/resumen-financiero', '/morosidad', '/caja']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
-  const cometActive = pathname === '/comet' || pathname.startsWith('/comet/');
   const adminActive = ['/usuarios', '/automatizaciones', '/configuracion']
     .some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
@@ -56,7 +55,6 @@ export default function Sidebar({ collapsed, onToggle }) {
     personas: personasActive,
     finanzas: finanzasActive,
     comunicaciones: comunicacionesActive,
-    comet: cometActive,
     admin: adminActive,
   });
 
@@ -66,10 +64,9 @@ export default function Sidebar({ collapsed, onToggle }) {
       ...(personasActive && { personas: true }),
       ...(finanzasActive && { finanzas: true }),
       ...(comunicacionesActive && { comunicaciones: true }),
-      ...(cometActive && { comet: true }),
       ...(adminActive && { admin: true }),
     }));
-  }, [personasActive, finanzasActive, comunicacionesActive, cometActive, adminActive]);
+  }, [personasActive, finanzasActive, comunicacionesActive, adminActive]);
 
   return (
     <aside className={`app-sidebar ${claseEstado}`}>
@@ -116,6 +113,12 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">school</span>
                     <span className="app-sidebar-label text-base">Docentes</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/padron/reportes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">monitoring</span>
+                    <span className="app-sidebar-label text-base">Reportes</span>
                   </span>
                 </NavLink>
               </div>
@@ -207,81 +210,14 @@ export default function Sidebar({ collapsed, onToggle }) {
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
                 <NavLink end to="/comunicaciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">edit_note</span>
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">dashboard</span>
+                    <span className="app-sidebar-label text-base">Panel e historial</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/comunicaciones/nuevo" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">send</span>
                     <span className="app-sidebar-label text-base">Nuevo envío</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comunicaciones/historial" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">history</span>
-                    <span className="app-sidebar-label text-base">Historial de envíos</span>
-                  </span>
-                </NavLink>
-              </div>
-            </details>
-            {/* Sección COMET */}
-            <details
-              open={openSections.comet}
-              onToggle={(e) => {
-                const isOpen = e.currentTarget.open;
-                setOpenSections((prev) => (prev.comet === isOpen ? prev : { ...prev, comet: isOpen }));
-              }}
-              className="app-sidebar-group flex flex-col gap-0.5"
-            >
-              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${pathname === '/comet' || pathname.startsWith('/comet/') ? 'app-sidebar-section--active' : ''}`}>
-                <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
-                  <span className="app-sidebar-label text-base font-semibold text-on-surface">COMET</span>
-                </div>
-                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
-              </summary>
-              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
-                <NavLink to="/comet" end className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">cloud_sync</span>
-                    <span className="app-sidebar-label text-base">Inicio COMET</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/competiciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">emoji_events</span>
-                    <span className="app-sidebar-label text-base">Competiciones</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/equipos" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">groups_3</span>
-                    <span className="app-sidebar-label text-base">Equipos</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/partidos" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">sports_soccer</span>
-                    <span className="app-sidebar-label text-base">Partidos</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/tablas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">leaderboard</span>
-                    <span className="app-sidebar-label text-base">Tablas</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/inscripciones" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">assignment</span>
-                    <span className="app-sidebar-label text-base">Inscripciones</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/jugadores" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">badge</span>
-                    <span className="app-sidebar-label text-base">Jugadores</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/comet/logs" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">history</span>
-                    <span className="app-sidebar-label text-base">Historial</span>
                   </span>
                 </NavLink>
               </div>

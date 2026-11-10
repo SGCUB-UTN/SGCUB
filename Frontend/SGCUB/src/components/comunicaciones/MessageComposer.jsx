@@ -1,143 +1,177 @@
+import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
+
+const PLANTILLAS_CLUB = [
+  {
+    id: 'deportivo',
+    label: 'Citación deportiva',
+    icon: 'sports_soccer',
+    asunto: 'Información de entrenamientos y jornada deportiva',
+    cuerpo:
+      'Estimados jugadores y familias:\n\nLes informamos los horarios y detalles correspondientes a la próxima jornada deportiva.\n\n• Día y horario: \n• Lugar: Predio deportivo\n• Indumentaria: concurrir con ropa oficial e hidratación.\n\nAnte cualquier eventualidad, dar aviso al cuerpo técnico.',
+  },
+  {
+    id: 'cuota',
+    label: 'Recordatorio de cuota',
+    icon: 'receipt_long',
+    asunto: 'Aviso de vencimiento de cuota social',
+    cuerpo:
+      'Estimado/a socio/a:\n\nLe recordamos que se encuentra al cobro la cuota social correspondiente al período en curso.\n\nPuede acercarse a la secretaría en los horarios habituales de atención para regularizar su estado de cuenta o realizar consultas.',
+  },
+  {
+    id: 'documentacion',
+    label: 'Documentación pendiente',
+    icon: 'assignment_ind',
+    asunto: 'Solicitud de documentación deportiva',
+    cuerpo:
+      'Estimado/a socio/a y familia:\n\nLes solicitamos acercar a secretaría la documentación pendiente (DNI y/o certificado de aptitud física vigente) a fin de mantener al día la habilitación deportiva.',
+  },
+  {
+    id: 'institucional',
+    label: 'Comunicado general',
+    icon: 'campaign',
+    asunto: 'Comunicado para socios y familias',
+    cuerpo:
+      'Estimados socios y familias:\n\nPor medio del presente nos dirigimos a ustedes para informarles las próximas novedades y disposiciones de la institución.',
+  },
+]
+
 export default function MessageComposer({
   asunto,
+  setAsunto,
   cuerpo,
+  setCuerpo,
   copiaSecretaria,
-  onAsuntoChange,
-  onCuerpoChange,
-  onCopiaSecretariaChange,
-  onDiscard,
-  onPreview,
-  onSubmit,
+  setCopiaSecretaria,
+  remitente,
+  validationError,
+  onOpenPreview,
+  onOpenConfirm,
 }) {
-  const maxChars = 500
-  const charCount = cuerpo.length
+  const clubNombre = remitente?.club_nombre || 'Club Universitario de Berisso'
+  const emailSecretaria = remitente?.email_secretaria || remitente?.email_remitente || ''
+
+  const aplicarPlantilla = (plantilla) => {
+    setAsunto(plantilla.asunto)
+    setCuerpo(plantilla.cuerpo)
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Encabezado Bloque 2 */}
-      <h3 className="text-base font-semibold text-on-surface flex items-center gap-2">
-        <span className="w-6 h-6 rounded-full bg-surface-container text-primary flex items-center justify-center text-xs font-bold">
-          2
-        </span>
-        Contenido del Mensaje
-      </h3>
-
-      <div className="flex flex-col gap-4">
-        {/* Asunto */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="msg-subject"
-              className="text-sm font-semibold text-on-surface"
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+            Plantillas sugeridas
+          </span>
+          <span className="text-xs text-on-surface-variant">
+            Seleccioná una base o redactá el comunicado directamente
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {PLANTILLAS_CLUB.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => aplicarPlantilla(p)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-variant/50 bg-surface-container-low hover:bg-surface-container text-xs font-medium text-on-surface transition-colors cursor-pointer"
             >
-              Asunto / Título institucional <span className="text-error">*</span>
-            </label>
-            <span className="text-xs text-on-surface-variant">
-              Visible en el encabezado del correo y mensaje de WhatsApp
-            </span>
-          </div>
-          <input
-            id="msg-subject"
-            type="text"
-            value={asunto}
-            onChange={(e) => onAsuntoChange(e.target.value)}
-            placeholder="Ingrese el asunto oficial..."
-            className="w-full h-10 px-3.5 bg-surface-container-lowest border border-outline-variant/40 rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-          />
+              <span className="material-symbols-outlined text-[16px] text-on-surface-variant" aria-hidden="true">
+                {p.icon}
+              </span>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="comunicacion-asunto" className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">
+          Asunto <span className="text-error">*</span>
+        </label>
+        <input
+          id="comunicacion-asunto"
+          type="text"
+          value={asunto}
+          onChange={(e) => setAsunto(e.target.value)}
+          placeholder="Ej: Información de entrenamientos, Aviso de secretaría..."
+          className="w-full h-10 px-3.5 text-sm rounded-lg border border-outline-variant/60 bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary"
+        />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label htmlFor="comunicacion-cuerpo" className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+            Cuerpo del comunicado <span className="text-error">*</span>
+          </label>
+          <span className="text-xs text-on-surface-variant tabular-nums">
+            {cuerpo.length} caracteres
+          </span>
         </div>
 
-        {/* Cuerpo del mensaje */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="msg-body"
-              className="text-sm font-semibold text-on-surface"
-            >
-              Cuerpo del mensaje <span className="text-error">*</span>
-            </label>
-            <div className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-              <span className="material-symbols-outlined text-[16px]">short_text</span>
-              <span
-                id="char-counter"
-                className={`font-semibold ${
-                  charCount > maxChars ? 'text-error' : 'text-on-surface'
-                }`}
-              >
-                {charCount}
-              </span>
-              <span>/ {maxChars} caracteres (WhatsApp / Email)</span>
+        <div className="rounded-lg border border-outline-variant/60 bg-surface-container-lowest overflow-hidden focus-within:border-primary transition-colors">
+          <div className="px-4 py-2.5 bg-slate-900 text-slate-100 flex items-center gap-3">
+            <img
+              src="/escudo-sin-fondo.png"
+              alt="Escudo C.U.B."
+              className="w-7 h-7 object-contain shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white leading-tight truncate">{clubNombre}</p>
+              <p className="text-[11px] text-slate-400 leading-tight">Comunicado institucional</p>
             </div>
           </div>
-          <textarea
-            id="msg-body"
-            rows={5}
-            value={cuerpo}
-            onChange={(e) => onCuerpoChange(e.target.value)}
-            placeholder="Redacte aquí el texto oficial de la comunicación..."
-            className="w-full p-3.5 bg-surface-container-lowest border border-outline-variant/40 rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-y leading-relaxed"
-          />
-          <div className="flex items-start gap-1.5 text-xs text-on-surface-variant mt-1">
-            <span className="material-symbols-outlined text-[16px] text-primary shrink-0 mt-0.5">
-              info
-            </span>
-            <span>
-              El mensaje se enviará automáticamente por correo electrónico o WhatsApp según los datos de
-              contacto disponibles y validados en el legajo de cada destinatario.
-            </span>
-          </div>
-        </div>
 
-        {/* Opciones de Envío Complementarias */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-lg border border-outline-variant/30 bg-surface-container-low/50">
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={copiaSecretaria}
-                onChange={(e) => onCopiaSecretariaChange(e.target.checked)}
-                className="w-4 h-4 rounded border-outline-variant/50 text-primary accent-primary cursor-pointer"
-              />
-              <span className="text-sm text-on-surface font-medium">
-                Enviar copia de respaldo a Secretaría
-              </span>
-            </label>
-          </div>
-          <div className="flex items-center gap-1.5 text-on-surface-variant text-xs">
-            <span className="material-symbols-outlined text-[16px]">schedule</span>
-            <span>Programación: Envío inmediato</span>
+          <textarea
+            id="comunicacion-cuerpo"
+            rows={7}
+            value={cuerpo}
+            onChange={(e) => setCuerpo(e.target.value)}
+            placeholder="Estimados socios y familias:..."
+            className="w-full p-3.5 text-sm bg-transparent text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none resize-y leading-relaxed"
+          />
+
+          <div className="px-4 py-2 bg-surface-container-low/70 border-t border-outline-variant/30 text-xs text-on-surface-variant flex items-center justify-between gap-2">
+            <span>
+              Firma al pie: <strong className="text-on-surface font-medium">Atentamente, Secretaría y Comisión Directiva</strong>
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Barra de Acciones Inferior */}
-      <div className="flex items-center justify-between pt-4 border-t border-outline-variant/20">
-        <button
-          type="button"
-          onClick={onDiscard}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer"
+      {validationError && (
+        <div
+          role="alert"
+          className="p-3 rounded-lg bg-error-container/40 border border-error/25 flex items-center gap-2 text-xs text-on-error-container"
         >
-          <span className="material-symbols-outlined text-[18px]">delete_outline</span>
-          <span>Descartar borrador</span>
-        </button>
+          <span className="material-symbols-outlined text-[18px] text-error shrink-0" aria-hidden="true">
+            error
+          </span>
+          <span>{validationError}</span>
+        </div>
+      )}
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onPreview}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-outline-variant/40 bg-surface-container-lowest text-on-surface hover:bg-surface-container-low text-sm font-medium transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">visibility</span>
-            <span>Vista previa</span>
-          </button>
-          <button
-            type="button"
-            id="btn-submit-send"
-            onClick={onSubmit}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary/90 text-sm font-medium shadow-xs transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">send</span>
-            <span>Revisar y enviar</span>
-          </button>
+      <div className="pt-3 border-t border-outline-variant/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <label className="inline-flex items-center gap-2.5 text-xs text-on-surface cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={copiaSecretaria}
+            onChange={(e) => setCopiaSecretaria(e.target.checked)}
+            className="w-4 h-4 rounded accent-primary cursor-pointer"
+          />
+          <span>
+            Enviar copia de respaldo a secretaría
+            {emailSecretaria ? (
+              <span className="text-on-surface-variant"> ({emailSecretaria})</span>
+            ) : null}
+          </span>
+        </label>
+
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <SecondaryButton type="button" icon="visibility" onClick={onOpenPreview}>
+            Vista previa
+          </SecondaryButton>
+          <PrimaryButton type="button" icon="send" onClick={onOpenConfirm}>
+            Revisar y enviar
+          </PrimaryButton>
         </div>
       </div>
     </div>

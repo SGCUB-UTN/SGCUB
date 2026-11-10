@@ -87,7 +87,7 @@ function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-vari
       </div>
       <div className="grid w-44 max-w-[55%] shrink-0 grid-cols-[minmax(0,1fr)_1.5rem] items-center gap-1.5">
         <span className="text-right tabular-nums whitespace-nowrap">{value}</span>
-        <span className="flex w-6 justify-center">{action}</span>
+        <span className="flex w-6 justify-start">{action}</span>
       </div>
     </div>
   )
@@ -134,32 +134,34 @@ function CuotaBreakdownRow({
                   tone={tone.className}
                   action={blocker === null ? null : (
                     <RemoveItemButton
-                      label={`Remover ${itemLabel(item)}`}
+                      label={`Eliminar ${itemLabel(item)}`}
                       blocker={blocker}
                       onClick={() => onRemoveItem(cuota, item)}
-                      isDiscount={item.es_descuento}
                     />
                   )}
                 />
               )
             })}
             {paid > 0 && <BreakdownLine label="Pagado" value={`− ${formatAmount(paid)}`} />}
-            <div className="pt-2 mt-1 border-t border-outline-variant/30">
-              <BreakdownLine label="Total" value={formatAmount(due)} tone="text-on-surface" strong />
+            <div className="pt-2 mt-1 mb-2 border-t border-outline-variant/30">
+              <BreakdownLine
+                label="Total"
+                value={formatAmount(due)}
+                tone="text-on-surface"
+                strong
+                action={onAssignBenefit && (
+                  <button
+                    type="button"
+                    onClick={() => onAssignBenefit(cuota.cuota_id)}
+                    className="h-6 shrink-0 inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                  >
+                    <span className="w-6 inline-flex justify-center material-symbols-outlined text-[18px]!" aria-hidden="true">sell</span>
+                    Agregar descuento
+                  </button>
+                )}
+              />
             </div>
           </div>
-          {onAssignBenefit && (
-            <div className="grid w-44 max-w-[55%] shrink-0 grid-cols-[minmax(0,1fr)_1.5rem] gap-1.5">
-              <button
-                type="button"
-                onClick={() => onAssignBenefit(cuota.cuota_id)}
-                className="col-start-1 inline-flex w-full items-center justify-end gap-1.5 rounded-md pt-1 text-sm font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sell</span>
-                Agregar descuento
-              </button>
-            </div>
-          )}
         </div>
       </td>
     </tr>

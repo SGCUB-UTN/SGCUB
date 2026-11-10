@@ -19,7 +19,7 @@ const NIVELES_EDUCACION = {
   universitario_completo: 'Universitario completo',
 }
 
-export default function PersonalDataTab({ persona, localidades = [], deportivo, onEdit }) {
+export default function PersonalDataTab({ persona, localidades = [], deportivo, onEdit, extraActions }) {
   if (!persona) return null
 
   const age = yearsSince(persona.fecha_nacimiento)
@@ -28,7 +28,15 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo, 
 
   return (
     <div className="flex flex-col gap-8">
-      <RecordSection title="Datos personales" extra={onEdit && <EditButton onClick={onEdit} />}>
+      <RecordSection
+        title="Datos personales"
+        extra={(extraActions || onEdit) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {extraActions}
+            {onEdit && <EditButton onClick={onEdit} />}
+          </div>
+        )}
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Field
             label="Documento Nacional de Identidad (DNI)"
