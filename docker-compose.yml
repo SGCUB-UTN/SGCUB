@@ -26,7 +26,7 @@ services:
       - .env
     volumes:
       - ./Backend:/app
-      - /documentacion:/app/media
+      - ${MEDIA_PATH:-/documentacion}:/app/media
     ports:
       - "127.0.0.1:8000:8000"
     environment:
@@ -48,7 +48,7 @@ services:
       - .env
     volumes:
       - ./Backend:/app
-      - /documentacion:/app/media
+      - ${MEDIA_PATH:-/documentacion}:/app/media
     environment:
       DB_NAME: ${DB_NAME:-sgcub_db}
       DB_USER: ${DB_USER:-sgcub_user}
