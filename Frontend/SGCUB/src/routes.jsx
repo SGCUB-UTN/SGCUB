@@ -43,10 +43,21 @@ import HistorialComunicaciones from './pages/HistorialComunicaciones'
 import Automatizaciones from './pages/Automatizaciones'
 import RecategorizacionRevision from './pages/RecategorizacionRevision'
 import Configuracion from './pages/Configuracion'
+
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />,
+  },
+  {
+    path: '/recuperar-contrasena',
+    element: <ForgotPassword />,
+  },
+  {
+    path: '/reset-password/:uid/:token',
+    element: <ResetPassword />,
   },
   {
     element: <ProtectedRoute />,

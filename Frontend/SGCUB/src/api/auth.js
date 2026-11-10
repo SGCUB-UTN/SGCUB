@@ -32,3 +32,17 @@ export const changePassword = async (currentPassword, newPassword) => {
   if (currentPassword) data.current_password = currentPassword
   await api.post(`${authEndpoint}change-password/`, data)
 }
+
+export async function requestPasswordReset(email) {
+  const { data } = await api.post('auth/password-reset/', { email })
+  return data
+}
+
+export async function confirmPasswordReset({ uid, token, newPassword }) {
+  const { data } = await api.post('auth/password-reset/confirm/', {
+    uid,
+    token,
+    new_password: newPassword,
+  })
+  return data
+}

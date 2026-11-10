@@ -24,7 +24,7 @@ auth_urlpatterns = [
     path("me/", current_user, name="auth-me"),
     path("change-password/", change_password, name="auth-change-password"),
     path("password-reset/", PasswordResetRequestView.as_view(), name="auth-password-reset"),
-    path("password-reset-confirm/", PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm"),
+    path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm"),
 ]
 
 # Montadas en api/usuarios/
