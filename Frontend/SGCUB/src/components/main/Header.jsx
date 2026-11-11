@@ -1,17 +1,21 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Menu } from "@mantine/core";
 import { useAuth } from "../../auth/useAuth";
 import useTheme from "../../hooks/useTheme";
 import HeaderSearch from "./HeaderSearch";
 import "./header.css";
 
 const getRoleLabel = (user) => {
-  if (user.roles.length > 0) return user.roles.join(", ");
+  if (!user) return "";
+  if (user.roles?.length > 0) return user.roles.join(", ");
   return user.is_superuser ? "Administrador" : "Sin rol";
 };
 
 export default function Header({ collapsed = false }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const [menuOpened, setMenuOpened] = useState(false);
 
   return (
     <header className={`app-header fixed top-0 right-0 z-40 bg-surface-container-lowest flex flex-row flex-nowrap items-stretch ${collapsed ? 'app-header--collapsed' : ''}`}>
@@ -30,42 +34,78 @@ export default function Header({ collapsed = false }) {
           <HeaderSearch />
         </div>
 
-        <div className="app-header-actions ml-auto flex shrink-0 items-center gap-4">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-            title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-            className="flex h-9 w-9 items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
-              {isDark ? "light_mode" : "dark_mode"}
-            </span>
-          </button>
+        <div className="app-header-actions ml-auto flex shrink-0 items-center">
+          {user && (
+            <Menu
+              opened={menuOpened}
+              onChange={setMenuOpened}
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+              position="bottom-end"
+              shadow="md"
+              width={240}
+              withinPortal
+            >
+              <Menu.Target>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpened((prev) => !prev)}
+                  aria-label="Menú de usuario"
+                  aria-expanded={menuOpened}
+                  className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-outline-variant/30 hover:bg-surface-container-low transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <div className="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-primary shrink-0">
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">person</span>
+                  </div>
+                  <div className="hidden sm:flex flex-col text-left min-w-0 max-w-[180px]">
+                    <span className="text-sm text-on-surface font-semibold leading-tight truncate">{user.full_name}</span>
+                    <span className="text-xs text-primary font-medium truncate">{getRoleLabel(user)}</span>
+                  </div>
+                  <span
+                    className={`material-symbols-outlined text-on-surface-variant text-[18px] transition-transform duration-200 ${menuOpened ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  >
+                    expand_more
+                  </span>
+                </button>
+              </Menu.Target>
 
-          <div className="h-6 w-px bg-outline-variant/30"></div>
+              <Menu.Dropdown className="p-1 min-w-[220px]">
+                <div className="px-3 py-2 border-b border-outline-variant/20 mb-1">
+                  <p className="text-sm font-semibold text-on-surface truncate">{user.full_name}</p>
+                  <p className="text-xs text-on-surface-variant truncate">{user.email || getRoleLabel(user)}</p>
+                </div>
 
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-primary shrink-0">
-              <span className="material-symbols-outlined text-[20px]">person</span>
-            </div>
-            <div className="flex flex-col text-left">
-              <span className="text-base text-on-surface font-semibold leading-tight">{user.full_name}</span>
-              <span className="text-sm text-primary font-medium">{getRoleLabel(user)}</span>
-            </div>
-          </div>
+                <Menu.Item
+                  icon={
+                    <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">
+                      {isDark ? "light_mode" : "dark_mode"}
+                    </span>
+                  }
+                  onClick={toggleTheme}
+                >
+                  <span className="text-sm text-on-surface">
+                    {isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+                  </span>
+                </Menu.Item>
 
-          <div className="h-6 w-px bg-outline-variant/30"></div>
+                <Menu.Divider />
 
-          <button
-            type="button"
-            onClick={logout}
-            className="flex items-center gap-1 p-2 rounded text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors"
-            title="Cerrar sesión"
-          >
-            <span className="material-symbols-outlined text-[20px]">logout</span>
-            <span className="text-sm">Salir</span>
-          </button>
+                <Menu.Item
+                  color="red"
+                  icon={
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                      logout
+                    </span>
+                  }
+                  onClick={logout}
+                >
+                  <span className="text-sm font-medium">Cerrar sesión</span>
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          )}
         </div>
       </div>
     </header>

@@ -2,7 +2,7 @@ import { annulItemCuota } from '../../api/cuotas'
 import { formatAmount } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
 import AuthorizationModal from './AuthorizationModal'
-import { SCHOLARSHIP_CONCEPT, isLateFee, itemLabel } from './cuotaItems'
+import { SCHOLARSHIP_CONCEPT, isLateFee, isRegistration, itemLabel } from './cuotaItems'
 
 export function RemoveItemButton({ label, blocker = '', onClick }) {
   return (
@@ -47,7 +47,13 @@ function RemoveCuotaItemModal({ cuota, item, onClose, onRemoved }) {
   return (
     <AuthorizationModal
       opened={Boolean(cuota && item)}
-      title={item && isLateFee(item) ? 'Eliminar recargo' : 'Eliminar beneficio'}
+      title={
+        item && isLateFee(item)
+          ? 'Eliminar recargo'
+          : item && isRegistration(item)
+            ? 'Eliminar inscripción'
+            : 'Eliminar beneficio'
+      }
       description={cuota && item ? removalDescription(cuota, item) : null}
       confirmLabel="Eliminar"
       confirmIcon={null}
