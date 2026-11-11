@@ -1,14 +1,9 @@
 import { useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import AuthCard from '../components/auth/AuthCard'
 import PasswordField from '../components/auth/PasswordField'
 import FullPageLoader from '../components/shared/FullPageLoader'
-
-const HELP_MESSAGES = {
-  forgotPassword: 'Para restablecer tu contraseña, contactá a la Administración del club.',
-  noCredentials: 'Las cuentas las crea la Administración del club. Acercate con tu DNI para solicitar el acceso.',
-}
 
 const getErrorMessage = (error) => {
   if (!error.response) return 'No se pudo conectar con el servidor. Intentá nuevamente.'
@@ -20,12 +15,13 @@ const getErrorMessage = (error) => {
 export default function Login() {
   const { user, isLoading, login } = useAuth()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const passwordResetOk = searchParams.get('reset') === 'ok'
 
   const [dni, setDni] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [helpMessage, setHelpMessage] = useState('')
 
   // Vuelve a la página que se intentó abrir antes de iniciar sesión (ver ProtectedRoute)
   const redirectTo = location.state?.from ?? '/'
@@ -37,7 +33,6 @@ export default function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
-    setHelpMessage('')
     setIsSubmitting(true)
     try {
       await login(dni, password)
@@ -50,6 +45,16 @@ export default function Login() {
   return (
     <AuthCard>
       <form className="w-full space-y-space-md" onSubmit={handleSubmit}>
+        {passwordResetOk && (
+          <div
+            className="bg-emerald-50 text-emerald-800 px-3 py-2.5 rounded-lg border border-emerald-200 flex items-center gap-2"
+            role="status"
+          >
+            <span className="material-symbols-outlined text-emerald-700 text-title-md">check_circle</span>
+            <p className="text-body-sm font-medium">Tu contraseña se actualizó. Ya podés iniciar sesión.</p>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5 text-left">
           <label className="text-label-md font-label-md text-on-surface font-semibold" htmlFor="dni">
             DNI
@@ -91,16 +96,6 @@ export default function Login() {
           </div>
         )}
 
-        {helpMessage && (
-          <div
-            className="bg-surface-container-high text-on-surface px-3 py-2.5 rounded-lg border border-outline-variant/40 flex items-center gap-2"
-            role="status"
-          >
-            <span className="material-symbols-outlined text-primary text-title-md">info</span>
-            <p className="text-body-sm font-medium">{helpMessage}</p>
-          </div>
-        )}
-
         <div className="pt-1">
           <button
             className="w-full h-11 bg-primary hover:bg-primary/90 active:scale-[0.99] text-on-primary font-headline-sm text-headline-sm rounded-lg flex items-center justify-center gap-2 shadow-md transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-80"
@@ -122,14 +117,13 @@ export default function Login() {
         </div>
 
         <div className="text-center pt-2">
-          <button
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-primary hover:bg-primary/5 text-body-sm font-label-lg font-medium transition-colors cursor-pointer"
-            type="button"
-            onClick={() => setHelpMessage(HELP_MESSAGES.forgotPassword)}
+          <Link
+            to="/recuperar-contrasena"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-primary hover:bg-primary/5 text-body-sm font-label-lg font-medium transition-colors"
           >
             <span className="material-symbols-outlined text-label-md">lock_reset</span>
             <span>¿Olvidaste tu contraseña?</span>
-          </button>
+          </Link>
         </div>
       </form>
     </AuthCard>

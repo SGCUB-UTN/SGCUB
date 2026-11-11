@@ -12,6 +12,8 @@ from .views import (
     usuario_detail,
     usuario_list_create,
     usuario_reset_password,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
 )
 
 # Montadas en api/auth/
@@ -21,6 +23,8 @@ auth_urlpatterns = [
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("me/", current_user, name="auth-me"),
     path("change-password/", change_password, name="auth-change-password"),
+    path("password-reset/", PasswordResetRequestView.as_view(), name="auth-password-reset"),
+    path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="auth-password-reset-confirm"),
 ]
 
 # Montadas en api/usuarios/
