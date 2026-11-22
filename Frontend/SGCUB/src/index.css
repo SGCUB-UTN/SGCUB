@@ -230,6 +230,9 @@ html.dark select option {
     padding: 0;
     @apply bg-background text-base text-on-surface antialiased min-h-screen;
   }
+  html {
+    scrollbar-gutter: stable;
+  }
   body {
     overscroll-behavior: none;
   }
