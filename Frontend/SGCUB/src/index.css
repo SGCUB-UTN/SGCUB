@@ -241,8 +241,9 @@ html.dark select option {
   }
 }
 
-::-webkit-scrollbar {
-  display: none;
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-outline) 55%, transparent) transparent;
 }
 
 .comunicaciones-table-scroll {
