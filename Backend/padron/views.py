@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
+from documental.services import PERFIL_JUGADOR, documentation_statuses
 from finanzas.services import account_debt_summaries
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
@@ -488,8 +489,15 @@ def jugador_list_create(request):
             if not category_id.isdigit():
                 return Response({"categoria": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
             players = players.filter(Q(categoria_id=category_id) | Q(categoria_secundaria_id=category_id))
-        serializer_class = JugadorTableSerializer if view == LIST_VIEW else JugadorListSerializer
-        serializer = serializer_class(players, many=True, context={"request": request})
+        if view == LIST_VIEW:
+            players = list(players)
+            context = {
+                "request": request,
+                "account_summaries": account_debt_summaries([player.socio_id for player in players]),
+                "document_statuses": documentation_statuses([player.socio.persona_id for player in players], PERFIL_JUGADOR),
+            }
+            return Response(JugadorTableSerializer(players, many=True, context=context).data)
+        serializer = JugadorListSerializer(players, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = JugadorSerializer(data=request.data)

@@ -1009,6 +1009,8 @@ class PadronViewTests(APITestCase):
         self.assertEqual({"categoria_id", "nombre", "genero"}, set(item["categoria"].keys()))
         self.assertEqual(jugador.socio.socio_id, item["socio"]["socio_id"])
         self.assertIsNone(item["categoria_secundaria"])
+        self.assertEqual({"deuda": "0.00", "cuotas_vencidas": 0}, item["socio"]["cuenta"])
+        self.assertEqual({"estado", "vencidos", "faltantes", "por_vencer"}, set(item["documentacion"].keys()))
 
     def test_jugador_get_list_vista_listado_filtra_por_categoria(self):
         jugador = self.crear_jugador_orm()

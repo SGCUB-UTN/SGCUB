@@ -108,6 +108,33 @@ def serialize_document(tipo, document, today, alert_days):
     }
 
 
+STATE_SEVERITY = (VENCIDO, FALTANTE, POR_VENCER, VIGENTE)
+
+
+def documentation_statuses(persona_ids, perfil):
+    today = timezone.localdate()
+    alert_days = ConfiguracionGeneral.load().dias_alerta_documentos
+    tipos = [tipo for tipo in TipoDocumento.objects.filter(activo=True) if applies_to(tipo, perfil)]
+    documents = latest_documents(persona_ids, tipos)
+
+    statuses = {}
+    for persona_id in persona_ids:
+        counts = Counter(
+            document_state(document, today, alert_days)
+            for tipo in tipos
+            for document in [documents.get((persona_id, tipo.id_tipo_documento))]
+            if tipo.obligatorio or document
+        )
+        estado = next((state for state in STATE_SEVERITY if counts[state]), VIGENTE)
+        statuses[persona_id] = {
+            "estado": estado,
+            "vencidos": counts[VENCIDO],
+            "faltantes": counts[FALTANTE],
+            "por_vencer": counts[POR_VENCER],
+        }
+    return statuses
+
+
 def build_padron_documental():
     today = timezone.localdate()
     alert_days = ConfiguracionGeneral.load().dias_alerta_documentos

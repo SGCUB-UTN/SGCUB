@@ -962,14 +962,19 @@ class JugadorTableSerializer(serializers.ModelSerializer):
     categoria_secundaria = CategoriaSummarySerializer(read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
+    documentacion = serializers.SerializerMethodField()
 
     class Meta:
         model = Jugador
         fields = [
             "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja",
-            "esquema_vacunacion", "nivel_educacion",
+            "esquema_vacunacion", "nivel_educacion", "documentacion",
         ]
         read_only_fields = fields
+
+    def get_documentacion(self, player):
+        statuses = self.context.get("document_statuses")
+        return statuses.get(player.socio.persona_id) if statuses is not None else None
 
 
 class JugadorSerializerDetail(serializers.ModelSerializer):
