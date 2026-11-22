@@ -5,8 +5,8 @@ import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
 
 const PAID_ON_TIME = { key: 'paid_on_time', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600' }
-const PAID_FIRST_SURCHARGE = { key: 'paid_first_surcharge', label: 'Pagas con 1° recargo', fill: 'bg-amber-500', stroke: 'stroke-amber-500' }
-const PAID_SECOND_SURCHARGE = { key: 'paid_second_surcharge', label: 'Pagas con 2° recargo', fill: 'bg-orange-700', stroke: 'stroke-orange-700' }
+const PAID_FIRST_SURCHARGE = { key: 'paid_first_surcharge', label: 'Pagas con 1° recargo', fill: 'bg-amber-600', stroke: 'stroke-amber-600' }
+const PAID_SECOND_SURCHARGE = { key: 'paid_second_surcharge', label: 'Pagas con 2° recargo', fill: 'bg-amber-800', stroke: 'stroke-amber-800' }
 const UNPAID = { key: 'unpaid', label: 'Impagas' }
 
 const SEGMENTS_BY_STAGE = [
@@ -55,7 +55,7 @@ export default function CuotaSituationChart({ situation, label }) {
           activeKey={activeKey}
           onActiveChange={setActiveKey}
         />
-        <ul className="flex flex-col gap-1 min-w-0 text-sm">
+        <ul className="flex flex-col gap-1 min-w-0 text-sm sm:text-base">
           <li className="flex items-center gap-2 pb-1 mb-1 border-b border-outline-variant/30">
             <span className="text-on-surface-variant">Generadas</span>
             <span className="ml-auto pl-3 font-semibold tabular-nums text-on-surface">{formatCount(situation.generated)}</span>

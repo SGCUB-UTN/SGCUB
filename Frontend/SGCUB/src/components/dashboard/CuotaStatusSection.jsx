@@ -52,7 +52,7 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
         )}
         className={HEADING_CLASS}
         actions={(
-          <Link to={cuotas?.period ? `/finanzas/cuotas?periodo=${cuotas.period}` : '/finanzas/cuotas'} className={`${TEXT_BUTTON_CLASS} text-sm`}>
+          <Link to={cuotas?.period ? `/finanzas/cuotas?periodo=${cuotas.period}` : '/finanzas/cuotas'} className={`${TEXT_BUTTON_CLASS} text-base`}>
             Ver cuotas
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
           </Link>
@@ -68,13 +68,13 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
               <div className="flex-1 min-w-0 flex flex-col gap-4 sm:pl-6 sm:border-l border-outline-variant/40">
                 <KpiColumn label="Ingresos por cuotas" value={formatWholeMoney(income.cuotas)} title={formatMoney(income.cuotas)} />
                 <div className="pt-4 border-t border-outline-variant/40">
-                  <KpiColumn label="Otros movimientos" value={formatWholeMoney(income.other)} title={formatMoney(income.other)} />
+                  <KpiColumn label="Otros ingresos" value={formatWholeMoney(income.other)} title={formatMoney(income.other)} />
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <p className="text-sm text-on-surface-variant">Sin datos de cuotas.</p>
+          <p className="text-base text-on-surface-variant">Sin datos de cuotas.</p>
         )}
       </div>
     </section>
