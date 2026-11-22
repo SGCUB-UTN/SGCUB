@@ -7,11 +7,11 @@ import { notifyCajaChanged } from '../finanzas/cajaEvents'
 
 const LISTBOX_ID = 'header-search-results'
 
-const PROFILE_TONES = {
-  socio: 'bg-primary/10 text-primary',
-  jugador: 'bg-emerald-50 text-emerald-700',
-  docente: 'bg-amber-50 text-amber-700',
-  vinculo: 'bg-surface-container-high text-on-surface-variant',
+const PROFILE_ICONS = {
+  socio: 'person',
+  jugador: 'sports',
+  docente: 'school',
+  vinculo: 'family_restroom',
 }
 
 function SearchMessage({ icon, spin = false, children }) {
@@ -115,7 +115,12 @@ export default function HeaderSearch() {
                     {result.detail && ` · ${result.detail}`}
                   </span>
                 </span>
-                <span className={`shrink-0 px-2 py-0.5 rounded-md text-sm font-medium ${PROFILE_TONES[result.profile]}`}>{result.label}</span>
+                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface-variant text-sm font-medium">
+                  {PROFILE_ICONS[result.profile] && (
+                    <span className="material-symbols-outlined text-[16px]" aria-hidden="true">{PROFILE_ICONS[result.profile]}</span>
+                  )}
+                  {result.label}
+                </span>
               </button>
               {result.socioId && (
                 <button
