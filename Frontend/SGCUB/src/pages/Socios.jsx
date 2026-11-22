@@ -5,11 +5,12 @@ import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
+import { SOCIOS_LIST_VIEW } from '../api/socios'
 
 const MOSTRAR_RESUMEN_JUGADORES = false
 
 function Padron() {
-  const { socios, isLoading, error } = useSocio({ onlyMembers: true })
+  const { socios, isLoading, error } = useSocio({ onlyMembers: true, view: SOCIOS_LIST_VIEW })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
 

@@ -2,9 +2,14 @@ import { api } from './conf'
 
 const sociosEndpoint = 'padron/socio/'
 
-export const getSocios = async ({ onlyMembers = false } = {}) => {
+export const SOCIOS_LIST_VIEW = 'listado'
+
+export const getSocios = async ({ onlyMembers = false, view } = {}) => {
   try {
-    const params = onlyMembers ? { es_jugador: false } : undefined
+    const params = {
+      ...(onlyMembers && { es_jugador: false }),
+      ...(view && { vista: view }),
+    }
     const response = await api.get(sociosEndpoint, { params })
     return response.data
   } catch (error) {

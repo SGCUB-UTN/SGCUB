@@ -587,6 +587,25 @@ class SocioSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+class SocioListSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(source="persona.nombre", read_only=True)
+    apellido = serializers.CharField(source="persona.apellido", read_only=True)
+    dni = serializers.CharField(source="persona.dni", read_only=True)
+    telefono = serializers.CharField(source="persona.telefono", read_only=True)
+    estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
+    es_jugador = serializers.BooleanField(source="is_player", read_only=True)
+    es_ex_jugador = serializers.BooleanField(source="is_former_player", read_only=True)
+    jugador_id = serializers.IntegerField(source="player_profile.jugador_id", read_only=True, allow_null=True)
+
+    class Meta:
+        model = Socio
+        fields = [
+            "socio_id", "numero_socio", "nombre", "apellido", "dni", "telefono", "fecha_alta",
+            "estado_administrativo_nombre", "es_jugador", "es_ex_jugador", "jugador_id",
+        ]
+        read_only_fields = fields
+
+
 class CategoriaSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=50)
     anio_vigente = serializers.IntegerField()

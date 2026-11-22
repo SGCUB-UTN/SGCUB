@@ -19,6 +19,7 @@ from .serializers import (
     CargoDocenteSerializer,
     DocenteCategoriaSerializer,
     PersonaSerializer,
+    SocioListSerializer,
     SocioSerializer,
     CategoriaSerializer,
     CategoriaListSerializer,
@@ -41,6 +42,7 @@ from .serializers import (
 )
 
 PERSONA_SEARCH_LIMIT = 10
+SOCIO_LIST_VIEW = "listado"
 
 
 def request_user(request):
@@ -266,9 +268,15 @@ def persona_detail(request, pk):
 @api_view(["GET", "POST"])
 def socio_list_create(request):
     if request.method == "GET":
-        members = Socio.objects.select_related(
-            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador__estado"
-        )
+        view = request.query_params.get("vista")
+        if view not in (None, SOCIO_LIST_VIEW):
+            return Response({"vista": f"Debe ser '{SOCIO_LIST_VIEW}'."}, status=status.HTTP_400_BAD_REQUEST)
+        if view == SOCIO_LIST_VIEW:
+            members = Socio.objects.select_related("persona", "estado_administrativo", "jugador__estado")
+        else:
+            members = Socio.objects.select_related(
+                "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador__estado"
+            )
         is_player = request.query_params.get("es_jugador")
         if is_player is not None:
             if is_player not in ("true", "false"):
@@ -277,7 +285,8 @@ def socio_list_create(request):
                 Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
             )
             members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
-        serializer = SocioSerializer(members, many=True, context={"request": request})
+        serializer_class = SocioListSerializer if view == SOCIO_LIST_VIEW else SocioSerializer
+        serializer = serializer_class(members, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = SocioSerializer(data=request.data)

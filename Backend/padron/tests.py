@@ -1,10 +1,12 @@
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from padron.serializers import SocioSerializer
+from padron.serializers import SocioListSerializer, SocioSerializer
 
 import csv
 from datetime import date, timedelta
@@ -423,6 +425,35 @@ class PadronViewTests(APITestCase):
         response = self.client.get("/api/padron/socio/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
+
+    def test_socio_get_list_vista_listado_devuelve_solo_campos_de_la_tabla(self):
+        self.crear_socio_orm()
+        jugador = self.crear_jugador_orm()
+        jugador.deactivate()
+
+        response = self.client.get("/api/padron/socio/?vista=listado&es_jugador=false", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(2, len(response.data))
+        self.assertEqual(set(SocioListSerializer.Meta.fields), set(response.data[0].keys()))
+        ex_jugador = next(item for item in response.data if item["socio_id"] == jugador.socio.socio_id)
+        self.assertTrue(ex_jugador["es_ex_jugador"])
+        self.assertEqual(jugador.jugador_id, ex_jugador["jugador_id"])
+
+    def test_socio_get_list_vista_listado_no_hace_consultas_por_socio(self):
+        self.crear_socio_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/socio/?vista=listado", format="json")
+        for _ in range(3):
+            self.crear_socio_orm()
+        self.crear_jugador_orm()
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/socio/?vista=listado", format="json")
+        self.assertEqual(5, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_socio_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/socio/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_socio_get_list_filtra_por_es_jugador(self):
         solo_socio = self.crear_socio_orm()
