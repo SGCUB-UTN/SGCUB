@@ -16,13 +16,19 @@ export default function MainLayout() {
       <RegisterPaymentProvider>
         <RevertPaymentProvider>
           <div className={`main-layout ${sidebarCollapsed ? 'main-layout--collapsed' : ''}`}>
+            <a
+              href="#contenido"
+              className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-primary focus:text-on-primary focus:text-base focus:font-semibold focus:shadow-md"
+            >
+              Saltar al contenido
+            </a>
             <Sidebar
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
             />
             <div className="main-layout-content">
               <Header collapsed={sidebarCollapsed} />
-              <main className="main-layout-main">
+              <main id="contenido" tabIndex={-1} className="main-layout-main focus:outline-none">
                 <Outlet />
               </main>
             </div>

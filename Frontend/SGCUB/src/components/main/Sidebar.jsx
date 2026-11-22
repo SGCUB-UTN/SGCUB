@@ -73,7 +73,7 @@ export default function Sidebar({ collapsed, onToggle }) {
     <aside className={`app-sidebar ${claseEstado}`}>
       <div className="app-sidebar-content">
         <div className="app-sidebar-scroll">
-          <nav className="app-sidebar-nav">
+          <nav className="app-sidebar-nav" aria-label="Navegación principal">
             <NavLink end to="/" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-base font-semibold ${isActive ? 'app-sidebar-link--active' : ''}`}>
               <div className="flex items-center gap-space-sm">
                 <span className="material-symbols-outlined text-[20px]" aria-hidden="true">grid_view</span>
@@ -168,12 +168,20 @@ export default function Sidebar({ collapsed, onToggle }) {
               </div>
               {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
                 <span className="app-sidebar-badges font-label-sm flex items-center gap-1">
+                  <span className="sr-only">
+                    {[
+                      alertas.vencidos > 0 && `${alertas.vencidos} vencidos`,
+                      alertas.proximos > 0 && `${alertas.proximos} por vencer`,
+                    ].filter(Boolean).join(', ')}
+                  </span>
+                  <span className="contents" aria-hidden="true">
                   {alertas.vencidos > 0 && (
                     <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
                   )}
                   {alertas.proximos > 0 && (
                     <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
                   )}
+                  </span>
                 </span>
               )}
             </NavLink>
@@ -288,11 +296,12 @@ export default function Sidebar({ collapsed, onToggle }) {
           type="button"
           className="app-sidebar-toggle"
           onClick={onToggle}
-          aria-label={collapsed ? 'Mostrar menú' : 'Ocultar menú'}
-          title={collapsed ? 'Mostrar menú' : 'Ocultar menú'}
+          aria-label={collapsed ? 'Mostrar menú' : 'Contraer menú'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Mostrar menú' : 'Contraer menú'}
         >
           <span className="app-sidebar-toggle-label">{collapsed ? 'Mostrar menú' : 'Contraer menú'}</span>
-          <span className="material-symbols-outlined text-[18px]">keyboard_double_arrow_left</span>
+          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">keyboard_double_arrow_left</span>
         </button>
       </div>
     </aside>

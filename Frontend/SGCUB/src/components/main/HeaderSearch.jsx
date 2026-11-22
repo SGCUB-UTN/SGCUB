@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import usePersonaSearch from '../../hooks/usePersonaSearch'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { formatDni } from '../personas/format'
+import { notifyCajaChanged } from '../finanzas/cajaEvents'
 
 const LISTBOX_ID = 'header-search-results'
 
@@ -16,7 +17,7 @@ const PROFILE_TONES = {
 function SearchMessage({ icon, children }) {
   return (
     <div className="flex items-center gap-2 px-3 py-3 text-sm text-on-surface-variant">
-      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{icon}</span>
       {children}
     </div>
   )
@@ -45,7 +46,7 @@ export default function HeaderSearch() {
   }
 
   const pay = (result) => {
-    openPayment({ socioId: result.socioId })
+    openPayment({ socioId: result.socioId, onSuccess: notifyCajaChanged })
     closeSearch()
   }
 
@@ -71,6 +72,9 @@ export default function HeaderSearch() {
     } else if (event.key === 'Enter') {
       event.preventDefault()
       select(results[highlightedIndex])
+    } else if ((event.key === '.' || event.key === ',') && !isSearching && results[highlightedIndex]?.socioId) {
+      event.preventDefault()
+      pay(results[highlightedIndex])
     }
   }
 
@@ -112,7 +116,8 @@ export default function HeaderSearch() {
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => pay(result)}
-                  title="Registrar pago"
+                  title="Registrar pago (tecla . o ,)"
+                  aria-keyshortcuts=". ,"
                   aria-label={`Registrar pago de ${result.name}`}
                   className="inline-flex items-center gap-1 h-8 px-2.5 shrink-0 rounded-md border border-primary/30 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors cursor-pointer"
                 >
@@ -129,10 +134,10 @@ export default function HeaderSearch() {
 
   return (
     <div className="relative flex items-center">
-      <span className="material-symbols-outlined absolute left-3 text-outline text-[20px]">search</span>
+      <span className="material-symbols-outlined absolute left-3 text-outline text-[20px]" aria-hidden="true">search</span>
       <input
         ref={inputRef}
-        className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:bg-surface-container-lowest transition-colors"
+        className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-colors"
         placeholder="Búsqueda global (DNI, nombre, apellido, n° de socio)"
         type="text"
         role="combobox"

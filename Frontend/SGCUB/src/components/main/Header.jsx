@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { Menu } from "@mantine/core";
 import { useAuth } from "../../auth/useAuth";
 import useTheme from "../../hooks/useTheme";
+import useRegisterPayment from "../../hooks/useRegisterPayment";
+import OtroMovimientoModal from "../finanzas/OtroMovimientoModal";
+import { notifyCajaChanged } from "../finanzas/cajaEvents";
+import { PrimaryButton, SecondaryButton } from "../personas/tabs/parts";
 import HeaderSearch from "./HeaderSearch";
 import "./header.css";
 
@@ -16,6 +20,8 @@ export default function Header({ collapsed = false }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [menuOpened, setMenuOpened] = useState(false);
+  const [movimientoAbierto, setMovimientoAbierto] = useState(false);
+  const { openPayment } = useRegisterPayment();
 
   return (
     <header className={`app-header fixed top-0 right-0 z-40 bg-surface-container-lowest flex flex-row flex-nowrap items-stretch ${collapsed ? 'app-header--collapsed' : ''}`}>
@@ -35,6 +41,17 @@ export default function Header({ collapsed = false }) {
         </div>
 
         <div className="app-header-actions ml-auto flex shrink-0 items-center">
+          {user && (
+            <div className="flex items-center gap-2 ml-2">
+              <PrimaryButton icon="payments" title="Registrar pago" onClick={() => openPayment({ onSuccess: notifyCajaChanged })}>
+                <span className="max-xl:sr-only">Pagar</span>
+              </PrimaryButton>
+              <SecondaryButton icon="swap_horiz" title="Otros movimientos" onClick={() => setMovimientoAbierto(true)}>
+                <span className="max-xl:sr-only">Otro movimiento
+                </span>
+              </SecondaryButton>
+            </div>
+          )}
           {user && (
             <Menu
               opened={menuOpened}
@@ -105,6 +122,12 @@ export default function Header({ collapsed = false }) {
           )}
         </div>
       </div>
+
+      <OtroMovimientoModal
+        opened={movimientoAbierto}
+        onClose={() => setMovimientoAbierto(false)}
+        onSuccess={notifyCajaChanged}
+      />
     </header>
   );
 }

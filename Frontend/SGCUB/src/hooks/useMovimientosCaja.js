@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getComprobantes } from '../api/comprobantes'
 import { getDevoluciones } from '../api/devoluciones'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
 const EMPTY = { comprobantes: [], devoluciones: [] }
 
@@ -18,6 +19,11 @@ export default function useMovimientosCaja(period) {
   }, [period, version])
 
   const reload = useCallback(() => setVersion((current) => current + 1), [])
+
+  useEffect(() => {
+    window.addEventListener(CAJA_CHANGED_EVENT, reload)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, reload)
+  }, [reload])
 
   const loaded = load.period === period
   return {
