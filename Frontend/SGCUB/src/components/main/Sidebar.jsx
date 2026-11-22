@@ -131,43 +131,6 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
             </NavLink>
 
             <details
-              open={openSections.finanzas}
-              onToggle={(e) => {
-                const isOpen = e.currentTarget.open;
-                setOpenSections((prev) => (prev.finanzas === isOpen ? prev : { ...prev, finanzas: isOpen }));
-              }}
-              className="app-sidebar-group flex flex-col gap-0.5"
-            >
-              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
-                <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">account_balance_wallet</span>
-                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Finanzas</span>
-                </div>
-                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
-              </summary>
-              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
-                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
-                    <span className="app-sidebar-label text-base">Caja y cobros</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/finanzas/cuotas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">receipt_long</span>
-                    <span className="app-sidebar-label text-base">Cuotas</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/resumen-financiero" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance</span>
-                    <span className="app-sidebar-label text-base">Resumen financiero</span>
-                  </span>
-                </NavLink>
-              </div>
-            </details>
-
-            <details
               open={openSections.padron}
               onToggle={(e) => {
                 const isOpen = e.currentTarget.open;
@@ -205,6 +168,43 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">sports_soccer</span>
                     <span className="app-sidebar-label text-base">Categorías</span>
+                  </span>
+                </NavLink>
+              </div>
+            </details>
+
+            <details
+              open={openSections.finanzas}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.finanzas === isOpen ? prev : { ...prev, finanzas: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">account_balance_wallet</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Finanzas</span>
+                </div>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
+              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
+                    <span className="app-sidebar-label text-base">Caja y cobros</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/finanzas/cuotas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">receipt_long</span>
+                    <span className="app-sidebar-label text-base">Cuotas</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/resumen-financiero" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance</span>
+                    <span className="app-sidebar-label text-base">Resumen financiero</span>
                   </span>
                 </NavLink>
               </div>
