@@ -62,15 +62,13 @@
 .app-header-brand-name {
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .app-header-brand-subtitle {
-  margin-top: 3px;
-  font-size: 11px;
+  margin-top: 2px;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .app-header-main {

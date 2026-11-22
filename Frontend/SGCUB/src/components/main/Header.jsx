@@ -72,9 +72,9 @@ export default function Header({ collapsed = false }) {
                   <div className="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-primary shrink-0">
                     <span className="material-symbols-outlined text-[20px]" aria-hidden="true">person</span>
                   </div>
-                  <div className="hidden sm:flex flex-col text-left min-w-0 max-w-[180px]">
-                    <span className="text-sm text-on-surface font-semibold leading-tight truncate">{user.full_name}</span>
-                    <span className="text-xs text-primary font-medium truncate">{getRoleLabel(user)}</span>
+                  <div className="hidden sm:flex flex-col text-left min-w-0 max-w-[200px]">
+                    <span className="text-base text-on-surface font-semibold leading-tight truncate">{user.full_name}</span>
+                    <span className="text-sm text-on-surface-variant truncate">{getRoleLabel(user)}</span>
                   </div>
                   <span
                     className={`material-symbols-outlined text-on-surface-variant text-[18px] transition-transform duration-200 ${menuOpened ? 'rotate-180' : ''}`}
@@ -87,8 +87,8 @@ export default function Header({ collapsed = false }) {
 
               <Menu.Dropdown className="p-1 min-w-[220px]">
                 <div className="px-3 py-2 border-b border-outline-variant/20 mb-1">
-                  <p className="text-sm font-semibold text-on-surface truncate">{user.full_name}</p>
-                  <p className="text-xs text-on-surface-variant truncate">{user.email || getRoleLabel(user)}</p>
+                  <p className="text-base font-semibold text-on-surface truncate">{user.full_name}</p>
+                  <p className="text-sm text-on-surface-variant truncate">{user.email || getRoleLabel(user)}</p>
                 </div>
 
                 <Menu.Item
@@ -99,7 +99,7 @@ export default function Header({ collapsed = false }) {
                   }
                   onClick={toggleTheme}
                 >
-                  <span className="text-sm text-on-surface">
+                  <span className="text-base text-on-surface">
                     {isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
                   </span>
                 </Menu.Item>
@@ -115,7 +115,7 @@ export default function Header({ collapsed = false }) {
                   }
                   onClick={logout}
                 >
-                  <span className="text-sm font-medium">Cerrar sesión</span>
+                  <span className="text-base font-medium">Cerrar sesión</span>
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
