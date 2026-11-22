@@ -940,6 +940,29 @@ class JugadorListSerializer(serializers.ModelSerializer):
         fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "estado", "tipo_baja", "vinculos_familiares"]
 
 
+class CategoriaSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categoria
+        fields = ["categoria_id", "nombre", "genero"]
+        read_only_fields = fields
+
+
+class JugadorTableSerializer(serializers.ModelSerializer):
+    socio = SocioListSerializer(read_only=True)
+    categoria = CategoriaSummarySerializer(read_only=True)
+    categoria_secundaria = CategoriaSummarySerializer(read_only=True)
+    estado = EstadoDeportivoSerializer(read_only=True)
+    tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
+
+    class Meta:
+        model = Jugador
+        fields = [
+            "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja",
+            "esquema_vacunacion", "nivel_educacion",
+        ]
+        read_only_fields = fields
+
+
 class JugadorSerializerDetail(serializers.ModelSerializer):
     socio = SocioSerializer(read_only=True)
     categoria = CategoriaSerializer(read_only=True)

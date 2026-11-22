@@ -6,7 +6,7 @@ import {
   postJugador,
 } from '../api/jugadores'
 
-function useJugadores() {
+function useJugadores({ view } = {}) {
   const [jugadores, setJugadores] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -16,13 +16,13 @@ function useJugadores() {
     setError(null)
 
     try {
-      setJugadores(await getJugadores())
+      setJugadores(await getJugadores({ view }))
     } catch (requestError) {
       setError(requestError)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [view])
 
   const crearJugador = useCallback(async (jugador) => {
     const jugadorCreado = await postJugador(jugador)

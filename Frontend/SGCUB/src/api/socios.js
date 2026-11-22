@@ -2,8 +2,6 @@ import { api } from './conf'
 
 const sociosEndpoint = 'padron/socio/'
 
-export const SOCIOS_LIST_VIEW = 'listado'
-
 export const getSocios = async ({ onlyMembers = false, view } = {}) => {
   try {
     const params = {

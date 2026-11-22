@@ -3,8 +3,8 @@ import { getEstados } from './estados'
 
 const jugadoresEndpoint = 'padron/jugador/'
 
-export const getJugadores = async () => {
-  const response = await api.get(jugadoresEndpoint)
+export const getJugadores = async ({ view } = {}) => {
+  const response = await api.get(jugadoresEndpoint, { params: view ? { vista: view } : undefined })
   return response.data
 }
 

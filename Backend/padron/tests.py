@@ -6,7 +6,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from padron.serializers import SocioListSerializer, SocioSerializer
+from padron.serializers import JugadorTableSerializer, SocioListSerializer, SocioSerializer
 
 import csv
 from datetime import date, timedelta
@@ -990,6 +990,42 @@ class PadronViewTests(APITestCase):
         response = self.client.get("/api/padron/jugador/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
+
+    def test_jugador_get_list_vista_listado_devuelve_solo_campos_de_la_tabla(self):
+        jugador = self.crear_jugador_orm()
+
+        response = self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        item = response.data[0]
+        self.assertEqual(set(JugadorTableSerializer.Meta.fields), set(item.keys()))
+        self.assertEqual(set(SocioListSerializer.Meta.fields), set(item["socio"].keys()))
+        self.assertEqual({"categoria_id", "nombre", "genero"}, set(item["categoria"].keys()))
+        self.assertEqual(jugador.socio.socio_id, item["socio"]["socio_id"])
+        self.assertIsNone(item["categoria_secundaria"])
+
+    def test_jugador_get_list_vista_listado_filtra_por_categoria(self):
+        jugador = self.crear_jugador_orm()
+        otra = self.crear_categoria_orm(nombre="Otra")
+
+        response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={jugador.categoria_id}", format="json")
+        self.assertEqual([jugador.jugador_id], [item["jugador_id"] for item in response.data])
+        response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={otra.categoria_id}", format="json")
+        self.assertEqual([], response.data)
+
+    def test_jugador_get_list_vista_listado_no_hace_consultas_por_jugador(self):
+        self.crear_jugador_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        for index in range(3):
+            self.crear_jugador_orm(categoria=self.crear_categoria_orm(nombre=f"Categoría {index}"))
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        self.assertEqual(4, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_jugador_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/jugador/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_jugador_get_detail(self):
         jugador = self.crear_jugador_orm()

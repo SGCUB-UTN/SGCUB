@@ -4,12 +4,13 @@ import JugadoresTable from '../components/jugadores/JugadoresTable'
 import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useCategorias from '../hooks/useCategorias'
 import useJugadores from '../hooks/useJugadores'
+import { LIST_VIEW } from '../api/listView'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 
 function Jugadores() {
   const navigate = useNavigate()
-  const { jugadores, isLoading, error } = useJugadores()
+  const { jugadores, isLoading, error } = useJugadores({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
   const totales = useMemo(() => {

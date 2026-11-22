@@ -26,6 +26,7 @@ from .serializers import (
     EstadoDeportivoSerializer,
     JugadorSerializer,
     JugadorListSerializer,
+    JugadorTableSerializer,
     JugadorSerializerDetail,
     DocenteSerializer,
     VinculoFamiliarSerializer,
@@ -42,7 +43,7 @@ from .serializers import (
 )
 
 PERSONA_SEARCH_LIMIT = 10
-SOCIO_LIST_VIEW = "listado"
+LIST_VIEW = "listado"
 
 
 def request_user(request):
@@ -60,6 +61,10 @@ def talle_sort_key(nombre):
     if name in letter_ranks:
         return (1, letter_ranks[name], "")
     return (2, 0, name)
+
+
+def invalid_view_response():
+    return Response({"vista": f"Debe ser '{LIST_VIEW}'."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(tags=["Padron / Genero"], request=GeneroSerializer, responses=GeneroSerializer)
@@ -269,9 +274,9 @@ def persona_detail(request, pk):
 def socio_list_create(request):
     if request.method == "GET":
         view = request.query_params.get("vista")
-        if view not in (None, SOCIO_LIST_VIEW):
-            return Response({"vista": f"Debe ser '{SOCIO_LIST_VIEW}'."}, status=status.HTTP_400_BAD_REQUEST)
-        if view == SOCIO_LIST_VIEW:
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
             members = Socio.objects.select_related("persona", "estado_administrativo", "jugador__estado")
         else:
             members = Socio.objects.select_related(
@@ -285,7 +290,7 @@ def socio_list_create(request):
                 Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
             )
             members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
-        serializer_class = SocioListSerializer if view == SOCIO_LIST_VIEW else SocioSerializer
+        serializer_class = SocioListSerializer if view == LIST_VIEW else SocioSerializer
         serializer = serializer_class(members, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -459,18 +464,27 @@ def estado_detail(request, pk):
 @api_view(["GET", "POST"])
 def jugador_list_create(request):
     if request.method == "GET":
-        players = Jugador.objects.select_related(
-            "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
-            "categoria", "categoria_secundaria", "estado",
-        ).prefetch_related(
-            *persona_serializer_prefetches("vinculos_familiares__persona"),
-        )
+        view = request.query_params.get("vista")
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
+            players = Jugador.objects.select_related(
+                "socio__persona", "socio__estado_administrativo", "categoria", "categoria_secundaria", "estado",
+            )
+        else:
+            players = Jugador.objects.select_related(
+                "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
+                "categoria", "categoria_secundaria", "estado",
+            ).prefetch_related(
+                *persona_serializer_prefetches("vinculos_familiares__persona"),
+            )
         category_id = request.query_params.get("categoria")
         if category_id:
             if not category_id.isdigit():
                 return Response({"categoria": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
             players = players.filter(Q(categoria_id=category_id) | Q(categoria_secundaria_id=category_id))
-        serializer = JugadorListSerializer(players, many=True, context={"request": request})
+        serializer_class = JugadorTableSerializer if view == LIST_VIEW else JugadorListSerializer
+        serializer = serializer_class(players, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = JugadorSerializer(data=request.data)
