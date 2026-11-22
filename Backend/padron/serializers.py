@@ -588,13 +588,20 @@ class SocioSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+def account_summary(context, socio):
+    summaries = context.get("account_summaries")
+    if summaries is None:
+        return None
+    summary = summaries.get(socio.pk, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0})
+    return {"deuda": f"{summary['deuda']:.2f}", "cuotas_vencidas": summary["cuotas_vencidas"]}
+
+
 class SocioListSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(source="persona.nombre", read_only=True)
     apellido = serializers.CharField(source="persona.apellido", read_only=True)
     dni = serializers.CharField(source="persona.dni", read_only=True)
     telefono = serializers.CharField(source="persona.telefono", read_only=True)
     estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
-    es_jugador = serializers.BooleanField(source="is_player", read_only=True)
     es_ex_jugador = serializers.BooleanField(source="is_former_player", read_only=True)
     jugador_id = serializers.IntegerField(source="player_profile.jugador_id", read_only=True, allow_null=True)
     cuenta = serializers.SerializerMethodField()
@@ -603,16 +610,28 @@ class SocioListSerializer(serializers.ModelSerializer):
         model = Socio
         fields = [
             "socio_id", "numero_socio", "nombre", "apellido", "dni", "telefono", "fecha_alta",
-            "estado_administrativo_nombre", "es_jugador", "es_ex_jugador", "jugador_id", "cuenta",
+            "estado_administrativo_nombre", "es_ex_jugador", "jugador_id", "cuenta",
         ]
         read_only_fields = fields
 
     def get_cuenta(self, socio):
-        summaries = self.context.get("account_summaries")
-        if summaries is None:
-            return None
-        summary = summaries.get(socio.pk, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0})
-        return {"deuda": f"{summary['deuda']:.2f}", "cuotas_vencidas": summary["cuotas_vencidas"]}
+        return account_summary(self.context, socio)
+
+
+class JugadorSocioSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(source="persona.nombre", read_only=True)
+    apellido = serializers.CharField(source="persona.apellido", read_only=True)
+    dni = serializers.CharField(source="persona.dni", read_only=True)
+    estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
+    cuenta = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Socio
+        fields = ["socio_id", "numero_socio", "nombre", "apellido", "dni", "estado_administrativo_nombre", "cuenta"]
+        read_only_fields = fields
+
+    def get_cuenta(self, socio):
+        return account_summary(self.context, socio)
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -957,7 +976,7 @@ class CategoriaSummarySerializer(serializers.ModelSerializer):
 
 
 class JugadorTableSerializer(serializers.ModelSerializer):
-    socio = SocioListSerializer(read_only=True)
+    socio = JugadorSocioSerializer(read_only=True)
     categoria = CategoriaSummarySerializer(read_only=True)
     categoria_secundaria = CategoriaSummarySerializer(read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
@@ -1042,7 +1061,7 @@ def group_teacher_assignments(teacher, category_serializer=None):
 class PersonaSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Persona
-        fields = ["persona_id", "nombre", "apellido", "dni", "telefono", "email"]
+        fields = ["nombre", "apellido", "dni", "telefono", "email"]
         read_only_fields = fields
 
 

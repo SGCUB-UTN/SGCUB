@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from padron.serializers import (
     DocenteTableSerializer,
+    JugadorSocioSerializer,
     JugadorTableSerializer,
     PersonaSummarySerializer,
     SocioListSerializer,
@@ -1005,7 +1006,7 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         item = response.data[0]
         self.assertEqual(set(JugadorTableSerializer.Meta.fields), set(item.keys()))
-        self.assertEqual(set(SocioListSerializer.Meta.fields), set(item["socio"].keys()))
+        self.assertEqual(set(JugadorSocioSerializer.Meta.fields), set(item["socio"].keys()))
         self.assertEqual({"categoria_id", "nombre", "genero"}, set(item["categoria"].keys()))
         self.assertEqual(jugador.socio.socio_id, item["socio"]["socio_id"])
         self.assertIsNone(item["categoria_secundaria"])
