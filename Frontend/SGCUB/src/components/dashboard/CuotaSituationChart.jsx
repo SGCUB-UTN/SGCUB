@@ -42,8 +42,7 @@ export default function CuotaSituationChart({ situation, label }) {
 
   return (
     <div className="min-w-0 h-full flex flex-col">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Estado de las cuotas</h3>
-      <div className="mt-2 flex items-center gap-4">
+      <div className="mt-3 flex items-center gap-4">
         <DonutChart
           segments={segments}
           total={situation.generated}

@@ -3,7 +3,7 @@ import CuotaSituationChart from './CuotaSituationChart'
 import { formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import { KpiColumn } from '../shared/Kpi'
 import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../shared/panel'
-import { formatPeriod } from '../shared/periodFormat'
+import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import SectionHeading from '../shared/SectionHeading'
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
@@ -43,10 +43,16 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
       <SectionHeading
         id="cuota-status-title"
         icon="donut_large"
-        title="Finanzas"
+        title={(
+          <>
+            Finanzas
+            <span className="text-outline-variant font-normal" aria-hidden="true">|</span>
+            <span className="font-normal text-on-surface-variant">{formatPeriod(cuotas?.period ?? currentPeriod())}</span>
+          </>
+        )}
         className={HEADING_CLASS}
         actions={(
-          <Link to="/finanzas/cuotas" className={`${TEXT_BUTTON_CLASS} text-sm`}>
+          <Link to={cuotas?.period ? `/finanzas/cuotas?periodo=${cuotas.period}` : '/finanzas/cuotas'} className={`${TEXT_BUTTON_CLASS} text-sm`}>
             Ver cuotas
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
           </Link>
