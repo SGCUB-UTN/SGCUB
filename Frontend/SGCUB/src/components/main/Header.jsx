@@ -16,7 +16,7 @@ const getRoleLabel = (user) => {
   return user.is_superuser ? "Administrador" : "Sin rol";
 };
 
-export default function Header({ collapsed = false }) {
+export default function Header({ collapsed = false, mobile = false, menuOpen = false, onMenuToggle }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [menuOpened, setMenuOpened] = useState(false);
@@ -25,6 +25,18 @@ export default function Header({ collapsed = false }) {
 
   return (
     <header className={`app-header fixed top-0 right-0 z-40 bg-surface-container-lowest flex flex-row flex-nowrap items-stretch ${collapsed ? 'app-header--collapsed' : ''}`}>
+      {mobile && (
+        <button
+          type="button"
+          className="app-header-menu-button"
+          onClick={onMenuToggle}
+          aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={menuOpen}
+          aria-controls="app-sidebar"
+        >
+          <span className="material-symbols-outlined text-[24px]" aria-hidden="true">{menuOpen ? 'close' : 'menu'}</span>
+        </button>
+      )}
       <div className="app-header-brand">
         <Link to="/" className="app-header-brand-inner" aria-label="Ir al inicio">
           <img alt="Escudo C.U.B." className="app-header-logo object-contain shrink-0" src="/escudo-sin-fondo.png" />

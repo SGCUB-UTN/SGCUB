@@ -9,7 +9,7 @@ const DURACION_CONTRAER = 220;
 const DEMORA_DESPLEGAR = 120;
 const DEMORA_CONTRAER = 150;
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpen = false, onNavigate }) {
   const { pathname } = useLocation();
 
   const [alertas, setAlertas] = useState(null);
@@ -65,7 +65,9 @@ export default function Sidebar({ collapsed, onToggle }) {
     return () => clearTimeout(timer);
   }, [contrayendo]);
 
-  const claseEstado = contrayendo
+  const claseEstado = mobile
+    ? mobileOpen ? 'app-sidebar--mobile-open' : ''
+    : contrayendo
     ? 'app-sidebar--collapsing'
     : contraido
       ? 'app-sidebar--collapsed'
@@ -100,6 +102,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
+      id="app-sidebar"
       className={`app-sidebar ${claseEstado}`}
       onMouseEnter={() => collapsed && programarHover(true, DEMORA_DESPLEGAR)}
       onMouseLeave={() => programarHover(false, DEMORA_CONTRAER)}
@@ -108,7 +111,11 @@ export default function Sidebar({ collapsed, onToggle }) {
     >
       <div className="app-sidebar-content">
         <div className="app-sidebar-scroll">
-          <nav className="app-sidebar-nav" aria-label="Navegación principal">
+          <nav
+            className="app-sidebar-nav"
+            aria-label="Navegación principal"
+            onClick={(event) => mobile && event.target.closest('a') && onNavigate?.()}
+          >
             <NavLink end to="/" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-base font-semibold ${isActive ? 'app-sidebar-link--active' : ''}`}>
               <div className="flex items-center gap-space-sm">
                 <span className="material-symbols-outlined text-[20px]" aria-hidden="true">grid_view</span>
