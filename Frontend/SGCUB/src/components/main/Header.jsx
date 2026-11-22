@@ -16,6 +16,15 @@ const getRoleLabel = (user) => {
   return user.is_superuser ? "Administrador" : "Sin rol";
 };
 
+const getInitials = (fullName = "") =>
+  fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join("");
+
 export default function Header({ collapsed = false, mobile = false, menuOpen = false, onMenuToggle }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
@@ -81,8 +90,8 @@ export default function Header({ collapsed = false, mobile = false, menuOpen = f
                   aria-expanded={menuOpened}
                   className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-outline-variant/30 hover:bg-surface-container-low transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <div className="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-primary shrink-0">
-                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">person</span>
+                  <div className="w-9 h-9 rounded-[9999px] bg-surface-container-high border border-outline-variant/40 flex items-center justify-center text-on-surface-variant text-sm font-semibold shrink-0" aria-hidden="true">
+                    {getInitials(user.full_name) || <span className="material-symbols-outlined text-[20px]">person</span>}
                   </div>
                   <div className="hidden sm:flex flex-col text-left min-w-0 max-w-[200px]">
                     <span className="text-base text-on-surface font-semibold leading-tight truncate">{user.full_name}</span>
