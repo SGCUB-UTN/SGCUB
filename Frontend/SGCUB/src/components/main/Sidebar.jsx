@@ -13,6 +13,7 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
   const { pathname } = useLocation();
 
   const [alertas, setAlertas] = useState(null);
+  const [alertasError, setAlertasError] = useState(false);
 
   useEffect(() => {
     const fetchAlertas = async () => {
@@ -20,8 +21,10 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
         const { getAlertasCount } = await import('../../api/documentacion');
         const data = await getAlertasCount();
         setAlertas(data);
+        setAlertasError(false);
       } catch (err) {
         console.error('Error fetching alertas count:', err);
+        setAlertasError(true);
       }
     };
     
@@ -229,6 +232,12 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                     <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
                   )}
                   </span>
+                </span>
+              )}
+              {alertasError && !alertas && (
+                <span className="app-sidebar-badges flex items-center text-on-surface-variant" title="No se pudieron cargar las alertas">
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sync_problem</span>
+                  <span className="sr-only">No se pudieron cargar las alertas</span>
                 </span>
               )}
             </NavLink>
