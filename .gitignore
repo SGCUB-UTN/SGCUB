@@ -54,3 +54,11 @@ Thumbs.db
 
 respaldo/
 /media/
+
+
+# Claude Code / Impeccable (local)
+.claude/settings.local.json
+.impeccable/config.local.json
+.github/skills/
+.github/agents/
+.github/hooks/
