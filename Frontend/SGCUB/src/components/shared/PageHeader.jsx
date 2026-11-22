@@ -26,7 +26,7 @@ export default function PageHeader({ breadcrumb = [], title, actions }) {
           <div className="flex items-center gap-3">
             {title && <h1 className="text-2xl font-bold text-on-surface tracking-tight font-headline-lg">{title}</h1>}
           </div>
-          {actions && <div className="flex items-center gap-2.5">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
         </div>
       )}
     </div>
