@@ -1285,6 +1285,7 @@ class PadronViewTests(APITestCase):
         item = response.data[0]
         self.assertEqual({*DocenteTableSerializer.Meta.fields, "asignaciones"}, set(item.keys()))
         self.assertEqual(set(PersonaSummarySerializer.Meta.fields), set(item["persona_detalle"].keys()))
+        self.assertEqual({"estado", "vencidos", "faltantes", "por_vencer"}, set(item["documentacion"].keys()))
         self.assertEqual(
             [{
                 "cargo": asignacion.cargo_id,

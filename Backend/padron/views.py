@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
-from documental.services import PERFIL_JUGADOR, documentation_statuses
+from documental.services import PERFIL_DOCENTE, PERFIL_JUGADOR, documentation_statuses
 from finanzas.services import account_debt_summaries
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
@@ -547,11 +547,15 @@ def docente_list_create(request):
         if view not in (None, LIST_VIEW):
             return invalid_view_response()
         if view == LIST_VIEW:
-            teachers = Docente.objects.select_related("persona", "estado").prefetch_related(
+            teachers = list(Docente.objects.select_related("persona", "estado").prefetch_related(
                 "categorias_docente__cargo",
                 "categorias_docente__categoria",
-            )
-            return Response(DocenteTableSerializer(teachers, many=True, context={"request": request}).data)
+            ))
+            context = {
+                "request": request,
+                "document_statuses": documentation_statuses([teacher.persona_id for teacher in teachers], PERFIL_DOCENTE),
+            }
+            return Response(DocenteTableSerializer(teachers, many=True, context=context).data)
         teachers = Docente.objects.select_related(
             "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "persona__socio__jugador", "estado"
         ).prefetch_related(

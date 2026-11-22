@@ -1050,11 +1050,16 @@ class PersonaSummarySerializer(serializers.ModelSerializer):
 class DocenteTableSerializer(serializers.ModelSerializer):
     persona_detalle = PersonaSummarySerializer(source="persona", read_only=True)
     estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
+    documentacion = serializers.SerializerMethodField()
 
     class Meta:
         model = Docente
-        fields = ["docente_id", "legajo", "persona_detalle", "estado_nombre"]
+        fields = ["docente_id", "legajo", "persona_detalle", "estado_nombre", "documentacion"]
         read_only_fields = fields
+
+    def get_documentacion(self, teacher):
+        statuses = self.context.get("document_statuses")
+        return statuses.get(teacher.persona_id) if statuses is not None else None
 
     def to_representation(self, teacher):
         data = super().to_representation(teacher)
