@@ -5,6 +5,7 @@ import {
   patchJugador,
   postJugador,
 } from '../api/jugadores'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
 function useJugadores({ view } = {}) {
   const [jugadores, setJugadores] = useState([])
@@ -44,6 +45,12 @@ function useJugadores({ view } = {}) {
   useEffect(() => {
     cargarJugadores()
   }, [cargarJugadores])
+
+  useEffect(() => {
+    if (!view) return undefined
+    window.addEventListener(CAJA_CHANGED_EVENT, cargarJugadores)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, cargarJugadores)
+  }, [view, cargarJugadores])
 
   return {
     jugadores,

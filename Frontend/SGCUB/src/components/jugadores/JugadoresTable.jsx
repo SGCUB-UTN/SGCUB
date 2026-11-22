@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import DocumentationStatus from '../documental/DocumentationStatus'
+import { documentationSeverity } from '../documental/documentationStates'
+import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
+import { accountDebt } from '../finanzas/accountDebt'
+import { notifyCajaChanged } from '../finanzas/cajaEvents'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
@@ -12,11 +17,12 @@ import CategoryFilter from '../shared/CategoryFilter'
 import { ALL_CATEGORIES, NO_CATEGORY_VALUE } from '../shared/categoryFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
-import { formatDni } from '../personas/format'
+import useRegisterPayment from '../../hooks/useRegisterPayment'
+import { formatDni, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 8
 const GENDER_PREFIX = 'gender:'
 
 const matchesCategory = (jugador, value) => {
@@ -39,25 +45,24 @@ const statusLabel = (jugador) => {
   return jugador.tipo_baja === 'parcial' ? 'Baja temporal' : 'De baja'
 }
 
-const secondaryCategoryName = (jugador) => {
-  const secundaria = jugador.categoria_secundaria ?? jugador.categoriaSecundaria
-  if (secundaria?.nombre) return secundaria.nombre
-  if (typeof secundaria === 'string') return secundaria
-  if (Array.isArray(jugador.categorias_secundarias)) {
-    return jugador.categorias_secundarias.map((categoria) => categoria.nombre ?? categoria).join(', ')
-  }
-  return '—'
-}
+const secondaryCategoryName = (jugador) => jugador.categoria_secundaria?.nombre ?? ''
+
+const DOCUMENTATION_LABELS = { vencido: 'Vencida', faltante: 'Incompleta', por_vencer: 'Por vencer', vigente: 'Al día' }
+
+const socioCanPay = (jugador) => isActiveStatus(jugador.socio?.estado_administrativo_nombre)
 
 const exportCsv = (jugadores) => {
-  const headers = ['N° Socio', 'Nombre y apellido', 'DNI', 'Categoría principal', 'Categoría secundaria', 'Estado']
+  const headers = ['N° Socio', 'Nombre y apellido', 'DNI', 'Categoría principal', 'Categoría secundaria', 'Documentación', 'Estado', 'Deuda', 'Cuotas vencidas']
   const rows = jugadores.map((jugador) => [
     jugador.socio?.numero_socio ?? '',
     `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() ,
     jugador.socio?.dni ?? '',
     jugador.categoria?.nombre ?? '',
     secondaryCategoryName(jugador),
+    DOCUMENTATION_LABELS[jugador.documentacion?.estado] ?? '',
     jugador.estado?.nombre ?? '',
+    accountDebt(jugador.socio?.cuenta).toFixed(2).replace('.', ','),
+    jugador.socio?.cuenta?.cuotas_vencidas ?? 0,
   ])
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
@@ -77,12 +82,15 @@ const SORT_VALUES = {
   numero: (jugador) => (jugador.socio?.numero_socio ? Number(jugador.socio.numero_socio) : null),
   nombre: (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim(),
   estado: (jugador) => (isActive(jugador) ? 0 : 1),
+  documentacion: (jugador) => documentationSeverity(jugador.documentacion),
+  cuenta: (jugador) => accountDebt(jugador.socio?.cuenta),
 }
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
 function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange }) {
   const navigate = useNavigate()
+  const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState(ALL_CATEGORIES)
 
@@ -172,9 +180,11 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Categoría principal</th>
-            <th className="py-3 px-4" scope="col">Categoría secundaria</th>
+            <th className="py-3 px-4" scope="col">Categoría</th>
+            <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
+            <th className="py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
           </>
         )}
       >
@@ -204,12 +214,23 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{secondaryCategoryName(jugador)}</td>
+            <td className="py-3 px-4 text-on-surface-variant">
+              {jugador.categoria?.nombre ?? '—'}
+              {secondaryCategoryName(jugador) && <span className="text-on-surface-variant/80"> ({secondaryCategoryName(jugador)})</span>}
+            </td>
+            <td className="py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <ActiveStatusBadge isActive={isActive(jugador)} label={statusLabel(jugador)} />
               </div>
+            </td>
+            <td className="py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
+            <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
+              <PayButton
+                onPay={() => openPayment({ socioId: jugador.socio.socio_id, onSuccess: notifyCajaChanged })}
+                label={`Registrar pago de ${jugador.socio?.nombre} ${jugador.socio?.apellido}`}
+                disabledReason={socioCanPay(jugador) ? undefined : 'Los socios de baja no pueden registrar pagos'}
+              />
             </td>
           </tr>
         ))}

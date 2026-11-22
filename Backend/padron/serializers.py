@@ -967,8 +967,7 @@ class JugadorTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = Jugador
         fields = [
-            "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja",
-            "esquema_vacunacion", "nivel_educacion", "documentacion",
+            "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja", "documentacion",
         ]
         read_only_fields = fields
 

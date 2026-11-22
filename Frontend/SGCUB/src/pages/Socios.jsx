@@ -3,11 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
-import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
 import { LIST_VIEW } from '../api/listView'
-
-const MOSTRAR_RESUMEN_JUGADORES = false
 
 function Padron() {
   const { socios, isLoading, error } = useSocio({ onlyMembers: true, view: LIST_VIEW })
@@ -52,8 +49,6 @@ function Padron() {
           <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
           <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
-
-        {MOSTRAR_RESUMEN_JUGADORES && <JugadorHealthEducationSummary />}
 
         <section aria-label="Socios">
           <SociosTable
