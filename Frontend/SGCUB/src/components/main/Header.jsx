@@ -8,6 +8,7 @@ import OtroMovimientoModal from "../finanzas/OtroMovimientoModal";
 import { notifyCajaChanged } from "../finanzas/cajaEvents";
 import { PrimaryButton, SecondaryButton } from "../personas/tabs/parts";
 import HeaderSearch from "./HeaderSearch";
+import HelpModal from "./HelpModal";
 import "./header.css";
 
 const getRoleLabel = (user) => {
@@ -30,6 +31,7 @@ export default function Header({ collapsed = false, mobile = false, menuOpen = f
   const { isDark, toggleTheme } = useTheme();
   const [menuOpened, setMenuOpened] = useState(false);
   const [movimientoAbierto, setMovimientoAbierto] = useState(false);
+  const [ayudaAbierta, setAyudaAbierta] = useState(false);
   const { openPayment } = useRegisterPayment();
 
   return (
@@ -125,6 +127,17 @@ export default function Header({ collapsed = false, mobile = false, menuOpen = f
                   </span>
                 </Menu.Item>
 
+                <Menu.Item
+                  icon={
+                    <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">
+                      help
+                    </span>
+                  }
+                  onClick={() => setAyudaAbierta(true)}
+                >
+                  <span className="text-base text-on-surface">Ayuda y atajos</span>
+                </Menu.Item>
+
                 <Menu.Divider />
 
                 <Menu.Item
@@ -149,6 +162,7 @@ export default function Header({ collapsed = false, mobile = false, menuOpen = f
         onClose={() => setMovimientoAbierto(false)}
         onSuccess={notifyCajaChanged}
       />
+      <HelpModal opened={ayudaAbierta} onClose={() => setAyudaAbierta(false)} />
     </header>
   );
 }
