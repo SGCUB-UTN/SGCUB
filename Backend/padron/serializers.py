@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from rest_framework import serializers
 from django.db import transaction
@@ -596,14 +597,22 @@ class SocioListSerializer(serializers.ModelSerializer):
     es_jugador = serializers.BooleanField(source="is_player", read_only=True)
     es_ex_jugador = serializers.BooleanField(source="is_former_player", read_only=True)
     jugador_id = serializers.IntegerField(source="player_profile.jugador_id", read_only=True, allow_null=True)
+    cuenta = serializers.SerializerMethodField()
 
     class Meta:
         model = Socio
         fields = [
             "socio_id", "numero_socio", "nombre", "apellido", "dni", "telefono", "fecha_alta",
-            "estado_administrativo_nombre", "es_jugador", "es_ex_jugador", "jugador_id",
+            "estado_administrativo_nombre", "es_jugador", "es_ex_jugador", "jugador_id", "cuenta",
         ]
         read_only_fields = fields
+
+    def get_cuenta(self, socio):
+        summaries = self.context.get("account_summaries")
+        if summaries is None:
+            return None
+        summary = summaries.get(socio.pk, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0})
+        return {"deuda": f"{summary['deuda']:.2f}", "cuotas_vencidas": summary["cuotas_vencidas"]}
 
 
 class CategoriaSerializer(serializers.ModelSerializer):

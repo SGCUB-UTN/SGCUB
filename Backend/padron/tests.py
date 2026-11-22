@@ -444,6 +444,7 @@ class PadronViewTests(APITestCase):
         ex_jugador = next(item for item in response.data if item["socio_id"] == jugador.socio.socio_id)
         self.assertTrue(ex_jugador["es_ex_jugador"])
         self.assertEqual(jugador.jugador_id, ex_jugador["jugador_id"])
+        self.assertEqual({"deuda": "0.00", "cuotas_vencidas": 0}, ex_jugador["cuenta"])
 
     def test_socio_get_list_vista_listado_no_hace_consultas_por_socio(self):
         self.crear_socio_orm()

@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
+from finanzas.services import account_debt_summaries
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
 from .search import normalize_text, normalized_field
@@ -291,8 +292,11 @@ def socio_list_create(request):
                 Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
             )
             members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
-        serializer_class = SocioListSerializer if view == LIST_VIEW else SocioSerializer
-        serializer = serializer_class(members, many=True, context={"request": request})
+        if view == LIST_VIEW:
+            members = list(members)
+            context = {"request": request, "account_summaries": account_debt_summaries([member.pk for member in members])}
+            return Response(SocioListSerializer(members, many=True, context=context).data)
+        serializer = SocioSerializer(members, many=True, context={"request": request})
         return Response(serializer.data)
 
     serializer = SocioSerializer(data=request.data)

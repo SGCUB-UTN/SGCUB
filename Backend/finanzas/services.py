@@ -33,6 +33,7 @@ from .models import (
     ItemPago,
     ModalidadMontoChoices,
     MovimientoCuenta,
+    OVERDUE_CUOTA_STATES,
     Pago,
     SecuenciaComprobante,
     TipoComprobanteChoices,
@@ -657,6 +658,31 @@ def pending_amounts(cuotas):
         else:
             pending[cuota.pk] = max(Decimal("0.00"), cuota.movimiento.monto - applied.get(cuota.pk, Decimal("0.00")))
     return pending
+
+
+def account_debt_summaries(socio_ids, today=None):
+    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
+    cuotas = list(
+        Cuota.objects.filter(
+            movimiento__cuenta_corriente__socio__in=socio_ids,
+            periodo__lte=current_period,
+        )
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento__cuenta_corriente")
+    )
+    pending = pending_amounts(cuotas)
+    summaries = {}
+    for cuota in cuotas:
+        amount = pending[cuota.pk]
+        if amount <= 0:
+            continue
+        summary = summaries.setdefault(
+            cuota.movimiento.cuenta_corriente.socio_id, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0}
+        )
+        summary["deuda"] += amount
+        if cuota.estado_cuota in OVERDUE_CUOTA_STATES:
+            summary["cuotas_vencidas"] += 1
+    return summaries
 
 
 def cuota_state(cuota, pending, today):

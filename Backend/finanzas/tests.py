@@ -63,6 +63,7 @@ from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
 from .services import (
 	CategoriaExentaError,
+	account_debt_summaries,
 	annul_exempt_cuotas,
 	apply_surcharges,
 	assign_benefit,
@@ -1551,6 +1552,46 @@ class EstadoCuentaPendienteTests(PagoTestBase):
 		cuotas = {cuota["cuota_id"]: cuota for cuota in response.data}
 		self.assertEqual(Decimal(str(cuotas[self.agosto.pk]["saldo_pendiente"])), Decimal("750.00"))
 		self.assertEqual(Decimal(str(cuotas[self.agosto.pk]["monto_pagado"])), Decimal("250.00"))
+
+
+
+class ResumenDeudaPorSocioTests(PagoTestBase):
+	def test_suma_lo_pendiente_hasta_el_periodo_actual_como_el_estado_de_cuenta(self):
+		self.pagar([self.agosto], "400.00")
+		crear_cuota_con_cargo(self.cuenta, "2026-10", "1000.00")
+
+		resumen = account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+
+		self.assertEqual(Decimal("1600.00"), resumen[self.socio.pk]["deuda"])
+
+	def test_cuenta_las_cuotas_vencidas_con_saldo(self):
+		self.agosto.estado_cuota = EstadoCuotaChoices.VENCIDA_2
+		self.agosto.save(update_fields=["estado_cuota"])
+
+		resumen = account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+
+		self.assertEqual(1, resumen[self.socio.pk]["cuotas_vencidas"])
+
+	def test_no_incluye_socios_al_dia(self):
+		self.pagar([self.agosto, self.septiembre], "2000.00")
+
+		self.assertEqual({}, account_debt_summaries([self.socio.pk], today=date(2026, 9, 15)))
+
+	def test_no_hace_consultas_por_socio(self):
+		otros = []
+		for index in range(3):
+			persona = Persona.objects.create(nombre="Otro", apellido=f"Socio {index}", dni=f"4000000{index}")
+			socio = Socio.objects.create(persona=persona)
+			crear_cuota_con_cargo(account_for(socio), "2026-09", "500.00")
+			otros.append(socio.pk)
+
+		with CaptureQueriesContext(connection) as uno:
+			account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+		with CaptureQueriesContext(connection) as varios:
+			resumen = account_debt_summaries([self.socio.pk, *otros], today=date(2026, 9, 15))
+
+		self.assertEqual(4, len(resumen))
+		self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
 
 
 class ReversionPagoTests(PagoTestBase):
