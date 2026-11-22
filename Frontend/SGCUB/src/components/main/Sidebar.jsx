@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import PermissionGate from '../../auth/PermissionGate';
 import { PERMISSIONS } from '../../auth/permissions';
@@ -6,6 +6,8 @@ import StatusBadge from '../shared/StatusBadge';
 import './sidebar.css';
 
 const DURACION_CONTRAER = 220;
+const DEMORA_DESPLEGAR = 120;
+const DEMORA_CONTRAER = 150;
 
 export default function Sidebar({ collapsed, onToggle }) {
   const { pathname } = useLocation();
@@ -29,11 +31,32 @@ export default function Sidebar({ collapsed, onToggle }) {
     return () => window.removeEventListener('documentacionCambiada', fetchAlertas);
   }, []);
 
+  const [mouseEncima, setMouseEncima] = useState(false);
+  const [focoTeclado, setFocoTeclado] = useState(false);
+  const hoverTimer = useRef(null);
+  const desplegado = collapsed && (mouseEncima || focoTeclado);
+  const contraido = collapsed && !desplegado;
+
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+
+  const programarHover = (valor, demora) => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setMouseEncima(valor), demora);
+  };
+
+  const handleFocus = (event) => {
+    if (event.target.matches(':focus-visible')) setFocoTeclado(true);
+  };
+
+  const handleBlur = (event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) setFocoTeclado(false);
+  };
+
   const [contrayendo, setContrayendo] = useState(false);
-  const [collapsedAnterior, setCollapsedAnterior] = useState(collapsed);
-  if (collapsed !== collapsedAnterior) {
-    setCollapsedAnterior(collapsed);
-    setContrayendo(collapsed);
+  const [contraidoAnterior, setContraidoAnterior] = useState(contraido);
+  if (contraido !== contraidoAnterior) {
+    setContraidoAnterior(contraido);
+    setContrayendo(contraido);
   }
 
   useEffect(() => {
@@ -42,7 +65,13 @@ export default function Sidebar({ collapsed, onToggle }) {
     return () => clearTimeout(timer);
   }, [contrayendo]);
 
-  const claseEstado = contrayendo ? 'app-sidebar--collapsing' : collapsed ? 'app-sidebar--collapsed' : '';
+  const claseEstado = contrayendo
+    ? 'app-sidebar--collapsing'
+    : contraido
+      ? 'app-sidebar--collapsed'
+      : desplegado
+        ? 'app-sidebar--peek'
+        : '';
   const matches = (routes) => routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const finanzasActive = matches(['/finanzas', '/resumen-financiero', '/caja']);
   const padronActive = matches(['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/categorias', '/docentes', '/categorias']);
@@ -70,7 +99,13 @@ export default function Sidebar({ collapsed, onToggle }) {
   }, [finanzasActive, padronActive, comunicacionesActive, reportesActive, ajustesActive]);
 
   return (
-    <aside className={`app-sidebar ${claseEstado}`}>
+    <aside
+      className={`app-sidebar ${claseEstado}`}
+      onMouseEnter={() => collapsed && programarHover(true, DEMORA_DESPLEGAR)}
+      onMouseLeave={() => programarHover(false, DEMORA_CONTRAER)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    >
       <div className="app-sidebar-content">
         <div className="app-sidebar-scroll">
           <nav className="app-sidebar-nav" aria-label="Navegación principal">
@@ -163,7 +198,12 @@ export default function Sidebar({ collapsed, onToggle }) {
 
             <NavLink to="/documental" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
               <div className="flex items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">folder_shared</span>
+                <span className="relative inline-flex" aria-hidden="true">
+                  <span className="material-symbols-outlined text-[20px]">folder_shared</span>
+                  {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
+                    <span className={`app-sidebar-alert-dot ${alertas.vencidos > 0 ? 'bg-error' : 'bg-amber-500'}`} />
+                  )}
+                </span>
                 <span className="app-sidebar-label text-base font-semibold text-on-surface">Documentación</span>
               </div>
               {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
@@ -296,11 +336,11 @@ export default function Sidebar({ collapsed, onToggle }) {
           type="button"
           className="app-sidebar-toggle"
           onClick={onToggle}
-          aria-label={collapsed ? 'Mostrar menú' : 'Contraer menú'}
+          aria-label={collapsed ? 'Fijar menú abierto' : 'Contraer menú'}
           aria-expanded={!collapsed}
-          title={collapsed ? 'Mostrar menú' : 'Contraer menú'}
+          title={collapsed ? 'Fijar menú abierto' : 'Contraer menú'}
         >
-          <span className="app-sidebar-toggle-label">{collapsed ? 'Mostrar menú' : 'Contraer menú'}</span>
+          <span className="app-sidebar-toggle-label">{collapsed ? 'Fijar menú abierto' : 'Contraer menú'}</span>
           <span className="material-symbols-outlined text-[18px]" aria-hidden="true">keyboard_double_arrow_left</span>
         </button>
       </div>

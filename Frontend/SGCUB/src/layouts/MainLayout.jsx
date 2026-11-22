@@ -1,5 +1,5 @@
 // src/layouts/MainLayout.jsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/main/Sidebar';
 import Header from '../components/main/Header';
@@ -8,8 +8,26 @@ import RegisterPaymentProvider from '../components/finanzas/RegisterPaymentProvi
 import RevertPaymentProvider from '../components/finanzas/RevertPaymentProvider';
 import './main-layout.css';
 
+const SIDEBAR_STORAGE_KEY = 'sgcub.sidebarContraido';
+
+const leerContraido = () => {
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 export default function MainLayout() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(leerContraido);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? '1' : '0');
+    } catch {
+      return;
+    }
+  }, [sidebarCollapsed]);
 
   return (
     <AssignBenefitProvider>

@@ -10,7 +10,28 @@
   box-sizing: border-box;
   background: var(--color-surface-container-lowest);
   border-right: 1px solid color-mix(in srgb, var(--color-outline-variant) 30%, transparent);
-  transition: width 220ms ease;
+  transition:
+    width 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.app-sidebar--peek {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.app-sidebar-alert-dot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px var(--color-surface-container-lowest);
+}
+
+.app-sidebar--collapsed .app-sidebar-alert-dot {
+  display: block;
 }
 
 .app-sidebar-content {
@@ -112,7 +133,7 @@
 
 .app-sidebar-toggle {
   width: 100%;
-  min-height: 34px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -153,10 +174,7 @@
 .app-sidebar:not(.app-sidebar--collapsed, .app-sidebar--collapsing) :is(
   .app-sidebar-toggle-label,
   .app-sidebar-label,
-  .font-body-md,
-  .font-body-sm,
-  .font-label-sm,
-  .font-label-md
+  .app-sidebar-badges
 ) {
   animation: app-sidebar-fade-in 200ms ease 100ms both;
 }
@@ -164,10 +182,7 @@
 .app-sidebar--collapsing :is(
   .app-sidebar-toggle-label,
   .app-sidebar-label,
-  .font-body-md,
-  .font-body-sm,
-  .font-label-sm,
-  .font-label-md
+  .app-sidebar-badges
 ) {
   animation: app-sidebar-fade-out 140ms ease both;
 }
@@ -202,16 +217,20 @@
   }
 }
 
-.app-sidebar--collapsed .app-sidebar-toggle-label,
-.app-sidebar--collapsed .app-sidebar-label,
-.app-sidebar--collapsed .font-body-md,
-.app-sidebar--collapsed .font-body-sm,
-.app-sidebar--collapsed .font-label-sm,
-.app-sidebar--collapsed .font-label-md {
-  display: none;
+.app-sidebar--collapsed :is(.app-sidebar-toggle-label, .app-sidebar-label, .app-sidebar-badges) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
-.app-sidebar--collapsed .app-sidebar-section-chevron {
+.app-sidebar--collapsed .app-sidebar-section-chevron,
+.app-sidebar--collapsed .app-sidebar-nav > details > div {
   display: none;
 }
 
@@ -260,6 +279,6 @@
   padding-right: 18.5px;
 }
 
-:is(.app-sidebar--collapsing, .app-sidebar--collapsed) .app-sidebar-toggle .material-symbols-outlined {
+:is(.app-sidebar--collapsing, .app-sidebar--collapsed, .app-sidebar--peek) .app-sidebar-toggle .material-symbols-outlined {
   transform: rotate(180deg);
 }
