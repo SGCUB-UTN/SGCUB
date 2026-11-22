@@ -173,13 +173,13 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
       <DataTable
         headers={(
           <>
-            <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="max-sm:hidden py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Categoría</th>
-            <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
-            <th className="py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
+            <th className="max-sm:hidden py-3 px-4" scope="col">Categoría</th>
+            <SortableHeader className="max-sm:hidden py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="max-sm:hidden py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
+            <th className="max-sm:hidden py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
           </>
         )}
       >
@@ -199,7 +199,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             onClick={() => navigate(`/padron/jugadores/${jugador.jugador_id}`)}
             className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
           >
-            <td className="py-3 px-4 font-bold text-primary text-base pl-6">
+            <td className="max-sm:hidden py-3 px-4 font-bold text-primary text-base pl-6">
               {jugador.socio?.numero_socio ? `#${jugador.socio.numero_socio}` : '—'}
             </td>
             <td className="py-3 px-4">
@@ -209,13 +209,13 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
-            <td className="py-3 px-4 text-on-surface-variant">
+            <td className="max-sm:hidden py-3 px-4 text-on-surface-variant">
               {jugador.categoria?.nombre ?? '—'}
               {secondaryCategoryName(jugador) && <span className="text-on-surface-variant/80"> ({secondaryCategoryName(jugador)})</span>}
             </td>
-            <td className="py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
-            <td className="py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
-            <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
+            <td className="max-sm:hidden py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
+            <td className="max-sm:hidden py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
+            <td className="max-sm:hidden py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
               <PayButton
                 onPay={() => openPayment({ socioId: jugador.socio.socio_id, onSuccess: notifyCajaChanged })}
                 label={`Registrar pago de ${jugador.socio?.nombre} ${jugador.socio?.apellido}`}

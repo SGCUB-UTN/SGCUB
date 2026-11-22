@@ -162,11 +162,11 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
       <DataTable
         headers={(
           <>
-            <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="max-sm:hidden py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Cargo y categorías</th>
-            <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
+            <th className="max-sm:hidden py-3 px-4" scope="col">Cargo y categorías</th>
+            <SortableHeader className="max-sm:hidden py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
       >
@@ -187,7 +187,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
               onClick={() => navigate(`/padron/docentes/${docente.docente_id}`)}
               className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
             >
-              <td className="py-3 px-4 font-bold text-primary text-base pl-6">
+              <td className="max-sm:hidden py-3 px-4 font-bold text-primary text-base pl-6">
                 {docente.legajo ? `#${docente.legajo}` : '—'}
               </td>
               <td className="py-3 px-4">
@@ -197,8 +197,8 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
                 </div>
               </td>
               <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
-              <td className="py-3 px-4"><RoleAssignments asignaciones={docente.asignaciones} /></td>
-              <td className="py-3 px-4"><DocumentationStatus documentacion={docente.documentacion} /></td>
+              <td className="max-sm:hidden py-3 px-4"><RoleAssignments asignaciones={docente.asignaciones} /></td>
+              <td className="max-sm:hidden py-3 px-4"><DocumentationStatus documentacion={docente.documentacion} /></td>
             </tr>
           )
         })}
