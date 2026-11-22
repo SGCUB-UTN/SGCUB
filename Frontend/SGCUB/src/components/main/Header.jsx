@@ -26,7 +26,7 @@ const getInitials = (fullName = "") =>
     .map((word) => word[0].toUpperCase())
     .join("");
 
-export default function Header({ collapsed = false, mobile = false, menuOpen = false, onMenuToggle }) {
+export default function Header({ collapsed = false, peek = false, mobile = false, menuOpen = false, onMenuToggle }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [menuOpened, setMenuOpened] = useState(false);
@@ -35,7 +35,7 @@ export default function Header({ collapsed = false, mobile = false, menuOpen = f
   const { openPayment } = useRegisterPayment();
 
   return (
-    <header className={`app-header fixed top-0 right-0 z-40 bg-surface-container-lowest flex flex-row flex-nowrap items-stretch ${collapsed ? 'app-header--collapsed' : ''}`}>
+    <header className={`app-header fixed top-0 right-0 z-40 bg-surface-container-lowest flex flex-row flex-nowrap items-stretch ${collapsed ? (peek ? 'app-header--peek' : 'app-header--collapsed') : ''}`}>
       {mobile && (
         <button
           type="button"

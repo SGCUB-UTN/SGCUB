@@ -9,7 +9,7 @@ const DURACION_CONTRAER = 220;
 const DEMORA_DESPLEGAR = 120;
 const DEMORA_CONTRAER = 150;
 
-export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpen = false, onNavigate }) {
+export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpen = false, onNavigate, onPeekChange }) {
   const { pathname } = useLocation();
 
   const [alertas, setAlertas] = useState(null);
@@ -39,6 +39,10 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
   const hoverTimer = useRef(null);
   const desplegado = collapsed && (mouseEncima || focoTeclado);
   const contraido = collapsed && !desplegado;
+
+  useEffect(() => {
+    onPeekChange?.(desplegado);
+  }, [desplegado, onPeekChange]);
 
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
 

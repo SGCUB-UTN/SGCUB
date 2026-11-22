@@ -31,7 +31,15 @@
   box-sizing: border-box;
   overflow: hidden;
   padding: 0 16px;
-  transition: width 220ms ease;
+  background: var(--color-surface-container-lowest);
+  transition:
+    width 220ms ease,
+    margin-right 220ms ease;
+}
+
+.app-header--peek .app-header-brand {
+  z-index: 1;
+  margin-right: -188px;
 }
 
 .app-header-brand::after {
@@ -200,5 +208,12 @@
     grid-area: actions;
     justify-self: end;
     padding-right: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header-brand,
+  .app-header-brand-copy {
+    transition: none;
   }
 }

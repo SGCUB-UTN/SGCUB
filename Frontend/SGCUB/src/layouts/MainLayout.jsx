@@ -24,6 +24,7 @@ export default function MainLayout() {
   usePageTitle();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(leerContraido);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [sidebarDesplegado, setSidebarDesplegado] = useState(false);
   const mobile = useMediaQuery('(max-width: 1023px)', false, { getInitialValueInEffect: false });
   const menuAbierto = mobile && menuMovilAbierto;
   const contraido = !mobile && sidebarCollapsed;
@@ -62,6 +63,7 @@ export default function MainLayout() {
             <Sidebar
               collapsed={contraido}
               onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              onPeekChange={setSidebarDesplegado}
               mobile={mobile}
               mobileOpen={menuAbierto}
               onNavigate={() => setMenuMovilAbierto(false)}
@@ -72,6 +74,7 @@ export default function MainLayout() {
             <div className="main-layout-content">
               <Header
                 collapsed={contraido}
+                peek={contraido && sidebarDesplegado}
                 mobile={mobile}
                 menuOpen={menuAbierto}
                 onMenuToggle={() => setMenuMovilAbierto((abierto) => !abierto)}
