@@ -1009,7 +1009,8 @@ class AsignacionDocenteSerializer(serializers.Serializer):
     categorias = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all(), many=True, allow_empty=False)
 
 
-def group_teacher_assignments(teacher):
+def group_teacher_assignments(teacher, category_serializer=None):
+    category_serializer = category_serializer or CategoriaSerializer
     groups = {}
     assignments = sorted(
         teacher.categorias_docente.all(),
@@ -1021,8 +1022,30 @@ def group_teacher_assignments(teacher):
             "cargo_nombre": assignment.cargo.nombre if assignment.cargo else None,
             "categorias": [],
         })
-        group["categorias"].append(CategoriaSerializer(assignment.categoria).data)
+        group["categorias"].append(category_serializer(assignment.categoria).data)
     return list(groups.values())
+
+
+class PersonaSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Persona
+        fields = ["persona_id", "nombre", "apellido", "dni", "telefono", "email"]
+        read_only_fields = fields
+
+
+class DocenteTableSerializer(serializers.ModelSerializer):
+    persona_detalle = PersonaSummarySerializer(source="persona", read_only=True)
+    estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
+
+    class Meta:
+        model = Docente
+        fields = ["docente_id", "legajo", "persona_detalle", "estado_nombre"]
+        read_only_fields = fields
+
+    def to_representation(self, teacher):
+        data = super().to_representation(teacher)
+        data["asignaciones"] = group_teacher_assignments(teacher, CategoriaSummarySerializer)
+        return data
 
 
 class DocenteSerializer(serializers.ModelSerializer):

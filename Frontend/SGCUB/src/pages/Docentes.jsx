@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/conf'
+import { LIST_VIEW } from '../api/listView'
 import DocentesTable from '../components/docentes/DocentesTable'
-import { esActivo } from '../components/docentes/docentesUtils'
+import { categoriasDeAsignaciones, esActivo } from '../components/docentes/docentesUtils'
 import PageHeader from '../components/shared/PageHeader'
 import StatCard from '../components/shared/StatCard'
 import useCategorias from '../hooks/useCategorias'
@@ -10,30 +10,14 @@ import useDocentes from '../hooks/useDocentes'
 
 function Docentes() {
   const navigate = useNavigate()
-  const { docentes, isLoading, error } = useDocentes()
+  const { docentes, isLoading, error } = useDocentes({ view: LIST_VIEW })
   const { categorias } = useCategorias()
-  const [categoriasPorDocente, setCategoriasPorDocente] = useState({})
   const [status, setStatus] = useState('activo')
 
-  useEffect(() => {
-    let cancelado = false
-    api.get('padron/docente-categoria/')
-      .then((response) => {
-        if (cancelado) return
-        const agrupadas = {}
-        ;(response.data ?? []).forEach(({ docente, categoria, cargo }) => {
-          if (!docente || !categoria) return
-          agrupadas[docente.docente_id] = [...(agrupadas[docente.docente_id] ?? []), { ...categoria, cargo }]
-        })
-        setCategoriasPorDocente(agrupadas)
-      })
-      .catch(() => {
-        if (!cancelado) setCategoriasPorDocente({})
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [])
+  const categoriasPorDocente = useMemo(
+    () => Object.fromEntries(docentes.map((docente) => [docente.docente_id, categoriasDeAsignaciones(docente.asignaciones)])),
+    [docentes],
+  )
 
   const totales = useMemo(() => {
     const activos = docentes.filter(esActivo).length

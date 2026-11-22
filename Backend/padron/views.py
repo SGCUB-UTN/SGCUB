@@ -29,6 +29,7 @@ from .serializers import (
     JugadorTableSerializer,
     JugadorSerializerDetail,
     DocenteSerializer,
+    DocenteTableSerializer,
     VinculoFamiliarSerializer,
     EstadoAdministrativoSerializer,
     GeneroSerializer,
@@ -530,6 +531,15 @@ def jugador_detail(request, pk):
 @api_view(["GET", "POST"])
 def docente_list_create(request):
     if request.method == "GET":
+        view = request.query_params.get("vista")
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
+            teachers = Docente.objects.select_related("persona", "estado").prefetch_related(
+                "categorias_docente__cargo",
+                "categorias_docente__categoria",
+            )
+            return Response(DocenteTableSerializer(teachers, many=True, context={"request": request}).data)
         teachers = Docente.objects.select_related(
             "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "persona__socio__jugador", "estado"
         ).prefetch_related(

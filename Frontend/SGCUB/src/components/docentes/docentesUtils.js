@@ -16,6 +16,9 @@ export const esCategoriaAsignable = (categoria) => categoria.nombre !== 'No asig
 
 export const esActivo = (docente) => isActiveStatus(docente.estado_nombre)
 
+export const categoriasDeAsignaciones = (asignaciones = []) =>
+  asignaciones.flatMap(({ cargo_nombre: cargo, categorias = [] }) => categorias.map((categoria) => ({ ...categoria, cargo })))
+
 export const exportarNominaCSV = (docentes, categoriasPorDocente = {}) => {
   const encabezados = ['Legajo', 'Nombre', 'Apellido', 'DNI', 'Teléfono', 'Email', 'Cargo', 'Categorías', 'Estado']
   const filas = docentes.map((docente) => [

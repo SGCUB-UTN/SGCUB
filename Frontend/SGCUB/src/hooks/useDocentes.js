@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { deactivateDocente, getDocentes, patchDocente, postDocente } from '../api/docentes'
 
-function useDocentes() {
+function useDocentes({ view } = {}) {
   const [docentes, setDocentes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11,13 +11,13 @@ function useDocentes() {
     setError(null)
 
     try {
-      setDocentes(await getDocentes())
+      setDocentes(await getDocentes({ view }))
     } catch (requestError) {
       setError(requestError)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [view])
 
   const crearDocente = useCallback(async (docente) => {
     const docenteCreado = await postDocente(docente)

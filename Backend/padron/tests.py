@@ -6,7 +6,13 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from padron.serializers import JugadorTableSerializer, SocioListSerializer, SocioSerializer
+from padron.serializers import (
+    DocenteTableSerializer,
+    JugadorTableSerializer,
+    PersonaSummarySerializer,
+    SocioListSerializer,
+    SocioSerializer,
+)
 
 import csv
 from datetime import date, timedelta
@@ -1266,6 +1272,43 @@ class PadronViewTests(APITestCase):
         response = self.client.get("/api/padron/docente/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
+
+    def test_docente_get_list_vista_listado_devuelve_campos_y_asignaciones(self):
+        docente = self.crear_docente_orm()
+        asignacion = docente.categorias_docente.get()
+
+        response = self.client.get("/api/padron/docente/?vista=listado", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        item = response.data[0]
+        self.assertEqual({*DocenteTableSerializer.Meta.fields, "asignaciones"}, set(item.keys()))
+        self.assertEqual(set(PersonaSummarySerializer.Meta.fields), set(item["persona_detalle"].keys()))
+        self.assertEqual(
+            [{
+                "cargo": asignacion.cargo_id,
+                "cargo_nombre": asignacion.cargo.nombre,
+                "categorias": [{
+                    "categoria_id": asignacion.categoria_id,
+                    "nombre": asignacion.categoria.nombre,
+                    "genero": asignacion.categoria.genero,
+                }],
+            }],
+            item["asignaciones"],
+        )
+
+    def test_docente_get_list_vista_listado_no_hace_consultas_por_docente(self):
+        self.crear_docente_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/docente/?vista=listado", format="json")
+        for _ in range(3):
+            self.crear_docente_orm()
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/docente/?vista=listado", format="json")
+        self.assertEqual(4, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_docente_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/docente/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_docente_get_detail(self):
         docente = self.crear_docente_orm()
