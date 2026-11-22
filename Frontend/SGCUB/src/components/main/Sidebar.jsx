@@ -215,7 +215,7 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                 <span className="relative inline-flex" aria-hidden="true">
                   <span className="material-symbols-outlined text-[20px]">folder_shared</span>
                   {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
-                    <span className={`app-sidebar-alert-dot ${alertas.vencidos > 0 ? 'bg-error' : 'bg-amber-500'}`} />
+                    <span className={`app-sidebar-alert-dot ${alertas.vencidos > 0 ? 'bg-error' : 'bg-amber-600'}`} />
                   )}
                 </span>
                 <span className="app-sidebar-label text-base font-semibold text-on-surface">Documentación</span>
