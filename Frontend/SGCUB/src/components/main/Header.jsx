@@ -39,9 +39,7 @@ export default function Header({ collapsed = false }) {
             <Menu
               opened={menuOpened}
               onChange={setMenuOpened}
-              trigger="hover"
-              openDelay={100}
-              closeDelay={200}
+              trigger="click"
               position="bottom-end"
               shadow="md"
               width={240}
@@ -50,7 +48,6 @@ export default function Header({ collapsed = false }) {
               <Menu.Target>
                 <button
                   type="button"
-                  onClick={() => setMenuOpened((prev) => !prev)}
                   aria-label="Menú de usuario"
                   aria-expanded={menuOpened}
                   className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-outline-variant/30 hover:bg-surface-container-low transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
