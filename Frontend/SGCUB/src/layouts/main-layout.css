@@ -5,7 +5,6 @@
   min-width: 0;
   margin-left: 260px;
   transition: margin-left 220ms ease;
-  
 }
 
 .main-layout-main {
@@ -13,7 +12,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: 70px 2.5rem 1.5rem;
-  background: var(--surface, #f8f9ff);
+  background: var(--color-surface);
 }
 
 .main-layout--collapsed .main-layout-content {
