@@ -1,3 +1,4 @@
+import { DOCUMENTATION_LABELS } from '../documental/documentationStates'
 import { isActiveStatus } from '../personas/format'
 
 const nombreCargo =(cargo) => (typeof cargo === 'string' ? cargo : cargo?.nombre)
@@ -20,7 +21,7 @@ export const categoriasDeAsignaciones = (asignaciones = []) =>
   asignaciones.flatMap(({ cargo_nombre: cargo, categorias = [] }) => categorias.map((categoria) => ({ ...categoria, cargo })))
 
 export const exportarNominaCSV = (docentes, categoriasPorDocente = {}) => {
-  const encabezados = ['Legajo', 'Nombre', 'Apellido', 'DNI', 'Teléfono', 'Email', 'Cargo', 'Categorías', 'Estado']
+  const encabezados = ['Legajo', 'Nombre', 'Apellido', 'DNI', 'Teléfono', 'Email', 'Cargo', 'Categorías', 'Documentación', 'Estado']
   const filas = docentes.map((docente) => [
     docente.legajo ?? '',
     docente.persona_detalle?.nombre ?? '',
@@ -30,6 +31,7 @@ export const exportarNominaCSV = (docentes, categoriasPorDocente = {}) => {
     docente.persona_detalle?.email ?? '',
     cargosDe(categoriasPorDocente[docente.docente_id]).join(', '),
     (categoriasPorDocente[docente.docente_id] ?? []).map((categoria) => categoria.nombre).join(', '),
+    DOCUMENTATION_LABELS[docente.documentacion?.estado] ?? '',
     esActivo(docente) ? 'Activo' : 'De baja',
   ])
   const csv = [encabezados, ...filas]

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import DocumentationStatus from '../documental/DocumentationStatus'
+import { documentationSeverity } from '../documental/documentationStates'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
@@ -16,7 +18,7 @@ import { cargosDe, esActivo, exportarNominaCSV } from './docentesUtils'
 import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 7
 const GENDER_PREFIX = 'gender:'
 
 const matchesDocenteCategory = (docenteCategorias, value) => {
@@ -39,6 +41,7 @@ const SORT_VALUES = {
   legajo: (docente) => (docente.legajo ? Number(docente.legajo) : null),
   nombre: (docente) => fullName(docente),
   estado: (docente) => (esActivo(docente) ? 0 : 1),
+  documentacion: (docente) => documentationSeverity(docente.documentacion),
 }
 const INITIAL_SORT = { columna: 'legajo', direccion: 'desc' }
 
@@ -150,6 +153,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
             <th className="py-3 px-4" scope="col">DNI</th>
             <th className="py-3 px-4" scope="col">Cargo</th>
             <th className="py-3 px-4" scope="col">Categorías</th>
+            <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
@@ -181,6 +185,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
               <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
               <td className="py-3 px-4 text-on-surface-variant">{cargosDe(docenteCategorias).join(', ') || '—'}</td>
               <td className="py-3 px-4 text-on-surface-variant">{categoryNames(docenteCategorias)}</td>
+              <td className="py-3 px-4"><DocumentationStatus documentacion={docente.documentacion} /></td>
               <td className="py-3 px-4">
                 <ActiveStatusBadge isActive={esActivo(docente)} label={esActivo(docente) ? 'Activo' : 'De baja'} />
               </td>

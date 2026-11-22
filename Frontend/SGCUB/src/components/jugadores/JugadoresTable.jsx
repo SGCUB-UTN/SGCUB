@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
-import { documentationSeverity } from '../documental/documentationStates'
+import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
@@ -46,8 +46,6 @@ const statusLabel = (jugador) => {
 }
 
 const secondaryCategoryName = (jugador) => jugador.categoria_secundaria?.nombre ?? ''
-
-const DOCUMENTATION_LABELS = { vencido: 'Vencida', faltante: 'Incompleta', por_vencer: 'Por vencer', vigente: 'Al día' }
 
 const socioCanPay = (jugador) => isActiveStatus(jugador.socio?.estado_administrativo_nombre)
 
