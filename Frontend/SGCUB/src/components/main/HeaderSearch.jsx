@@ -14,11 +14,11 @@ const PROFILE_TONES = {
   vinculo: 'bg-surface-container-high text-on-surface-variant',
 }
 
-function SearchMessage({ icon, children }) {
+function SearchMessage({ icon, spin = false, children }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-3 text-sm text-on-surface-variant">
-      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{icon}</span>
-      {children}
+    <div className="flex items-start gap-2 px-3 py-3 text-base text-on-surface-variant" role="status">
+      <span className={`material-symbols-outlined text-[20px] shrink-0 ${spin ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true">{icon}</span>
+      <span>{children}</span>
     </div>
   )
 }
@@ -79,9 +79,15 @@ export default function HeaderSearch() {
   }
 
   const renderContent = () => {
-    if (isSearching) return <SearchMessage icon="progress_activity">Buscando...</SearchMessage>
-    if (error) return <SearchMessage icon="error">No se pudo realizar la búsqueda.</SearchMessage>
-    if (results.length === 0) return <SearchMessage icon="person_off">Sin resultados.</SearchMessage>
+    if (isSearching) return <SearchMessage icon="progress_activity" spin>Buscando...</SearchMessage>
+    if (error) return <SearchMessage icon="error">No se pudo buscar. Revisá la conexión y probá de nuevo.</SearchMessage>
+    if (results.length === 0) {
+      return (
+        <SearchMessage icon="person_off">
+          No encontramos a «{query.trim()}». Probá con el apellido o con el DNI sin puntos.
+        </SearchMessage>
+      )
+    }
 
     return (
       <ul id={LISTBOX_ID} role="listbox" className="flex flex-col divide-y divide-outline-variant/30 max-h-96 overflow-y-auto">
@@ -138,11 +144,12 @@ export default function HeaderSearch() {
       <input
         ref={inputRef}
         className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-colors"
-        placeholder="Búsqueda global (DNI, nombre, apellido, n° de socio)"
+        placeholder="Buscar por nombre, DNI o n° de socio"
+        aria-label="Buscar socios, jugadores y docentes"
         type="text"
         role="combobox"
         aria-expanded={showDropdown}
-        aria-controls={LISTBOX_ID}
+        aria-controls={showDropdown && results.length > 0 ? LISTBOX_ID : undefined}
         aria-autocomplete="list"
         aria-activedescendant={showDropdown && results.length > 0 ? `${LISTBOX_ID}-${highlightedIndex}` : undefined}
         value={query}
