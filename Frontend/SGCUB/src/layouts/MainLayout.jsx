@@ -7,6 +7,7 @@ import Header from '../components/main/Header';
 import AssignBenefitProvider from '../components/finanzas/AssignBenefitProvider';
 import RegisterPaymentProvider from '../components/finanzas/RegisterPaymentProvider';
 import RevertPaymentProvider from '../components/finanzas/RevertPaymentProvider';
+import usePageTitle from '../hooks/usePageTitle';
 import './main-layout.css';
 
 const SIDEBAR_STORAGE_KEY = 'sgcub.sidebarContraido';
@@ -20,6 +21,7 @@ const leerContraido = () => {
 };
 
 export default function MainLayout() {
+  usePageTitle();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(leerContraido);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
   const mobile = useMediaQuery('(max-width: 1023px)', false, { getInitialValueInEffect: false });
