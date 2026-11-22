@@ -199,7 +199,7 @@ function JugadorDetail() {
   const socio = jugador.socio ?? {}
   const contactos = jugador.vinculos_familiares ?? []
   const activo = isActiveStatus(jugador.estado?.nombre)
-  const bajaTemporal = jugador.tipo_baja === 'parcial'
+  const bajaParcial = jugador.tipo_baja === 'parcial'
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
@@ -242,7 +242,7 @@ function JugadorDetail() {
             nivel_educacion: jugador.nivel_educacion,
           }}
           localidades={localidades}
-          onEdit={(activo || bajaTemporal) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
+          onEdit={(activo || bajaParcial) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           extraActions={<CometDescargarButton jugadorId={jugador.jugador_id} />}
           deportivo={{
             categoria: jugador.categoria?.nombre,
@@ -310,14 +310,14 @@ function JugadorDetail() {
         ]}
         statusAction={activo
           ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />
-          : !bajaTemporal && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
-        actions={(activo || bajaTemporal) && socio.socio_id && (
+          : !bajaParcial && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
+        actions={(activo || bajaParcial) && socio.socio_id && (
           <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
         )}
-        footer={bajaTemporal && (
+        footer={bajaParcial && (
           <HeaderNotice
             icon="pause_circle"
-            title="Baja temporal"
+            title="Baja parcial"
             actions={(
               <>
                 <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)}>

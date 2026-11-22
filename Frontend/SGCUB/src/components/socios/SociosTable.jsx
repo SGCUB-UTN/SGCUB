@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
-import ActiveStatusBadge from '../shared/ActiveStatusBadge'
+import InactiveTag from '../shared/InactiveTag'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import ProfileBadge from '../shared/ProfileBadge'
@@ -17,7 +17,7 @@ import usePagination from '../../hooks/usePagination'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { matchesSearch } from '../shared/search'
 
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 5
 
 const formatDate = (date) => {
   if (!date) return '—'
@@ -66,7 +66,6 @@ const exportCsv = (socios) => {
 const SORT_VALUES = {
   numero: (socio) => (socio.numero_socio ? Number(socio.numero_socio) : null),
   nombre: (socio) => `${socio.nombre ?? ''} ${socio.apellido ?? ''}`.trim(),
-  estado: (socio) => (isActive(socio) ? 0 : 1),
   cuenta: (socio) => accountDebt(socio.cuenta),
 }
 // On load: most recent first.
@@ -117,7 +116,7 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
           >
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
-            <option value="baja">De baja / Inactivo</option>
+            <option value="baja">De Baja</option>
             <option value="ex_jugador">Ex jugadores</option>
           </FilterSelect>
         </div>
@@ -140,7 +139,6 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4 pl-5" scope="col">DNI</th>
-            <SortableHeader className="py-3 px-4 w-36 whitespace-nowrap" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
           </>
@@ -167,14 +165,14 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             </td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-on-surface text-base">
+                <span className={`font-medium text-base ${isActive(socio) ? 'text-on-surface' : 'text-on-surface-variant'}`}>
                   {socio.nombre} {socio.apellido}
                 </span>
+                {!isActive(socio) && <InactiveTag>De Baja</InactiveTag>}
                 {socio.es_ex_jugador && <ProfileBadge>Ex jugador</ProfileBadge>}
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
-            <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
             <td className="py-3 px-4 text-right whitespace-nowrap">
               <AccountStatus cuenta={socio.cuenta} />
             </td>

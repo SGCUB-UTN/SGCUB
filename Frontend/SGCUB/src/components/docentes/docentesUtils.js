@@ -32,7 +32,7 @@ export const exportarNominaCSV = (docentes, categoriasPorDocente = {}) => {
     cargosDe(categoriasPorDocente[docente.docente_id]).join(', '),
     (categoriasPorDocente[docente.docente_id] ?? []).map((categoria) => categoria.nombre).join(', '),
     DOCUMENTATION_LABELS[docente.documentacion?.estado] ?? '',
-    esActivo(docente) ? 'Activo' : 'De baja',
+    esActivo(docente) ? 'Activo' : 'De Baja',
   ])
   const csv = [encabezados, ...filas]
     .map((fila) => fila.map((celda) => `"${String(celda).replace(/"/g, '""')}"`).join(';'))

@@ -5,10 +5,9 @@ import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/docum
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
-import ActiveStatusBadge from '../shared/ActiveStatusBadge'
+import InactiveTag from '../shared/InactiveTag'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
-import ProfileBadge from '../shared/ProfileBadge'
 import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
@@ -22,7 +21,7 @@ import { formatDni, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const COLUMN_COUNT = 8
+const COLUMN_COUNT = 7
 const GENDER_PREFIX = 'gender:'
 
 const matchesCategory = (jugador, value) => {
@@ -42,7 +41,7 @@ const isActive = (jugador) => {
 
 const statusLabel = (jugador) => {
   if (isActive(jugador)) return 'Activo'
-  return jugador.tipo_baja === 'parcial' ? 'Baja temporal' : 'De baja'
+  return jugador.tipo_baja === 'parcial' ? 'Baja parcial' : 'De Baja'
 }
 
 const secondaryCategoryName = (jugador) => jugador.categoria_secundaria?.nombre ?? ''
@@ -79,7 +78,6 @@ const exportCsv = (jugadores) => {
 const SORT_VALUES = {
   numero: (jugador) => (jugador.socio?.numero_socio ? Number(jugador.socio.numero_socio) : null),
   nombre: (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim(),
-  estado: (jugador) => (isActive(jugador) ? 0 : 1),
   documentacion: (jugador) => documentationSeverity(jugador.documentacion),
   cuenta: (jugador) => accountDebt(jugador.socio?.cuenta),
 }
@@ -116,7 +114,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
       if (!matchesCategory(jugador, category)) return false
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
-      if (status === 'baja_temporal' && jugador.tipo_baja !== 'parcial') return false
+      if (status === 'baja_parcial' && jugador.tipo_baja !== 'parcial') return false
       if (!text) return true
       return matchesSearch(text, [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre])
     })
@@ -155,8 +153,8 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           >
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
-            <option value="baja">De baja completa</option>
-            <option value="baja_temporal">Baja temporal</option>
+            <option value="baja">De Baja</option>
+            <option value="baja_parcial">Baja parcial</option>
           </FilterSelect>
         </div>
         <div className="flex items-center justify-end xl:shrink-0">
@@ -180,7 +178,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             <th className="py-3 px-4" scope="col">DNI</th>
             <th className="py-3 px-4" scope="col">Categoría</th>
             <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
           </>
@@ -207,8 +204,8 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             </td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-on-surface block text-base">{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
-                {jugador.socio?.es_ex_jugador && <ProfileBadge>Socio activo</ProfileBadge>}
+                <span className={`font-medium block text-base ${isActive(jugador) ? 'text-on-surface' : 'text-on-surface-variant'}`}>{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+                {!isActive(jugador) && <InactiveTag>{statusLabel(jugador)}</InactiveTag>}
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
@@ -217,11 +214,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
               {secondaryCategoryName(jugador) && <span className="text-on-surface-variant/80"> ({secondaryCategoryName(jugador)})</span>}
             </td>
             <td className="py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
-            <td className="py-3 px-4">
-              <div className="flex items-center gap-2 flex-wrap">
-                <ActiveStatusBadge isActive={isActive(jugador)} label={statusLabel(jugador)} />
-              </div>
-            </td>
             <td className="py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
             <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
               <PayButton

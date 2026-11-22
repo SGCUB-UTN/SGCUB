@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { documentationSeverity } from '../documental/documentationStates'
-import ActiveStatusBadge from '../shared/ActiveStatusBadge'
+import InactiveTag from '../shared/InactiveTag'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
@@ -18,7 +18,7 @@ import { cargosDe, esActivo, exportarNominaCSV } from './docentesUtils'
 import { matchesSearch } from '../shared/search'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const COLUMN_COUNT = 7
+const COLUMN_COUNT = 5
 const GENDER_PREFIX = 'gender:'
 
 const matchesDocenteCategory = (docenteCategorias, value) => {
@@ -34,13 +34,27 @@ const matchesDocenteCategory = (docenteCategorias, value) => {
 const fullName = (docente) =>
   [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido].filter(Boolean).join(' ')
 
-const categoryNames = (categorias) =>
-  categorias.length > 0 ? categorias.map((categoria) => categoria.nombre).join(', ') : '—'
+const NO_ROLE = 'Sin cargo'
+
+function RoleAssignments({ asignaciones = [] }) {
+  if (asignaciones.length === 0) return <span>—</span>
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {asignaciones.map(({ cargo, cargo_nombre: cargoNombre, categorias = [] }) => (
+        <li key={cargo ?? NO_ROLE}>
+          <span className="text-on-surface">{cargoNombre ?? NO_ROLE}</span>
+          {categorias.length > 0 && (
+            <span className="text-on-surface-variant"> · {categorias.map((categoria) => categoria.nombre).join(', ')}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 const SORT_VALUES = {
   legajo: (docente) => (docente.legajo ? Number(docente.legajo) : null),
   nombre: (docente) => fullName(docente),
-  estado: (docente) => (esActivo(docente) ? 0 : 1),
   documentacion: (docente) => documentationSeverity(docente.documentacion),
 }
 const INITIAL_SORT = { columna: 'legajo', direccion: 'desc' }
@@ -129,7 +143,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           >
             <option value="activo">Estado: Activo</option>
             <option value="todos">Estado: Todos</option>
-            <option value="baja">De baja / Inactivo</option>
+            <option value="baja">De Baja</option>
           </FilterSelect>
         </div>
         <div className="flex items-center justify-end xl:shrink-0">
@@ -151,10 +165,8 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Cargo</th>
-            <th className="py-3 px-4" scope="col">Categorías</th>
+            <th className="py-3 px-4" scope="col">Cargo y categorías</th>
             <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
       >
@@ -169,7 +181,6 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
         />
 
         {!isLoading && visibleRows.map((docente) => {
-          const docenteCategorias = categoriasPorDocente[docente.docente_id] ?? []
           return (
             <tr
               key={docente.docente_id}
@@ -180,15 +191,14 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
                 {docente.legajo ? `#${docente.legajo}` : '—'}
               </td>
               <td className="py-3 px-4">
-                <span className="font-medium text-on-surface block text-base">{fullName(docente) || '—'}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`font-medium block text-base ${esActivo(docente) ? 'text-on-surface' : 'text-on-surface-variant'}`}>{fullName(docente) || '—'}</span>
+                  {!esActivo(docente) && <InactiveTag>De Baja</InactiveTag>}
+                </div>
               </td>
               <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{cargosDe(docenteCategorias).join(', ') || '—'}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{categoryNames(docenteCategorias)}</td>
+              <td className="py-3 px-4"><RoleAssignments asignaciones={docente.asignaciones} /></td>
               <td className="py-3 px-4"><DocumentationStatus documentacion={docente.documentacion} /></td>
-              <td className="py-3 px-4">
-                <ActiveStatusBadge isActive={esActivo(docente)} label={esActivo(docente) ? 'Activo' : 'De baja'} />
-              </td>
             </tr>
           )
         })}
