@@ -42,7 +42,7 @@ function recategorizationRow(recategorization, year) {
   if (!recategorization.executed) {
     return {
       key: 'recategorization',
-      title: 'Recategorizar a los jugadores',
+      title: 'Recategorización anual',
       description: `Todavía no se ejecutó la recategorización automática de ${year}.`,
       tone: 'warning',
       status: 'Pendiente',
@@ -52,7 +52,7 @@ function recategorizationRow(recategorization, year) {
   if (recategorization.status === 'revision_pendiente') {
     return {
       key: 'recategorization',
-      title: 'Revisar la recategorización',
+      title: 'Recategorización anual',
       description: `La recategorización de ${year} tiene resultados por revisar.`,
       tone: 'warning',
       status: 'Por revisar',
@@ -63,7 +63,7 @@ function recategorizationRow(recategorization, year) {
   if (recategorization.status === 'en_curso') {
     return {
       key: 'recategorization',
-      title: 'Recategorización en curso',
+      title: 'Recategorización anual',
       description: `La recategorización de ${year} se está ejecutando.`,
       tone: 'neutral',
       status: 'En curso',
@@ -107,6 +107,7 @@ function backupRow(backup) {
     description: 'Todavía no hay un backup automático configurado.',
     tone: 'neutral',
     status: 'Sin configurar',
+    placeholder: true,
   }
 }
 
@@ -130,10 +131,17 @@ function AlertRow({ row, canOpen }) {
         <span className="text-base text-on-surface-variant">{row.description}</span>
       </div>
       <span className={`${BADGE_CLASS} ${tone.badge}`}>{row.status}</span>
-      {canOpen && <span className="material-symbols-outlined text-[20px] shrink-0 text-on-surface-variant" aria-hidden="true">chevron_right</span>}
+      {(canOpen || row.placeholder) && <span className="material-symbols-outlined text-[20px] shrink-0 text-on-surface-variant" aria-hidden="true">chevron_right</span>}
     </>
   )
   const rowClass = 'flex items-center gap-3 py-3 px-4 sm:px-5'
+  if (row.placeholder) {
+    return (
+      <li>
+        <div className={`${rowClass} cursor-pointer transition-colors hover:bg-surface-container-low`}>{content}</div>
+      </li>
+    )
+  }
   if (!canOpen) return <li className={rowClass}>{content}</li>
   return (
     <li>
@@ -191,11 +199,15 @@ export default function AlertCenterSection({ isLoading, alerts }) {
       {alerts ? (
         <ul className="flex flex-col divide-y divide-outline-variant/20">
           {rows.map((row) => (
-            <AlertRow key={row.key} row={row} canOpen={Boolean(row.to) && (!row.permission || hasPermission(row.permission))} />
+            <AlertRow
+              key={row.key}
+              row={row}
+              canOpen={Boolean(row.to) && (!row.permission || hasPermission(row.permission))}
+            />
           ))}
         </ul>
       ) : (
-        <p className="px-4 sm:px-5 py-4 text-sm text-on-surface-variant">Sin datos de alertas.</p>
+        <p className="px-4 sm:px-5 py-4 text-base text-on-surface-variant">Sin datos de alertas.</p>
       )}
     </section>
   )
