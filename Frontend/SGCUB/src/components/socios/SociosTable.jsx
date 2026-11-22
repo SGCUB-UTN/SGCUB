@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
 import InactiveTag from '../shared/InactiveTag'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import ProfileBadge from '../shared/ProfileBadge'
@@ -165,9 +166,14 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             </td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-medium text-base ${isActive(socio) ? 'text-on-surface' : 'text-on-surface-variant'}`}>
+                <Link
+                  to={detailPathOf(socio)}
+                  state={{ from: 'socios' }}
+                  onClick={stopRowClick}
+                  className={`font-medium text-base ${ROW_LINK_CLASS} ${isActive(socio) ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                >
                   {socio.nombre} {socio.apellido}
-                </span>
+                </Link>
                 {!isActive(socio) && <InactiveTag>De Baja</InactiveTag>}
                 {socio.es_ex_jugador && <ProfileBadge>Ex jugador</ProfileBadge>}
               </div>

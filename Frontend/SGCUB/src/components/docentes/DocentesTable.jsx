@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { documentationSeverity } from '../documental/documentationStates'
 import InactiveTag from '../shared/InactiveTag'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
@@ -192,7 +193,13 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
               </td>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`font-medium block text-base ${esActivo(docente) ? 'text-on-surface' : 'text-on-surface-variant'}`}>{fullName(docente) || '—'}</span>
+                  <Link
+                    to={`/padron/docentes/${docente.docente_id}`}
+                    onClick={stopRowClick}
+                    className={`font-medium block text-base ${ROW_LINK_CLASS} ${esActivo(docente) ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                  >
+                    {fullName(docente) || '—'}
+                  </Link>
                   {!esActivo(docente) && <InactiveTag>De Baja</InactiveTag>}
                 </div>
               </td>

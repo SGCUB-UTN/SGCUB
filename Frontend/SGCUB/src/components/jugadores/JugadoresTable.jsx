@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
 import InactiveTag from '../shared/InactiveTag'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
@@ -204,7 +205,13 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             </td>
             <td className="py-3 px-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-medium block text-base ${isActive(jugador) ? 'text-on-surface' : 'text-on-surface-variant'}`}>{jugador.socio?.nombre} {jugador.socio?.apellido}</span>
+                <Link
+                  to={`/padron/jugadores/${jugador.jugador_id}`}
+                  onClick={stopRowClick}
+                  className={`font-medium block text-base ${ROW_LINK_CLASS} ${isActive(jugador) ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                >
+                  {jugador.socio?.nombre} {jugador.socio?.apellido}
+                </Link>
                 {!isActive(jugador) && <InactiveTag>{statusLabel(jugador)}</InactiveTag>}
               </div>
             </td>
