@@ -10,7 +10,7 @@ import useDocentes from '../hooks/useDocentes'
 
 function Docentes() {
   const navigate = useNavigate()
-  const { docentes, isLoading, error } = useDocentes({ view: LIST_VIEW })
+  const { docentes, isLoading, error, recargarDocentes } = useDocentes({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
 
@@ -45,9 +45,9 @@ function Docentes() {
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-        <StatCard label="Total" value={totales.total} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
-        <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+        <StatCard label="Total" value={error ? '—' : totales.total} isLoading={isLoading} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+        <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+        <StatCard label="De Baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Docentes">
         <DocentesTable
@@ -58,6 +58,7 @@ function Docentes() {
           error={error}
           status={status}
           onStatusChange={setStatus}
+          onRetry={recargarDocentes}
         />
       </section>
     </div>

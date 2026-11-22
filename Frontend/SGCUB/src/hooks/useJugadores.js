@@ -56,6 +56,7 @@ function useJugadores({ view } = {}) {
     jugadores,
     isLoading,
     error,
+    recargarJugadores: cargarJugadores,
     crearJugador,
     editarJugador,
     darDeBajaJugador,

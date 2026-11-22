@@ -85,7 +85,7 @@ const SORT_VALUES = {
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange }) {
+function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange, onRetry }) {
   const navigate = useNavigate()
   const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
@@ -123,6 +123,12 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
+  const clearFilters = () => {
+    setSearch('')
+    setCategory(ALL_CATEGORIES)
+    onStatusChange('todos')
+    resetPage()
+  }
   const sortAndReset = withPageReset(sortBy)
   const [previousStatus, setPreviousStatus] = useState(status)
   if (status !== previousStatus) {
@@ -191,7 +197,9 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           error={error}
           loadingText="Cargando jugadores..."
           errorText="No se pudieron cargar los jugadores."
-          emptyText="No hay jugadores que coincidan con el filtro."
+          emptyText={jugadores.length === 0 ? 'Todavía no hay jugadores cargados.' : 'Ningún jugador coincide con la búsqueda o los filtros.'}
+          onRetry={onRetry}
+          onClearFilters={jugadores.length === 0 ? undefined : clearFilters}
         />
 
         {!isLoading && visibleRows.map((jugador) => (

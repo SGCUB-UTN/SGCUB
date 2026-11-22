@@ -1,3 +1,5 @@
+import { SkeletonBlock } from './Skeleton'
+
 const TONES = {
   neutral: { icon: 'bg-surface-container-high text-primary' },
   positive: { icon: 'bg-emerald-50 text-emerald-700 border border-emerald-100', accent: 'text-emerald-700' },
@@ -16,7 +18,7 @@ const BASE_CLASS = 'min-w-0 w-full text-left bg-surface-container-lowest border 
 const INTERACTIVE_CLASS = 'shadow-xs cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 const STATIC_CLASS = 'shadow-sm'
 
-export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, onClick, isSelected = false }) {
+export default function StatCard({ label, value, icon, tone = 'neutral', size = 'md', eyebrow, caption, onClick, isSelected = false, isLoading = false }) {
   const style = TONES[tone] ?? TONES.neutral
   const sizeStyle = SIZES[size] ?? SIZES.md
   const Container = onClick ? 'button' : 'div'
@@ -31,7 +33,9 @@ export default function StatCard({ label, value, icon, tone = 'neutral', size = 
         <span className="text-base xl:text-xl leading-tight font-medium text-on-surface-variant uppercase tracking-wider break-words">{label}</span>
 
         <div className={`flex items-baseline flex-wrap gap-x-1.5 gap-y-0 min-w-0 ${sizeStyle.row}`}>
-          <span className={`${sizeStyle.value} font-bold truncate ${style.accent ?? 'text-on-surface'}`}>{value}</span>
+          {isLoading
+            ? <><SkeletonBlock className="h-7 w-14 my-0.5" /><span className="sr-only">Cargando</span></>
+            : <span className={`${sizeStyle.value} font-bold truncate ${style.accent ?? 'text-on-surface'}`}>{value}</span>}
           {caption && (
             <span className={`${sizeStyle.caption} font-medium text-on-surface-variant break-words ${style.accent ?? ''}`}>{caption}</span>
           )}

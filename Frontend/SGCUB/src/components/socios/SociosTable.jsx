@@ -72,7 +72,7 @@ const SORT_VALUES = {
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function SociosTable({ data, isLoading, error, status, onStatusChange }) {
+function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry }) {
   const navigate = useNavigate()
   const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
@@ -92,6 +92,11 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
+  const clearFilters = () => {
+    setSearch('')
+    onStatusChange('todos')
+    resetPage()
+  }
   const sortAndReset = withPageReset(sortBy)
   const [previousStatus, setPreviousStatus] = useState(status)
   if (status !== previousStatus) {
@@ -152,7 +157,9 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
           error={error}
           loadingText="Cargando socios..."
           errorText="No se pudieron cargar los socios."
-          emptyText="No hay socios que coincidan con el filtro."
+          emptyText={socios.length === 0 ? 'Todavía no hay socios cargados.' : 'Ningún socio coincide con la búsqueda o los filtros.'}
+          onRetry={onRetry}
+          onClearFilters={socios.length === 0 ? undefined : clearFilters}
         />
 
         {!isLoading && visibleRows.map((socio) => (

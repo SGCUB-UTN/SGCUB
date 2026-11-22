@@ -7,7 +7,7 @@ import useSocio from '../hooks/useSocio'
 import { LIST_VIEW } from '../api/listView'
 
 function Padron() {
-  const { socios, isLoading, error } = useSocio({ onlyMembers: true, view: LIST_VIEW })
+  const { socios, isLoading, error, recargarSocios } = useSocio({ onlyMembers: true, view: LIST_VIEW })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
 
@@ -44,10 +44,10 @@ function Padron() {
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-          <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
-          <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-          <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
-          <StatCard label="De Baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+          <StatCard label="Total Padrón" value={error ? '—' : totales.total} isLoading={isLoading} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+          <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+          <StatCard label="Ex Jugadores" value={error ? '—' : totales.exJugadores} isLoading={isLoading} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
+          <StatCard label="De Baja" value={error ? '—' : totales.inactivos} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
 
         <section aria-label="Socios">
@@ -57,6 +57,7 @@ function Padron() {
             error={error}
             status={status}
             onStatusChange={setStatus}
+            onRetry={recargarSocios}
             onEdit={(socio) => navigate(`/padron/socios/${socio.socio_id}/editar`)}
           />
         </section>

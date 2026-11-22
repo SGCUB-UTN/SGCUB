@@ -60,7 +60,7 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'legajo', direccion: 'desc' }
 
-function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onStatusChange }) {
+function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onStatusChange, onRetry }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [cargo, setCargo] = useState('todos')
@@ -104,6 +104,13 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
+  const clearFilters = () => {
+    setSearch('')
+    setCargo('todos')
+    setCategory(ALL_CATEGORIES)
+    onStatusChange('todos')
+    resetPage()
+  }
   const sortAndReset = withPageReset(sortBy)
   const [previousStatus, setPreviousStatus] = useState(status)
   if (status !== previousStatus) {
@@ -178,7 +185,9 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           error={error}
           loadingText="Cargando docentes..."
           errorText="No se pudieron cargar los docentes."
-          emptyText="No hay docentes que coincidan con el filtro."
+          emptyText={docentes.length === 0 ? 'Todavía no hay docentes cargados.' : 'Ningún docente coincide con la búsqueda o los filtros.'}
+          onRetry={onRetry}
+          onClearFilters={docentes.length === 0 ? undefined : clearFilters}
         />
 
         {!isLoading && visibleRows.map((docente) => {
