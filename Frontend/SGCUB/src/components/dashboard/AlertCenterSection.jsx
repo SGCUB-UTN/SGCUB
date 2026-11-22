@@ -6,12 +6,21 @@ import { PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../shared/pan
 import { formatPeriod } from '../shared/periodFormat'
 import SectionHeading from '../shared/SectionHeading'
 import { HeadingSkeleton, SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
+import { TONOS_BADGE } from '../shared/statusTones'
 
 const TONES = {
-  error: { icon: 'error', iconClass: 'text-error', badge: 'bg-error-container text-on-error-container' },
-  warning: { icon: 'warning', iconClass: 'text-amber-600', badge: 'bg-secondary-fixed text-on-secondary-fixed' },
-  success: { icon: 'check_circle', iconClass: 'text-emerald-700', badge: 'bg-emerald-50 text-emerald-700' },
-  neutral: { icon: 'info', iconClass: 'text-outline', badge: 'bg-surface-container-high text-on-surface-variant' },
+  error: { icon: 'error', iconClass: 'text-error', badge: TONOS_BADGE.error },
+  warning: { icon: 'warning', iconClass: 'text-amber-700', badge: TONOS_BADGE.alerta },
+  success: { icon: 'check_circle', iconClass: 'text-emerald-700', badge: TONOS_BADGE.ok },
+  neutral: { icon: 'info', iconClass: 'text-outline', badge: TONOS_BADGE.neutro },
+}
+
+const BADGE_CLASS = 'shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold tabular-nums'
+
+const summaryTone = (rows) => {
+  if (rows.some((row) => row.tone === 'error')) return TONES.error
+  if (rows.some((row) => row.tone === 'warning')) return TONES.warning
+  return TONES.success
 }
 
 const NEEDS_ACTION = new Set(['error', 'warning'])
@@ -118,9 +127,9 @@ function AlertRow({ row, canOpen }) {
       <span className={`material-symbols-outlined text-[20px] shrink-0 ${tone.iconClass}`} aria-hidden="true">{tone.icon}</span>
       <div className="flex flex-col min-w-0 flex-1">
         <span className="font-medium text-base text-on-surface">{row.title}</span>
-        <span className="text-sm text-on-surface-variant line-clamp-2" title={row.description}>{row.description}</span>
+        <span className="text-base text-on-surface-variant">{row.description}</span>
       </div>
-      <span className={`shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold ${tone.badge}`}>{row.status}</span>
+      <span className={`${BADGE_CLASS} ${tone.badge}`}>{row.status}</span>
       {canOpen && <span className="material-symbols-outlined text-[20px] shrink-0 text-on-surface-variant" aria-hidden="true">chevron_right</span>}
     </>
   )
@@ -174,7 +183,7 @@ export default function AlertCenterSection({ isLoading, alerts }) {
         title="Alertas y tareas pendientes"
         className={HEADING_CLASS}
         actions={alerts && (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold ${pending === 0 ? TONES.success.badge : TONES.error.badge}`}>
+          <span className={`${BADGE_CLASS} ${summaryTone(rows).badge}`}>
             {summary}
           </span>
         )}
