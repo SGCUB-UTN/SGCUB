@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
+import { accountDebt } from '../finanzas/accountDebt'
+import { notifyCajaChanged } from '../finanzas/cajaEvents'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
@@ -8,13 +11,13 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
-import { formatDni, formatPhone } from '../personas/format'
+import { formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { matchesSearch } from '../shared/search'
 
-const COLUMN_COUNT = 7
+const COLUMN_COUNT = 6
 
 const formatDate = (date) => {
   if (!date) return '—'
@@ -33,7 +36,7 @@ const isActive = (socio) => (socio.estado_administrativo_nombre ?? '').toLowerCa
   && !(socio.estado_administrativo_nombre ?? '').toLowerCase().includes('inactivo')
 
 const exportCsv = (socios) => {
-  const headers = ['N° Socio', 'Nombre', 'Apellido', 'DNI', 'Teléfono', 'Fecha de alta', 'Estado']
+  const headers = ['N° Socio', 'Nombre', 'Apellido', 'DNI', 'Teléfono', 'Fecha de alta', 'Estado', 'Deuda', 'Cuotas vencidas']
   const rows = socios.map((socio) => [
     socio.numero_socio ?? '',
     socio.nombre ?? '',
@@ -42,6 +45,8 @@ const exportCsv = (socios) => {
     phoneOf(socio),
     formatDate(socio.fecha_alta),
     socio.estado_administrativo_nombre ?? '',
+    accountDebt(socio.cuenta).toFixed(2).replace('.', ','),
+    socio.cuenta?.cuotas_vencidas ?? 0,
   ])
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
@@ -61,8 +66,8 @@ const exportCsv = (socios) => {
 const SORT_VALUES = {
   numero: (socio) => (socio.numero_socio ? Number(socio.numero_socio) : null),
   nombre: (socio) => `${socio.nombre ?? ''} ${socio.apellido ?? ''}`.trim(),
-  fechaAlta: (socio) => socio.fecha_alta,
   estado: (socio) => (isActive(socio) ? 0 : 1),
+  cuenta: (socio) => accountDebt(socio.cuenta),
 }
 // On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
@@ -135,10 +140,9 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
             <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Socio" columna="numero" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4 pl-5" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Teléfono</th>
-            <SortableHeader className="py-3 px-4" etiqueta="Fecha de Alta" columna="fechaAlta" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4 w-36 whitespace-nowrap" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
-            <th className="py-3 px-4 text-right" scope="col">Acciones</th>
+            <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Cuenta" columna="cuenta" orden={sort} onOrdenar={sortAndReset} />
+            <th className="py-3 px-4 w-28" scope="col"><span className="sr-only">Acciones</span></th>
           </>
         )}
       >
@@ -170,22 +174,16 @@ function SociosTable({ data, isLoading, error, status, onStatusChange }) {
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(socio.dni)}</td>
-            <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatPhone(phoneOf(socio))}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{formatDate(socio.fecha_alta)}</td>
             <td className="py-3 px-4"><ActiveStatusBadge isActive={isActive(socio)} /></td>
+            <td className="py-3 px-4 text-right whitespace-nowrap">
+              <AccountStatus cuenta={socio.cuenta} />
+            </td>
             <td className="py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
-              <span title={isActive(socio) ? 'Registrar pago' : 'No se pueden registrar pagos a socios de baja'} className="inline-flex">
-                <button
-                  type="button"
-                  onClick={() => openPayment({ socioId: socio.socio_id })}
-                  disabled={!isActive(socio)}
-                  aria-label={`Registrar pago de ${socio.nombre} ${socio.apellido}`}
-                  className="inline-flex items-center gap-1 h-8 px-2.5 shrink-0 rounded-md border border-primary/30 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-primary"
-                >
-                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">payments</span>
-                  Pagar
-                </button>
-              </span>
+              <PayButton
+                onPay={() => openPayment({ socioId: socio.socio_id, onSuccess: notifyCajaChanged })}
+                label={`Registrar pago de ${socio.nombre} ${socio.apellido}`}
+                disabledReason={isActive(socio) ? undefined : 'Los socios de baja no pueden registrar pagos'}
+              />
             </td>
           </tr>
         ))}

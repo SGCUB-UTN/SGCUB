@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { deactivateSocio, getSocios, postSocio, putSocio } from '../api/socios'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
 function useSocio({ onlyMembers = false, view } = {}) {
   const [socios, setSocios] = useState([])
@@ -40,6 +41,12 @@ function useSocio({ onlyMembers = false, view } = {}) {
   useEffect(() => {
     cargarSocios()
   }, [cargarSocios])
+
+  useEffect(() => {
+    if (!view) return undefined
+    window.addEventListener(CAJA_CHANGED_EVENT, cargarSocios)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, cargarSocios)
+  }, [view, cargarSocios])
 
   return {
     socios,
