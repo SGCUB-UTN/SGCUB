@@ -42,7 +42,7 @@ export default function CuotaSituationChart({ situation, label }) {
 
   return (
     <div className="min-w-0 h-full flex flex-col">
-      <div className="mt-3 flex items-center gap-4">
+      <div className="mt-2 flex items-center gap-4">
         <DonutChart
           segments={segments}
           total={situation.generated}
@@ -57,7 +57,7 @@ export default function CuotaSituationChart({ situation, label }) {
         />
         <ul className="flex flex-col gap-1 min-w-0 text-sm sm:text-base">
           <li className="flex items-center gap-2 pb-1 mb-1 border-b border-outline-variant/30">
-            <span className="text-on-surface-variant">Generadas</span>
+            <span className="text-on-surface-variant">Cuotas generadas</span>
             <span className="ml-auto pl-3 font-semibold tabular-nums text-on-surface">{formatCount(situation.generated)}</span>
           </li>
           {stage.map((segment) => {

@@ -39,7 +39,7 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
   const label = cuotas ? `Estado de las cuotas de ${formatPeriod(cuotas.period)}` : 'Estado de las cuotas'
 
   return (
-    <section className={PANEL_CLASS} aria-labelledby="cuota-status-title">
+    <section className={`${PANEL_CLASS} flex flex-col`} aria-labelledby="cuota-status-title">
       <SectionHeading
         id="cuota-status-title"
         icon="donut_large"
@@ -58,9 +58,9 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
           </Link>
         )}
       />
-      <div className={BODY_CLASS}>
+      <div className={`${BODY_CLASS} flex-1 flex flex-col justify-center`}>
         {cuotas ? (
-          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="shrink-0">
               <CuotaSituationChart situation={cuotas} label={label} />
             </div>

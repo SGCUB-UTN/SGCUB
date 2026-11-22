@@ -92,7 +92,7 @@ export default function DocumentationCenterSection({ isLoading, documentation })
   if (isLoading) return <DocumentationCenterSkeleton />
 
   return (
-    <section className={PANEL_CLASS} aria-labelledby="documentation-center-title">
+    <section className={`${PANEL_CLASS} flex flex-col`} aria-labelledby="documentation-center-title">
       <SectionHeading
         id="documentation-center-title"
         icon="folder_shared"
@@ -105,9 +105,9 @@ export default function DocumentationCenterSection({ isLoading, documentation })
           </Link>
         )}
       />
-      <div className={BODY_CLASS}>
+      <div className={`${BODY_CLASS} flex-1 flex flex-col justify-center`}>
         {documentation ? (
-          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <DocumentStateChart documents={documentation.documents} />
             <div className="flex-1 min-w-0 flex flex-col gap-4 sm:pl-6 sm:border-l border-outline-variant/40">
               <KpiColumn

@@ -33,7 +33,7 @@ export default function Principal() {
         <>
           <MemberCountsSection isLoading={isLoading} members={data?.members} />
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-space-lg">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-space-lg">
             <CuotaStatusSection isLoading={isLoading} cuotas={data?.cuotas} income={data?.income} />
             <DocumentationCenterSection isLoading={isLoading} documentation={data?.documentation} />
           </div>
