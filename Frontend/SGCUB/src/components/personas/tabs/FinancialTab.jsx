@@ -5,6 +5,7 @@ import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
 import DevolucionDetailModal from '../../finanzas/DevolucionDetailModal'
 import OtroMovimientoModal from '../../finanzas/OtroMovimientoModal'
 import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
+import { isOverdue } from '../../finanzas/cuotaStates'
 import { formatAmount, formatDate } from '../format'
 import { BenefitButton } from '../HeaderPersona'
 import DataTable from '../../shared/DataTable'
@@ -12,7 +13,7 @@ import { SectionEmpty } from '../../shared/FlushSection'
 import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
 import { KpiColumn, KpiGrid } from '../../shared/Kpi'
-import { formatCount, formatMoney, formatWholeMoney } from '../../cuota/cuotaPeriod'
+import { formatCount, formatMoney } from '../../cuota/cuotaPeriod'
 import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
@@ -57,7 +58,7 @@ const otherMovements = (movimientos) => [
     codigo: comprobante.codigo,
     fecha: comprobante.fecha_emision,
     concepto: comprobante.concepto,
-    detalle: 'Ver recibo',
+    detalle: comprobante.medios_de_pago || '—',
     monto: comprobante.monto_total,
     anulado: comprobante.estado === 'Anulado',
   })),
@@ -90,7 +91,7 @@ function MovementsTable({ movimientos, movements, onOpen }) {
               <th className="py-3 px-4 w-[16%]" scope="col">Tipo</th>
               <th className="py-3 px-4 w-[14%]" scope="col">Fecha</th>
               <th className="py-3 px-4" scope="col">Concepto</th>
-              <th className="py-3 px-4 w-[16%]" scope="col">Medio</th>
+              <th className="py-3 px-4 w-[16%]" scope="col">Medio de pago</th>
               <th className="py-3 px-4 w-[15%] text-right" scope="col">Monto</th>
             </>
           )}
@@ -107,7 +108,7 @@ function MovementsTable({ movimientos, movements, onOpen }) {
                   onOpen(movement)
                 }
               }}
-              className="hover:bg-surface-container-low focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+              className="hover:bg-surface-container-low focus:outline-none focus-visible:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 transition-colors cursor-pointer"
             >
               <td className="py-3 px-4 font-bold text-primary whitespace-nowrap tabular-nums">{movement.codigo}</td>
               <td className="py-3 px-4">
@@ -149,6 +150,8 @@ function ExemptNotice({ category }) {
   )
 }
 
+const cuotasText = (count, singular, plural) => `${formatCount(count)} ${count === 1 ? `cuota ${singular}` : `cuotas ${plural}`}`
+
 export function FinancialStatement({ socio, finances, exemptCategory = null, readOnly = false }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
@@ -170,10 +173,15 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
 
   const summary = useMemo(() => {
     const period = currentPeriod()
-    const dueUnpaidCuotas = cuotas.filter((cuota) => String(cuota.periodo) <= period && !isPaid(cuota))
+    const unpaid = cuotas.filter((cuota) => !isPaid(cuota))
+    const overdue = unpaid.filter(isOverdue)
+    const upcoming = unpaid.filter((cuota) => !isOverdue(cuota) && String(cuota.periodo) <= period)
+    const total = (list) => list.reduce((sum, cuota) => sum + Number(cuota.saldo_pendiente ?? 0), 0)
     return {
-      pendingCount: dueUnpaidCuotas.length,
-      debt: dueUnpaidCuotas.reduce((sum, cuota) => sum + Number(cuota.saldo_pendiente ?? 0), 0),
+      overdueCount: overdue.length,
+      overdueDebt: total(overdue),
+      upcomingCount: upcoming.length,
+      upcomingDebt: total(upcoming),
       activeScholarships: becas ? becas.filter((beca) => isActiveScholarship(beca)).length : null,
     }
   }, [cuotas, becas])
@@ -199,7 +207,12 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
   }
 
   if (error) {
-    return <div className="bg-error-container text-on-error-container p-4 rounded-lg border border-error/30" role="alert">{error}</div>
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-error-container text-on-error-container p-4 rounded-lg border border-error/30" role="alert">
+        <span>{error}</span>
+        <SecondaryButton icon="refresh" onClick={reloadFinances}>Reintentar</SecondaryButton>
+      </div>
+    )
   }
 
   if (!account) {
@@ -217,15 +230,15 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
 
       <KpiGrid columns={3} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
         <KpiColumn
-          label="Cuotas pendientes"
-          value={formatCount(summary.pendingCount)}
-          tone={summary.pendingCount ? 'text-amber-700' : 'text-on-surface'}
+          label="Deuda vencida"
+          value={formatMoney(summary.overdueDebt)}
+          tone={summary.overdueDebt ? 'text-error' : 'text-on-surface'}
+          caption={summary.overdueCount ? cuotasText(summary.overdueCount, 'vencida', 'vencidas') : 'Sin cuotas vencidas'}
         />
         <KpiColumn
-          label="Saldo adeudado"
-          value={formatWholeMoney(summary.debt)}
-          title={formatMoney(summary.debt)}
-          tone={summary.debt ? 'text-error' : 'text-on-surface'}
+          label="A vencer"
+          value={formatMoney(summary.upcomingDebt)}
+          caption={summary.upcomingCount ? cuotasText(summary.upcomingCount, 'en fecha', 'en fecha') : 'Sin cuotas por vencer'}
         />
         <KpiColumn
           label="Becas vigentes"
@@ -248,6 +261,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
           ) : (
             <CuotasEstadoCuentaTable
               cuotas={cuotas}
+              socio={socio}
               revertibleIds={readOnly ? undefined : account.cuotas_revertibles ?? []}
               settlementCuotaId={readOnly ? null : account.saldo_beneficio_revertible?.cuota_id ?? null}
               onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}

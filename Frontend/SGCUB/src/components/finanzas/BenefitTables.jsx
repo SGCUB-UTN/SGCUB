@@ -124,9 +124,9 @@ function RowActions({ row, onEdit, onCancel }) {
         disabled={disabled}
         title={row.blocker || 'Cancelar'}
         aria-label={`Cancelar ${row.type.label.toLowerCase()} ${row.validity}`}
-        className={`${ACTION_BUTTON_CLASS} border-red-200 text-red-600 hover:bg-red-50`}
+        className={`${ACTION_BUTTON_CLASS} border-error/30 text-error hover:bg-error-container/40`}
       >
-        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">block</span>
+        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">cancel</span>
       </button>
     </div>
   )
@@ -193,7 +193,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
                 <ExclusionList exclusions={row.exclusions} />
               </td>
               <td className="py-3 px-4 text-on-surface-variant break-words">{row.reason || '—'}</td>
-              <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap">{row.value}</td>
+              <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap tabular-nums">{row.value}</td>
               <td className="py-3 px-4 text-center">
                 <span
                   className={`${BADGE_CLASS} ${STATE_CLASSES[row.state]}`}

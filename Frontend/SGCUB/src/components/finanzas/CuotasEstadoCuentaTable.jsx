@@ -5,24 +5,15 @@ import usePagination from '../../hooks/usePagination'
 import { formatAmount } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import { isPaid } from './accountStatement'
-import { CUOTA_STATES, cuotaState, cuotaStateBadgeClass, cuotaStateLabel, isOverdue } from './cuotaStates'
+import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 import CuotaDetailPanel from './CuotaDetailPanel'
+import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import { getComprobantesByCuota } from '../../api/comprobantes'
+import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
+import useToast from '../../hooks/useToast'
 
 const COLUMN_COUNT = 4
-
-const OVERDUE_BADGE_LABELS = {
-  [CUOTA_STATES.VENCIDA_1]: '1er venc.',
-  [CUOTA_STATES.VENCIDA_2]: '2do venc.',
-}
-
-const PAID_BADGE_CLASS = 'bg-gray-100 text-gray-600 border-gray-200'
-
-const rowBadge = (cuota) => {
-  if (isPaid(cuota)) return { label: 'Paga', title: cuotaStateLabel(CUOTA_STATES.PAGA), className: PAID_BADGE_CLASS }
-  if (!isOverdue(cuota)) return null
-  const state = cuotaState(cuota)
-  return { label: OVERDUE_BADGE_LABELS[state], title: cuotaStateLabel(state), className: cuotaStateBadgeClass(state) }
-}
+const ROWS_PER_PAGE = 12
 
 const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.saldo_pendiente}`
 
@@ -30,28 +21,21 @@ const byPeriodDesc = (a, b) => String(b.periodo).localeCompare(String(a.periodo)
 
 const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?? 0) > 0
 
-// The latest paid cuotas are always shown: the ones of the latest payment (the only one that can be
-// reverted) or, without it, the paid cuota of the latest period. The rest of the paid ones fold away.
-const groupCuotas = (cuotas, period, revertibleIds, settlementCuotaId) => {
-  const sorted = [...cuotas].sort(byPeriodDesc)
-  const visible = sorted.filter((cuota) => String(cuota.periodo) <= period || isPartiallyPaid(cuota) || isPaid(cuota))
-  const paid = visible.filter(isPaid)
-  const fromLatestPayment = paid.filter((cuota) => revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId)
-  const latestPaid = fromLatestPayment.length ? fromLatestPayment : paid.slice(0, 1)
-  return {
-    upToDate: visible.filter((cuota) => !isPaid(cuota) && !isOverdue(cuota)),
-    overdue: visible.filter((cuota) => !isPaid(cuota) && isOverdue(cuota)),
-    latestPaid,
-    latestTitle: fromLatestPayment.length ? 'Último pago' : 'Última cuota paga',
-    olderPaid: paid.filter((cuota) => !latestPaid.includes(cuota)),
-    future: sorted.filter((cuota) => !visible.includes(cuota)),
-  }
+const isFuture = (cuota, period) => String(cuota.periodo) > period && !isPaid(cuota) && !isPartiallyPaid(cuota)
+
+function CuotaStateBadge({ cuota }) {
+  const state = cuotaState(cuota)
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(state)}`}>
+      {cuotaStateLabel(state)}
+    </span>
+  )
 }
 
 const NO_IDS = []
 
 const SECTION_ROW_CLASS = 'bg-surface-container-low/40'
-const SECTION_CELL_CLASS = 'py-1.5 px-4 text-left text-xs font-semibold uppercase tracking-wider text-outline'
+const SECTION_CELL_CLASS = 'py-2 px-4 text-left text-sm font-semibold text-on-surface-variant'
 
 function SectionRow({ title, count, expanded, onToggle }) {
   return (
@@ -64,7 +48,7 @@ function SectionRow({ title, count, expanded, onToggle }) {
             event.stopPropagation()
             onToggle()
           }}
-          className="inline-flex items-center gap-1 h-4 uppercase tracking-wider cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+          className="inline-flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
         >
           <span className={`material-symbols-outlined leading-none transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 16 }} aria-hidden="true">expand_more</span>
           {title} <span className="font-normal">({count})</span>
@@ -74,68 +58,132 @@ function SectionRow({ title, count, expanded, onToggle }) {
   )
 }
 
-function PaidAction({ revertible, onRevert }) {
-  if (!revertible) return <span className="text-sm font-normal text-on-surface-variant">Pagada</span>
+const ICON_BUTTON_CLASS = 'inline-flex items-center justify-center size-9 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent'
+
+const ICON_TONES = {
+  whatsapp: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 cursor-pointer',
+  pay: 'border-primary/40 text-primary hover:bg-primary/5 cursor-pointer',
+  revert: 'border-error/30 text-error hover:bg-error-container/40 cursor-pointer',
+}
+
+const hasPayments = (cuota) => isPaid(cuota) || Number(cuota.monto_pagado ?? 0) > 0
+
+const latestReceipt = (comprobantes) => [...(comprobantes ?? [])]
+  .filter((comprobante) => comprobante.estado !== 'Anulado')
+  .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)) || b.comprobante_id - a.comprobante_id)[0]
+
+function RowIconButton({ tone, label, disabledReason, busy = false, onClick, children }) {
+  const disabled = Boolean(disabledReason) || busy
   return (
     <button
       type="button"
+      aria-label={disabledReason ? `${label}: ${disabledReason}` : label}
+      aria-disabled={disabled || undefined}
+      title={disabledReason || label}
       onClick={(event) => {
         event.stopPropagation()
-        onRevert()
+        if (!disabled) onClick()
       }}
       onKeyDown={(event) => event.stopPropagation()}
-      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
+      className={`${ICON_BUTTON_CLASS} ${ICON_TONES[tone]}`}
     >
-      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
-      Revertir pago
+      {busy
+        ? <span className="material-symbols-outlined animate-spin" style={{ fontSize: 18 }} aria-hidden="true">progress_activity</span>
+        : children}
     </button>
   )
 }
 
-function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged, readOnly }) {
-  const badge = rowBadge(cuota)
+function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
+  const { showToast } = useToast()
+  const [sending, setSending] = useState(false)
+  const paid = isPaid(cuota)
+  const phone = socio?.telefono || socio?.persona?.telefono || ''
+  const hasPhone = String(phone).trim().length >= 6
+
+  const whatsappBlocker = !hasPayments(cuota)
+    ? 'La cuota todavía no tiene pagos'
+    : !hasPhone ? 'El socio no tiene un teléfono registrado' : ''
+  const payBlocker = paid ? 'La cuota ya está paga' : !onPay ? 'No se pueden registrar pagos' : ''
+  const revertBlocker = !onRevert
+    ? 'La ficha está en solo lectura'
+    : !revertible ? 'Solo se puede revertir el último pago' : ''
+
+  const sendWhatsApp = async () => {
+    setSending(true)
+    try {
+      const receipt = latestReceipt(await getComprobantesByCuota(cuota.cuota_id))
+      if (!receipt) {
+        showToast({ tone: 'error', title: 'Sin comprobante para enviar', description: 'La cuota no tiene comprobantes vigentes.' })
+        return
+      }
+      await sendReceiptToWhatsApp({
+        socio,
+        phone,
+        comprobanteId: receipt.comprobante_id,
+        comprobanteCodigo: receipt.codigo || `COM-${String(receipt.numero).padStart(8, '0')}`,
+        montoTotal: receipt.monto_total,
+        tipo: 'comprobante',
+        onToast: showToast,
+      })
+    } catch {
+      showToast({ tone: 'error', title: 'No se pudo enviar el comprobante', description: 'Probá de nuevo en unos minutos.' })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <RowIconButton tone="whatsapp" label="Enviar comprobante por WhatsApp" disabledReason={whatsappBlocker} busy={sending} onClick={sendWhatsApp}>
+        <WhatsAppIcon className="w-[18px] h-[18px]" />
+      </RowIconButton>
+      <RowIconButton tone="pay" label="Pagar cuota" disabledReason={payBlocker} onClick={() => onPay(cuota)}>
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">payments</span>
+      </RowIconButton>
+      <RowIconButton tone="revert" label="Revertir pago" disabledReason={revertBlocker} onClick={() => onRevert(cuota)}>
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">undo</span>
+      </RowIconButton>
+    </div>
+  )
+}
+
+function CuotaRow({ cuota, socio, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged, readOnly }) {
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onToggle(cuota.cuota_id)
     }
   }
+  const period = cuota.periodo ? formatPeriod(cuota.periodo) : '—'
 
   return (
     <Fragment>
       <tr
         tabIndex={0}
         aria-expanded={expanded}
+        aria-label={`Cuota de ${period}`}
         onClick={() => onToggle(cuota.cuota_id)}
         onKeyDown={handleKeyDown}
-        className={`cursor-pointer transition-colors ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
+        className={`cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 ${expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
       >
         <td className="py-3 pl-4 pr-0 text-outline">
           <span className={`material-symbols-outlined text-[22px] transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} aria-hidden="true">expand_more</span>
         </td>
         <td className="py-3 px-4">
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-on-surface text-base">{cuota.periodo ? formatPeriod(cuota.periodo) : '—'}</span>
-            {badge && (
-              <span
-                className={`inline-flex justify-center min-w-20 px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${badge.className}`}
-                title={badge.title}
-              >
-                {badge.label}
-              </span>
-            )}
-            {isPartiallyPaid(cuota) && <span className="text-sm text-amber-700">Pago parcial</span>}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-medium text-on-surface text-base whitespace-nowrap">{period}</span>
+            <CuotaStateBadge cuota={cuota} />
           </div>
         </td>
-        <td className="py-3 px-4 text-right text-on-surface-variant">{formatAmount(Number(cuota.monto_total ?? 0))}</td>
-        <td className="py-2 px-4 text-right font-semibold text-on-surface whitespace-nowrap">
-          {revertible ? (
-            <PaidAction revertible onRevert={() => onRevert(cuota)} />
-          ) : isPaid(cuota) ? (
-            <PaidAction revertible={false} />
-          ) : (
-            formatAmount(Number(cuota.saldo_pendiente ?? 0))
+        <td className="py-3 px-4 text-right whitespace-nowrap tabular-nums">
+          {isPartiallyPaid(cuota) && (
+            <span className="text-sm text-on-surface-variant mr-2">Pagó {formatAmount(Number(cuota.monto_pagado ?? 0))} de</span>
           )}
+          <span className="font-semibold text-on-surface">{formatAmount(Number(cuota.monto_total ?? 0))}</span>
+        </td>
+        <td className="py-2 px-4">
+          <CuotaActions cuota={cuota} socio={socio} revertible={revertible} onPay={onPay} onRevert={onRevert} />
         </td>
       </tr>
       {expanded && (
@@ -147,16 +195,6 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
           onAssignBenefit={onAssignBenefit}
           onChanged={onChanged}
           readOnly={readOnly}
-          extraActions={revertible && onRevert && (
-            <button
-              type="button"
-              onClick={() => onRevert(cuota)}
-              className="inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-md border border-error/40 text-sm font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">undo</span>
-              Revertir pago
-            </button>
-          )}
         />
       )}
     </Fragment>
@@ -165,24 +203,21 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
 
 // `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
 // `className` styles the table shell (e.g. edge to edge inside a section).
-function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, readOnly = false, className = '' }) {
+function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, readOnly = false, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
-  const [collapsed, setCollapsed] = useState({ future: true, olderPaid: true })
-  const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds, settlementCuotaId)
-  const { visibleRows: visiblePaid, paginationProps } = usePagination(groups.olderPaid, 10)
+  const [showFuture, setShowFuture] = useState(false)
+  const period = currentPeriod()
+  const sorted = [...cuotas].sort(byPeriodDesc)
+  const future = sorted.filter((cuota) => isFuture(cuota, period))
+  const listed = sorted.filter((cuota) => !isFuture(cuota, period))
+  const { visibleRows, paginationProps } = usePagination(listed, ROWS_PER_PAGE)
 
-  const toggleSection = (section) => setCollapsed((current) => ({ ...current, [section]: !current[section] }))
-  const renderSection = (section, title, rows, visibleRows = rows) => rows.length > 0 && (
-    <Fragment key={section}>
-      <SectionRow title={title} count={rows.length} expanded={!collapsed[section]} onToggle={() => toggleSection(section)} />
-      {!collapsed[section] && visibleRows.map(renderRow)}
-    </Fragment>
-  )
   const toggle = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
   const renderRow = (cuota) => (
     <CuotaRow
       key={cuota.cuota_id}
       cuota={cuota}
+      socio={socio}
       expanded={expandedId === cuota.cuota_id}
       revertible={revertibleIds.includes(cuota.cuota_id) || cuota.cuota_id === settlementCuotaId}
       onToggle={toggle}
@@ -193,35 +228,37 @@ function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuo
       readOnly={readOnly}
     />
   )
-  const noOpenCuotas = !groups.upToDate.length && !groups.overdue.length
+  const noOpenCuotas = !listed.some((cuota) => !isPaid(cuota))
 
   return (
     <div className="flex flex-col gap-4">
       <DataTable
         className={className}
-        tableClassName="min-w-[560px]"
+        tableClassName="min-w-[680px]"
         headers={(
           <>
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
             <th className="py-3 px-4" scope="col">Período</th>
-            <th className="py-3 px-4 text-right w-44" scope="col">Total</th>
-            <th className="py-3 px-4 text-right w-48" scope="col">Pendiente</th>
+            <th className="py-3 px-4 text-right" scope="col">Total</th>
+            <th className="py-3 px-4 text-right w-40" scope="col">Acciones</th>
           </>
         )}
       >
+        {future.length > 0 && (
+          <>
+            <SectionRow title="Cuotas futuras" count={future.length} expanded={showFuture} onToggle={() => setShowFuture((current) => !current)} />
+            {showFuture && future.map(renderRow)}
+          </>
+        )}
         {noOpenCuotas && (
           <tr>
             <td colSpan={COLUMN_COUNT} className="py-4 px-4 text-center text-base text-on-surface-variant">El socio no tiene cuotas pendientes.</td>
           </tr>
         )}
-        {renderSection('future', 'Cuotas futuras', groups.future)}
-        {renderSection('upToDate', 'En fecha', groups.upToDate)}
-        {renderSection('overdue', 'Vencidas', groups.overdue)}
-        {renderSection('latestPaid', groups.latestTitle, groups.latestPaid)}
-        {renderSection('olderPaid', 'Más cuotas pagas', groups.olderPaid, visiblePaid)}
+        {visibleRows.map(renderRow)}
       </DataTable>
-      {!collapsed.olderPaid && groups.olderPaid.length > 10 && (
-        <TablePagination id="cuotas-pagas-rows-per-page" rowsPerPageOptions={[10, 25, 50]} {...paginationProps} />
+      {listed.length > ROWS_PER_PAGE && (
+        <TablePagination id="cuotas-rows-per-page" rowsPerPageOptions={[12, 24, 60]} {...paginationProps} />
       )}
     </div>
   )

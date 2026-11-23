@@ -98,13 +98,13 @@ function ReceiptRow({ comprobante, onOpen, fallbackSocio }) {
             onOpen(comprobante)
           }
         }}
-        title={`Ver comprobante #${comprobante.numero}`}
+        title={`Ver comprobante ${comprobante.codigo || `#${comprobante.numero}`}`}
         className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-surface-container/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       >
         <span className={`material-symbols-outlined text-[22px] shrink-0 ${annulled ? 'text-outline' : 'text-primary'}`} aria-hidden="true">receipt_long</span>
         <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-base font-semibold ${annulled ? 'text-on-surface-variant line-through' : 'text-on-surface'}`}>Comprobante #{comprobante.numero}</span>
+            <span className={`text-base font-semibold ${annulled ? 'text-on-surface-variant line-through' : 'text-on-surface'}`}>Comprobante {comprobante.codigo || `#${comprobante.numero}`}</span>
             {annulled && (
               <span className="px-2 py-0.5 rounded text-xs font-bold border bg-error-container text-on-error-container border-error/20">
                 {comprobante.estado}
@@ -146,7 +146,7 @@ function ReceiptRow({ comprobante, onOpen, fallbackSocio }) {
             }}
             disabled={downloading}
             title="Descargar PDF"
-            aria-label={`Descargar comprobante ${comprobante.numero}`}
+            aria-label={`Descargar comprobante ${comprobante.codigo || comprobante.numero}`}
             className={ICON_BUTTON_CLASS}
           >
             <span className={`material-symbols-outlined text-[20px] ${downloading ? 'animate-spin' : ''}`} aria-hidden="true">
@@ -287,7 +287,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, class
           )}
           {onAssignBenefit && (
             <SecondaryButton icon="sell" onClick={() => onAssignBenefit(cuota)} disabled={paid} title={paid ? PAID_HINT : undefined}>
-              Agregar descuento
+              Agregar beca o descuento
             </SecondaryButton>
           )}
           {extraActions}
