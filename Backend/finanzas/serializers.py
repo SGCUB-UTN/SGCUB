@@ -452,7 +452,7 @@ class ComprobanteListSerializer(ComprobanteSerializer):
             labels = dict(MedioPago.objects.values_list("codigo", "nombre"))
             self.context["medios_pago_labels"] = labels
         names = [labels.get(item.medio_de_pago, item.medio_de_pago) for item in pago.items_pago.all()]
-        return ", ".join(dict.fromkeys(names))
+        return ", ".join(dict.fromkeys(names)) or "-"
 
 
 class ComprobanteDetalleSerializer(ComprobanteListSerializer):

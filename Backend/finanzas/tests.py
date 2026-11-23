@@ -2169,6 +2169,67 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
 
+	def settlement_receipt(self):
+		imputation = Imputacion.objects.get(movimiento_destino__cuota=self.cuota, monto_aplicado=0)
+		return Comprobante.objects.get(pago=imputation.movimiento_origen.pago)
+
+	def receipt_lines(self, receipt):
+		response = self.client.get(reverse("comprobante-detail", args=[receipt.pk]))
+		self.assertEqual(response.status_code, 200, response.data)
+		return response.data, {line["concepto"]: Decimal(str(line["monto"])) for line in response.data["desglose"]}
+
+	def test_a_discount_that_settles_the_cuota_issues_a_zero_receipt_showing_it(self):
+		response = self.asignar(modalidad="Porcentaje", valor="100")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = self.settlement_receipt()
+		self.assertEqual(receipt.monto_total, Decimal("0.00"))
+		data, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["DescuentoUnico"], Decimal("-2500.00"))
+		self.assertEqual(sum((amount for amount in lines.values() if amount > 0), Decimal("0.00")), Decimal("2500.00"))
+		self.assertEqual(data["medios_de_pago"], "-")
+
+	def test_a_scholarship_that_settles_a_partially_paid_cuota_issues_a_zero_receipt(self):
+		self.pay("1000.00")
+
+		response = self.asignar(tipo="Beca", modalidad="Porcentaje", valor="100", fecha_fin="2026-12-31")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = self.settlement_receipt()
+		_, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["Beca"], Decimal("-1500.00"))
+		self.assertEqual(sum(lines.values(), Decimal("0.00")), Decimal("0.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_discount_that_does_not_settle_the_cuota_issues_no_receipt(self):
+		self.asignar(valor="500.00")
+
+		self.assertFalse(Imputacion.objects.filter(movimiento_destino__cuota=self.cuota).exists())
+
+	def test_reverting_the_settlement_annuls_its_zero_receipt(self):
+		self.asignar(modalidad="Porcentaje", valor="100")
+		receipt = self.settlement_receipt()
+
+		response = self.client.post(
+			reverse("cuota-revertir-saldo", args=[self.cuota.pk]),
+			{"motivo": "Descuento mal cargado", "responsable": "Tesorería"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		receipt.refresh_from_db()
+		self.assertEqual(receipt.estado, "Anulado")
+		self.assertNotEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_paid_cuota_with_a_discount_shows_it_in_the_receipt(self):
+		self.asignar(valor="500.00")
+		self.pay("2000.00")
+
+		receipt = Comprobante.objects.exclude(monto_total=0).get()
+		_, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["DescuentoUnico"], Decimal("-500.00"))
+		self.assertEqual(sum((amount for amount in lines.values() if amount > 0), Decimal("0.00")), Decimal("2500.00"))
+
 	def test_paid_cuota_only_accepts_a_scholarship_for_next_periods(self):
 		self.pay("2500.00")
 

@@ -345,11 +345,69 @@ def ensure_cuota_without_payments(cuota):
 
 @transaction.atomic
 def sync_cuota_charge(cuota):
+    was_paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
     _, movement = lock_cuota_charge(cuota)
     amount = net_amount(ItemCuota.objects.filter(cuota=cuota))
     movement.monto = amount
     movement.save(update_fields=["monto"])
     refresh_cuota_state(cuota, amount - applied_amount(cuota))
+    is_paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
+    if is_paid and not was_paid:
+        issue_settlement_receipt(cuota)
+    elif was_paid and not is_paid:
+        annul_settlement_receipts(cuota)
+
+
+SETTLEMENT_CONCEPT = "Cuota saldada con beca o descuento"
+NO_PAYMENT_METHOD = "-"
+
+
+def settlement_imputations(cuota):
+    """Zero-amount imputations: the receipts of cuotas settled with a scholarship or a discount."""
+    return active_imputations().filter(movimiento_destino__cuota=cuota, monto_aplicado=0)
+
+
+def issue_settlement_receipt(cuota, user=None):
+    """A cuota settled with a scholarship or a discount gets its receipt, for $0 and without payment
+    methods, so the benefit shows in it like in any other receipt."""
+    if settlement_imputations(cuota).exists():
+        return None
+    lines = imputation_lines(cuota, Decimal("0.00"))
+    if not lines:
+        return None
+    account = cuota.movimiento.cuenta_corriente
+    payment, receipt, movement = create_payment(account, [], Decimal("0.00"), "", user, f"{SETTLEMENT_CONCEPT} {cuota.periodo}")
+    imputation = Imputacion.objects.create(
+        movimiento_origen=movement,
+        movimiento_destino=cuota.movimiento,
+        fecha=timezone.now(),
+        monto_aplicado=Decimal("0.00"),
+        saldo_pendiente=Decimal("0.00"),
+    )
+    DetalleImputacion.objects.bulk_create([
+        DetalleImputacion(imputacion=imputation, concepto=concept, monto=line_amount)
+        for concept, line_amount in lines.items()
+    ])
+    record_transaction(
+        Accion.PAGO_REGISTRADO,
+        f"Cuota {cuota.periodo} saldada con beca o descuento",
+        user,
+        socio=account.socio,
+        amount=Decimal("0.00"),
+        reference=receipt_code(receipt),
+        detail={"pago_id": payment.pk, "cuota_id": cuota.pk},
+    )
+    return receipt
+
+
+def annul_settlement_receipts(cuota):
+    for imputation in settlement_imputations(cuota).select_related("movimiento_origen__pago"):
+        payment = imputation.movimiento_origen.pago
+        payment.estado_pago = EstadoPagoChoices.ANULADO
+        payment.motivo_anulacion = "Se revirtió el saldo de la cuota con beca o descuento"
+        payment.fecha_anulacion = timezone.now()
+        payment.save(update_fields=["estado_pago", "motivo_anulacion", "fecha_anulacion"])
+        Comprobante.objects.filter(pago=payment).update(estado=EstadoComprobanteChoices.ANULADO)
 
 
 @transaction.atomic
@@ -884,7 +942,7 @@ def receipt_detail(receipt):
         "medios": [
             {"medio_de_pago": item.medio_de_pago, "monto": item.monto}
             for item in payment.items_pago.order_by("pk")
-        ],
+        ] or [{"medio_de_pago": NO_PAYMENT_METHOD, "monto": Decimal("0.00")}],
     }
 
 
@@ -1172,6 +1230,7 @@ def latest_cuota_payment(account):
         Pago.objects.filter(
             movimiento__cuenta_corriente=account,
             movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO,
+            movimiento__monto__gt=0,
             estado_pago=EstadoPagoChoices.ACREDITADO,
         )
         .order_by("-fecha", "-pk")
@@ -1803,7 +1862,7 @@ def remove_benefit(cuota, item, reason, authorized_by, user):
 
 
 def latest_payment_date(cuota):
-    return active_imputations().filter(movimiento_destino__cuota=cuota).aggregate(
+    return active_imputations().filter(movimiento_destino__cuota=cuota, monto_aplicado__gt=0).aggregate(
         latest=Max("movimiento_origen__pago__fecha"),
     )["latest"]
 

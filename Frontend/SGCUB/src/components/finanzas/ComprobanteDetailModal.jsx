@@ -19,6 +19,13 @@ const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rou
 
 const MODAL_STYLES = receiptModalStyles()
 
+const NO_PAYMENT_METHOD = { medio: '-', monto: 0 }
+
+const paymentMethodsOf = (pago, methodLabel) => {
+  const items = (pago?.items_pago ?? []).map((item) => ({ medio: methodLabel(item.medio_de_pago), monto: item.monto }))
+  return items.length ? items : [NO_PAYMENT_METHOD]
+}
+
 function InfoRow({ label, children }) {
   return (
     <div className="flex justify-between gap-3 text-sm">
@@ -139,7 +146,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               detalle={detalle}
               codigo={detalle.codigo}
               fecha={formatDate(detalle.fecha_emision)}
-              medios={(pago?.items_pago ?? []).map((item) => ({ medio: methodLabel(item.medio_de_pago), monto: item.monto }))}
+              medios={paymentMethodsOf(pago, methodLabel)}
               montoTotal={detalle.monto_total}
               observacion={pago?.observacion}
               anulado={anulado}
