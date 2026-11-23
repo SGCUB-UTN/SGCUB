@@ -18,7 +18,3 @@ export const memberStatuses = (socio, account, jugador = null) => {
 }
 
 export const teacherStatuses = (isActive) => (isActive ? [] : [DEACTIVATED])
-
-export const categoryTags = (jugador) => [jugador?.categoria, jugador?.categoria_secundaria]
-  .filter((categoria) => categoria?.nombre)
-  .map((categoria) => ({ label: categoria.nombre, icon: 'groups' }))

@@ -17,7 +17,6 @@ import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useRevertPayment from '../../../hooks/useRevertPayment'
-import useSocioFinances from '../../../hooks/useSocioFinances'
 import { SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../../shared/Skeleton'
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
@@ -302,10 +301,3 @@ export function FinancialStatement({ socio, finances, exemptCategory = null }) {
     </section>
   )
 }
-
-function FinancialTab({ socio }) {
-  const finances = useSocioFinances(socio.socio_id)
-  return <FinancialStatement socio={socio} finances={finances} />
-}
-
-export default FinancialTab

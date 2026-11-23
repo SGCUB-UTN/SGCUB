@@ -14,7 +14,7 @@ import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { categoryTags, exemptCategory, memberStatuses } from '../components/personas/profileStatus'
+import { exemptCategory, memberStatuses } from '../components/personas/profileStatus'
 import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -247,7 +247,6 @@ function JugadorDetail() {
           deportivo={{
             categoria: jugador.categoria?.nombre,
             categoria_secundaria: jugador.categoria_secundaria?.nombre,
-            estado: jugador.estado?.nombre,
             obra_social: jugador.obra_social,
             talla: jugador.tallaIndumentaria,
           }}
@@ -301,12 +300,14 @@ function JugadorDetail() {
         onUploadPhoto={handleUploadPhoto}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
-        tags={categoryTags(jugador)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
           { label: 'Alta', value: formatDate(socio.fecha_alta) },
-          { label: 'Categoría', value: jugador.categoria?.nombre || 'Sin categoría' },
+          {
+            label: 'Categoría',
+            value: [jugador.categoria?.nombre || 'Sin categoría', jugador.categoria_secundaria?.nombre].filter(Boolean).join(', '),
+          },
         ]}
         statusAction={activo
           ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />

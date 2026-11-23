@@ -118,9 +118,8 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
 
 export const ACTION_GRID_CLASS ='grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, onUploadPhoto, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, onUploadPhoto, isActive = false, statuses = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
-  const statusList = statuses ?? (status ? [status] : [])
 
   return (
     <>
@@ -142,9 +141,9 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
                 <h1 className="text-2xl text-on-surface font-bold tracking-tight">{fullName}</h1>
-                {statusList.length > 0 && (
+                {statuses.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {statusList.map((item) => (
+                    {statuses.map((item) => (
                       <span
                         key={item.label}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-sm font-semibold whitespace-nowrap ${STATUS_TONES[toneOf(item)]}`}
@@ -156,7 +155,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
                   </div>
                 )}
               </div>
-              {(metadata.length > 0 || tags.length > 0) && (
+              {metadata.length > 0 && (
                 <div className="flex items-center gap-y-1 gap-x-4 flex-wrap text-base text-on-surface-variant">
                   {metadata.map((item, index) => (
                     <div key={item.label} className="flex items-center gap-x-4">
