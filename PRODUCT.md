@@ -36,7 +36,7 @@ Es un sistema hecho a medida para un club concreto, según su operatoria real. C
 - Stack: Django y PostgreSQL en el backend; React 19 con Vite, Mantine 6 y Tailwind 4 en el frontend; todo con Docker Compose.
 - Módulos: inicio, padrón, finanzas, documental, comunicaciones, automatizaciones, configuración, usuarios y Comet.
 - Comet: se analiza la factibilidad de una integración futura con esta plataforma analítica. No está decidido.
-- Reglas financieras: un saldo negativo es una deuda; una cuota está vencida desde el primer vencimiento; el socio dado de baja no paga.
+- Reglas financieras: un saldo negativo es una deuda; una cuota está vencida desde el primer vencimiento; el socio dado de baja solo paga su deuda pendiente (no se le generan cuotas nuevas ni se le asignan becas).
 - Pendiente: implementar la unificación de los roles en un único rol de usuario.
 
 ## Brand Commitments

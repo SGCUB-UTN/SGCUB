@@ -11,6 +11,7 @@ import PagoForm from './PagoForm'
 import { receiptModalStyles } from './receiptModal'
 import SocioPicker from './SocioPicker'
 import { TitleSkeleton } from '../shared/Skeleton'
+import StatusBadge from '../shared/StatusBadge'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
@@ -82,13 +83,18 @@ function RegisterPaymentModal({
     if (ready) {
       const socio = load.socio
       return (
-        <p className="min-w-0 truncate text-base text-on-surface-variant">
-          <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
-          {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
-        </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <p className="min-w-0 truncate text-base text-on-surface-variant">
+            <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
+            {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
+          </p>
+          {!socioActive && (
+            <StatusBadge size="md" badge={{ label: 'De baja · solo deuda', tono: 'alerta', title: 'Socio dado de baja: solo puede pagar la deuda pendiente' }} />
+          )}
+        </div>
       )
     }
-    if (!socioId) return <SocioPicker compact excludedId={excludedSocioId} onSelect={(socio) => setSocioId(socio.socio_id)} />
+    if (!socioId) return <SocioPicker compact includeInactive excludedId={excludedSocioId} onSelect={(socio) => setSocioId(socio.socio_id)} />
     if (loading) return <TitleSkeleton label="Cargando estado de cuenta..." />
     if (!loaded) {
       return <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { collectErrorMessages, formatAmount, formatDate } from '../personas/format'
+import { collectErrorMessages, formatAmount, formatDate, isActiveStatus } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
@@ -406,6 +406,30 @@ function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows
   )
 }
 
+function PaymentMethodsNotice({ error, empty, onRetry }) {
+  if (!error && !empty) return null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-error/30 bg-error-container text-on-error-container" role="alert">
+      <p className="flex items-start gap-2 text-base">
+        <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">error</span>
+        {error
+          ? 'No se pudieron cargar los medios de pago.'
+          : 'No hay medios de pago habilitados. Se activan en Ajustes › Configuración › Finanzas y facturación.'}
+      </p>
+      {error && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-error/40 text-base font-semibold text-error hover:bg-error/10 transition-colors cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">refresh</span>
+          Reintentar
+        </button>
+      )}
+    </div>
+  )
+}
+
 const ROW_ICON_BUTTON_CLASS = 'w-11 h-11 shrink-0 rounded-lg flex items-center justify-center transition-colors cursor-pointer'
 
 export function PaymentRow({ row, index, paymentMethods, takenMethods, canRemove, showActionSlot, showErrors, onChange, onRemove, onAdd = null, lockedTitle = '' }) {
@@ -493,13 +517,15 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
 function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
+  const period = currentPeriod()
+  const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
+      .filter((cuota) => !debtOnly || !isFuture(cuota, period))
       .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || a.cuota_id - b.cuota_id),
-    [cuenta],
+    [cuenta, debtOnly, period],
   )
-  const period = currentPeriod()
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
@@ -521,7 +547,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const [receipt, setReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const { paymentMethods, methodLabel } = useMediosPago()
+  const { paymentMethods, methodLabel, error: methodsError, loading: methodsLoading, retry: retryMethods } = useMediosPago()
 
   const debtTotal = firstCuotasTotal(paymentCuotas, dueCount)
   const received = reversal ? roundCents(reversal.total) : 0
@@ -612,8 +638,10 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable }
           : null,
       })
-      const detalle = await getComprobante(response.comprobante?.comprobante_id).catch(() => null)
+      const comprobanteId = response.comprobante?.comprobante_id
+      const detalle = await getComprobante(comprobanteId).catch(() => null)
       setReceipt({
+        comprobanteId,
         detalle,
         medios: allRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) })),
         montoTotal: enteredTotal,
@@ -630,8 +658,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     }
   }
 
+  const reloadReceipt = async () => {
+    const detalle = await getComprobante(receipt.comprobanteId)
+    setReceipt((current) => ({ ...current, detalle }))
+  }
+
   if (receipt) {
-    return <ComprobantePago socio={socio} {...receipt} onBack={onCancel} />
+    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onBack={onCancel} />
   }
 
   const noDebt = !paymentCuotas.some((cuota) => cuotaDue(cuota) > 0)
@@ -740,6 +773,11 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             description={socio && noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
             disabled={!socio || noDebt}
           >
+            <PaymentMethodsNotice
+              error={methodsError}
+              empty={!methodsLoading && !methodsError && paymentMethods.length === 0}
+              onRetry={retryMethods}
+            />
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3 text-base font-semibold text-on-surface">
                 <span className="flex-1" aria-hidden="true">Medio de pago <span className="text-error font-bold">*</span></span>
@@ -789,7 +827,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             </div>
             {showErrors && formErrors.medios && <p className="text-sm text-error font-medium" role="alert">{formErrors.medios}</p>}
             {formErrors.montos && <p className="text-sm text-error font-medium" role="alert">{formErrors.montos}</p>}
-            {showErrors && formErrors.descuentos && <p className="text-sm text-error font-medium" role="alert">{formErrors.descuentos}</p>}
           </FormPanel>
 
           <FormPanel id="payment-notes-title" icon="notes" title="Observaciones" disabled={!socio}>
