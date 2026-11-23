@@ -4,10 +4,9 @@ import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
-import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS } from './formParts'
+import { AmountInput, AuthorizerSelect, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS } from './formParts'
 import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
@@ -55,7 +54,7 @@ const EXCESS_OPTIONS = [
   {
     value: EXCESS_PARTIAL,
     title: 'Pago parcial de la siguiente cuota',
-    description: 'Se imputa todo el dinero recibido: lo que sobra queda como pago parcial de la cuota siguiente.',
+    description: 'Se usa todo el dinero recibido: lo que sobra queda como pago parcial de la cuota siguiente.',
     icon: 'event_repeat',
   },
   {
@@ -124,11 +123,6 @@ function CuotaBreakdownRow({
     <tr className="bg-surface-container-low/40">
       <td colSpan={COLUMN_COUNT} className="px-4 py-3 sm:pl-12">
         <div className="flex flex-col gap-2.5 max-w-xl">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-on-surface-variant">
-            <span>1° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc1)}</span></span>
-            <span className="text-outline-variant" aria-hidden="true">|</span>
-            <span>2° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc2)}</span></span>
-          </div>
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
             {items.filter((item) => !isAdjustment(item)).map((item) => {
               const blocker = onRemoveItem && isRegistration(item) ? removalBlocker(cuota, item) : null
@@ -215,6 +209,9 @@ function CuotasTable({
 
   const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
   const futureLines = lines.filter((line) => isFuture(line.cuota, period))
+  const coveredFuture = futureLines.filter((line) => line.applied > 0)
+  const otherFuture = futureLines.filter((line) => line.applied <= 0)
+  const futureToggleLabel = coveredFuture.length > 0 ? 'Ver más cuotas futuras' : 'Ver cuotas futuras'
   const renderLine = (line) => (
     <CuotaLine
       key={line.cuota.cuota_id}
@@ -240,7 +237,7 @@ function CuotasTable({
       footer={(
         <>
           <td className="py-2 pl-3 pr-0" />
-          <th className="py-2 px-3 text-base font-semibold text-on-surface-variant" scope="row">Deuda total</th>
+          <th className="py-2 px-3 text-base font-semibold text-on-surface-variant" scope="row">Deuda a hoy</th>
           <td className="py-2 px-3 text-right text-base font-bold text-on-surface">{formatAmount(debtTotal)}</td>
         </>
       )}
@@ -253,7 +250,8 @@ function CuotasTable({
         </tr>
       )}
       {dueLines.map(renderLine)}
-      {futureLines.length > 0 && (
+      {coveredFuture.map(renderLine)}
+      {otherFuture.length > 0 && (
         <tr>
           <td colSpan={COLUMN_COUNT} className="py-1 px-3">
             <button
@@ -263,12 +261,12 @@ function CuotasTable({
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
             >
               <span className={`material-symbols-outlined text-[18px] transition-transform ${showFuture ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-              {showFuture ? 'Ocultar cuotas futuras' : `Ver cuotas futuras (${futureLines.length})`}
+              {showFuture ? 'Ocultar cuotas futuras' : `${futureToggleLabel} (${otherFuture.length})`}
             </button>
           </td>
         </tr>
       )}
-      {showFuture && futureLines.map(renderLine)}
+      {showFuture && otherFuture.map(renderLine)}
     </DataTable>
   )
 }
@@ -541,7 +539,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   ))
   const [refundMethod, setRefundMethod] = useState('')
   const [refundReason, setRefundReason] = useState(() => (reversal ? `Sobrante del pago anulado ${reversal.codigo}` : ''))
-  const [confirmingRefund, setConfirmingRefund] = useState(false)
+  const [refundResponsable, setRefundResponsable] = useState('')
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [receipt, setReceipt] = useState(null)
@@ -604,9 +602,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const formErrors = {
     medios: allRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá el monto de cada pago.' : '',
     montos: exceedsDebt
-      ? `El pago no puede superar el total de cuotas pendientes, incluidas las futuras (${formatAmount(pendingTotal)}).${hasExcess ? ' Devolvé el excedente con una nota de crédito.' : ''}`
+      ? `El pago no puede superar ${debtOnly ? 'la deuda pendiente' : 'el total de cuotas pendientes, incluidas las futuras'} (${formatAmount(pendingTotal)}).${hasExcess ? ' Devolvé el excedente con una nota de crédito.' : ''}`
       : '',
-    devolucion: excess > 0 && (!refundMethod || !refundReason.trim()) ? 'Elegí el medio de devolución e indicá el motivo de la nota de crédito.' : '',
+    devolucion: excess > 0 && (!refundMethod || !refundReason.trim() || !refundResponsable) ? 'Elegí el medio de devolución, el responsable e indicá el motivo de la nota de crédito.' : '',
   }
   const isValid = !Object.values(formErrors).some(Boolean) && coveredLines.length > 0
 
@@ -615,15 +613,10 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     if (!socio) return
     setShowErrors(true)
     if (!isValid) return
-    // Refunds always ask who is responsible before confirming
-    if (excess > 0) {
-      setConfirmingRefund(true)
-      return
-    }
     submitPayment()
   }
 
-  const submitPayment = async (responsable = '') => {
+  const submitPayment = async () => {
     setSaving(true)
     setSubmitError('')
     try {
@@ -635,7 +628,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         medios: allRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion: observacion || reversalNote(reversal),
         nota_credito: excess > 0
-          ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable }
+          ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable: refundResponsable }
           : null,
       })
       const comprobanteId = response.comprobante?.comprobante_id
@@ -654,7 +647,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
       setSubmitError(collectErrorMessages(error.response?.data).join(' ') || 'No se pudo registrar el pago.')
     } finally {
       setSaving(false)
-      setConfirmingRefund(false)
     }
   }
 
@@ -754,9 +746,16 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                       className={claseInput(showErrors && excess > 0 && !refundReason.trim())}
                     />
                   </Campo>
+                  <Campo id="payment-refund-responsable" label="Responsable de la devolución" requerido className="sm:col-span-2">
+                    <AuthorizerSelect
+                      id="payment-refund-responsable"
+                      value={refundResponsable}
+                      onChange={setRefundResponsable}
+                      invalid={showErrors && excess > 0 && !refundResponsable}
+                    />
+                  </Campo>
                   <p className="sm:col-span-2 text-base text-on-surface-variant">
                     Sobrante a devolver: <strong className="text-on-surface tabular-nums">{formatAmount(excess)}</strong>
-                    {excess > 0 && ' · El responsable se pide al confirmar.'}
                   </p>
                 </div>
               )}
@@ -769,7 +768,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           <FormPanel
             id="payment-methods-title"
             icon="payments"
-            title="Formas de pago"
+            title="Medios de pago"
             description={socio && noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
             disabled={!socio || noDebt}
           >
@@ -874,18 +873,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         </div>
       </div>
 
-      <AuthorizationModal
-        opened={confirmingRefund}
-        title="Confirmar pago y nota de crédito"
-        description={`Se registra el pago por ${formatAmount(enteredTotal)} y una nota de crédito por ${formatAmount(excess)} sobre el comprobante ${reversal?.codigo ?? ''}.`}
-        confirmLabel="Confirmar"
-        confirmIcon="check"
-        authorizerLabel="Responsable de la devolución"
-        authorizerError="Elegí el responsable de la devolución."
-        withReason={false}
-        onConfirm={({ autorizado_por: responsable }) => submitPayment(responsable)}
-        onClose={() => setConfirmingRefund(false)}
-      />
       <RemoveCuotaItemModal
         cuota={removal?.cuota ?? null}
         item={removal?.item ?? null}

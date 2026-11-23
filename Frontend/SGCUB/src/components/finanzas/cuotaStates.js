@@ -18,8 +18,8 @@ export const CUOTA_STATE_LABELS = {
 
 const CUOTA_STATE_SHORT_LABELS = {
   [CUOTA_STATES.EN_FECHA]: 'En fecha',
-  [CUOTA_STATES.VENCIDA_1]: '1° Venc.',
-  [CUOTA_STATES.VENCIDA_2]: '2° Venc.',
+  [CUOTA_STATES.VENCIDA_1]: 'Vencida',
+  [CUOTA_STATES.VENCIDA_2]: 'Vencida',
   [CUOTA_STATES.PAGA]: 'Paga',
 }
 
