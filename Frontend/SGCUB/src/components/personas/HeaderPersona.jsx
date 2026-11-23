@@ -14,6 +14,25 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
+const AVATAR_CLASS = 'relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight'
+
+function AvatarFrame({ onClick, label, busy, children }) {
+  if (!label) return <div className={AVATAR_CLASS}>{children}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={label}
+      aria-label={label}
+      aria-busy={busy}
+      className={`${AVATAR_CLASS} group cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary`}
+    >
+      {children}
+    </button>
+  )
+}
+
 function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPhoto }) {
   const [imageError, setImageError] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -71,10 +90,10 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
           onChange={handleFileChange}
         />
       )}
-      <div
+      <AvatarFrame
         onClick={onUploadPhoto && !uploading ? () => fileInputRef.current?.click() : undefined}
-        title={onUploadPhoto ? (showPhoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil') : undefined}
-        className={`relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight ${onUploadPhoto ? 'cursor-pointer group' : ''}`}
+        label={onUploadPhoto ? (showPhoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil') : undefined}
+        busy={uploading}
       >
         {showPhoto ? (
           <img
@@ -85,11 +104,11 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
             draggable={false}
           />
         ) : (
-          getInitials(name, surname)
+          <span aria-hidden={Boolean(onUploadPhoto)}>{getInitials(name, surname)}</span>
         )}
 
         {onUploadPhoto && (
-          <div className={`absolute inset-0 transition-opacity flex flex-col items-center justify-center text-white gap-0.5 ${uploading ? 'opacity-100 bg-black/60' : 'opacity-0 group-hover:opacity-100 bg-black/50'}`}>
+          <div className={`absolute inset-0 transition-opacity flex flex-col items-center justify-center text-white gap-0.5 ${uploading ? 'opacity-100 bg-black/60' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 bg-black/50'}`} aria-hidden="true">
             <span className={`material-symbols-outlined text-[20px] ${uploading ? 'animate-spin' : ''}`}>
               {uploading ? 'progress_activity' : 'photo_camera'}
             </span>
@@ -98,10 +117,11 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
             </span>
           </div>
         )}
-      </div>
+      </AvatarFrame>
 
       {isActive && (
         <span
+          role="img"
           className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
           title="Activo"
           aria-label="Activo"
@@ -116,7 +136,7 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
           aria-label="Descargar foto"
           className="absolute -bottom-1 -left-1 w-7 h-7 rounded-full bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[16px]">download</span>
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">download</span>
         </button>
       )}
     </div>

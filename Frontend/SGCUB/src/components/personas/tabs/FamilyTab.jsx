@@ -4,6 +4,7 @@ import { SecondaryButton, Field, TabHeader, TableFooter, EmptyState } from './pa
 import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
 import { FLUSH_END_CLASS, FLUSH_FOOTER_CLASS } from '../../shared/flushTable'
+import useDialogFocus from '../../../hooks/useDialogFocus'
 
 function formatearDomicilioContacto(person) {
   if (!person?.domicilio_calle && !person?.domicilio_numero) return ''
@@ -16,6 +17,7 @@ function formatearDomicilioContacto(person) {
 }
 
 function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true }) {
+  const dialogRef = useDialogFocus()
   useEffect(() => {
     const closeWithEscape = (event) => event.key === 'Escape' && onClose()
     window.addEventListener('keydown', closeWithEscape)
@@ -31,6 +33,7 @@ function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 bg-inverse-surface/40" onClick={onClose}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-detalle-contacto"
@@ -57,7 +60,7 @@ function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true 
             className="p-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer"
             aria-label="Cerrar"
           >
-            <span className="material-symbols-outlined text-[22px]">close</span>
+            <span className="material-symbols-outlined text-[22px]" aria-hidden="true">close</span>
           </button>
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -76,6 +79,7 @@ function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true 
 }
 
 function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'jugador' }) {
+  const dialogRef = useDialogFocus()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const person = contact.persona ?? {}
@@ -103,6 +107,7 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-inverse-surface/40" onClick={() => !deleting && onClose()}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-contact-title"
@@ -120,11 +125,11 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
             className="p-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer disabled:opacity-50"
             aria-label="Cerrar"
           >
-            <span className="material-symbols-outlined text-[22px]">close</span>
+            <span className="material-symbols-outlined text-[22px]" aria-hidden="true">close</span>
           </button>
         </div>
         <div className="p-6">
-          <p className="mt-1 text-base text-on-surface-variant">¿Estás seguro de eliminar a {name}?, esta acción quitará el vínculo familiar del {etiquetaTitular}.</p>
+          <p className="mt-1 text-base text-on-surface-variant">¿Confirmás que querés eliminar a {name}? Se quita el vínculo familiar del {etiquetaTitular}.</p>
           {error && <p className="mt-4 px-3 py-2 rounded-lg bg-error-container/40 text-base text-on-error-container" role="alert">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container">

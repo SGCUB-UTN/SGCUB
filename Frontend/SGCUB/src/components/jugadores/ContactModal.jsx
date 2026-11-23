@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
+import useDialogFocus from '../../hooks/useDialogFocus'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
@@ -77,6 +78,7 @@ export default function ContactModal({
   mostrarResponsableLegal = true,
 }) {
   const editando = Boolean(contact)
+  const dialogRef = useDialogFocus()
   const [form, setForm] = useState(() => (editando ? contactoAFormulario(contact, domicilioTitular) : contactoVacio))
   const [saving, setSaving] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -255,6 +257,7 @@ export default function ContactModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-inverse-surface/40" onClick={() => !saving && onClose()}>
       <form
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-agregar-contacto"
