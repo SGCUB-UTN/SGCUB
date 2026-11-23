@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
 import { activateSocio } from '../api/socios'
-import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
-import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
-import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
+import PersonStatusModal from '../components/personas/PersonStatusModal'
 import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
@@ -22,7 +20,8 @@ import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
-import { hasPendingDebt } from '../components/finanzas/accountStatement'
+import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useSocioFinances from '../hooks/useSocioFinances'
 import useToast from '../hooks/useToast'
 import CometDescargarButton from '../components/comet/CometDescargarButton'
@@ -30,6 +29,29 @@ import { getContactsPayload, getContactsPayloadWith } from '../components/jugado
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
 import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
 import { uploadPersonaFoto } from '../api/personaFoto'
+
+const READ_ONLY = 'La ficha queda en solo lectura.'
+const EDITABLE = 'La ficha vuelve a ser editable.'
+
+const DEACTIVATION_TYPES = [
+  { value: 'completa', label: 'Baja completa', description: 'Da de baja al jugador y al socio. Deja de abonar la cuota.' },
+  { value: 'parcial', label: 'Baja parcial', description: 'Da de baja solo al jugador. Mantiene la cuota social.' },
+]
+
+const ACTIVATION_TYPES = [
+  {
+    value: 'completa',
+    label: 'Alta completa',
+    description: 'Da de alta al socio y al jugador. Abona la cuota social y la deportiva.',
+    consequences: [EDITABLE],
+  },
+  {
+    value: 'parcial',
+    label: 'Alta parcial',
+    description: 'Da de alta solo al socio. Abona la cuota social y queda como ex jugador.',
+    consequences: ['La ficha sigue en solo lectura hasta el alta como jugador.'],
+  },
+]
 
 const ORIGINS = {
   jugadores: [{ label: 'Personas' }, { label: 'Jugadores', to: '/padron/jugadores' }],
@@ -169,7 +191,7 @@ function JugadorDetail() {
         ? { title: 'Jugador dado de baja', description: `${nombreJugador} quedó de baja como jugador y como socio.` }
         : { title: 'Baja parcial registrada', description: `${nombreJugador} deja la actividad deportiva y sigue como socio.` })
     } catch (requestError) {
-      setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el jugador.')
+      setErrorBaja(getErrorMessage(requestError, 'No se pudo dar de baja al jugador.'))
     } finally {
       setDandoDeBaja(false)
     }
@@ -191,7 +213,7 @@ function JugadorDetail() {
         ? { title: 'Jugador dado de alta', description: `${nombreJugador} vuelve a estar activo.` }
         : { title: 'Alta como socio registrada', description: `${nombreJugador} vuelve como socio, sin actividad deportiva.` })
     } catch (requestError) {
-      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el jugador.'))
+      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta al jugador.'))
     } finally {
       setDandoDeAlta(false)
     }
@@ -220,6 +242,9 @@ function JugadorDetail() {
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
+  const altaConEleccion = jugador.tipo_baja === 'completa'
+  const deuda = pendingDebt(finances.account)
+  const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
   const handleDownloadPhoto = async () => {
     if (!socio.foto_url) return
@@ -362,29 +387,41 @@ function JugadorDetail() {
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
 
-      <ActivateJugadorModal
+      <PersonStatusModal
         opened={modalAltaAbierto}
-        onClose={() => !dandoDeAlta && setModalAltaAbierto(false)}
-        onConfirm={confirmarAlta}
-        jugador={jugador}
+        action="alta"
+        title="Confirmar alta de jugador"
+        personName={nombreJugador}
+        options={altaConEleccion ? ACTIVATION_TYPES : undefined}
+        consequences={altaConEleccion ? [] : ['Vuelve a la actividad deportiva y abona la cuota deportiva.', EDITABLE]}
+        onClose={() => setModalAltaAbierto(false)}
+        onConfirm={(tipo) => confirmarAlta(!altaConEleccion || tipo === 'completa')}
         loading={dandoDeAlta}
         error={errorAlta}
       />
 
-      <DeactivateSocioModal
+      <PersonStatusModal
         opened={modalBajaCompletaAbierto}
-        onClose={() => !dandoDeBaja && setModalBajaCompletaAbierto(false)}
+        action="baja"
+        title="Confirmar baja completa"
+        personName={nombreJugador}
+        confirmLabel="Dar de baja completa"
+        consequences={['También se da de baja al socio: deja de abonar la cuota social.', avisoDeuda, 'La ficha sigue en solo lectura.']}
+        onClose={() => setModalBajaCompletaAbierto(false)}
         onConfirm={() => confirmarBaja(true)}
-        socio={socio}
         loading={dandoDeBaja}
         error={errorBaja}
       />
 
-      <DeactivateJugadorModal
+      <PersonStatusModal
         opened={modalBajaAbierto}
-        onClose={() => !dandoDeBaja && setModalBajaAbierto(false)}
-        onConfirm={confirmarBaja}
-        jugador={jugador}
+        action="baja"
+        title="Confirmar baja de jugador"
+        personName={nombreJugador}
+        options={DEACTIVATION_TYPES}
+        consequences={[avisoDeuda, READ_ONLY]}
+        onClose={() => setModalBajaAbierto(false)}
+        onConfirm={(tipo) => confirmarBaja(tipo === 'completa')}
         loading={dandoDeBaja}
         error={errorBaja}
       />

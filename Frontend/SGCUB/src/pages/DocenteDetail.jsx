@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateDocente, deactivateDocente, getCargosDocente, getDocente, patchDocente } from '../api/docentes'
 import ActivateDocenteModal from '../components/docentes/ActivateDocenteModal'
-import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModal'
+import PersonStatusModal from '../components/personas/PersonStatusModal'
 import PersonHeader, { DeactivateButton, ActivateButton, LockedProfileNotice } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
@@ -132,7 +132,7 @@ function DocenteDetail() {
       setModalBajaAbierto(false)
       showToast({ title: 'Docente dado de baja', description: `${nombreDocente} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
-      setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el docente.')
+      setErrorBaja(getErrorMessage(requestError, 'No se pudo dar de baja al docente.'))
     } finally {
       setDandoDeBaja(false)
     }
@@ -147,7 +147,7 @@ function DocenteDetail() {
       setModalAltaAbierto(false)
       showToast({ title: 'Docente dado de alta', description: `${nombreDocente} vuelve a estar activo.` })
     } catch (requestError) {
-      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el docente.'))
+      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta al docente.'))
     } finally {
       setDandoDeAlta(false)
     }
@@ -298,20 +298,24 @@ function DocenteDetail() {
       <ActivateDocenteModal
         key={modalAltaKey}
         opened={modalAltaAbierto}
-        onClose={() => !dandoDeAlta && setModalAltaAbierto(false)}
+        onClose={() => setModalAltaAbierto(false)}
         onConfirm={confirmarAlta}
-        docente={docente}
+        personName={nombreDocente}
+        needsCargo={(docente.asignaciones ?? []).length === 0}
         cargos={cargos}
         categorias={categorias}
         loading={dandoDeAlta}
         error={errorAlta}
       />
 
-      <DeactivateDocenteModal
+      <PersonStatusModal
         opened={modalBajaAbierto}
-        onClose={() => !dandoDeBaja && setModalBajaAbierto(false)}
+        action="baja"
+        title="Confirmar baja de docente"
+        personName={nombreDocente}
+        consequences={['Conserva sus cargos y categorías asignadas.', 'La ficha queda en solo lectura.']}
+        onClose={() => setModalBajaAbierto(false)}
         onConfirm={confirmarBaja}
-        docente={docente}
         loading={dandoDeBaja}
         error={errorBaja}
       />

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
-import ActivateSocioModal from '../components/socios/ActivateSocioModal'
-import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
+import PersonStatusModal from '../components/personas/PersonStatusModal'
 import PersonHeader, { ActivateButton, DeactivateButton, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { memberStatuses } from '../components/personas/profileStatus'
-import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
+import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText, getErrorMessage } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
-import { hasPendingDebt } from '../components/finanzas/accountStatement'
+import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
@@ -85,7 +85,7 @@ function SocioDetail() {
       setModaldeactivateAbierto(false)
       showToast({ title: 'Socio dado de baja', description: `${socio.nombre} ${socio.apellido} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
-      setErrorEliminacion(requestError.response?.data?.detail || 'No se pudo dar de baja al socio.')
+      setErrorEliminacion(getErrorMessage(requestError, 'No se pudo dar de baja al socio.'))
     } finally {
       setdeactivate(false)
     }
@@ -101,7 +101,7 @@ function SocioDetail() {
       setModalActivarAbierto(false)
       showToast({ title: 'Socio dado de alta', description: `${socio.nombre} ${socio.apellido} vuelve a estar activo.` })
     } catch (requestError) {
-      setErrorActivacion(requestError.response?.data?.detail || 'No se pudo dar de alta al socio.')
+      setErrorActivacion(getErrorMessage(requestError, 'No se pudo dar de alta al socio.'))
     } finally {
       setActivando(false)
     }
@@ -117,6 +117,9 @@ function SocioDetail() {
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)
   const puedePagar = activo || hasPendingDebt(finances.account)
+  const nombreSocio = `${socio.nombre ?? ''} ${socio.apellido ?? ''}`.trim()
+  const deuda = pendingDebt(finances.account)
+  const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
   const tabs = [
     {
@@ -189,20 +192,26 @@ function SocioDetail() {
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
 
-      <ActivateSocioModal
+      <PersonStatusModal
         opened={modalActivarAbierto}
-        onClose={() => !activando && setModalActivarAbierto(false)}
+        action="alta"
+        title="Confirmar alta de socio"
+        personName={nombreSocio}
+        consequences={['Vuelve a generar la cuota mensual.', 'La ficha vuelve a ser editable.']}
+        onClose={() => setModalActivarAbierto(false)}
         onConfirm={confirmarActivacion}
-        socio={socio}
         loading={activando}
         error={errorActivacion}
       />
 
-      <DeactivateSocioModal
+      <PersonStatusModal
         opened={modaldeactivateAbierto}
-        onClose={() => !deactivate && setModaldeactivateAbierto(false)}
+        action="baja"
+        title="Confirmar baja de socio"
+        personName={nombreSocio}
+        consequences={['No se le generan más cuotas.', avisoDeuda, 'La ficha queda en solo lectura.']}
+        onClose={() => setModaldeactivateAbierto(false)}
         onConfirm={confirmarEliminacion}
-        socio={socio}
         loading={deactivate}
         error={errorEliminacion}
       />
