@@ -14,6 +14,13 @@ import { TitleSkeleton } from '../shared/Skeleton'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
+const FORM_HEIGHT = 'min(820px, 90dvh)'
+
+const modalLayout = (paid, isMobile) => {
+  if (paid) return receiptModalStyles(isMobile)
+  return isMobile ? {} : receiptModalStyles(false, FORM_HEIGHT)
+}
+
 function HeaderMessage({ icon, tone = 'text-on-surface-variant', children }) {
   return (
     <p className={`flex items-center gap-2 h-10 text-base ${tone}`} role={tone === 'text-error' ? 'alert' : 'status'}>
@@ -131,7 +138,7 @@ function RegisterPaymentModal({
           <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(paid ? receiptModalStyles(isMobile) : {}) }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...modalLayout(paid, isMobile) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered

@@ -7,7 +7,7 @@ import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
-import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS } from './formParts'
 import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
@@ -72,6 +72,24 @@ const reversalNote = (reversal) => {
   return reversal.otherSocio
     ? `Pago anulado ${reversal.codigo} registrado en el socio correcto`
     : `Vuelve a cobrar el pago anulado ${reversal.codigo}`
+}
+
+const monthName = (period) => {
+  const [year, month] = String(period).split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
+}
+
+const joinWords = (words) => (words.length > 1 ? `${words.slice(0, -1).join(', ')} y ${words.at(-1)}` : words[0] ?? '')
+
+const periodsText = (periods) => {
+  const years = []
+  periods.forEach((period) => {
+    const year = String(period).slice(0, 4)
+    const group = years.find((current) => current.year === year)
+    if (group) group.months.push(monthName(period))
+    else years.push({ year, months: [monthName(period)] })
+  })
+  return joinWords(years.map((group) => `${joinWords(group.months)} de ${group.year}`))
 }
 
 const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
@@ -321,6 +339,73 @@ function CuotaLine({
   )
 }
 
+function SettlementStatus({ settledLines, partialLines }) {
+  if (settledLines.length === 0 && partialLines.length === 0) {
+    return <p className="text-base text-on-surface-variant">Ingresá el monto para ver qué cuotas se saldan.</p>
+  }
+  return (
+    <ul className="flex flex-col gap-1.5 text-base">
+      {settledLines.length > 0 && (
+        <li className="flex items-start gap-2 text-on-surface">
+          <span className="material-symbols-outlined text-[20px] text-emerald-700 shrink-0" aria-hidden="true">check_circle</span>
+          <span>Salda {periodsText(settledLines.map((line) => line.cuota.periodo))}.</span>
+        </li>
+      )}
+      {partialLines.map((line) => (
+        <li key={line.cuota.cuota_id} className="flex items-start gap-2 text-on-surface">
+          <span className="material-symbols-outlined text-[20px] text-amber-700 shrink-0" aria-hidden="true">timelapse</span>
+          <span>
+            {periodsText([line.cuota.periodo]).replace(/^./, (letter) => letter.toUpperCase())} queda con pago parcial: faltan{' '}
+            <span className="font-semibold tabular-nums">{formatAmount(roundCents(line.due - line.applied))}</span>.
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RemainingValue({ remaining, empty }) {
+  if (empty) return <span className="text-lg font-bold tabular-nums text-on-surface-variant">{formatAmount(0)}</span>
+  if (remaining > 0) return <span className="text-lg font-bold tabular-nums text-amber-700">{formatAmount(remaining)}</span>
+  return (
+    <span className="inline-flex items-center gap-1.5 text-lg font-bold text-emerald-700">
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">check_circle</span>
+      Al día
+    </span>
+  )
+}
+
+function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows, methodLabel, remaining, empty }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-base font-semibold text-on-surface-variant">A cobrar</span>
+        <span className="text-[2rem] leading-tight font-bold tabular-nums text-on-surface" aria-live="polite">{formatAmount(enteredTotal)}</span>
+      </div>
+
+      {empty
+        ? <p className="text-base text-on-surface-variant">Elegí un socio con deuda para armar el cobro.</p>
+        : <SettlementStatus settledLines={settledLines} partialLines={partialLines} />}
+
+      <div className="flex flex-col gap-1.5 pt-4 border-t border-dashed border-slate-300">
+        {completeRows.map((row) => (
+          <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
+        ))}
+        {completeRows.length === 0 && (
+          <p className="text-base text-on-surface-variant">{empty ? 'Sin medios de pago.' : 'Falta elegir el medio de pago.'}</p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-4 border-t border-dashed border-slate-300">
+        <span className="text-base font-bold text-on-surface">Queda por pagar</span>
+        <RemainingValue remaining={remaining} empty={empty} />
+      </div>
+    </div>
+  )
+}
+
 const ROW_ICON_BUTTON_CLASS = 'w-11 h-11 shrink-0 rounded-lg flex items-center justify-center transition-colors cursor-pointer'
 
 export function PaymentRow({ row, index, paymentMethods, takenMethods, canRemove, showActionSlot, showErrors, onChange, onRemove, onAdd = null, lockedTitle = '' }) {
@@ -456,7 +541,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const settledLines = coveredLines.filter((line) => line.applied >= line.due)
   const partialLines = coveredLines.filter((line) => line.applied < line.due)
   const pendingBalance = roundCents(billedTotal - enteredTotal)
-  const partialFuture = partialLines.some((line) => isFuture(line.cuota, period))
 
   const [syncedCuenta, setSyncedCuenta] = useState(cuenta)
   if (cuenta !== syncedCuenta) {
@@ -561,9 +645,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   }
 
   return (
-    <form onSubmit={confirmPayment} className="flex flex-col" noValidate>
-      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
-        <div className="flex flex-col gap-5 min-w-0">
+    <form onSubmit={confirmPayment} className="flex flex-col flex-1 min-h-0" noValidate>
+      <div className={`grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[minmax(0,1fr)] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
+        <div className="flex flex-col gap-5 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:-m-1 lg:p-1 [&>*]:shrink-0">
           <FormPanel
             id="payment-cuotas-title"
             icon="receipt_long"
@@ -721,70 +805,18 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           </FormPanel>
         </div>
 
-        <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>
-          <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
+        <div className={`${TICKET_CLASS} lg:min-h-0 lg:overflow-y-auto transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>
+          <PaymentSummary
+            enteredTotal={enteredTotal}
+            settledLines={settledLines}
+            partialLines={partialLines}
+            completeRows={allRows.filter(isRowComplete)}
+            methodLabel={methodLabel}
+            remaining={Math.max(pendingBalance, 0)}
+            empty={!socio || noDebt}
+          />
 
-          <div className="flex flex-1 flex-col justify-between gap-3">
-            <TicketSection title="Cuotas a pagar">
-              {billedLines.length
-                ? billedLines.map((line) => (
-                  <SummaryLine
-                    key={line.cuota.cuota_id}
-                    label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                    value={formatAmount(line.due)}
-                  />
-                ))
-                : <p className="text-base text-on-surface-variant">Sin cuotas a pagar.</p>}
-            </TicketSection>
-
-            <div className="pb-3 border-b border-dashed border-slate-300">
-              <SummaryLine label="Total de cuotas" value={formatAmount(billedTotal)} isTotal />
-            </div>
-
-            <TicketSection title="Medios de pago">
-              {allRows.some(isRowComplete)
-                ? allRows.filter(isRowComplete).map((row) => (
-                  <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
-                ))
-                : <p className="text-base text-on-surface-variant">Ningún medio de pago cargado.</p>}
-            </TicketSection>
-
-            <div className="pb-3 border-b border-dashed border-slate-300">
-              <SummaryLine label="Total de medios de pago" value={formatAmount(enteredTotal)} isTotal />
-            </div>
-
-            <TicketSection title="Resultado del pago">
-              {coveredLines.length ? (
-                <>
-                  {settledLines.map((line) => (
-                    <SummaryLine
-                      key={line.cuota.cuota_id}
-                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                      value="Se salda"
-                      valueClassName="text-emerald-700"
-                    />
-                  ))}
-                  {partialLines.map((line) => (
-                    <SummaryLine
-                      key={line.cuota.cuota_id}
-                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                      value="Parcial"
-                      valueClassName="text-amber-700"
-                    />
-                  ))}
-                </>
-              ) : <p className="text-base text-on-surface-variant">Ingresá el pago para ver qué cuotas se saldan.</p>}
-            </TicketSection>
-
-            <SummaryLine
-              label={partialFuture ? 'Pendiente próxima cuota' : 'Deuda pendiente'}
-              value={formatAmount(Math.max(pendingBalance, 0))}
-              isTotal
-              valueClassName={pendingBalance <= 0 ? 'text-emerald-700' : 'text-amber-700'}
-            />
-          </div>
-
-          <div className="flex flex-col gap-3">
+          <div className="mt-auto flex flex-col gap-3">
             {submitError && (
               <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
                 <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>

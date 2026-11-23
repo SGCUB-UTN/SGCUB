@@ -39,7 +39,7 @@ export function AmountInput({ value, onChange, invalid = false, className = '', 
         value={formatAmountText(value)}
         onChange={handleChange}
         aria-invalid={invalid || undefined}
-        className={claseInput(invalid, 'pl-7 font-semibold text-right')}
+        className={claseInput(invalid, 'pl-7 font-semibold text-right tabular-nums')}
         {...props}
       />
     </div>
@@ -69,7 +69,7 @@ export function SummaryLine({ label, value, isTotal = false, valueClassName = ''
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className={`shrink-0 ${isTotal ? 'text-base font-bold text-on-surface' : 'text-base text-on-surface-variant'}`}>{label}</span>
-      <span className={`min-w-0 text-right break-words ${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
+      <span className={`min-w-0 text-right break-words tabular-nums ${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
     </div>
   )
 }
