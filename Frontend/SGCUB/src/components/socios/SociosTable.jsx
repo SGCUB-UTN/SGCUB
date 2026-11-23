@@ -185,7 +185,7 @@ function SociosTable({ data, isLoading, error, status, onRetry }) {
               <PayButton
                 onPay={() => openPayment({ socioId: socio.socio_id, onSuccess: notifyCajaChanged })}
                 label={`Registrar pago de ${socio.nombre} ${socio.apellido}`}
-                disabledReason={isActive(socio) ? undefined : 'Los socios de baja no pueden registrar pagos'}
+                disabledReason={isActive(socio) || accountDebt(socio.cuenta) > 0 ? undefined : 'Socio de baja sin deuda pendiente'}
               />
             </td>
           </tr>

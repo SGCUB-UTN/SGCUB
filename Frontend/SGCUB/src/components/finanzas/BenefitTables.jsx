@@ -158,7 +158,7 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
   )
 }
 
-export function BenefitsTable({ becas, cuotas, onChanged }) {
+export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
@@ -179,7 +179,7 @@ export function BenefitsTable({ becas, cuotas, onChanged }) {
               <th className="py-3 px-4" scope="col">Motivo</th>
               <th className="py-3 px-4 w-[13%] text-right" scope="col">Valor</th>
               <th className="py-3 px-4 w-[13%] text-center" scope="col">Estado</th>
-              <th className="py-3 px-4 w-[11%] text-center" scope="col">Acciones</th>
+              {!readOnly && <th className="py-3 px-4 w-[11%] text-center" scope="col">Acciones</th>}
             </>
           )}
         >
@@ -202,9 +202,11 @@ export function BenefitsTable({ becas, cuotas, onChanged }) {
                   {row.stateLabel}
                 </span>
               </td>
-              <td className="py-3 px-4">
-                <RowActions row={row} onEdit={setEditing} onCancel={setCancelling} />
-              </td>
+              {!readOnly && (
+                <td className="py-3 px-4">
+                  <RowActions row={row} onEdit={setEditing} onCancel={setCancelling} />
+                </td>
+              )}
             </tr>
           ))}
         </DataTable>

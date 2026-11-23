@@ -71,6 +71,7 @@ const fullName = (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.a
 const secondaryCategoryName = (jugador) => jugador.categoria_secundaria?.nombre ?? ''
 
 const socioCanPay = (jugador) => isActiveStatus(jugador.socio?.estado_administrativo_nombre)
+  || accountDebt(jugador.socio?.cuenta) > 0
 
 const EXPORT_COLUMNS = [
   { header: 'N° socio', value: (jugador) => jugador.socio?.numero_socio },
@@ -270,7 +271,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onRet
               <PayButton
                 onPay={() => openPayment({ socioId: jugador.socio.socio_id, onSuccess: notifyCajaChanged })}
                 label={`Registrar pago de ${fullName(jugador)}`}
-                disabledReason={socioCanPay(jugador) ? undefined : 'Los socios de baja no pueden registrar pagos'}
+                disabledReason={socioCanPay(jugador) ? undefined : 'Socio de baja sin deuda pendiente'}
               />
             </td>
           </tr>

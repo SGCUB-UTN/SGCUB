@@ -119,16 +119,18 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
             </td>
             <td className="py-3 px-4 pr-6">
               <div className="flex items-center justify-end gap-1">
-                {!isHistory && canGenerate?.(doc) && (
+                {!isHistory && onGenerate && canGenerate?.(doc) && (
                   <ActionButton icon="article" label={`Generar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onGenerate(doc)} />
                 )}
                 {doc.archivoUrl && (
                   <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />
                 )}
-                {!isHistory && (
+                {!isHistory && onEdit && (
                   <ActionButton icon="edit" label={`Editar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onEdit(doc)} />
                 )}
-                <ActionButton icon="delete" label={`Eliminar ${doc.typeName}`} className={DANGER_ACTION_CLASS} onClick={() => onDelete(doc)} />
+                {onDelete && (
+                  <ActionButton icon="delete" label={`Eliminar ${doc.typeName}`} className={DANGER_ACTION_CLASS} onClick={() => onDelete(doc)} />
+                )}
               </div>
             </td>
           </tr>

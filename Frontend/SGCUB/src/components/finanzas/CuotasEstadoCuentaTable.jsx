@@ -92,7 +92,7 @@ function PaidAction({ revertible, onRevert }) {
   )
 }
 
-function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged }) {
+function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged, readOnly }) {
   const badge = rowBadge(cuota)
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -146,6 +146,7 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
           onPay={onPay}
           onAssignBenefit={onAssignBenefit}
           onChanged={onChanged}
+          readOnly={readOnly}
           extraActions={revertible && onRevert && (
             <button
               type="button"
@@ -164,7 +165,7 @@ function CuotaRow({ cuota, expanded, revertible, onToggle, onPay, onAssignBenefi
 
 // `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
 // `className` styles the table shell (e.g. edge to edge inside a section).
-function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, className = '' }) {
+function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, readOnly = false, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
   const [collapsed, setCollapsed] = useState({ future: true, olderPaid: true })
   const groups = groupCuotas(cuotas, currentPeriod(), revertibleIds, settlementCuotaId)
@@ -189,6 +190,7 @@ function CuotasEstadoCuentaTable({ cuotas, revertibleIds = NO_IDS, settlementCuo
       onAssignBenefit={onAssignBenefit}
       onRevert={onRevert}
       onChanged={onChanged}
+      readOnly={readOnly}
     />
   )
   const noOpenCuotas = !groups.upToDate.length && !groups.overdue.length

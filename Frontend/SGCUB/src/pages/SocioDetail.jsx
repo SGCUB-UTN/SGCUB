@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
 import ActivateSocioModal from '../components/socios/ActivateSocioModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActivateButton, DeactivateButton, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, DeactivateButton, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
@@ -11,6 +11,7 @@ import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { memberStatuses } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
+import { hasPendingDebt } from '../components/finanzas/accountStatement'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
@@ -108,6 +109,7 @@ function SocioDetail() {
   }
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)
+  const puedePagar = activo || hasPendingDebt(finances.account)
 
   const tabs = [
     {
@@ -127,7 +129,7 @@ function SocioDetail() {
       label: 'Financiero',
       icon: 'account_balance_wallet',
       badge: cuotaBadges,
-      content: <FinancialStatement socio={socio} finances={finances} />,
+      content: <FinancialStatement socio={socio} finances={finances} readOnly={!activo} />,
     },
   ]
 
@@ -149,23 +151,32 @@ function SocioDetail() {
           { label: 'Alta', value: formatDate(socio.fecha_alta) },
           { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
         ]}
-        statusAction={activo ? (
+        statusAction={activo && (
           <DeactivateButton
             onClick={() => {
               setErrorEliminacion('')
               setModaldeactivateAbierto(true)
             }}
           />
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorActivacion('')
-              setModalActivarAbierto(true)
-            }}
+        )}
+        actions={(
+          <PayButton
+            onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })}
+            disabledReason={puedePagar ? undefined : 'Socio de baja sin deuda pendiente'}
           />
         )}
-        actions={activo && (
-          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+        footer={!activo && (
+          <LockedProfileNotice
+            canPay={puedePagar}
+            actions={(
+              <ActivateButton
+                onClick={() => {
+                  setErrorActivacion('')
+                  setModalActivarAbierto(true)
+                }}
+              />
+            )}
+          />
         )}
       />
 

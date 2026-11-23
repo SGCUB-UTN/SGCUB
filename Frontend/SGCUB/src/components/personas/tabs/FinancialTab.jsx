@@ -149,7 +149,7 @@ function ExemptNotice({ category }) {
   )
 }
 
-export function FinancialStatement({ socio, finances, exemptCategory = null }) {
+export function FinancialStatement({ socio, finances, exemptCategory = null, readOnly = false }) {
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
   const { openReversal } = useRevertPayment()
@@ -248,32 +248,37 @@ export function FinancialStatement({ socio, finances, exemptCategory = null }) {
           ) : (
             <CuotasEstadoCuentaTable
               cuotas={cuotas}
-              revertibleIds={account.cuotas_revertibles ?? []}
-              settlementCuotaId={account.saldo_beneficio_revertible?.cuota_id ?? null}
+              revertibleIds={readOnly ? undefined : account.cuotas_revertibles ?? []}
+              settlementCuotaId={readOnly ? null : account.saldo_beneficio_revertible?.cuota_id ?? null}
               onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
-              onAssignBenefit={(cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
-              onRevert={(cuota) => openReversal(reversalFor(account, cuota, reloadFinances))}
+              onAssignBenefit={readOnly ? undefined : (cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
+              onRevert={readOnly ? undefined : (cuota) => openReversal(reversalFor(account, cuota, reloadFinances))}
               onChanged={reloadFinances}
+              readOnly={readOnly}
             />
           ))}
           {activeSection === MOVEMENTS && (
             <>
               <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
-              <TableFooter>
-                <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
-                  Agregar ingreso o devolución
-                </SecondaryButton>
-              </TableFooter>
+              {!readOnly && (
+                <TableFooter>
+                  <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>
+                    Agregar ingreso o devolución
+                  </SecondaryButton>
+                </TableFooter>
+              )}
             </>
           )}
           {activeSection === BENEFITS && (
             <>
-              <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} />
-              <TableFooter>
-                <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
-                  Agregar beca o descuento
-                </BenefitButton>
-              </TableFooter>
+              <BenefitsTable becas={becas} cuotas={cuotas} onChanged={reloadFinances} readOnly={readOnly} />
+              {!readOnly && (
+                <TableFooter>
+                  <BenefitButton variant="neutral" onClick={() => openBenefit({ socioId, onSuccess: reloadFinances })}>
+                    Agregar beca o descuento
+                  </BenefitButton>
+                </TableFooter>
+              )}
             </>
           )}
         </div>
@@ -284,6 +289,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null }) {
         opened={Boolean(comprobanteId)}
         onClose={() => setComprobanteId(null)}
         onChanged={reloadFinances}
+        readOnly={readOnly}
       />
 
       <DevolucionDetailModal

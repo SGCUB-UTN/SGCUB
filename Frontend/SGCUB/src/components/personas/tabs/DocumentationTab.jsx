@@ -19,7 +19,7 @@ const PANEL_ID = 'documentation-section-panel'
 
 const countByStatus = (documents, status) => documents.filter((doc) => doc.status === status).length
 
-export default function DocumentationTab({ documentation, personaId, personaType, personaInfo }) {
+export default function DocumentationTab({ documentation, personaId, personaType, personaInfo, readOnly = false }) {
   const {
     tipos,
     isLoading: loading,
@@ -113,7 +113,12 @@ export default function DocumentationTab({ documentation, personaId, personaType
       </KpiGrid>
 
       {missingTipos.length > 0 && (
-        <MissingDocumentsTable tipos={missingTipos} onUpload={handleNewClick} onGenerate={setTemplateTipo} className="mt-6" />
+        <MissingDocumentsTable
+          tipos={missingTipos}
+          onUpload={readOnly ? undefined : handleNewClick}
+          onGenerate={readOnly ? undefined : setTemplateTipo}
+          className="mt-6"
+        />
       )}
 
       <SegmentedTabs
@@ -135,16 +140,20 @@ export default function DocumentationTab({ documentation, personaId, personaType
                 <PersonaDocumentsTable
                   documents={documentosActivos}
                   getTypeName={getNombreTipo}
-                  onEdit={upload.openEdit}
-                  onDelete={handleDeleteClick}
+                  onEdit={readOnly ? undefined : upload.openEdit}
+                  onDelete={readOnly ? undefined : handleDeleteClick}
                   canGenerate={canGenerate}
-                  onGenerate={(doc) => setTemplateTipo(findTipo(doc.tipo_documento))}
+                  onGenerate={readOnly ? undefined : (doc) => setTemplateTipo(findTipo(doc.tipo_documento))}
                 />
               )}
               <TableFooter>
                 <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0 && !personaInfo?.foto_url}>Descargar ZIP</SecondaryButton>
-                <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
-                <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
+                {!readOnly && (
+                  <>
+                    <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
+                    <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
+                  </>
+                )}
               </TableFooter>
             </>
           )}
@@ -156,7 +165,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
                 <PersonaDocumentsTable
                   documents={documentosHistoricos}
                   getTypeName={getNombreTipo}
-                  onDelete={handleDeleteClick}
+                  onDelete={readOnly ? undefined : handleDeleteClick}
                   isHistory
                 />
               )}

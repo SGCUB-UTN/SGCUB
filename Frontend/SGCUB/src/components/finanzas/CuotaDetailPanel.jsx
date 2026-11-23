@@ -333,7 +333,7 @@ function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio, onToast }) {
   )
 }
 
-function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false }) {
+function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false, readOnly = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
   const [removingItem, setRemovingItem] = useState(null)
@@ -344,7 +344,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
         <div className={layout.grid}>
           <div className={layout.main}>
-            <ConceptsCard cuota={cuota} onRemove={onChanged ? setRemovingItem : undefined} className={layout.concepts} />
+            <ConceptsCard cuota={cuota} onRemove={onChanged && !readOnly ? setRemovingItem : undefined} className={layout.concepts} />
           </div>
           <div className={layout.side}>
             <ReceiptsCard
@@ -363,6 +363,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
           opened={Boolean(selectedId)}
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
+          readOnly={readOnly}
         />
         <RemoveCuotaItemModal
           cuota={removingItem ? cuota : null}

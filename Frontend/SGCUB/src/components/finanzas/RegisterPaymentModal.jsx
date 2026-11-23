@@ -6,6 +6,7 @@ import { getEstadoCuenta } from '../../api/estadoCuenta'
 import useAssignBenefit from '../../hooks/useAssignBenefit'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { BenefitButton } from '../personas/HeaderPersona'
+import { hasPendingDebt } from './accountStatement'
 import PagoForm from './PagoForm'
 import { receiptModalStyles } from './receiptModal'
 import SocioPicker from './SocioPicker'
@@ -67,7 +68,8 @@ function RegisterPaymentModal({
 
   const loading = Boolean(socioId) && load.socioId !== socioId
   const loaded = Boolean(socioId) && !loading && !load.error && load.socio && load.cuenta
-  const ready = loaded && isActiveStatus(load.socio.estado_administrativo_nombre)
+  const socioActive = loaded && isActiveStatus(load.socio.estado_administrativo_nombre)
+  const ready = socioActive || (loaded && hasPendingDebt(load.cuenta))
 
   const socioSummary = () => {
     if (ready) {
@@ -84,7 +86,7 @@ function RegisterPaymentModal({
     if (!loaded) {
       return <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
     }
-    return <HeaderMessage icon="person_off" tone="text-error">El socio está dado de baja. No se pueden registrar pagos a socios inactivos.</HeaderMessage>
+    return <HeaderMessage icon="person_off" tone="text-error">El socio está dado de baja y no tiene deuda pendiente.</HeaderMessage>
   }
 
   const handleSuccess = (response) => {
@@ -126,7 +128,7 @@ function RegisterPaymentModal({
           </button>
           <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
           <div className="flex-1 min-w-0">{socioSummary()}</div>
-          <BenefitButton onClick={() => assignBenefit()} disabled={!ready} />
+          <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />
         </div>
       )}
       styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(paid ? receiptModalStyles(isMobile) : {}) }}
@@ -145,7 +147,7 @@ function RegisterPaymentModal({
           reversal={reversal}
           onCancel={onClose}
           onSuccess={handleSuccess}
-          onAssignBenefit={assignBenefit}
+          onAssignBenefit={socioActive ? assignBenefit : undefined}
           onAccountChanged={refreshAccount}
         />
       ) : (

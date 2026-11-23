@@ -71,7 +71,7 @@ function CreditNotes({ detalle, methodLabel }) {
   )
 }
 
-function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged }) {
+function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, readOnly }) {
   const [state, setState] = useState({ loading: true, error: '', data: null })
   const [action, setAction] = useState(null)
   const [justReverted, setJustReverted] = useState(false)
@@ -169,13 +169,13 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
-            {detalle.revertible && (
+            {!readOnly && detalle.revertible && (
               <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40 mr-auto`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
             )}
-            {anulado && isIncome && available > 0 && (
+            {!readOnly && anulado && isIncome && available > 0 && (
               <button
                 type="button"
                 onClick={() => setAction('creditNote')}
@@ -223,7 +223,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 }
 
 // Detail of a receipt with its actions: revert it (or annul an income), charge it again and refund it
-function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged }) {
+function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged, readOnly = false }) {
   if (!comprobanteId) return null
   return (
     <ComprobanteDetailContent
@@ -232,6 +232,7 @@ function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged }) {
       opened={opened}
       onClose={onClose}
       onChanged={onChanged}
+      readOnly={readOnly}
     />
   )
 }

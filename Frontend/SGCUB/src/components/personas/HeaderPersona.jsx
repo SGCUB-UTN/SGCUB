@@ -198,12 +198,14 @@ export function EditButton({ onClick, children = 'Editar legajo' }) {
   )
 }
 
-export function PayButton({ onClick, children = 'Registrar pago' }) {
+export function PayButton({ onClick, disabledReason, children = 'Registrar pago' }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none"
+      disabled={Boolean(disabledReason)}
+      title={disabledReason}
+      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
     >
       <span className="material-symbols-outlined text-[20px]">payments</span>
       <span>{children}</span>
@@ -243,6 +245,16 @@ export function HeaderNotice({ icon, title, actions, children }) {
       </div>
       {actions && <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 shrink-0">{actions}</div>}
     </div>
+  )
+}
+
+export function LockedProfileNotice({ canPay = false, actions }) {
+  return (
+    <HeaderNotice icon="lock" title="Ficha de baja" actions={actions}>
+      {canPay
+        ? 'La ficha queda en solo lectura. Solo se puede registrar el pago de la deuda pendiente.'
+        : 'La ficha queda en solo lectura.'}
+    </HeaderNotice>
   )
 }
 

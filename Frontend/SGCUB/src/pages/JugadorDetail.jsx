@@ -6,7 +6,7 @@ import { activateSocio } from '../api/socios'
 import ActivateJugadorModal from '../components/jugadores/ActivateJugadorModal'
 import DeactivateJugadorModal from '../components/jugadores/DeactivateJugadorModal'
 import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, PayButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -22,6 +22,7 @@ import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
+import { hasPendingDebt } from '../components/finanzas/accountStatement'
 import useSocioFinances from '../hooks/useSocioFinances'
 import CometDescargarButton from '../components/comet/CometDescargarButton'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
@@ -200,6 +201,11 @@ function JugadorDetail() {
   const contactos = jugador.vinculos_familiares ?? []
   const activo = isActiveStatus(jugador.estado?.nombre)
   const bajaParcial = jugador.tipo_baja === 'parcial'
+  const puedePagar = Boolean(socio.socio_id)
+    && (isActiveStatus(socio.estado_administrativo_nombre) || hasPendingDebt(finances.account))
+  const payDisabledReason = !socio.socio_id
+    ? 'El jugador no tiene un socio asociado'
+    : !puedePagar ? 'Socio de baja sin deuda pendiente' : undefined
   const edadJugador = yearsSince(socio.fecha_nacimiento)
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
@@ -242,7 +248,7 @@ function JugadorDetail() {
             nivel_educacion: jugador.nivel_educacion,
           }}
           localidades={localidades}
-          onEdit={(activo || bajaParcial) ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
+          onEdit={activo ? () => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`) : undefined}
           extraActions={<CometDescargarButton jugadorId={jugador.jugador_id} />}
           deportivo={{
             categoria: jugador.categoria?.nombre,
@@ -260,9 +266,9 @@ function JugadorDetail() {
       content: (
         <FamilyTab
           contacts={contactos}
-          onAdd={agregarContacto}
-          onEdit={editarContacto}
-          onDelete={eliminarContacto}
+          onAdd={activo ? agregarContacto : undefined}
+          onEdit={activo ? editarContacto : undefined}
+          onDelete={activo ? eliminarContacto : undefined}
           domicilioTitular={socio}
           mostrarResponsableLegal={mostrarResponsableLegal}
         />
@@ -273,7 +279,7 @@ function JugadorDetail() {
       label: 'Documentación',
       icon: 'folder_shared',
       badge: badgeConfig,
-      content: <DocumentationTab documentation={documentation} personaId={socio?.persona?.persona_id || socio?.persona} personaInfo={socio} personaType="jugador" />,
+      content: <DocumentationTab documentation={documentation} personaId={socio?.persona?.persona_id || socio?.persona} personaInfo={socio} personaType="jugador" readOnly={!activo} />,
     },
     {
       id: 'financiero',
@@ -281,7 +287,7 @@ function JugadorDetail() {
       icon: 'account_balance_wallet',
       badge: cuotaBadges,
       content: socio.socio_id
-        ? <FinancialStatement socio={socio} finances={finances} exemptCategory={categoriaExenta} />
+        ? <FinancialStatement socio={socio} finances={finances} exemptCategory={categoriaExenta} readOnly={!activo} />
         : <EmptyState icon="account_balance_wallet" title="Sin datos de socio" description="El jugador no tiene un socio asociado." />,
     },
   ]
@@ -309,13 +315,14 @@ function JugadorDetail() {
             value: [jugador.categoria?.nombre || 'Sin categoría', jugador.categoria_secundaria?.nombre].filter(Boolean).join(', '),
           },
         ]}
-        statusAction={activo
-          ? <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />
-          : !bajaParcial && <ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
-        actions={(activo || bajaParcial) && socio.socio_id && (
-          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+        statusAction={activo && <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />}
+        actions={(
+          <PayButton
+            onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })}
+            disabledReason={payDisabledReason}
+          />
         )}
-        footer={bajaParcial && (
+        footer={bajaParcial ? (
           <HeaderNotice
             icon="pause_circle"
             title="Baja parcial"
@@ -331,9 +338,14 @@ function JugadorDetail() {
             )}
           >
             {categoriaExenta
-              ? `Sin actividad deportiva. Sigue como socio, sin cuotas por estar en la categoría ${categoriaExenta.nombre}.`
-              : 'Sin actividad deportiva. Sigue como socio y abona la cuota social.'}
+              ? `Sin actividad deportiva. Sigue como socio, sin cuotas por estar en la categoría ${categoriaExenta.nombre}. La ficha queda en solo lectura.`
+              : 'Sin actividad deportiva. Sigue como socio y abona la cuota social. La ficha queda en solo lectura.'}
           </HeaderNotice>
+        ) : !activo && (
+          <LockedProfileNotice
+            canPay={puedePagar}
+            actions={<ActivateButton onClick={() => openModal(setErrorAlta, setModalAltaAbierto)} />}
+          />
         )}
       />
 

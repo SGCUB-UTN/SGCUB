@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateDocente, deactivateDocente, getCargosDocente, getDocente, patchDocente } from '../api/docentes'
 import ActivateDocenteModal from '../components/docentes/ActivateDocenteModal'
 import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModal'
-import PersonHeader, { DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
+import PersonHeader, { DeactivateButton, ActivateButton, LockedProfileNotice } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -208,9 +208,9 @@ function DocenteDetail() {
       content: (
         <FamilyTab
           contacts={contactos}
-          onAdd={agregarContacto}
-          onEdit={editarContacto}
-          onDelete={eliminarContacto}
+          onAdd={activo ? agregarContacto : undefined}
+          onEdit={activo ? editarContacto : undefined}
+          onDelete={activo ? eliminarContacto : undefined}
           domicilioTitular={persona}
           etiquetaTitular="docente"
           mostrarResponsableLegal={false}
@@ -222,7 +222,7 @@ function DocenteDetail() {
       label: 'Documentación',
       icon: 'folder_shared',
       badge: badgeConfig,
-      content: <DocumentationTab documentation={documentation} personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" />,
+      content: <DocumentationTab documentation={documentation} personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" readOnly={!activo} />,
     },
     {
       id: 'categorias',
@@ -233,7 +233,7 @@ function DocenteDetail() {
           asignaciones={docente.asignaciones ?? []}
           cargos={cargos}
           categorias={categorias}
-          editable
+          editable={activo}
           isActive={activo}
           onSave={guardarAsignaciones}
         />
@@ -263,20 +263,25 @@ function DocenteDetail() {
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
           ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}
-        statusAction={activo ? (
+        statusAction={activo && (
           <DeactivateButton
             onClick={() => {
               setErrorBaja('')
               setModalBajaAbierto(true)
             }}
           />
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorAlta('')
-              setModalAltaKey((key) => key + 1)
-              setModalAltaAbierto(true)
-            }}
+        )}
+        footer={!activo && (
+          <LockedProfileNotice
+            actions={(
+              <ActivateButton
+                onClick={() => {
+                  setErrorAlta('')
+                  setModalAltaKey((key) => key + 1)
+                  setModalAltaAbierto(true)
+                }}
+              />
+            )}
           />
         )}
       />
