@@ -10,6 +10,7 @@ import { formatDate } from '../personas/format'
 import { parseDueDate } from './dueDate'
 import { matchesSearch } from '../shared/search'
 import DocumentStatusBadge from './DocumentStatusBadge'
+import StatusBadge from '../shared/StatusBadge'
 import { FILE_MISSING_TOAST, openFile } from './documentFile'
 import useToast from '../../hooks/useToast'
 
@@ -129,7 +130,7 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
             </td>
             <td className="py-3 px-4">
               {isHistory ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">Histórico</span>
+                <StatusBadge size="md" badge={{ label: 'Histórico', tono: 'neutro' }} />
               ) : (
                 <DocumentStatusBadge status={doc.status} />
               )}

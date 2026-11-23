@@ -1,12 +1,9 @@
 import DataTable from '../shared/DataTable'
+import StatusBadge from '../shared/StatusBadge'
 import { formatDni, formatPhone } from '../personas/format'
 
 function LegalGuardianBadge({ isLegalGuardian }) {
-  return isLegalGuardian ? (
-    <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-base font-semibold border border-emerald-200">Sí</span>
-  ) : (
-    <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-base font-medium border border-outline-variant/30">No</span>
-  )
+  return <StatusBadge size="md" badge={isLegalGuardian ? { label: 'Sí', tono: 'ok' } : { label: 'No', tono: 'neutro' }} />
 }
 
 const fullName = (contact) => `${contact.persona?.nombre ?? ''} ${contact.persona?.apellido ?? ''}`.trim()
@@ -76,7 +73,7 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
           <td className="py-3 px-4 whitespace-nowrap text-on-surface">{contact.persona?.telefono ? formatPhone(contact.persona.telefono) : '—'}</td>
           <td className="py-3 px-4">
             {contact.relacion ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-sm font-medium">{contact.relacion}</span>
+              <StatusBadge size="md" badge={{ label: contact.relacion, tono: 'neutro' }} />
             ) : '—'}
           </td>
           {mostrarResponsableLegal && (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Modal, Text } from '@mantine/core'
 import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
-import useDialogFocus from '../../hooks/useDialogFocus'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 import useLocalidades from '../../hooks/useLocalidades'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
@@ -98,7 +98,6 @@ export default function ContactModal({
   mostrarResponsableLegal = true,
 }) {
   const editando = Boolean(contact)
-  const dialogRef = useDialogFocus()
   const [form, setForm] = useState(() => (editando ? contactoAFormulario(contact, domicilioTitular) : contactoVacio))
   const [saving, setSaving] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -133,12 +132,6 @@ export default function ContactModal({
 
   const { localidades } = useLocalidades()
   const { barrios } = useBarrios(form.mismo_domicilio ? null : form.domicilio_localidad)
-
-  useEffect(() => {
-    const cerrarConEscape = (event) => event.key === 'Escape' && !saving && onClose()
-    window.addEventListener('keydown', cerrarConEscape)
-    return () => window.removeEventListener('keydown', cerrarConEscape)
-  }, [onClose, saving])
 
   useEffect(() => {
     const dni = form.dni.trim()
@@ -291,31 +284,15 @@ export default function ContactModal({
   const requiereDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-inverse-surface/40" onClick={() => !saving && onClose()}>
-      <form
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-agregar-contacto"
-        className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={submit}
-        noValidate
-      >
-        <div className="flex items-start justify-between gap-4 px-6 pt-4 pb-3 border-b border-surface-container shrink-0">
-          <h2 id="titulo-agregar-contacto" className="text-xl font-bold text-on-surface">{editando ? 'Editar contacto' : 'Agregar contacto'}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="p-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer"
-            aria-label="Cerrar"
-          >
-            <span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <Modal
+      opened
+      onClose={() => !saving && onClose()}
+      centered
+      size="xl"
+      title={<Text fw={700} size="xl">{editando ? 'Editar contacto' : 'Agregar contacto'}</Text>}
+    >
+      <form onSubmit={submit} noValidate className="flex flex-col">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2 flex flex-col gap-2">
             <InputField id="dni" label="DNI" required error={fieldErrors.dni}>
               <div className="relative">
@@ -592,13 +569,13 @@ export default function ContactModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container shrink-0">
+        <div className="flex justify-end gap-2 pt-4 mt-6 border-t border-surface-container">
           <SecondaryButton onClick={onClose} disabled={saving}>Cancelar</SecondaryButton>
           <PrimaryButton type="submit" icon={editando ? 'save' : 'person_add'} disabled={saving}>
             {saving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Agregar contacto'}
           </PrimaryButton>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

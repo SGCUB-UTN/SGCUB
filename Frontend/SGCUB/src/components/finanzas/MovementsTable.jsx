@@ -3,6 +3,7 @@ import DataTable from '../shared/DataTable'
 import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
 import { SectionEmpty } from '../shared/FlushSection'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
+import StatusBadge from '../shared/StatusBadge'
 import { formatAmount, formatDate } from '../personas/format'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
@@ -10,12 +11,11 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 
 const COLUMN_COUNT = 5
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap'
 
 const KIND_BADGES = {
-  Anulado: { label: 'Anulado', className: 'bg-error-container text-on-error-container border-error/20' },
-  NotaCredito: { label: 'Nota de crédito', className: 'bg-amber-50 text-amber-800 border-amber-200' },
-  Manual: { label: 'Manual', className: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40' },
+  Anulado: { label: 'Anulado', tono: 'error' },
+  NotaCredito: { label: 'Nota de crédito', tono: 'alerta' },
+  Manual: { label: 'Manual', tono: 'neutro' },
 }
 
 const incomeMovement = (comprobante, refunds) => {
@@ -238,7 +238,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
             <td className="py-3 px-4">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="font-medium text-on-surface text-base">{movement.kind}</span>
-                {movement.badge && <span className={`${BADGE_CLASS} ${movement.badge.className}`}>{movement.badge.label}</span>}
+                {movement.badge && <StatusBadge size="md" badge={movement.badge} />}
               </div>
             </td>
             <td className="py-3 px-4 break-words">

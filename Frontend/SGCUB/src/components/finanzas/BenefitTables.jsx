@@ -3,6 +3,7 @@ import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
 import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
+import StatusBadge from '../shared/StatusBadge'
 import { SectionEmpty } from '../shared/FlushSection'
 import { formatAmount, formatDate } from '../personas/format'
 import { formatPeriod, periodOf } from '../shared/periodFormat'
@@ -14,8 +15,6 @@ import { removalBlocker } from './cuotaItems'
 import EditBenefitModal from './EditBenefitModal'
 
 
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border whitespace-nowrap'
-
 const SCHOLARSHIP_STATE_KEYS = {
   [SCHOLARSHIP_STATES.APPLIED]: 'applied',
   [SCHOLARSHIP_STATES.FINISHED]: 'finished',
@@ -25,16 +24,14 @@ const SCHOLARSHIP_STATE_KEYS = {
 const ANNULLED_ITEM = 'Anulado'
 
 const TYPES = {
-  beca: { label: 'Beca', className: 'bg-primary/5 text-primary border-primary/20' },
-  descuento: { label: 'Descuento', className: 'bg-surface-container-high text-on-surface border-outline-variant/40' },
+  beca: { label: 'Beca', tono: 'info' },
+  descuento: { label: 'Descuento', tono: 'neutro' },
 }
 
 const COLUMN_COUNT = 5
 
-const CANCELLED_TYPE_CLASS = 'bg-error-container/40 text-on-error-container border-error/20'
-
 const typeBadge = (row) => (row.state === 'cancelled'
-  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', className: CANCELLED_TYPE_CLASS }
+  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
   : row.type)
 
 const monthYear = (date) => formatPeriod(periodOf(date))
@@ -207,7 +204,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
               <td className="py-3 px-4">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-medium text-on-surface whitespace-nowrap">{row.validity}</span>
-                  <span className={`${BADGE_CLASS} ${typeBadge(row).className}`}>{typeBadge(row).label}</span>
+                  <StatusBadge size="md" badge={typeBadge(row)} />
                 </div>
               </td>
               <td className="py-3 px-4 break-words">

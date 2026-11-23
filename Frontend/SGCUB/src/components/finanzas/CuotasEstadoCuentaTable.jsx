@@ -5,7 +5,8 @@ import usePagination from '../../hooks/usePagination'
 import { formatAmount } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import { isPaid } from './accountStatement'
-import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
+import { CUOTA_STATES, cuotaState, cuotaStateLabel } from './cuotaStates'
+import StatusBadge from '../shared/StatusBadge'
 import CuotaDetailPanel from './CuotaDetailPanel'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
@@ -24,13 +25,16 @@ const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?
 
 const isFuture = (cuota, period) => String(cuota.periodo) > period && !isPaid(cuota) && !isPartiallyPaid(cuota)
 
+const STATE_TONES = {
+  [CUOTA_STATES.EN_FECHA]: 'info',
+  [CUOTA_STATES.VENCIDA_1]: 'alerta',
+  [CUOTA_STATES.VENCIDA_2]: 'error',
+  [CUOTA_STATES.PAGA]: 'ok',
+}
+
 function CuotaStateBadge({ cuota }) {
   const state = cuotaState(cuota)
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(state)}`}>
-      {cuotaStateLabel(state)}
-    </span>
-  )
+  return <StatusBadge size="md" badge={{ label: cuotaStateLabel(state), tono: STATE_TONES[state] ?? 'neutro' }} />
 }
 
 const NO_IDS = []
