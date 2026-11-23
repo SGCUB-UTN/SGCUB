@@ -18,7 +18,7 @@ const STATUS_ORDER = { vencido: 0, por_vencer: 1, vigente: 2 }
 const SORT_VALUES = {
   type: (doc) => doc.typeName,
   issueDate: (doc) => doc.fecha_emision || null,
-  dueDate: (doc) => (doc.daysFromToday === null ? null : Math.abs(doc.daysFromToday)),
+  dueDate: (doc) => doc.daysFromToday,
   status: (doc) => STATUS_ORDER[doc.status] ?? null,
 }
 const INITIAL_SORT = { columna: 'dueDate', direccion: 'asc' }
@@ -31,14 +31,24 @@ const PRIMARY_ACTION_CLASS = 'text-primary hover:bg-primary-fixed/30'
 const DANGER_ACTION_CLASS = 'text-error hover:bg-error-container/60'
 const compareText = new Intl.Collator('es', { sensitivity: 'base' }).compare
 
-function ActionButton({ icon, label, className, onClick }) {
+const plural = (count, singular, pluralWord) => `${count} ${count === 1 ? singular : pluralWord}`
+
+const dueDistance = (doc) => {
+  if (doc.daysFromToday === null || doc.status === 'vigente') return ''
+  const days = Math.round(doc.daysFromToday)
+  if (days === 0) return 'Vence hoy'
+  return days > 0 ? `Vence en ${plural(days, 'día', 'días')}` : `Venció hace ${plural(-days, 'día', 'días')}`
+}
+
+function ActionButton({ icon, label, className, onClick, disabledReason }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${className}`}
+      onClick={disabledReason ? undefined : onClick}
+      title={disabledReason || label}
+      aria-label={disabledReason ? `${label}: ${disabledReason}` : label}
+      aria-disabled={disabledReason ? true : undefined}
+      className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent ${className}`}
     >
       <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>
     </button>
@@ -108,10 +118,15 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
           emptyText="No hay documentos que coincidan con los filtros."
         />
         {sortedRows.map(doc => (
-          <tr key={doc.id_documento} className={`hover:bg-surface-container-low/80 transition-colors ${isHistory ? 'opacity-75' : ''}`}>
+          <tr key={doc.id_documento} className="hover:bg-surface-container-low/80 transition-colors">
             <td className="py-3 px-4 pl-6 font-medium text-base">{doc.typeName}</td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDate(doc.fecha_emision)}</td>
-            <td className="py-3 px-4 text-on-surface-variant">{doc.fecha_vencimiento ? formatDate(doc.fecha_vencimiento) : 'Sin vencimiento'}</td>
+            <td className="py-3 px-4 text-on-surface-variant">
+              <span className="block">{doc.fecha_vencimiento ? formatDate(doc.fecha_vencimiento) : 'Sin vencimiento'}</span>
+              {!isHistory && dueDistance(doc) && (
+                <span className={`block text-sm font-medium ${doc.status === 'vencido' ? 'text-error' : 'text-amber-700'}`}>{dueDistance(doc)}</span>
+              )}
+            </td>
             <td className="py-3 px-4">
               {isHistory ? (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-surface-container-high text-on-surface-variant border border-outline-variant/30">Histórico</span>
@@ -122,11 +137,15 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
             <td className="py-3 px-4 pr-6">
               <div className="flex items-center justify-end gap-1">
                 {!isHistory && onGenerate && canGenerate?.(doc) && (
-                  <ActionButton icon="article" label={`Generar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onGenerate(doc)} />
+                  <ActionButton icon="edit_document" label={`Generar ${doc.typeName} desde la plantilla`} className={PRIMARY_ACTION_CLASS} onClick={() => onGenerate(doc)} />
                 )}
-                {doc.archivoUrl && (
-                  <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl, () => showToast(FILE_MISSING_TOAST))} />
-                )}
+                <ActionButton
+                  icon="download"
+                  label={`Descargar ${doc.typeName}`}
+                  disabledReason={doc.archivoUrl ? '' : 'Registrado sin PDF: la documentación está en papel'}
+                  className={PRIMARY_ACTION_CLASS}
+                  onClick={() => openFile(doc.archivoUrl, () => showToast(FILE_MISSING_TOAST))}
+                />
                 {!isHistory && onEdit && (
                   <ActionButton icon="edit" label={`Editar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onEdit(doc)} />
                 )}

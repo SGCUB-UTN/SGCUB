@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import useToast from '../../../hooks/useToast'
-import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
+import { PrimaryButton, SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useDocumentUploadForm from '../../../hooks/useDocumentUploadForm'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
@@ -36,6 +36,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [docToDelete, setDocToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const [activeSection, setActiveSection] = useState(ACTIVE)
   const [templateTipo, setTemplateTipo] = useState(null)
 
@@ -64,12 +65,17 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
   const confirmDelete = async () => {
     if (!docToDelete) return
+    setDeleting(true)
     try {
       await borrarDocumento(docToDelete.id_documento)
       setDeleteModalOpen(false)
       setDocToDelete(null)
+      showToast({ title: 'Documento eliminado' })
     } catch (error) {
       console.error('Error deleting document:', error)
+      showToast({ tone: 'error', title: 'No se pudo eliminar el documento', description: 'Probá de nuevo en unos minutos.' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -103,8 +109,8 @@ export default function DocumentationTab({ documentation, personaId, personaType
   return (
     <div className="flex flex-col">
       <TabHeader
-        title="Documentación requerida"
-        description="Habilitaciones, certificados y títulos de la persona."
+        title="Documentación"
+        description="Certificados, habilitaciones y títulos de la persona, con su vencimiento."
       />
 
       <KpiGrid columns={4} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
@@ -153,7 +159,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
                 {!readOnly && (
                   <>
                     <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
-                    <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
+                    <PrimaryButton icon="upload_file" onClick={() => handleNewClick()}>Cargar documento</PrimaryButton>
                   </>
                 )}
               </TableFooter>
@@ -188,6 +194,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
         tipos={tiposFiltrados} 
         isEditing={upload.isEditing}
         error={upload.error}
+        saving={upload.saving}
       />
 
       <DocumentTemplateModal
@@ -199,10 +206,11 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
       <DocumentacionDeleteModal 
         isOpen={deleteModalOpen} 
-        onClose={() => setDeleteModalOpen(false)} 
-        onConfirm={confirmDelete} 
-        document={docToDelete} 
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        document={docToDelete}
         typeName={docToDelete ? getNombreTipo(docToDelete.tipo_documento) : ''}
+        deleting={deleting}
       />
     </div>
   )

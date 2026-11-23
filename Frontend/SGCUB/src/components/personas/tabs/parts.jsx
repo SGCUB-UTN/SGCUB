@@ -122,7 +122,7 @@ export function PrimaryButton({ icon, children, ...props }) {
       className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
       {...props}
     >
-      {icon && <span className="material-symbols-outlined text-[20px]">{icon}</span>}
+      {icon && <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>}
       <span>{children}</span>
     </button>
   )
@@ -135,7 +135,7 @@ export function SecondaryButton({ icon, children, className = '', ...props }) {
       className={`inline-flex items-center gap-2 h-10 px-4 bg-surface-container-low hover:bg-surface-container text-on-surface border border-outline-variant/40 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low ${className}`}
       {...props}
     >
-      {icon && <span className="material-symbols-outlined text-[20px]">{icon}</span>}
+      {icon && <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>}
       <span>{children}</span>
     </button>
   )

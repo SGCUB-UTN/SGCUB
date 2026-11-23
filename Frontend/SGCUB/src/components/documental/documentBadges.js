@@ -5,7 +5,7 @@ export const buildDocumentBadges = (documents = [], missingCount = 0) => {
   const porVencer = countByStatus(documents, 'por_vencer')
 
   const badges = []
-  if (missingCount > 0) badges.push({ label: missingCount, tono: 'neutro', icon: 'assignment_late', hideDot: true, title: 'Faltantes' })
+  if (missingCount > 0) badges.push({ label: missingCount, tono: 'error', icon: 'assignment_late', hideDot: true, title: 'Faltantes' })
   if (vencidos > 0) badges.push({ label: vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' })
   if (porVencer > 0) badges.push({ label: porVencer, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' })
   return badges.length > 0 ? badges : undefined
