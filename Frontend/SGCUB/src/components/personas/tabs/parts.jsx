@@ -3,9 +3,9 @@ import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 
 export function RecordSection({ title, color = 'bg-primary-container', extra, children }) {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between pb-1 border-b border-surface-container mb-4">
-        <h2 className="flex items-baseline gap-2 text-2xl text-on-surface font-bold tracking-tight">
+    <section className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 min-h-10 pb-2 border-b border-surface-container">
+        <h2 className="flex items-baseline gap-2 text-lg text-on-surface font-semibold">
           <span className={`w-1 h-[0.7em] shrink-0 rounded ${color}`} aria-hidden="true" />
           {title}
         </h2>
@@ -69,16 +69,22 @@ export function TableFooter({ className = '', children }) {
   )
 }
 
-export function Field({ label, value, icon, iconClass = 'text-outline', help, className = '' }) {
+const FIELD_TONES = {
+  default: 'text-on-surface',
+  alert: 'text-amber-700',
+}
+
+export function Field({ label, value, icon, iconClass = 'text-outline', help, tone = 'default', className = '' }) {
   const isEmpty = value === null || value === undefined || value === ''
+  const iconColor = tone === 'alert' && !isEmpty ? 'text-amber-700' : iconClass
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-base text-on-surface-variant font-semibold">{label}</span>
-      <div className="relative flex items-center w-full min-h-10 px-3 py-2 bg-surface-container-low rounded-lg text-base text-on-surface">
-        {icon && <span className={`material-symbols-outlined text-base mr-2 ${iconClass}`}>{icon}</span>}
-        <span className={`truncate ${isEmpty ? 'text-outline' : ''}`}>{isEmpty ? 'No registrado' : value}</span>
-      </div>
-      {help && <span className="text-xs text-on-surface-variant font-medium">{help}</span>}
+    <div className={`flex flex-col gap-1 min-w-0 ${className}`}>
+      <span className="text-sm text-on-surface-variant">{label}</span>
+      <span className={`flex items-start gap-2 text-base break-words ${isEmpty ? 'text-on-surface-variant' : `font-semibold ${FIELD_TONES[tone]}`}`}>
+        {icon && <span className={`material-symbols-outlined shrink-0 mt-0.5 ${iconColor}`} style={{ fontSize: 18 }} aria-hidden="true">{icon}</span>}
+        <span className="min-w-0">{isEmpty ? 'No registrado' : value}</span>
+      </span>
+      {help && <span className="text-sm text-on-surface-variant">{help}</span>}
     </div>
   )
 }
