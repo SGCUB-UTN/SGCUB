@@ -1,5 +1,4 @@
 import DataTable from '../shared/DataTable'
-import { FLUSH_TABLE_CLASS } from '../shared/flushTable'
 import { formatDni, formatPhone } from '../personas/format'
 
 function LegalGuardianBadge({ isLegalGuardian }) {
@@ -26,16 +25,21 @@ function RowAction({ icon, label, className, onClick }) {
       aria-label={label}
       title={label}
     >
-      <span className="material-symbols-outlined text-[20px]">{icon}</span>
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>
     </button>
   )
 }
 
 // Family links / emergency contacts of a jugador or docente. The actions column only shows the actions whose handler is given.
+const byGuardianFirst = (a, b) => Number(Boolean(b.responsable_legal)) - Number(Boolean(a.responsable_legal))
+  || fullName(a).localeCompare(fullName(b), 'es')
+
 function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsableLegal = true, className = '' }) {
+  const hasActions = Boolean(onEdit || onDelete)
+  const sorted = [...contacts].sort(mostrarResponsableLegal ? byGuardianFirst : (a, b) => fullName(a).localeCompare(fullName(b), 'es'))
   return (
     <DataTable
-      className={`${FLUSH_TABLE_CLASS} ${className}`}
+      className={className}
       headers={(
         <>
           <th className="py-3 px-4" scope="col">Nombre y apellido</th>
@@ -43,24 +47,33 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
           <th className="py-3 px-4" scope="col">Teléfono</th>
           <th className="py-3 px-4" scope="col">Vínculo</th>
           {mostrarResponsableLegal && <th className="py-3 px-4 text-center" scope="col">Responsable legal</th>}
-          <th className="py-3 px-4 text-center" scope="col">Acciones</th>
+          {hasActions && <th className="py-3 px-4 text-center" scope="col">Acciones</th>}
         </>
       )}
     >
-      {contacts.map((contact, index) => (
+      {sorted.map((contact, index) => (
         <tr
           key={contact.vinculo_familiar_id ?? index}
-          className="hover:bg-surface-container-low transition-colors cursor-pointer group"
+          tabIndex={0}
+          aria-label={`Ver datos de ${fullName(contact) || 'este contacto'}`}
+          className="hover:bg-surface-container-low transition-colors cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
           onClick={() => onSelect(contact)}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSelect(contact)
+            }
+          }}
         >
           <td className="py-3 px-4">
             <span className="font-semibold text-on-surface group-hover:text-primary transition-colors inline-flex items-center gap-1.5">
               {fullName(contact) || 'Sin nombre'}
-              <span className="material-symbols-outlined text-[16px] text-primary opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+              <span className="material-symbols-outlined text-[16px] text-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" aria-hidden="true">visibility</span>
             </span>
           </td>
           <td className="py-3 px-4 text-on-surface-variant">{contact.persona?.dni ? formatDni(contact.persona.dni) : '—'}</td>
-          <td className="py-3 px-4 whitespace-nowrap text-on-surface">{formatPhone(contact.persona?.telefono)}</td>
+          <td className="py-3 px-4 whitespace-nowrap text-on-surface">{contact.persona?.telefono ? formatPhone(contact.persona.telefono) : '—'}</td>
           <td className="py-3 px-4">
             {contact.relacion ? (
               <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface text-sm font-medium">{contact.relacion}</span>
@@ -69,6 +82,7 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
           {mostrarResponsableLegal && (
             <td className="py-3 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
           )}
+          {hasActions && (
           <td className="py-3 px-4 text-center whitespace-nowrap">
             {onEdit && (
               <RowAction
@@ -80,13 +94,14 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
             )}
             {onDelete && (
               <RowAction
-                icon="delete"
-                label={`Eliminar contacto ${fullName(contact)}`.trim()}
+                icon="person_remove"
+                label={`Quitar a ${fullName(contact)} de los contactos`.trim()}
                 className="text-error hover:bg-error-container/60"
                 onClick={() => onDelete(contact)}
               />
             )}
           </td>
+          )}
         </tr>
       ))}
     </DataTable>

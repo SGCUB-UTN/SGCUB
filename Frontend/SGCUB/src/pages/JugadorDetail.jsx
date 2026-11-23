@@ -297,7 +297,7 @@ function JugadorDetail() {
     },
     {
       id: 'familiar',
-      label: 'Familiar / Contactos',
+      label: 'Familiares y contactos',
       icon: 'family_restroom',
       content: (
         <FamilyTab

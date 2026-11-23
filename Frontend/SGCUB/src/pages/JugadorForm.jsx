@@ -112,7 +112,7 @@ function errorResponsableEdicion(jugador, fechaNacimiento) {
   const edad = edadActual(fechaNacimiento)
   const tieneResponsable = (jugador?.vinculos_familiares ?? []).some((vinculo) => vinculo.responsable_legal)
   if (edad === null || edad >= EDAD_MAYORIA || tieneResponsable) return null
-  return 'Con esta fecha de nacimiento el jugador es menor de edad y no tiene un responsable legal. Agregalo desde la pestaña Familiar / Contactos antes de guardar.'
+  return 'Con esta fecha de nacimiento el jugador es menor de edad y no tiene un responsable legal. Agregalo desde la pestaña Familiares y contactos antes de guardar.'
 }
 
 function JugadorForm() {

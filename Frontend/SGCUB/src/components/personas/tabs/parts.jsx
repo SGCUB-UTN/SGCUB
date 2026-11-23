@@ -31,6 +31,8 @@ export function TabHeader({ title, description, actions, divider = true }) {
   )
 }
 
+export const TAB_CARD_CLASS = 'min-w-0 overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest'
+
 export const TAB_PANEL_CLASS = 'min-w-0 overflow-hidden rounded-b-xl border-x border-b border-outline-variant/30 bg-surface-container-lowest'
 
 export function SegmentedTabs({ label, sections, value, onChange, panelId, className = '' }) {

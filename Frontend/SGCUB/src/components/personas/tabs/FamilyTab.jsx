@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { formatDni, formatPhone } from '../format'
-import { SecondaryButton, Field, TabHeader, TableFooter, EmptyState } from './parts'
+import { SecondaryButton, Field, TAB_CARD_CLASS, TabHeader, TableFooter } from './parts'
 import ContactModal from '../../jugadores/ContactModal'
 import ContactosTable from '../../jugadores/ContactosTable'
-import { FLUSH_END_CLASS, FLUSH_FOOTER_CLASS } from '../../shared/flushTable'
+import { SectionEmpty } from '../../shared/FlushSection'
 import useDialogFocus from '../../../hooks/useDialogFocus'
+import useToast from '../../../hooks/useToast'
 
 function formatearDomicilioContacto(person) {
   if (!person?.domicilio_calle && !person?.domicilio_numero) return ''
@@ -98,7 +99,7 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
       await onConfirm(contact)
       onClose()
     } catch (requestError) {
-      setError(requestError.message || 'No se pudo eliminar el contacto.')
+      setError(requestError.message || 'No se pudo quitar el contacto.')
     } finally {
       setDeleting(false)
     }
@@ -116,7 +117,7 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-4 border-b border-surface-container">
           <div>
-            <h3 id="delete-contact-title" className="text-xl font-bold text-on-surface">Eliminar contacto</h3>
+            <h3 id="delete-contact-title" className="text-xl font-bold text-on-surface">Quitar contacto</h3>
           </div>
           <button
             type="button"
@@ -129,7 +130,7 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
           </button>
         </div>
         <div className="p-6">
-          <p className="mt-1 text-base text-on-surface-variant">¿Confirmás que querés eliminar a {name}? Se quita el vínculo familiar del {etiquetaTitular}.</p>
+          <p className="mt-1 text-base text-on-surface-variant">¿Confirmás que querés quitar a {name} de los contactos del {etiquetaTitular}? La persona no se borra del sistema.</p>
           {error && <p className="mt-4 px-3 py-2 rounded-lg bg-error-container/40 text-base text-on-error-container" role="alert">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container">
@@ -147,8 +148,8 @@ function DeleteContactModal({ contact, onClose, onConfirm, etiquetaTitular = 'ju
             disabled={deleting}
             className="inline-flex items-center gap-2 h-10 px-4 bg-error text-on-error hover:bg-error/90 rounded-lg text-base font-semibold transition-colors cursor-pointer disabled:opacity-50"
           >
-            <span className={`material-symbols-outlined text-[20px] ${deleting ? 'animate-spin' : ''}`}>{deleting ? 'progress_activity' : 'delete'}</span>
-            {deleting ? 'Eliminando...' : 'Eliminar'}
+            <span className={`material-symbols-outlined text-[20px] ${deleting ? 'animate-spin' : ''}`} aria-hidden="true">{deleting ? 'progress_activity' : 'person_remove'}</span>
+            {deleting ? 'Quitando...' : 'Quitar'}
           </button>
         </div>
       </div>
@@ -169,6 +170,8 @@ export default function FamilyTab({
   const [contactToDelete, setContactToDelete] = useState(null)
   const [contactToEdit, setContactToEdit] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const { showToast } = useToast()
+  const personName = (contacto) => `${contacto.persona?.nombre ?? ''} ${contacto.persona?.apellido ?? ''}`.trim()
 
   const ensureNotDuplicated = (contacto) => {
     const dni = String(contacto.persona?.dni ?? '').trim()
@@ -185,33 +188,29 @@ export default function FamilyTab({
   return (
     <div className="flex flex-col">
       <TabHeader
-        title="Vínculos familiares y contactos de emergencia"
+        title="Familiares y contactos"
         description={description}
-        divider={false}
       />
 
-      {contacts.length === 0 ? (
-        <EmptyState
-          icon="family_restroom"
-          title="Sin contactos registrados"
-          description={`Este ${etiquetaTitular} todavía no tiene familiares ni contactos de emergencia cargados.`}
-        />
-      ) : (
-        <ContactosTable
-          contacts={contacts}
-          onSelect={setSelectedContact}
-          onEdit={onEdit ? setContactToEdit : undefined}
-          onDelete={onDelete ? setContactToDelete : undefined}
-          mostrarResponsableLegal={mostrarResponsableLegal}
-          className={onAdd ? 'border-b-0' : FLUSH_END_CLASS}
-        />
-      )}
+      <div className={`mt-6 ${TAB_CARD_CLASS}`}>
+        {contacts.length === 0 ? (
+          <SectionEmpty>{`Este ${etiquetaTitular} todavía no tiene familiares ni contactos cargados.`}</SectionEmpty>
+        ) : (
+          <ContactosTable
+            contacts={contacts}
+            onSelect={setSelectedContact}
+            onEdit={onEdit ? setContactToEdit : undefined}
+            onDelete={onDelete ? setContactToDelete : undefined}
+            mostrarResponsableLegal={mostrarResponsableLegal}
+          />
+        )}
 
-      {onAdd && (
-        <TableFooter className={`${FLUSH_FOOTER_CLASS} ${contacts.length === 0 ? 'mt-6' : ''}`}>
-          <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar familiar / contacto</SecondaryButton>
-        </TableFooter>
-      )}
+        {onAdd && (
+          <TableFooter>
+            <SecondaryButton icon="person_add" onClick={() => setAddModalOpen(true)}>Agregar contacto</SecondaryButton>
+          </TableFooter>
+        )}
+      </div>
 
       {selectedContact && (
         <ContactDetailsModal
@@ -224,7 +223,10 @@ export default function FamilyTab({
         <DeleteContactModal
           contact={contactToDelete}
           onClose={() => setContactToDelete(null)}
-          onConfirm={onDelete}
+          onConfirm={async (contacto) => {
+            await onDelete(contacto)
+            showToast({ title: 'Contacto quitado', description: `${personName(contacto)} ya no figura entre los contactos.` })
+          }}
           etiquetaTitular={etiquetaTitular}
         />
       )}
@@ -235,6 +237,7 @@ export default function FamilyTab({
           onSubmit={async (contacto) => {
             ensureNotDuplicated(contacto)
             await onEdit(contacto)
+            showToast({ title: 'Contacto actualizado', description: personName(contacto) })
           }}
           domicilioTitular={domicilioTitular}
           etiquetaTitular={etiquetaTitular}
@@ -247,6 +250,7 @@ export default function FamilyTab({
           onSubmit={async (contacto) => {
             ensureNotDuplicated(contacto)
             await onAdd(contacto)
+            showToast({ title: 'Contacto agregado', description: personName(contacto) })
           }}
           domicilioTitular={domicilioTitular}
           etiquetaTitular={etiquetaTitular}
