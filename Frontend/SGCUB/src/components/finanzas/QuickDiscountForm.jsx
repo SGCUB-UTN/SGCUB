@@ -3,8 +3,8 @@ import { postBeneficio } from '../../api/cuotas'
 import { formatAmount, getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AmountModeInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS, SummaryLine } from './formParts'
-import { PERCENTAGE, benefitFor, benefitPayload, benefitValueError, remainingWithoutFees, roundCents, todayIso } from './benefitMath'
+import { AmountModeInput, AuthorizerSelect, BenefitValueError, SUBMIT_BUTTON_CLASS, SummaryLine } from './formParts'
+import { PERCENTAGE, benefitPayload, benefitValueError, discountFor, exceedsMax, remainingToPay, roundCents, todayIso } from './benefitMath'
 
 const REASON_MAX_LENGTH = 140
 
@@ -18,12 +18,11 @@ function QuickDiscountForm({ cuota, onSuccess }) {
   const [submitError, setSubmitError] = useState('')
 
   const numericValue = Number(value)
-  const remaining = remainingWithoutFees(cuota)
-  const discount = numericValue > 0 ? benefitFor(cuota, mode, numericValue) : 0
-  const pending = roundCents(Number(cuota.saldo_pendiente ?? 0))
+  const pending = remainingToPay(cuota)
+  const discount = numericValue > 0 ? discountFor(cuota, mode, numericValue) : 0
 
   const errors = {
-    value: benefitValueError(mode, numericValue, remaining),
+    value: benefitValueError(mode, numericValue, { maxFixed: pending }),
     authorizer: !authorizer ? 'Elegí quién autoriza.' : '',
     reason: !reason.trim() ? 'Indicá el motivo.' : '',
   }
@@ -59,11 +58,19 @@ function QuickDiscountForm({ cuota, onSuccess }) {
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-1.5">
         <AmountModeInput mode={mode} value={value} onModeChange={changeMode} onValueChange={setValue} invalid={Boolean(fieldError('value'))} />
-        {fieldError('value') && <p className="text-sm text-error font-medium" role="alert">{errors.value}</p>}
+        <BenefitValueError
+          message={fieldError('value')}
+          maxFixed={pending}
+          canUseMax={exceedsMax(mode, numericValue, pending)}
+          onUseMax={setValue}
+        />
+        {mode === PERCENTAGE && !fieldError('value') && (
+          <p className="text-sm text-on-surface-variant">El porcentaje se calcula sobre lo que le resta pagar a la cuota ({formatAmount(pending)}).</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5 p-3 rounded-lg border border-slate-200 bg-slate-50">
-        <SummaryLine label="Monto actual" value={formatAmount(pending)} />
+        <SummaryLine label="Resta pagar" value={formatAmount(pending)} />
         <SummaryLine label="Descuento" value={`− ${formatAmount(discount)}`} valueClassName="text-emerald-700" />
         <div className="pt-1.5 mt-0.5 border-t border-dashed border-slate-300">
           <SummaryLine label="Nuevo total" value={formatAmount(roundCents(pending - discount))} isTotal />

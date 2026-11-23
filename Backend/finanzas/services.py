@@ -1496,18 +1496,19 @@ def assign_benefit(
     cuota = lock_cuota(cuota_id)
     items = list(cuota.items.all())
     base = discount_base(items)
-    if mode == ModalidadMontoChoices.MONTO_FIJO and value > base:
-        raise BeneficioInvalidoError("El monto fijo no puede superar el valor de la cuota.")
-
-    paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
-    remaining = discountable_pending(cuota, items, pending_amounts([cuota])[cuota.pk])
-    amount = min(benefit_amount(mode, value, base), base)
 
     if kind == BENEFIT_DISCOUNT:
-        if paid:
+        if cuota.estado_cuota == EstadoCuotaChoices.PAGA:
             raise CuotaConPagosError("La cuota está paga y no puede recibir un descuento.")
-        if amount > remaining:
-            raise BeneficioInvalidoError("El descuento supera el saldo pendiente de la cuota, sin contar recargos.")
+        remaining = pending_amounts([cuota])[cuota.pk]
+        if remaining <= 0:
+            raise BeneficioInvalidoError("La cuota no tiene saldo pendiente para descontar.")
+        if mode == ModalidadMontoChoices.MONTO_FIJO and value > remaining:
+            raise BeneficioInvalidoError(
+                f"El máximo que podés descontar es {format_amount(remaining)}, lo que le resta pagar a la cuota."
+            )
+        # A percentage discount is taken from what is left to pay, late fees included
+        amount = benefit_amount(mode, value, remaining)
         item = ItemCuota.objects.create(
             cuota=cuota,
             concepto=ConceptoItemChoices.DESCUENTO_UNICO,
@@ -1530,6 +1531,8 @@ def assign_benefit(
         )
         return None, item
 
+    if mode == ModalidadMontoChoices.MONTO_FIJO and value > base:
+        raise BeneficioInvalidoError(f"El monto de la beca no puede superar el valor de la cuota ({format_amount(base)}).")
     account = cuota.movimiento.cuenta_corriente
     scholarship = create_scholarship(account.socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
     items = refresh_scholarship_items(account, SCHOLARSHIP_GRANTED_REASON, authorized_by, user)
@@ -1589,13 +1592,21 @@ def scholarship_item(scholarship, cuota, amount):
     )
 
 
+def scholarship_discount(scholarship, base, remaining):
+    """A 100% scholarship settles all that is left to pay, late fees included; any other one is taken
+    from the value of the cuota, up to what is left."""
+    remaining = max(remaining, Decimal("0.00"))
+    if scholarship.porcentaje is not None and scholarship.porcentaje >= 100:
+        return remaining
+    return min(scholarship.discount_for(base), remaining)
+
+
 def apply_scholarship(scholarship, cuota):
     items = list(cuota.items.all())
     pending = pending_amounts([cuota])[cuota.pk]
     if pending <= 0 or not scholarship.covers_period(cuota_period_start(cuota)):
         return None
-    # A scholarship larger than what is left to pay only covers the remaining amount
-    amount = min(scholarship.discount_for(discount_base(items)), discountable_pending(cuota, items, pending))
+    amount = scholarship_discount(scholarship, discount_base(items), pending)
     if amount <= 0:
         return None
     item = scholarship_item(scholarship, cuota, amount)
@@ -1613,13 +1624,10 @@ def is_linked_scholarship(item):
 
 def scholarship_amounts(items, scholarships):
     base = discount_base(items)
-    available = base - sum(
-        (item.monto for item in items if item.es_descuento and item.concepto != ConceptoItemChoices.CONDONACION_MORA),
-        Decimal("0.00"),
-    )
+    available = net_amount(items)
     amounts = {}
     for scholarship in scholarships:
-        amount = min(scholarship.discount_for(base), max(available, Decimal("0.00")))
+        amount = scholarship_discount(scholarship, base, available)
         if amount > 0:
             amounts[scholarship.pk] = amount
             available -= amount

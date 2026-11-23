@@ -6,7 +6,7 @@ import ComprobanteDetailModal from './ComprobanteDetailModal'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
-import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
+import { isAdjustment, isLateFee, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { ListSkeleton } from '../shared/Skeleton'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 import useToast from '../../hooks/useToast'
@@ -16,20 +16,22 @@ const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-conta
 
 const LAYOUTS = {
   cards: {
+    wrapper: 'flex flex-col gap-4',
     grid: 'grid grid-cols-1 lg:grid-cols-3 gap-4',
     main: 'lg:col-span-2 min-w-0',
-    side: 'flex flex-col gap-4 min-w-0',
+    side: 'min-w-0',
     concepts: `${CARD_CLASS} p-4`,
     receipts: `${CARD_CLASS} p-4`,
-    summary: `${CARD_CLASS} p-4`,
+    summary: `${CARD_CLASS} p-4 h-full`,
   },
   flat: {
-    grid: 'grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-outline-variant/30',
+    wrapper: 'flex flex-col divide-y divide-outline-variant/30',
+    grid: 'grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-outline-variant/30 pb-4',
     main: 'lg:col-span-2 min-w-0 pb-4 lg:pb-0 lg:pr-6',
-    side: 'flex flex-col divide-y divide-outline-variant/30 min-w-0 pt-4 lg:pt-0 lg:pl-6',
+    side: 'min-w-0 pt-4 lg:pt-0 lg:pl-6',
     concepts: '',
-    receipts: 'pb-4',
-    summary: 'pt-4',
+    receipts: 'pt-4',
+    summary: '',
   },
 }
 
@@ -175,14 +177,10 @@ function ConceptLine({ label, detail, value, className = 'text-on-surface', acti
   )
 }
 
-function DueDatesBar({ cuota }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-md bg-surface-container-low/70 border border-outline-variant/20 text-sm text-on-surface-variant">
-      <span>1° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc1)}</span></span>
-      <span className="text-outline-variant" aria-hidden="true">|</span>
-      <span>2° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc2)}</span></span>
-    </div>
-  )
+const lateFeeDueDate = (cuota, item) => {
+  const step = Number(item.vencimiento)
+  if (step === 1 || step === 2) return formatDate(cuota[`fecha_venc${step}`])
+  return `${formatDate(cuota.fecha_venc1)} · ${formatDate(cuota.fecha_venc2)}`
 }
 
 function ConceptsCard({ cuota, onRemove, className }) {
@@ -192,10 +190,7 @@ function ConceptsCard({ cuota, onRemove, className }) {
 
   return (
     <div className={`${className} flex flex-col gap-3 h-full`} role="region" aria-label="Detalle de conceptos">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <h4 className={CARD_TITLE_CLASS}>Detalle de conceptos</h4>
-        <DueDatesBar cuota={cuota} />
-      </div>
+      <h4 className={CARD_TITLE_CLASS}>Detalle de conceptos</h4>
       <div className="flex flex-col text-base">
         {charges.map((item) => {
           const blocker = onRemove && isRegistration(item) ? removalBlocker(cuota, item) : null
@@ -224,7 +219,7 @@ function ConceptsCard({ cuota, onRemove, className }) {
                 <ConceptLine
                   key={item.item_cuota_id}
                   label={itemLabel(item)}
-                  detail={item.es_descuento ? item.motivo : ''}
+                  detail={item.es_descuento ? item.motivo : isLateFee(item) ? lateFeeDueDate(cuota, item) : ''}
                   value={`${tone.sign}${formatAmount(Number(item.monto ?? 0))}`}
                   className={tone.className}
                   action={blocker === null ? null : (
@@ -342,19 +337,21 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
   return (
     <tr className="bg-surface-container-low/60">
       <td colSpan={colSpan} className="px-4 py-4 border-l-4 border-primary">
-        <div className={layout.grid}>
-          <div className={layout.main}>
-            <ConceptsCard cuota={cuota} onRemove={onChanged && !readOnly ? setRemovingItem : undefined} className={layout.concepts} />
+        <div className={layout.wrapper}>
+          <div className={layout.grid}>
+            <div className={layout.main}>
+              <ConceptsCard cuota={cuota} onRemove={onChanged && !readOnly ? setRemovingItem : undefined} className={layout.concepts} />
+            </div>
+            <div className={layout.side}>
+              <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
+            </div>
           </div>
-          <div className={layout.side}>
-            <ReceiptsCard
-              cuotaId={cuota.cuota_id}
-              fallbackSocio={cuota?.socio}
-              onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)}
-              className={layout.receipts}
-            />
-            <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
-          </div>
+          <ReceiptsCard
+            cuotaId={cuota.cuota_id}
+            fallbackSocio={cuota?.socio}
+            onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)}
+            className={layout.receipts}
+          />
         </div>
 
         <ComprobanteDetailModal

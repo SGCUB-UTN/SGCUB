@@ -6,8 +6,8 @@ import { getErrorMessage } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AmountModeInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS } from './formParts'
-import { FIXED, PERCENTAGE, SCHOLARSHIP_TARGET, benefitPayload, benefitValueError, remainingWithoutFees, roundCents } from './benefitMath'
+import { AmountModeInput, AuthorizerSelect, BenefitValueError, SUBMIT_BUTTON_CLASS } from './formParts'
+import { FIXED, PERCENTAGE, SCHOLARSHIP_TARGET, benefitPayload, benefitValueError, exceedsMax, remainingToPay, roundCents } from './benefitMath'
 
 const REASON_MAX_LENGTH = 140
 
@@ -38,7 +38,7 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
 
   const change = (changes) => setValues((current) => ({ ...current, ...changes }))
   const numericValue = Number(values.value)
-  const maxDiscount = isScholarship ? null : roundCents(remainingWithoutFees(target.cuota) + Number(target.item.monto))
+  const maxDiscount = isScholarship ? null : roundCents(remainingToPay(target.cuota) + Number(target.item.monto))
 
   const errors = {
     startDate: isScholarship && !values.startDate ? 'Indicá desde cuándo rige la beca.' : '',
@@ -47,7 +47,7 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
       if (!values.endDate) return 'Indicá hasta cuándo rige o marcá "Sin fecha de finalización".'
       return values.endDate < values.startDate ? 'No puede ser anterior a la fecha de inicio.' : ''
     })(),
-    value: benefitValueError(values.mode, numericValue, maxDiscount),
+    value: benefitValueError(values.mode, numericValue, { maxFixed: maxDiscount }),
     authorizer: !authorizer ? 'Elegí quién autoriza el cambio.' : '',
     reason: !values.reason.trim() ? 'Indicá el motivo.' : '',
   }
@@ -129,7 +129,12 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
           onValueChange={(value) => change({ value })}
           invalid={Boolean(fieldError('value'))}
         />
-        {fieldError('value') && <p className="text-sm text-error font-medium" role="alert">{errors.value}</p>}
+        <BenefitValueError
+          message={fieldError('value')}
+          maxFixed={maxDiscount}
+          canUseMax={exceedsMax(values.mode, numericValue, maxDiscount)}
+          onUseMax={(value) => change({ value })}
+        />
       </div>
 
       <Campo id="edit-benefit-authorizer" label="Autorizado por" requerido error={fieldError('authorizer')}>

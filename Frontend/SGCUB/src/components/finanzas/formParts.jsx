@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAutorizantes } from '../../api/usuarios'
 import SectionHeading from '../shared/SectionHeading'
+import { formatAmount } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
@@ -41,6 +42,24 @@ export function AmountInput({ value, onChange, invalid = false, className = '', 
         className={claseInput(invalid, 'pl-7 font-semibold text-right')}
         {...props}
       />
+    </div>
+  )
+}
+
+export function BenefitValueError({ message, maxFixed = null, canUseMax = false, onUseMax }) {
+  if (!message) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="alert">
+      <p className="text-sm text-error font-medium">{message}</p>
+      {canUseMax && maxFixed !== null && (
+        <button
+          type="button"
+          onClick={() => onUseMax(maxFixed.toFixed(2))}
+          className="text-sm font-semibold text-primary underline underline-offset-4 hover:text-primary/80 cursor-pointer"
+        >
+          Aplicar {formatAmount(maxFixed)}
+        </button>
+      )}
     </div>
   )
 }

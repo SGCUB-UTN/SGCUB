@@ -5,8 +5,8 @@ import { formatAmount, formatDate, getErrorMessage } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import { AmountModeInput, AuthorizerSelect, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
-import { PERCENTAGE, benefitFor, benefitPayload, benefitValueError, discountBase, isOpen, previousBenefits, remainingWithoutFees, roundCents, todayIso } from './benefitMath'
+import { AmountModeInput, AuthorizerSelect, BenefitValueError, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { PERCENTAGE, benefitPayload, benefitValueError, discountFor, exceedsMax, isOpen, remainingToPay, roundCents, scholarshipFor, todayIso } from './benefitMath'
 import { isOverdue } from './cuotaStates'
 
 const SCHOLARSHIP = 'beca'
@@ -66,14 +66,14 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
   const reachedCuotas = isScholarship && startDate && hasValue
     ? openCuotas
       .filter((item) => item.periodo >= startPeriod && (!endPeriod || item.periodo <= endPeriod))
-      .map((item) => ({ cuota: item, amount: benefitFor(item, mode, numericValue) }))
+      .map((item) => ({ cuota: item, amount: scholarshipFor(item, mode, numericValue) }))
       .filter((item) => item.amount > 0)
     : []
   const scholarshipTotal = roundCents(reachedCuotas.reduce((total, item) => total + item.amount, 0))
 
-  const discountAmount = cuota && hasValue ? benefitFor(cuota, mode, numericValue) : 0
-  const remaining = remainingWithoutFees(cuota)
-  const pending = roundCents(Number(cuota?.saldo_pendiente ?? 0))
+  const pending = remainingToPay(cuota)
+  const discountAmount = cuota && hasValue ? discountFor(cuota, mode, numericValue) : 0
+  const discountMax = !isScholarship && cuota ? pending : null
 
   const errors = {
     startDate: isScholarship && !startDate ? 'Indicá desde cuándo rige la beca.' : '',
@@ -83,7 +83,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
       return endDate < startDate ? 'No puede ser anterior a la fecha de inicio.' : ''
     })(),
     cuota: !isScholarship && !cuota ? 'Elegí la cuota a descontar.' : '',
-    value: benefitValueError(mode, numericValue, !isScholarship && cuota ? remaining : null),
+    value: benefitValueError(mode, numericValue, { maxFixed: discountMax }),
     authorizer: !authorizer ? 'Elegí quién autoriza.' : '',
     reason: !reason.trim() ? 'Indicá el motivo.' : '',
   }
@@ -184,7 +184,7 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
                   <option value="">{openCuotas.length ? 'Seleccioná una cuota' : 'El socio no tiene cuotas impagas'}</option>
                   {openCuotas.map((item) => (
                     <option key={item.cuota_id} value={String(item.cuota_id)}>
-                      {formatPeriod(item.periodo)} · {formatAmount(remainingWithoutFees(item))}{isOverdue(item) ? ' · Vencida' : ''}
+                      {formatPeriod(item.periodo)} · {formatAmount(remainingToPay(item))}{isOverdue(item) ? ' · Vencida' : ''}
                     </option>
                   ))}
                 </SelectConFlecha>
@@ -200,7 +200,18 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
               onValueChange={setValue}
               invalid={Boolean(fieldError('value'))}
             />
-            {fieldError('value') && <p className="text-sm text-error font-medium" role="alert">{errors.value}</p>}
+            <BenefitValueError
+              message={fieldError('value')}
+              maxFixed={discountMax}
+              canUseMax={exceedsMax(mode, numericValue, discountMax)}
+              onUseMax={setValue}
+            />
+            {!isScholarship && cuota && mode === PERCENTAGE && !fieldError('value') && (
+              <p className="text-sm text-on-surface-variant">El porcentaje se calcula sobre lo que le resta pagar a la cuota ({formatAmount(pending)}).</p>
+            )}
+            {isScholarship && mode === PERCENTAGE && numericValue >= 100 && (
+              <p className="text-sm text-on-surface-variant">Una beca del 100% salda todo lo que le resta a cada cuota, recargos incluidos.</p>
+            )}
           </FormSection>
 
           <FormSection icon="verified_user" title="Autorización" disabled={!socio} className="mt-auto">
@@ -262,10 +273,8 @@ function BenefitForm({ socio = null, cuenta = null, onSuccess }) {
             ) : (
               <>
                 <TicketSection title={cuota ? `Cuota ${formatPeriod(cuota.periodo)}` : 'Cuota'}>
-                  <SummaryLine label="Total sin recargo" value={formatAmount(discountBase(cuota))} />
-                  {previousBenefits(cuota) > 0 && <SummaryLine label="Beneficios anteriores" value={`− ${formatAmount(previousBenefits(cuota))}`} />}
+                  <SummaryLine label="Resta pagar" value={formatAmount(pending)} />
                   <SummaryLine label="Descuento" value={`− ${formatAmount(discountAmount)}`} valueClassName="text-emerald-700" />
-                  {pending - remaining > 0 && <SummaryLine label="Recargo por mora pendiente" value={`+ ${formatAmount(roundCents(pending - remaining))}`} />}
                 </TicketSection>
                 <SummaryLine label="Nuevo saldo" value={formatAmount(roundCents(pending - discountAmount))} isTotal />
               </>
