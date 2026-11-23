@@ -26,19 +26,29 @@ function ContactDetailsModal({ contact, onClose, mostrarResponsableLegal = true 
   const ubicacionTexto = [person.domicilio_barrio_nombre, person.domicilio_localidad_nombre].filter(Boolean).join(', ')
 
   return (
-    <Modal opened onClose={onClose} centered size="lg" title={<Text fw={700} size="xl">{name}</Text>}>
+    <Modal
+      opened
+      onClose={onClose}
+      centered
+      size="lg"
+      title={(
+        <span className="text-xl font-bold text-on-surface">
+          {name}
+          {contact.relacion && <span className="font-normal text-on-surface-variant"> ({contact.relacion})</span>}
+        </span>
+      )}
+    >
       <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-2 flex-wrap">
-          {contact.relacion && <StatusBadge size="md" badge={{ label: contact.relacion, tono: 'neutro' }} />}
-          {mostrarResponsableLegal && (
+        {mostrarResponsableLegal && (
+          <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge
               size="md"
               badge={contact.responsable_legal
                 ? { label: 'Responsable legal autorizado', tono: 'ok' }
                 : { label: 'Solo contacto de emergencia', tono: 'neutro' }}
             />
-          )}
-        </div>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
           <Field label="DNI" value={person.dni ? formatDni(person.dni) : ''} icon="badge" />
           <Field label="Teléfono" value={person.telefono ? formatPhone(person.telefono) : ''} icon="call" />

@@ -42,7 +42,6 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
           <th className="py-3 px-4" scope="col">Nombre y apellido</th>
           <th className="py-3 px-4" scope="col">DNI</th>
           <th className="py-3 px-4" scope="col">Teléfono</th>
-          <th className="py-3 px-4" scope="col">Vínculo</th>
           {mostrarResponsableLegal && <th className="py-3 px-4 text-center" scope="col">Responsable legal</th>}
           {hasActions && <th className="py-3 px-4 text-center" scope="col">Acciones</th>}
         </>
@@ -65,17 +64,15 @@ function ContactosTable({ contacts, onSelect, onEdit, onDelete, mostrarResponsab
         >
           <td className="py-3 px-4">
             <span className="font-semibold text-on-surface group-hover:text-primary transition-colors inline-flex items-center gap-1.5">
-              {fullName(contact) || 'Sin nombre'}
+              <span>
+                {fullName(contact) || 'Sin nombre'}
+                {contact.relacion && <span className="font-normal text-on-surface-variant"> ({contact.relacion})</span>}
+              </span>
               <span className="material-symbols-outlined text-[16px] text-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" aria-hidden="true">visibility</span>
             </span>
           </td>
           <td className="py-3 px-4 text-on-surface-variant">{contact.persona?.dni ? formatDni(contact.persona.dni) : '—'}</td>
           <td className="py-3 px-4 whitespace-nowrap text-on-surface">{contact.persona?.telefono ? formatPhone(contact.persona.telefono) : '—'}</td>
-          <td className="py-3 px-4">
-            {contact.relacion ? (
-              <StatusBadge size="md" badge={{ label: contact.relacion, tono: 'neutro' }} />
-            ) : '—'}
-          </td>
           {mostrarResponsableLegal && (
             <td className="py-3 px-4 text-center"><LegalGuardianBadge isLegalGuardian={contact.responsable_legal} /></td>
           )}
