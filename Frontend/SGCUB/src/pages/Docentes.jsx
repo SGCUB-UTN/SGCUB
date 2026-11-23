@@ -43,7 +43,7 @@ function Docentes() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
         <StatCard label="Total" value={error ? '—' : totales.total} isLoading={isLoading} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
         <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-        <StatCard label="De Baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+        <StatCard label="De baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Docentes">
         <DocentesTable

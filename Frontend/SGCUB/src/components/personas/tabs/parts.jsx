@@ -106,9 +106,11 @@ export function KPI({ label, value, icon, tone = 'neutral' }) {
 export function EmptyState({ icon, title, description }) {
   return (
     <div className="flex flex-col items-center justify-center text-center gap-2 py-12 px-4 border border-dashed border-outline-variant/50 rounded-xl">
-      <span className="material-symbols-outlined text-xl text-outline">{icon}</span>
+      <span className="inline-flex items-center justify-center size-12 mb-1 rounded-full bg-surface-container-low text-outline" aria-hidden="true">
+        <span className="material-symbols-outlined" style={{ fontSize: 28 }}>{icon}</span>
+      </span>
       <p className="text-lg font-semibold text-on-surface">{title}</p>
-      {description && <p className="text-xl text-on-surface-variant max-w-md">{description}</p>}
+      {description && <p className="text-base text-on-surface-variant max-w-md">{description}</p>}
     </div>
   )
 }

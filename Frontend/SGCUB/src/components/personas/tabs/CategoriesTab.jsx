@@ -123,7 +123,7 @@ export default function CategoriesTab({ asignaciones = [], cargos = [], categori
   return (
     <div className="flex flex-col gap-6">
       <TabHeader
-        title="Categorías asignadas"
+        title="Cargos y categorías"
         description="Cargos que ocupa el docente y las categorías en las que participa con cada uno"
         actions={editable && (
           <PrimaryButton icon="add" onClick={() => setModalCargo({ asignacion: null })}>Agregar cargo</PrimaryButton>
@@ -133,8 +133,8 @@ export default function CategoriesTab({ asignaciones = [], cargos = [], categori
       {asignaciones.length === 0 ? (
         <EmptyState
           icon="groups"
-          title="Sin categorías asignadas"
-          description="Este docente todavía no tiene categorías asignadas."
+          title="Sin cargos asignados"
+          description="Este docente todavía no tiene cargos ni categorías asignadas."
         />
       ) : (
         <CargosDocenteTable

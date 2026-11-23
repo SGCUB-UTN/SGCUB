@@ -44,7 +44,7 @@ function Jugadores() {
         <StatCard label="Total" value={error ? '—' : totales.total} isLoading={isLoading} icon="sports_soccer" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
         <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
         <StatCard label="Baja parcial" value={error ? '—' : totales.bajasParciales} isLoading={isLoading} icon="pause_circle" tone="info" onClick={() => setStatus('baja_parcial')} isSelected={status === 'baja_parcial'} />
-        <StatCard label="De Baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+        <StatCard label="De baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Jugadores">
         <JugadoresTable

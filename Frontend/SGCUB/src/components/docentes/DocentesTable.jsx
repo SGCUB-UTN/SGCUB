@@ -37,7 +37,7 @@ const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
   { value: ALL, label: 'Todos' },
-  { value: 'baja', label: 'De Baja' },
+  { value: 'baja', label: 'De baja' },
 ]
 
 const matchesDocenteCategory = (docenteCategorias, value) => {
@@ -84,7 +84,7 @@ const EXPORT_COLUMNS = [
   { header: 'Email', value: (docente) => docente.persona_detalle?.email },
   { header: 'Cargo y categorías', value: (docente) => assignmentsText(docente.asignaciones) },
   { header: 'Documentación', value: (docente) => DOCUMENTATION_LABELS[docente.documentacion?.estado] },
-  { header: 'Estado', value: (docente) => (esActivo(docente) ? 'Activo' : 'De Baja') },
+  { header: 'Estado', value: (docente) => (esActivo(docente) ? 'Activo' : 'De baja') },
 ]
 
 const SORT_VALUES = {
@@ -261,7 +261,7 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
                 >
                   {fullName(docente) || '—'}
                 </Link>
-                {!esActivo(docente) && <InactiveTag>De Baja</InactiveTag>}
+                {!esActivo(docente) && <InactiveTag>De baja</InactiveTag>}
               </div>
             </td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>

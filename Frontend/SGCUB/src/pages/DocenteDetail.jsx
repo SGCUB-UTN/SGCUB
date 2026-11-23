@@ -233,7 +233,7 @@ function DocenteDetail() {
     },
     {
       id: 'categorias',
-      label: 'Categorías',
+      label: 'Cargos y categorías',
       icon: 'groups',
       content: (
         <CategoriesTab

@@ -42,7 +42,7 @@ const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
   { value: ALL, label: 'Todos' },
-  { value: 'baja', label: 'De Baja' },
+  { value: 'baja', label: 'De baja' },
   { value: 'baja_parcial', label: 'Baja parcial' },
 ]
 
@@ -63,7 +63,7 @@ const isActive = (jugador) => {
 
 const statusLabel = (jugador) => {
   if (isActive(jugador)) return 'Activo'
-  return jugador.tipo_baja === 'parcial' ? 'Baja parcial' : 'De Baja'
+  return jugador.tipo_baja === 'parcial' ? 'Baja parcial' : 'De baja'
 }
 
 const fullName = (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim()

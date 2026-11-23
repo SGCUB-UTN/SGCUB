@@ -27,7 +27,7 @@ const COLUMN_COUNT = 5
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
   { value: ALL, label: 'Todos' },
-  { value: 'baja', label: 'De Baja' },
+  { value: 'baja', label: 'De baja' },
   { value: 'ex_jugador', label: 'Ex jugadores' },
 ]
 
@@ -49,7 +49,7 @@ const EXPORT_COLUMNS = [
   { header: 'DNI', value: (socio) => formatDni(socio.dni) },
   { header: 'Teléfono', value: (socio) => socio.telefono },
   { header: 'Fecha de alta', value: (socio) => formatDate(socio.fecha_alta) },
-  { header: 'Estado', value: (socio) => (isActive(socio) ? 'Activo' : 'De Baja') },
+  { header: 'Estado', value: (socio) => (isActive(socio) ? 'Activo' : 'De baja') },
   { header: 'Deuda', value: (socio) => formatExportAmount(accountDebt(socio.cuenta)) },
   { header: 'Cuotas vencidas', value: (socio) => socio.cuenta?.cuotas_vencidas ?? 0 },
 ]
@@ -173,7 +173,7 @@ function SociosTable({ data, isLoading, error, status, onRetry }) {
                 >
                   {socio.nombre} {socio.apellido}
                 </Link>
-                {!isActive(socio) && <InactiveTag>De Baja</InactiveTag>}
+                {!isActive(socio) && <InactiveTag>De baja</InactiveTag>}
                 {socio.es_ex_jugador && <ProfileBadge>Ex jugador</ProfileBadge>}
               </div>
             </td>

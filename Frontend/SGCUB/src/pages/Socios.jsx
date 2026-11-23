@@ -43,7 +43,7 @@ function Padron() {
           <StatCard label="Total Padrón" value={error ? '—' : totales.total} isLoading={isLoading} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
           <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
           <StatCard label="Ex Jugadores" value={error ? '—' : totales.exJugadores} isLoading={isLoading} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
-          <StatCard label="De Baja" value={error ? '—' : totales.inactivos} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+          <StatCard label="De baja" value={error ? '—' : totales.inactivos} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
 
         <section aria-label="Socios">

@@ -139,7 +139,7 @@ function MovementsTable({ movimientos, movements, onOpen }) {
 function ExemptNotice({ category }) {
   return (
     <div className={`${INSET_PADDING_X_CLASS} my-2`}>
-      <p className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-base text-sky-900" role="status">
+      <p className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-base text-sky-800" role="status">
         <span className="material-symbols-outlined shrink-0 text-[20px]" aria-hidden="true">money_off</span>
         <span>
           No se generan cuotas porque juega en la categoría <strong>{category.nombre}</strong>, que está exenta de pago. Si existe deuda, puede deberse a las cuotas de su categoría anterior.

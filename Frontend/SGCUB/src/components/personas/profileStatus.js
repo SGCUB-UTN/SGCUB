@@ -1,7 +1,7 @@
 import { isOverdue } from '../finanzas/cuotaStates'
 import { isActiveStatus } from './format'
 
-const DEACTIVATED = { label: 'De Baja', tone: 'muted', icon: 'block' }
+const DEACTIVATED = { label: 'De baja', tone: 'muted', icon: 'block' }
 const PARTIAL_LEAVE = { label: 'Baja parcial', tone: 'warning', icon: 'pause_circle' }
 const IN_DEBT = { label: 'Con deuda', tone: 'error', icon: 'error' }
 const EXEMPT = { label: 'Exento de pago', tone: 'positive', icon: 'money_off' }
