@@ -15,7 +15,7 @@ import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 import useToast from '../../hooks/useToast'
 
 const COLUMN_COUNT = 4
-const ROWS_PER_PAGE = 12
+const ROWS_PER_PAGE = 15
 
 const panelKey = (cuota) => `${cuota.cuota_id}-${cuota.monto_total}-${cuota.saldo_pendiente}`
 
@@ -233,7 +233,7 @@ function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS,
         {visibleRows.map(renderRow)}
       </DataTable>
       {listed.length > ROWS_PER_PAGE && (
-        <TablePagination id="cuotas-rows-per-page" rowsPerPageOptions={[12, 24, 60]} {...paginationProps} />
+        <TablePagination id="cuotas-rows-per-page" rowsPerPageOptions={[15, 30, 60]} {...paginationProps} />
       )}
     </div>
   )

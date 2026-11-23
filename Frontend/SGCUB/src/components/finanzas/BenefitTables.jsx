@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
+import TablePagination from '../shared/TablePagination'
+import usePagination from '../../hooks/usePagination'
 import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
 import StatusBadge from '../shared/StatusBadge'
@@ -29,6 +31,7 @@ const TYPES = {
 }
 
 const COLUMN_COUNT = 5
+const ROWS_PER_PAGE = 15
 
 const typeBadge = (row) => (row.state === 'cancelled'
   ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
@@ -173,6 +176,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
   const [expandedKey, setExpandedKey] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
+  const { visibleRows, paginationProps } = usePagination(rows, ROWS_PER_PAGE)
 
   return (
     <>
@@ -192,7 +196,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
             </>
           )}
         >
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <ExpandableRow
               key={row.key}
               expanded={expandedKey === row.key}
@@ -224,6 +228,9 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
         </DataTable>
       ) : (
         becas !== null && <SectionEmpty>Sin becas ni descuentos.</SectionEmpty>
+      )}
+      {rows.length > ROWS_PER_PAGE && (
+        <TablePagination id="benefits-rows-per-page" rowsPerPageOptions={[15, 30, 60]} {...paginationProps} />
       )}
 
       <EditBenefitModal target={editing} onClose={() => setEditing(null)} onSaved={onChanged} />

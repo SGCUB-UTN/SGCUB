@@ -152,7 +152,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
     <>
       <PageHeader breadcrumb={breadcrumb} />
 
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm p-6 mb-6 relative overflow-hidden">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm px-6 py-3 mb-3 relative overflow-hidden">
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">

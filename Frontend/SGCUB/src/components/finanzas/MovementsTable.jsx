@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import DataTable from '../shared/DataTable'
+import TablePagination from '../shared/TablePagination'
+import usePagination from '../../hooks/usePagination'
 import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
 import { SectionEmpty } from '../shared/FlushSection'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
@@ -11,6 +13,7 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 
 const COLUMN_COUNT = 5
+const ROWS_PER_PAGE = 15
 
 const KIND_BADGES = {
   Anulado: { label: 'Anulado', tono: 'error' },
@@ -193,6 +196,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
   const [expandedKey, setExpandedKey] = useState(null)
   const [annulling, setAnnulling] = useState(null)
   const movements = otherMovements(movimientos)
+  const { visibleRows, paginationProps } = usePagination(movements, ROWS_PER_PAGE)
 
   const incomeAnnulled = (_updated, { refunded, amount }) => {
     const codigo = annulling.codigo
@@ -224,7 +228,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
           </>
         )}
       >
-        {movements.map((movement) => (
+        {visibleRows.map((movement) => (
           <ExpandableRow
             key={movement.key}
             expanded={expandedKey === movement.key}
@@ -258,6 +262,9 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
           </ExpandableRow>
         ))}
       </DataTable>
+      {movements.length > ROWS_PER_PAGE && (
+        <TablePagination id="movements-rows-per-page" rowsPerPageOptions={[15, 30, 60]} {...paginationProps} />
+      )}
 
       <AnnulIncomeModal
         opened={Boolean(annulling)}

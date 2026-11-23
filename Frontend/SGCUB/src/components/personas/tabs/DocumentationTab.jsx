@@ -110,7 +110,6 @@ export default function DocumentationTab({ documentation, personaId, personaType
     <div className="flex flex-col">
       <TabHeader
         title="Documentación"
-        description="Certificados, habilitaciones y títulos de la persona, con su vencimiento."
       />
 
       <KpiGrid columns={4} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>

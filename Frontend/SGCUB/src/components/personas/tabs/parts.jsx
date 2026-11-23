@@ -4,8 +4,8 @@ import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 export function RecordSection({ title, color = 'bg-primary-container', extra, children }) {
   return (
     <section className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 min-h-10 pb-2 border-b border-surface-container">
-        <h2 className="flex items-baseline gap-2 text-lg text-on-surface font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-3 min-h-10 pb-3 border-b border-surface-container">
+        <h2 className="flex items-baseline gap-2 text-2xl text-on-surface font-bold tracking-tight">
           <span className={`w-1 h-[0.7em] shrink-0 rounded ${color}`} aria-hidden="true" />
           {title}
         </h2>
@@ -63,7 +63,7 @@ export function SegmentedTabs({ label, sections, value, onChange, panelId, class
 
 export function TableFooter({ className = '', children }) {
   return (
-    <div className={`flex flex-wrap justify-end gap-2 py-3 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS} ${className}`}>
+    <div className={`flex flex-wrap justify-end gap-2 py-2 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS} ${className}`}>
       {children}
     </div>
   )
