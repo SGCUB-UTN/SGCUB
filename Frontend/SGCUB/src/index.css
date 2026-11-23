@@ -224,6 +224,10 @@ html.dark select option {
   color: var(--color-on-surface);
 }
 
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+}
+
 @layer base {
   html, body {
     margin: 0;

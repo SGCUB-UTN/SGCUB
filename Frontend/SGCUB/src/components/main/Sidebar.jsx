@@ -230,10 +230,10 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                   </span>
                   <span className="contents" aria-hidden="true">
                   {alertas.vencidos > 0 && (
-                    <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
+                    <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', title: 'Vencidos' }} />
                   )}
                   {alertas.proximos > 0 && (
-                    <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
+                    <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', title: 'Por vencer' }} />
                   )}
                   </span>
                 </span>
