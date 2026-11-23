@@ -33,7 +33,7 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo, 
         extra={(extraActions || onEdit) && (
           <div className="flex items-center gap-2 flex-wrap">
             {extraActions}
-            {onEdit && <EditButton onClick={onEdit} />}
+            {onEdit && <EditButton onClick={onEdit}>Editar datos</EditButton>}
           </div>
         )}
       >

@@ -13,7 +13,7 @@ import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { EmptyState } from '../components/personas/tabs/parts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { exemptCategory, memberStatuses } from '../components/personas/profileStatus'
-import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince } from '../components/personas/format'
+import { isActiveStatus, formatDni, formatDate, formatNumber, getErrorMessage, yearsSince, yearsText } from '../components/personas/format'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useDocumentacion from "../hooks/useDocumentacion"
@@ -333,19 +333,20 @@ function JugadorDetail() {
       <PersonHeader
         breadcrumb={[
           ...origin,
-          { label: `Jugador ${formatNumber(jugador.jugador_id)}` },
+          { label: `Socio ${formatNumber(socio.numero_socio)}` },
         ]}
         name={socio.nombre}
         surname={socio.apellido}
         photoUrl={socio.foto_url}
         onDownloadPhoto={handleDownloadPhoto}
-        onUploadPhoto={handleUploadPhoto}
+        onUploadPhoto={activo ? handleUploadPhoto : undefined}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account, jugador)}
         metadata={[
           { label: 'DNI', value: formatDni(socio.dni) },
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
           { label: 'Alta', value: formatDate(socio.fecha_alta) },
+          { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
           {
             label: 'Categoría',
             value: [jugador.categoria?.nombre || 'Sin categoría', jugador.categoria_secundaria?.nombre].filter(Boolean).join(', '),

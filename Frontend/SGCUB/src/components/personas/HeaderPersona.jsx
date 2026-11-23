@@ -192,7 +192,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
   )
 }
 
-export function EditButton({ onClick, children = 'Editar legajo' }) {
+export function EditButton({ onClick, children = 'Editar' }) {
   return (
     <button
       type="button"

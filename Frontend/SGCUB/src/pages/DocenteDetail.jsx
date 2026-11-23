@@ -13,7 +13,7 @@ import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { teacherStatuses } from '../components/personas/profileStatus'
-import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
+import { yearsSince, formatDni, formatDate, formatNumber, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useLocalidades from '../hooks/useLocalidades'
 import useToast from '../hooks/useToast'
@@ -254,19 +254,19 @@ function DocenteDetail() {
         breadcrumb={[
           { label: 'Personas' },
           { label: 'Docentes', to: '/padron/docentes' },
-          { label: `Legajo #${docente.legajo}` },
+          { label: `Legajo ${formatNumber(docente.legajo)}` },
         ]}
         name={persona.nombre}
         surname={persona.apellido}
         photoUrl={persona.foto_url}
         onDownloadPhoto={handleDownloadPhoto}
-        onUploadPhoto={handleUploadPhoto}
+        onUploadPhoto={activo ? handleUploadPhoto : undefined}
         isActive={activo}
         statuses={teacherStatuses(activo)}
         metadata={[
           { label: 'DNI', value: formatDni(persona.dni) },
-          { label: 'Legajo', value: `#${docente.legajo}`, highlighted: true },
-          { label: 'Fecha de ingreso', value: formatDate(docente.fecha_ingreso) },
+          { label: 'Legajo', value: formatNumber(docente.legajo), highlighted: true },
+          { label: 'Alta', value: formatDate(docente.fecha_ingreso) },
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
           ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}

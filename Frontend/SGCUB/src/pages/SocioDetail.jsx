@@ -16,6 +16,8 @@ import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
 import useToast from '../hooks/useToast'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 function SocioDetail() {
   const { id } = useParams()
@@ -121,6 +123,23 @@ function SocioDetail() {
   const deuda = pendingDebt(finances.account)
   const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
+  const handleDownloadPhoto = async () => {
+    if (!socio.foto_url) return
+    try {
+      await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
+    } catch (err) {
+      console.error(err)
+      showToast({ tone: 'error', title: 'No se pudo descargar la foto', description: 'Probá de nuevo en unos minutos.' })
+    }
+  }
+
+  const handleUploadPhoto = async (file) => {
+    const personaId = socio.persona?.persona_id || socio.persona
+    if (!personaId) return
+    const personaActualizada = await uploadPersonaFoto(personaId, file)
+    setCarga((actual) => ({ ...actual, datos: { ...actual.datos, foto_url: personaActualizada.foto_url } }))
+  }
+
   const tabs = [
     {
       id: 'datos-personales',
@@ -153,6 +172,9 @@ function SocioDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        photoUrl={socio.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={activo ? handleUploadPhoto : undefined}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account)}
         metadata={[
