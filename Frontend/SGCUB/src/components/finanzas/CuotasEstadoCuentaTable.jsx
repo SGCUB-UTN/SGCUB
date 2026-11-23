@@ -7,6 +7,7 @@ import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import { isPaid } from './accountStatement'
 import { cuotaState, cuotaStateBadgeClass, cuotaStateLabel } from './cuotaStates'
 import CuotaDetailPanel from './CuotaDetailPanel'
+import RowIconButton, { RowIcon } from '../shared/RowIconButton'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 import { getComprobantesByCuota } from '../../api/comprobantes'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
@@ -58,41 +59,11 @@ function SectionRow({ title, count, expanded, onToggle }) {
   )
 }
 
-const ICON_BUTTON_CLASS = 'inline-flex items-center justify-center size-9 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent'
-
-const ICON_TONES = {
-  whatsapp: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 cursor-pointer',
-  pay: 'border-primary/40 text-primary hover:bg-primary/5 cursor-pointer',
-  revert: 'border-error/30 text-error hover:bg-error-container/40 cursor-pointer',
-}
-
 const hasPayments = (cuota) => isPaid(cuota) || Number(cuota.monto_pagado ?? 0) > 0
 
 const latestReceipt = (comprobantes) => [...(comprobantes ?? [])]
   .filter((comprobante) => comprobante.estado !== 'Anulado')
   .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)) || b.comprobante_id - a.comprobante_id)[0]
-
-function RowIconButton({ tone, label, disabledReason, busy = false, onClick, children }) {
-  const disabled = Boolean(disabledReason) || busy
-  return (
-    <button
-      type="button"
-      aria-label={disabledReason ? `${label}: ${disabledReason}` : label}
-      aria-disabled={disabled || undefined}
-      title={disabledReason || label}
-      onClick={(event) => {
-        event.stopPropagation()
-        if (!disabled) onClick()
-      }}
-      onKeyDown={(event) => event.stopPropagation()}
-      className={`${ICON_BUTTON_CLASS} ${ICON_TONES[tone]}`}
-    >
-      {busy
-        ? <span className="material-symbols-outlined animate-spin" style={{ fontSize: 18 }} aria-hidden="true">progress_activity</span>
-        : children}
-    </button>
-  )
-}
 
 function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
   const { showToast } = useToast()
@@ -138,11 +109,11 @@ function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
       <RowIconButton tone="whatsapp" label="Enviar comprobante por WhatsApp" disabledReason={whatsappBlocker} busy={sending} onClick={sendWhatsApp}>
         <WhatsAppIcon className="w-[18px] h-[18px]" />
       </RowIconButton>
-      <RowIconButton tone="pay" label="Pagar cuota" disabledReason={payBlocker} onClick={() => onPay(cuota)}>
-        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">payments</span>
+      <RowIconButton tone="primary" label="Pagar cuota" disabledReason={payBlocker} onClick={() => onPay(cuota)}>
+        <RowIcon name="payments" />
       </RowIconButton>
-      <RowIconButton tone="revert" label="Revertir pago" disabledReason={revertBlocker} onClick={() => onRevert(cuota)}>
-        <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">undo</span>
+      <RowIconButton tone="danger" label="Revertir pago" disabledReason={revertBlocker} onClick={() => onRevert(cuota)}>
+        <RowIcon name="undo" />
       </RowIconButton>
     </div>
   )

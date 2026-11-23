@@ -2,13 +2,12 @@ import { useMemo, useState } from 'react'
 import { BenefitsTable } from '../../finanzas/BenefitTables'
 import ComprobanteDetailModal from '../../finanzas/ComprobanteDetailModal'
 import CuotasEstadoCuentaTable from '../../finanzas/CuotasEstadoCuentaTable'
+import MovementsTable from '../../finanzas/MovementsTable'
 import DevolucionDetailModal from '../../finanzas/DevolucionDetailModal'
 import OtroMovimientoModal from '../../finanzas/OtroMovimientoModal'
 import { isActiveScholarship, isPaid } from '../../finanzas/accountStatement'
 import { isOverdue } from '../../finanzas/cuotaStates'
-import { formatAmount, formatDate } from '../format'
 import { BenefitButton } from '../HeaderPersona'
-import DataTable from '../../shared/DataTable'
 import { SectionEmpty } from '../../shared/FlushSection'
 import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 import { currentPeriod } from '../../shared/periodFormat'
@@ -20,7 +19,6 @@ import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useRevertPayment from '../../../hooks/useRevertPayment'
 import { SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../../shared/Skeleton'
 
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap'
 
 const CUOTAS = 'cuotas'
 const MOVEMENTS = 'movimientos'
@@ -34,106 +32,11 @@ const SECTIONS = [
 
 const PANEL_ID = 'financial-section-panel'
 
-const MOVEMENT_BADGES = {
-  Ingreso: { label: 'Ingreso', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  IngresoAnulado: { label: 'Ingreso anulado', className: 'bg-error-container text-on-error-container border-error/20' },
-  Manual: { label: 'Devolución manual', className: 'bg-error/10 text-error border-error/20' },
-  NotaCredito: { label: 'Nota de crédito', className: 'bg-amber-50 text-amber-800 border-amber-200' },
-}
-
 const reversalFor = (account, cuota, onChanged) => {
   const settlement = account.saldo_beneficio_revertible
   if (settlement?.cuota_id !== cuota.cuota_id) return { comprobanteId: account.comprobante_revertible_id, onChanged }
   const item = cuota.items.find((candidate) => candidate.item_cuota_id === settlement.item_cuota_id)
   return { settlement: { cuota, item }, onChanged }
-}
-
-// Incomes (by their receipt) and refunds of the socio, newest first
-const otherMovements = (movimientos) => [
-  ...(movimientos?.ingresos ?? []).map((comprobante) => ({
-    key: `ingreso-${comprobante.comprobante_id}`,
-    raw: comprobante,
-    isRefund: false,
-    badge: MOVEMENT_BADGES[comprobante.estado === 'Anulado' ? 'IngresoAnulado' : 'Ingreso'],
-    codigo: comprobante.codigo,
-    fecha: comprobante.fecha_emision,
-    concepto: comprobante.concepto,
-    detalle: comprobante.medios_de_pago || '—',
-    monto: comprobante.monto_total,
-    anulado: comprobante.estado === 'Anulado',
-  })),
-  ...(movimientos?.devoluciones ?? []).map((devolucion) => ({
-    key: `devolucion-${devolucion.devolucion_id}`,
-    raw: devolucion,
-    isRefund: true,
-    badge: MOVEMENT_BADGES[devolucion.tipo] ?? MOVEMENT_BADGES.Manual,
-    codigo: devolucion.codigo,
-    fecha: devolucion.fecha,
-    concepto: devolucion.concepto,
-    detalle: devolucion.medio_de_pago_nombre,
-    monto: devolucion.monto,
-    anulado: false,
-  })),
-].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
-
-function MovementsTable({ movimientos, movements, onOpen }) {
-  return (
-    <>
-      {movimientos === null && (
-        <SectionEmpty><span className="text-error" role="alert">No se pudieron cargar los ingresos y devoluciones del socio.</span></SectionEmpty>
-      )}
-      {movements.length ? (
-        <DataTable
-          tableClassName="min-w-[760px]"
-          headers={(
-            <>
-              <th className="py-3 px-4 w-[16%]" scope="col">Comprobante</th>
-              <th className="py-3 px-4 w-[16%]" scope="col">Tipo</th>
-              <th className="py-3 px-4 w-[14%]" scope="col">Fecha</th>
-              <th className="py-3 px-4" scope="col">Concepto</th>
-              <th className="py-3 px-4 w-[16%]" scope="col">Medio de pago</th>
-              <th className="py-3 px-4 w-[15%] text-right" scope="col">Monto</th>
-            </>
-          )}
-        >
-          {movements.map((movement) => (
-            <tr
-              key={movement.key}
-              tabIndex={0}
-              role="button"
-              onClick={() => onOpen(movement)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onOpen(movement)
-                }
-              }}
-              className="hover:bg-surface-container-low focus:outline-none focus-visible:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 transition-colors cursor-pointer"
-            >
-              <td className="py-3 px-4 font-bold text-primary whitespace-nowrap tabular-nums">{movement.codigo}</td>
-              <td className="py-3 px-4">
-                <span className={`${BADGE_CLASS} ${movement.badge.className}`}>{movement.badge.label}</span>
-              </td>
-              <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{formatDate(movement.fecha)}</td>
-              <td className="py-3 px-4 text-on-surface font-medium break-words">{movement.concepto || '—'}</td>
-              <td className="py-3 px-4 text-on-surface-variant whitespace-nowrap">{movement.detalle}</td>
-              <td
-                className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
-                  movement.anulado ? 'text-outline line-through' : movement.isRefund ? 'text-error' : 'text-emerald-700'
-                }`}
-              >
-                {movement.anulado ? '' : movement.isRefund ? '− ' : '+ '}{formatAmount(movement.monto)}
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      ) : (
-        movimientos !== null && (
-          <SectionEmpty>Sin ingresos ni devoluciones registrados. No modifican la deuda del socio.</SectionEmpty>
-        )
-      )}
-    </>
-  )
 }
 
 // Renders finances already loaded with useSocioFinances, so the page can share them (e.g. for the tab badge)
@@ -163,8 +66,6 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
   const [devolucionSeleccionada, setDevolucionSeleccionada] = useState(null)
   const [modalMovimientoAbierto, setModalMovimientoAbierto] = useState(false)
   const [activeSection, setActiveSection] = useState(CUOTAS)
-
-  const movimientosOrdenados = useMemo(() => otherMovements(movimientos), [movimientos])
 
   const openMovement = (movement) => {
     if (movement.isRefund) setDevolucionSeleccionada(movement.raw)
@@ -273,7 +174,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
           ))}
           {activeSection === MOVEMENTS && (
             <>
-              <MovementsTable movimientos={movimientos} movements={movimientosOrdenados} onOpen={openMovement} />
+              <MovementsTable movimientos={movimientos} socio={socio} readOnly={readOnly} onOpen={openMovement} onChanged={reloadFinances} />
               {!readOnly && (
                 <TableFooter>
                   <SecondaryButton icon="add_card" onClick={() => setModalMovimientoAbierto(true)}>

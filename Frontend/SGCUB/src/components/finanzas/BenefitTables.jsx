@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
+import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
+import RowIconButton, { RowIcon } from '../shared/RowIconButton'
 import { SectionEmpty } from '../shared/FlushSection'
-import { formatAmount } from '../personas/format'
+import { formatAmount, formatDate } from '../personas/format'
 import { formatPeriod, periodOf } from '../shared/periodFormat'
 import { SCHOLARSHIP_STATES, cuotaDiscounts, isPaid, scholarshipState, todayIso } from './accountStatement'
 import AuthorizationModal from './AuthorizationModal'
@@ -38,7 +40,7 @@ const TYPES = {
   descuento: { label: 'Descuento', className: 'bg-surface-container-high text-on-surface border-outline-variant/40' },
 }
 
-const ACTION_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+const COLUMN_COUNT = 6
 
 const monthYear = (date) => formatPeriod(periodOf(date))
 
@@ -53,16 +55,19 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
   return {
     key: `beca-${beca.beca_id}`,
     type: TYPES.beca,
-    sortDate: beca.fecha_aplicacion,
+    sortDate: beca.fecha_creacion ?? beca.fecha_aplicacion,
     validity: `${monthYear(beca.fecha_aplicacion)} → ${beca.fecha_fin ? monthYear(beca.fecha_fin) : 'Sin fecha de fin'}`,
     exclusions: beca.exclusiones ?? [],
     reason: beca.motivo,
-    cancellation: beca.motivo_cancelacion,
     value: scholarshipValue(beca),
     state,
     stateLabel: STATE_LABELS.beca[state],
     blocker: state === 'applied' ? '' : NOT_APPLIED_HINT,
     target: { kind: SCHOLARSHIP_TARGET, beca },
+    granted: { date: beca.fecha_creacion ?? beca.fecha_aplicacion, by: beca.autorizado_por },
+    cancellation: state === 'cancelled'
+      ? { date: beca.fecha_cancelacion, by: beca.cancelado_por, reason: beca.motivo_cancelacion }
+      : null,
   }
 })
 
@@ -76,58 +81,72 @@ const discountRows = (cuotas) => cuotaDiscounts(cuotas).map((discount) => {
   return {
     key: `descuento-${discount.item.item_cuota_id}`,
     type: TYPES.descuento,
-    sortDate: `${discount.cuota.periodo}-01`,
+    sortDate: discount.item.fecha_creacion ?? `${discount.cuota.periodo}-01`,
     validity: formatPeriod(discount.cuota.periodo),
     exclusions: [],
     reason: discount.item.motivo,
-    cancellation: discount.item.motivo_anulacion,
     value: `− ${formatAmount(discount.item.monto)}`,
     state,
     stateLabel: STATE_LABELS.descuento[state],
     blocker: state === 'applied' ? removalBlocker(discount.cuota, discount.item) : NOT_APPLIED_HINT,
     target: { kind: DISCOUNT_TARGET, ...discount },
+    granted: { date: discount.item.fecha_creacion ?? discount.item.fecha_aplicacion, by: discount.item.autorizado_por },
+    cancellation: state === 'cancelled'
+      ? { date: discount.item.fecha_anulacion, by: discount.item.anulado_por, reason: discount.item.motivo_anulacion }
+      : null,
   }
 })
 
-function ExclusionList({ exclusions }) {
-  if (!exclusions.length) return null
+function BenefitDetail({ row }) {
+  const isScholarship = row.target.kind === SCHOLARSHIP_TARGET
   return (
-    <span className="block text-sm font-normal text-on-surface-variant whitespace-normal">
-      Sin aplicar en:{' '}
-      {exclusions.map((exclusion, index) => (
-        <span key={exclusion.exclusion_beca_id} title={`${exclusion.motivo} · Autorizó ${exclusion.autorizado_por}`}>
-          {index > 0 && ', '}
-          <span className="underline decoration-dotted underline-offset-2">{formatPeriod(exclusion.periodo)}</span>
-        </span>
-      ))}
-    </span>
+    <div className="flex flex-col gap-4">
+      <DetailList
+        items={[
+          { label: isScholarship ? 'Otorgada' : 'Otorgado', value: formatDate(row.granted.date) },
+          { label: 'Autorizó', value: row.granted.by || 'Sin registrar' },
+          { label: isScholarship ? 'Vigencia' : 'Cuota', value: row.validity },
+          { label: 'Motivo', value: row.reason || '—', wide: true },
+        ]}
+      />
+      {row.exclusions.length > 0 && (
+        <DetailSection title="Meses sin aplicar">
+          <ul className="flex flex-col gap-2">
+            {row.exclusions.map((exclusion) => (
+              <li key={exclusion.exclusion_beca_id} className="text-base text-on-surface">
+                <span className="font-semibold">{formatPeriod(exclusion.periodo)}</span>
+                <span className="text-on-surface-variant"> · {exclusion.motivo} · Autorizó {exclusion.autorizado_por}</span>
+              </li>
+            ))}
+          </ul>
+        </DetailSection>
+      )}
+      {row.cancellation && (
+        <DetailSection title={isScholarship ? 'Cancelación' : 'Anulación'} tone="error">
+          <DetailList
+            items={[
+              { label: 'Fecha', value: formatDate(row.cancellation.date) },
+              { label: 'Autorizó', value: row.cancellation.by || 'Sin registrar' },
+              { label: 'Motivo', value: row.cancellation.reason || 'Sin motivo registrado', wide: true },
+            ]}
+          />
+        </DetailSection>
+      )}
+    </div>
   )
 }
 
-function RowActions({ row, onEdit, onCancel }) {
-  const disabled = Boolean(row.blocker)
+function RowActions({ row, readOnly, onEdit, onCancel }) {
+  const blocker = readOnly ? 'La ficha está en solo lectura' : row.blocker
+  const name = `${row.type.label.toLowerCase()} ${row.validity}`
   return (
-    <div className="flex items-center justify-center gap-2">
-      <button
-        type="button"
-        onClick={() => onEdit(row.target)}
-        disabled={disabled}
-        title={row.blocker || 'Editar'}
-        aria-label={`Editar ${row.type.label.toLowerCase()} ${row.validity}`}
-        className={`${ACTION_BUTTON_CLASS} border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low`}
-      >
-        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">edit</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onCancel(row.target)}
-        disabled={disabled}
-        title={row.blocker || 'Cancelar'}
-        aria-label={`Cancelar ${row.type.label.toLowerCase()} ${row.validity}`}
-        className={`${ACTION_BUTTON_CLASS} border-error/30 text-error hover:bg-error-container/40`}
-      >
-        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">cancel</span>
-      </button>
+    <div className="flex items-center justify-end gap-1.5">
+      <RowIconButton tone="neutral" label={`Editar ${name}`} disabledReason={blocker} onClick={() => onEdit(row.target)}>
+        <RowIcon name="edit" />
+      </RowIconButton>
+      <RowIconButton tone="danger" label={`Cancelar ${name}`} disabledReason={blocker} onClick={() => onCancel(row.target)}>
+        <RowIcon name="cancel" />
+      </RowIconButton>
     </div>
   )
 }
@@ -161,6 +180,7 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
 export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
+  const [expandedKey, setExpandedKey] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
 
@@ -171,43 +191,49 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
       )}
       {rows.length ? (
         <DataTable
-          tableClassName="min-w-[860px] table-fixed"
+          tableClassName="min-w-[760px]"
           headers={(
             <>
-              <th className="py-3 px-4 w-[12%]" scope="col">Tipo</th>
-              <th className="py-3 px-4 w-[26%]" scope="col">Vigencia</th>
+              <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
+              <th className="py-3 px-4" scope="col">Beneficio</th>
               <th className="py-3 px-4" scope="col">Motivo</th>
-              <th className="py-3 px-4 w-[13%] text-right" scope="col">Valor</th>
-              <th className="py-3 px-4 w-[13%] text-center" scope="col">Estado</th>
-              {!readOnly && <th className="py-3 px-4 w-[11%] text-center" scope="col">Acciones</th>}
+              <th className="py-3 px-4 w-32 text-right" scope="col">Valor</th>
+              <th className="py-3 px-4 w-32" scope="col">Estado</th>
+              <th className="py-3 px-4 w-28 text-right" scope="col">Acciones</th>
             </>
           )}
         >
           {rows.map((row) => (
-            <tr key={row.key}>
+            <ExpandableRow
+              key={row.key}
+              expanded={expandedKey === row.key}
+              onToggle={() => setExpandedKey((current) => (current === row.key ? null : row.key))}
+              label={`${row.type.label} ${row.validity}, ${row.stateLabel}`}
+              colSpan={COLUMN_COUNT}
+              detail={<BenefitDetail row={row} />}
+            >
               <td className="py-3 px-4">
-                <span className={`${BADGE_CLASS} ${row.type.className}`}>{row.type.label}</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`${BADGE_CLASS} ${row.type.className}`}>{row.type.label}</span>
+                  <span className="font-medium text-on-surface whitespace-nowrap">{row.validity}</span>
+                </div>
               </td>
-              <td className="py-3 px-4 font-medium text-on-surface whitespace-nowrap">
-                {row.validity}
-                <ExclusionList exclusions={row.exclusions} />
+              <td className="py-3 px-4 break-words">
+                <span className="text-on-surface-variant">{row.reason || '—'}</span>
+                {row.cancellation?.reason && (
+                  <span className="block text-sm text-error">
+                    {row.target.kind === SCHOLARSHIP_TARGET ? 'Cancelada' : 'Anulado'}: {row.cancellation.reason}
+                  </span>
+                )}
               </td>
-              <td className="py-3 px-4 text-on-surface-variant break-words">{row.reason || '—'}</td>
               <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap tabular-nums">{row.value}</td>
-              <td className="py-3 px-4 text-center">
-                <span
-                  className={`${BADGE_CLASS} ${STATE_CLASSES[row.state]}`}
-                  title={row.state === 'cancelled' && row.cancellation ? row.cancellation : undefined}
-                >
-                  {row.stateLabel}
-                </span>
+              <td className="py-3 px-4">
+                <span className={`${BADGE_CLASS} ${STATE_CLASSES[row.state]}`}>{row.stateLabel}</span>
               </td>
-              {!readOnly && (
-                <td className="py-3 px-4">
-                  <RowActions row={row} onEdit={setEditing} onCancel={setCancelling} />
-                </td>
-              )}
-            </tr>
+              <td className="py-2 px-4">
+                <RowActions row={row} readOnly={readOnly} onEdit={setEditing} onCancel={setCancelling} />
+              </td>
+            </ExpandableRow>
           ))}
         </DataTable>
       ) : (
