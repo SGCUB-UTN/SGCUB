@@ -16,21 +16,10 @@ import EditBenefitModal from './EditBenefitModal'
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border whitespace-nowrap'
 
-const STATE_CLASSES = {
-  applied: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  finished: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
-  cancelled: 'bg-error-container/40 text-on-error-container border-error/20',
-}
-
 const SCHOLARSHIP_STATE_KEYS = {
   [SCHOLARSHIP_STATES.APPLIED]: 'applied',
   [SCHOLARSHIP_STATES.FINISHED]: 'finished',
   [SCHOLARSHIP_STATES.CANCELLED]: 'cancelled',
-}
-
-const STATE_LABELS = {
-  beca: { applied: 'Aplicada', finished: 'Finalizada', cancelled: 'Cancelada' },
-  descuento: { applied: 'Aplicado', finished: 'Finalizado', cancelled: 'Cancelado' },
 }
 
 const ANNULLED_ITEM = 'Anulado'
@@ -40,7 +29,13 @@ const TYPES = {
   descuento: { label: 'Descuento', className: 'bg-surface-container-high text-on-surface border-outline-variant/40' },
 }
 
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 5
+
+const CANCELLED_TYPE_CLASS = 'bg-error-container/40 text-on-error-container border-error/20'
+
+const typeBadge = (row) => (row.state === 'cancelled'
+  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', className: CANCELLED_TYPE_CLASS }
+  : row.type)
 
 const monthYear = (date) => formatPeriod(periodOf(date))
 
@@ -61,7 +56,6 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
     reason: beca.motivo,
     value: scholarshipValue(beca),
     state,
-    stateLabel: STATE_LABELS.beca[state],
     blocker: state === 'applied' ? '' : NOT_APPLIED_HINT,
     target: { kind: SCHOLARSHIP_TARGET, beca },
     granted: { date: beca.fecha_creacion ?? beca.fecha_aplicacion, by: beca.autorizado_por },
@@ -87,7 +81,6 @@ const discountRows = (cuotas) => cuotaDiscounts(cuotas).map((discount) => {
     reason: discount.item.motivo,
     value: `− ${formatAmount(discount.item.monto)}`,
     state,
-    stateLabel: STATE_LABELS.descuento[state],
     blocker: state === 'applied' ? removalBlocker(discount.cuota, discount.item) : NOT_APPLIED_HINT,
     target: { kind: DISCOUNT_TARGET, ...discount },
     granted: { date: discount.item.fecha_creacion ?? discount.item.fecha_aplicacion, by: discount.item.autorizado_por },
@@ -122,7 +115,7 @@ function BenefitDetail({ row }) {
         </DetailSection>
       )}
       {row.cancellation && (
-        <DetailSection title={isScholarship ? 'Cancelación' : 'Anulación'} tone="error">
+        <DetailSection title="Anulación" tone="error">
           <DetailList
             items={[
               { label: 'Fecha', value: formatDate(row.cancellation.date) },
@@ -144,7 +137,7 @@ function RowActions({ row, readOnly, onEdit, onCancel }) {
       <RowIconButton tone="neutral" label={`Editar ${name}`} disabledReason={blocker} onClick={() => onEdit(row.target)}>
         <RowIcon name="edit" />
       </RowIconButton>
-      <RowIconButton tone="danger" label={`Cancelar ${name}`} disabledReason={blocker} onClick={() => onCancel(row.target)}>
+      <RowIconButton tone="danger" label={`Anular ${name}`} disabledReason={blocker} onClick={() => onCancel(row.target)}>
         <RowIcon name="cancel" />
       </RowIconButton>
     </div>
@@ -161,16 +154,16 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
   return (
     <AuthorizationModal
       opened={Boolean(beca)}
-      title="Cancelar beca"
+      title="Anular beca"
       description={beca ? (
         <p>
-          Se cancela la beca de <strong className="text-on-surface">{scholarshipValue(beca)}</strong> ({beca.motivo}).
+          Se anula la beca de <strong className="text-on-surface">{scholarshipValue(beca)}</strong> ({beca.motivo}).
           Se quita de las cuotas impagas sin pagos registrados y no se aplicará a las cuotas que se generen.
           Las cuotas pagas o con pagos parciales no se modifican.
         </p>
       ) : null}
-      confirmLabel="Cancelar beca"
-      errorMessage="No se pudo cancelar la beca."
+      confirmLabel="Anular beca"
+      errorMessage="No se pudo anular la beca."
       onConfirm={confirm}
       onClose={onClose}
     />
@@ -198,7 +191,6 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
               <th className="py-3 px-4" scope="col">Beneficio</th>
               <th className="py-3 px-4" scope="col">Motivo</th>
               <th className="py-3 px-4 w-32 text-right" scope="col">Valor</th>
-              <th className="py-3 px-4 w-32" scope="col">Estado</th>
               <th className="py-3 px-4 w-28 text-right" scope="col">Acciones</th>
             </>
           )}
@@ -208,28 +200,25 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
               key={row.key}
               expanded={expandedKey === row.key}
               onToggle={() => setExpandedKey((current) => (current === row.key ? null : row.key))}
-              label={`${row.type.label} ${row.validity}, ${row.stateLabel}`}
+              label={`${typeBadge(row).label} ${row.validity}`}
               colSpan={COLUMN_COUNT}
               detail={<BenefitDetail row={row} />}
             >
               <td className="py-3 px-4">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className={`${BADGE_CLASS} ${row.type.className}`}>{row.type.label}</span>
                   <span className="font-medium text-on-surface whitespace-nowrap">{row.validity}</span>
+                  <span className={`${BADGE_CLASS} ${typeBadge(row).className}`}>{typeBadge(row).label}</span>
                 </div>
               </td>
               <td className="py-3 px-4 break-words">
                 <span className="text-on-surface-variant">{row.reason || '—'}</span>
                 {row.cancellation?.reason && (
                   <span className="block text-sm text-error">
-                    {row.target.kind === SCHOLARSHIP_TARGET ? 'Cancelada' : 'Anulado'}: {row.cancellation.reason}
+                    {row.target.kind === SCHOLARSHIP_TARGET ? 'Anulada' : 'Anulado'}: {row.cancellation.reason}
                   </span>
                 )}
               </td>
               <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap tabular-nums">{row.value}</td>
-              <td className="py-3 px-4">
-                <span className={`${BADGE_CLASS} ${STATE_CLASSES[row.state]}`}>{row.stateLabel}</span>
-              </td>
               <td className="py-2 px-4">
                 <RowActions row={row} readOnly={readOnly} onEdit={setEditing} onCancel={setCancelling} />
               </td>

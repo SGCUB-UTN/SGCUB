@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Modal } from '@mantine/core'
 import { getComprobante } from '../../api/comprobantes'
 import { getConfiguracionGeneral } from '../../api/configuracion'
-import { revertirPago } from '../../api/pagos'
 import useMediosPago from '../../hooks/useMediosPago'
 import useRevertPayment from '../../hooks/useRevertPayment'
 import { formatAmount, formatDate } from '../personas/format'
-import AuthorizationModal from './AuthorizationModal'
+import AnnulIncomeModal from './AnnulIncomeModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
@@ -17,7 +16,6 @@ import { receiptModalStyles } from './receiptModal'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
-const ANNUL_INCOME_DESCRIPTION = 'El comprobante pasa a anulado y el ingreso deja de contarse. Si hay que devolver el dinero, emití una nota de crédito.'
 
 const MODAL_STYLES = receiptModalStyles()
 
@@ -107,11 +105,10 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
     openReversal({ comprobanteId: detalle.comprobante_id, onChanged })
   }
 
-  const annulIncome = async ({ motivo, autorizado_por: responsable }) => {
-    const updated = await revertirPago(detalle.pago, { motivo, responsable })
+  const incomeAnnulled = (updated, { refunded }) => {
     setState({ loading: false, error: '', data: updated })
     setAction(null)
-    setJustReverted(true)
+    setJustReverted(refunded ? 'refunded' : 'pending')
     onChanged?.()
   }
 
@@ -162,8 +159,12 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
 
             {justReverted && (
               <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-                <p className="font-semibold text-on-surface">Ingreso anulado.</p>
-                <p className="text-sm text-on-surface-variant">Si le devolvés el dinero al socio, emití una nota de crédito.</p>
+                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
+                <p className="text-sm text-on-surface-variant">
+                  {justReverted === 'refunded'
+                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
+                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
+                </p>
               </div>
             )}
           </div>
@@ -200,17 +201,11 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
         </div>
       )}
 
-      <AuthorizationModal
+      <AnnulIncomeModal
         opened={action === 'revert'}
-        title="Anular ingreso"
-        description={ANNUL_INCOME_DESCRIPTION}
-        confirmLabel="Anular ingreso"
-        confirmIcon="undo"
-        authorizerLabel="Responsable"
-        authorizerError="Elegí el responsable."
-        errorMessage="No se pudo anular el ingreso."
-        onConfirm={annulIncome}
+        comprobante={detalle}
         onClose={() => setAction(null)}
+        onAnnulled={incomeAnnulled}
       />
       <NotaCreditoModal
         opened={action === 'creditNote'}

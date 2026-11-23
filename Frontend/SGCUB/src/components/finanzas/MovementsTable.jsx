@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { revertirPago } from '../../api/pagos'
 import DataTable from '../shared/DataTable'
 import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
 import { SectionEmpty } from '../shared/FlushSection'
@@ -7,13 +6,11 @@ import RowIconButton, { RowIcon } from '../shared/RowIconButton'
 import { formatAmount, formatDate } from '../personas/format'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
-import AuthorizationModal from './AuthorizationModal'
+import AnnulIncomeModal from './AnnulIncomeModal'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 
 const COLUMN_COUNT = 5
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap'
-
-const ANNUL_INCOME_DESCRIPTION = 'El comprobante pasa a anulado y el ingreso deja de contarse. Si hay que devolver el dinero, emití una nota de crédito desde el comprobante.'
 
 const KIND_BADGES = {
   Anulado: { label: 'Anulado', className: 'bg-error-container text-on-error-container border-error/20' },
@@ -63,7 +60,7 @@ const otherMovements = (movimientos) => {
   ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
 }
 
-const refundReason = (devolucion, income) => income?.motivo_anulacion || devolucion.concepto || 'Sin motivo registrado'
+const refundReason = (devolucion) => devolucion.concepto || 'Sin motivo registrado'
 
 function RefundList({ refunds }) {
   return (
@@ -118,7 +115,7 @@ function RefundDetail({ devolucion, income }) {
           { label: 'Medio de devolución', value: devolucion.medio_de_pago_nombre || '—' },
           { label: 'Fecha', value: formatDate(devolucion.fecha) },
           { label: 'Responsable', value: devolucion.responsable },
-          { label: 'Motivo', value: refundReason(devolucion, income), wide: true },
+          { label: 'Motivo', value: refundReason(devolucion), wide: true },
         ]}
       />
       {devolucion.comprobante_anulado_codigo && (
@@ -197,11 +194,13 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
   const [annulling, setAnnulling] = useState(null)
   const movements = otherMovements(movimientos)
 
-  const annulIncome = async ({ motivo, autorizado_por: responsable }) => {
-    await revertirPago(annulling.pago, { motivo, responsable })
+  const incomeAnnulled = (_updated, { refunded, amount }) => {
+    const codigo = annulling.codigo
     setAnnulling(null)
     onChanged?.()
-    showToast({ title: 'Ingreso anulado', description: `${annulling.codigo} quedó anulado. Si hay que devolver el dinero, emití una nota de crédito.` })
+    showToast(refunded
+      ? { title: 'Ingreso anulado y devuelto', description: `${codigo} quedó anulado y se emitió una nota de crédito por ${formatAmount(amount)}.` }
+      : { title: 'Ingreso anulado', description: `${codigo} quedó anulado. Si hay que devolver el dinero, emití una nota de crédito desde el comprobante.` })
   }
 
   if (movimientos === null) {
@@ -260,17 +259,11 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
         ))}
       </DataTable>
 
-      <AuthorizationModal
+      <AnnulIncomeModal
         opened={Boolean(annulling)}
-        title="Anular ingreso"
-        description={ANNUL_INCOME_DESCRIPTION}
-        confirmLabel="Anular ingreso"
-        confirmIcon="undo"
-        authorizerLabel="Responsable"
-        authorizerError="Elegí el responsable."
-        errorMessage="No se pudo anular el ingreso."
-        onConfirm={annulIncome}
+        comprobante={annulling}
         onClose={() => setAnnulling(null)}
+        onAnnulled={incomeAnnulled}
       />
     </>
   )
