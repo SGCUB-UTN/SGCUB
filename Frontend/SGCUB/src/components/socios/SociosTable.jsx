@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
@@ -24,11 +23,10 @@ import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 5
-const DEFAULT_STATUS = 'activo'
 
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
-  { value: ALL, label: 'Estado: Todos' },
+  { value: ALL, label: 'Todos' },
   { value: 'baja', label: 'De Baja' },
   { value: 'ex_jugador', label: 'Ex jugadores' },
 ]
@@ -63,7 +61,7 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry, exportSlot }) {
+function SociosTable({ data, isLoading, error, status, onRetry }) {
   const navigate = useNavigate()
   const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
@@ -85,11 +83,10 @@ function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry, 
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
-  const hasFilters = search.trim() !== '' || account !== ALL || status !== DEFAULT_STATUS
+  const hasFilters = search.trim() !== '' || account !== ALL
   const clearFilters = () => {
     setSearch('')
     setAccount(ALL)
-    onStatusChange(DEFAULT_STATUS)
     resetPage()
   }
   const sortAndReset = withPageReset(sortBy)
@@ -113,15 +110,6 @@ function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry, 
           <FilterSelect
             className={FILTER_CLASS}
             width={FILTER_WIDTH}
-            value={status}
-            onChange={(event) => onStatusChange(event.target.value)}
-            aria-label="Filtrar por estado"
-          >
-            {STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </FilterSelect>
-          <FilterSelect
-            className={FILTER_CLASS}
-            width={FILTER_WIDTH}
             value={account}
             onChange={(event) => withPageReset(setAccount)(event.target.value)}
             aria-label="Filtrar por estado de cuenta"
@@ -130,9 +118,6 @@ function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry, 
           </FilterSelect>
           <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
-      </div>
-
-      {exportSlot && createPortal(
         <ExportMenu
           title="Socios"
           filename="socios"
@@ -143,9 +128,8 @@ function SociosTable({ data, isLoading, error, status, onStatusChange, onRetry, 
             filterLabel(ACCOUNT_FILTERS, account, 'Cuenta'),
             search.trim() && `Búsqueda: «${search.trim()}»`,
           ]}
-        />,
-        exportSlot,
-      )}
+        />
+      </div>
 
       <DataTable
         headers={(

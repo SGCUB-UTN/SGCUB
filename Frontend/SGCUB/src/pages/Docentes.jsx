@@ -14,7 +14,6 @@ function Docentes() {
   const { docentes, isLoading, error, recargarDocentes } = useDocentes({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
-  const [exportSlot, setExportSlot] = useState(null)
 
   const categoriasPorDocente = useMemo(
     () => Object.fromEntries(docentes.map((docente) => [docente.docente_id, categoriasDeAsignaciones(docente.asignaciones)])),
@@ -38,7 +37,6 @@ function Docentes() {
         actions={(
           <div className="flex flex-wrap items-start gap-2.5">
             <PrimaryButton icon="person_add" onClick={() => navigate('/padron/docentes/nuevo')}>Nuevo docente</PrimaryButton>
-            <div ref={setExportSlot} className="contents" />
           </div>
         )}
       />
@@ -55,9 +53,7 @@ function Docentes() {
           isLoading={isLoading}
           error={error}
           status={status}
-          onStatusChange={setStatus}
           onRetry={recargarDocentes}
-          exportSlot={exportSlot}
         />
       </section>
     </div>

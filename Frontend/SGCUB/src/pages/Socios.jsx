@@ -11,7 +11,6 @@ function Padron() {
   const { socios, isLoading, error, recargarSocios } = useSocio({ onlyMembers: true, view: LIST_VIEW })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
-  const [exportSlot, setExportSlot] = useState(null)
 
   const sociosActivos = useMemo(() => socios.filter((socio) => {
     const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
@@ -36,7 +35,6 @@ function Padron() {
           actions={(
             <div className="flex flex-wrap items-start gap-2.5">
               <PrimaryButton icon="person_add" onClick={() => navigate('/padron/socios/nuevo')}>Nuevo socio</PrimaryButton>
-              <div ref={setExportSlot} className="contents" />
             </div>
           )}
         />
@@ -54,9 +52,7 @@ function Padron() {
             isLoading={isLoading}
             error={error}
             status={status}
-            onStatusChange={setStatus}
             onRetry={recargarSocios}
-            exportSlot={exportSlot}
           />
         </section>
       </div>

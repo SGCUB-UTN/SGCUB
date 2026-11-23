@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
@@ -38,12 +37,11 @@ import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 7
 const GENDER_PREFIX = 'gender:'
-const DEFAULT_STATUS = 'activo'
 const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
 
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
-  { value: ALL, label: 'Estado: Todos' },
+  { value: ALL, label: 'Todos' },
   { value: 'baja', label: 'De Baja' },
   { value: 'baja_parcial', label: 'Baja parcial' },
 ]
@@ -102,7 +100,7 @@ const categoryDescription = (value, options) => {
   return option ? `Categoría: ${option.name}` : null
 }
 
-function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange, onRetry, exportSlot }) {
+function JugadoresTable({ data, categorias = [], isLoading, error, status, onRetry }) {
   const navigate = useNavigate()
   const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
@@ -148,13 +146,11 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
     || category !== ALL_CATEGORIES
     || account !== ALL
     || documentation !== ALL
-    || status !== DEFAULT_STATUS
   const clearFilters = () => {
     setSearch('')
     setCategory(ALL_CATEGORIES)
     setAccount(ALL)
     setDocumentation(ALL)
-    onStatusChange(DEFAULT_STATUS)
     resetPage()
   }
   const sortAndReset = withPageReset(sortBy)
@@ -185,15 +181,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           <FilterSelect
             className={FILTER_CLASS}
             width={FILTER_WIDTH}
-            value={status}
-            onChange={(event) => onStatusChange(event.target.value)}
-            aria-label="Filtrar por estado"
-          >
-            {STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </FilterSelect>
-          <FilterSelect
-            className={FILTER_CLASS}
-            width={FILTER_WIDTH}
             value={documentation}
             onChange={(event) => withPageReset(setDocumentation)(event.target.value)}
             aria-label="Filtrar por documentación"
@@ -211,9 +198,6 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           </FilterSelect>
           <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
-      </div>
-
-      {exportSlot && createPortal(
         <ExportMenu
           title="Jugadores"
           filename="jugadores"
@@ -226,9 +210,8 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             filterLabel(ACCOUNT_FILTERS, account, 'Cuenta'),
             search.trim() && `Búsqueda: «${search.trim()}»`,
           ]}
-        />,
-        exportSlot,
-      )}
+        />
+      </div>
 
       <DataTable
         headers={(

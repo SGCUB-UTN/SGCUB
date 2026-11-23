@@ -13,7 +13,6 @@ function Jugadores() {
   const { jugadores, isLoading, error, recargarJugadores } = useJugadores({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
-  const [exportSlot, setExportSlot] = useState(null)
   const totales = useMemo(() => {
     const sportStatusOf = (jugador) => (jugador.estado?.nombre ?? '').toLowerCase()
     const isDeactivated = (jugador) => {
@@ -38,7 +37,6 @@ function Jugadores() {
         actions={(
           <div className="flex flex-wrap items-start gap-2.5">
             <PrimaryButton icon="person_add" onClick={() => navigate('/padron/jugadores/nuevo')}>Nuevo jugador</PrimaryButton>
-            <div ref={setExportSlot} className="contents" />
           </div>
         )}
       />
@@ -55,9 +53,7 @@ function Jugadores() {
           isLoading={isLoading}
           error={error}
           status={status}
-          onStatusChange={setStatus}
           onRetry={recargarJugadores}
-          exportSlot={exportSlot}
         />
       </section>
     </div>

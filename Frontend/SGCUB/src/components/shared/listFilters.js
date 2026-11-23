@@ -6,7 +6,7 @@ export const ALL = 'todos'
 
 export const SEARCH_WIDTH = 'sm:w-64 sm:flex-none'
 
-export const FILTER_WIDTH = 'sm:w-48'
+export const FILTER_WIDTH = 'sm:w-40'
 
 export const ACCOUNT_FILTERS = [
   { value: ALL, label: 'Cuenta' },

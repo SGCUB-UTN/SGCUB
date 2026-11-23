@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
@@ -32,13 +31,12 @@ import { matchesSearch } from '../shared/search'
 
 const COLUMN_COUNT = 5
 const GENDER_PREFIX = 'gender:'
-const DEFAULT_STATUS = 'activo'
 const NO_ROLE = 'Sin cargo'
 const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
 
 const STATUS_FILTERS = [
   { value: 'activo', label: 'Activos' },
-  { value: ALL, label: 'Estado: Todos' },
+  { value: ALL, label: 'Todos' },
   { value: 'baja', label: 'De Baja' },
 ]
 
@@ -104,7 +102,7 @@ const categoryDescription = (value, options) => {
   return option ? `Categoría: ${option.name}` : null
 }
 
-function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onStatusChange, onRetry, exportSlot }) {
+function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onRetry }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [cargo, setCargo] = useState(ALL)
@@ -154,13 +152,11 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
     || cargo !== ALL
     || category !== ALL_CATEGORIES
     || documentation !== ALL
-    || status !== DEFAULT_STATUS
   const clearFilters = () => {
     setSearch('')
     setCargo(ALL)
     setCategory(ALL_CATEGORIES)
     setDocumentation(ALL)
-    onStatusChange(DEFAULT_STATUS)
     resetPage()
   }
   const sortAndReset = withPageReset(sortBy)
@@ -201,15 +197,6 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           <FilterSelect
             className={FILTER_CLASS}
             width={FILTER_WIDTH}
-            value={status}
-            onChange={(event) => onStatusChange(event.target.value)}
-            aria-label="Filtrar por estado"
-          >
-            {STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </FilterSelect>
-          <FilterSelect
-            className={FILTER_CLASS}
-            width={FILTER_WIDTH}
             value={documentation}
             onChange={(event) => withPageReset(setDocumentation)(event.target.value)}
             aria-label="Filtrar por documentación"
@@ -218,9 +205,6 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           </FilterSelect>
           <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
-      </div>
-
-      {exportSlot && createPortal(
         <ExportMenu
           title="Docentes"
           filename="docentes"
@@ -233,9 +217,8 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
             filterLabel(DOCUMENTATION_FILTERS, documentation, 'Documentación'),
             search.trim() && `Búsqueda: «${search.trim()}»`,
           ]}
-        />,
-        exportSlot,
-      )}
+        />
+      </div>
 
       <DataTable
         headers={(
