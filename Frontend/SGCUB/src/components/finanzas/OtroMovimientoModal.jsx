@@ -4,8 +4,7 @@ import { useMediaQuery } from '@mantine/hooks'
 import { formatAmount, formatDni, formatNumber, getErrorMessage } from '../personas/format'
 import { SecondaryButton } from '../personas/tabs/parts'
 import { claseInput } from '../socios/socioForm'
-import { SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
-import AuthorizationModal from './AuthorizationModal'
+import { Campo, SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import ComprobantePago from './ComprobantePago'
 import ReciboDevolucion, { RefundResponsable } from './ReciboDevolucion'
 import { receiptModalStyles } from './receiptModal'
@@ -18,7 +17,7 @@ import { registrarIngreso } from '../../api/pagos'
 import { registrarDevolucionManual } from '../../api/devoluciones'
 import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import useMediosPago from '../../hooks/useMediosPago'
-import { AmountInput, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, AuthorizerSelect, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 
 const OPERATIONS = [
   {
@@ -35,28 +34,13 @@ const OPERATIONS = [
   },
 ]
 
+const OPERATION_TITLES = { [INCOME]: 'Registrar ingreso', [MANUAL_REFUND]: 'Registrar devolución' }
+
 const roundCents = (value) => Math.round(value * 100) / 100
 
 const emptyRow = () => ({ medio: '', monto: '' })
 
 const isRowComplete = (row) => Boolean(row.medio) && Number(row.monto) > 0
-
-function OperationOption({ operation, selected, onSelect }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(operation.value)}
-      aria-pressed={selected}
-      className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low'}`}
-    >
-      <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{operation.icon}</span>
-      <span className="flex flex-col min-w-0">
-        <span className="text-base font-semibold text-on-surface">{operation.title}</span>
-        <span className="text-sm text-on-surface-variant">{operation.description}</span>
-      </span>
-    </button>
-  )
-}
 
 function DevolucionRegistrada({ devolucion, onBack }) {
   return (
@@ -93,14 +77,14 @@ function DevolucionRegistrada({ devolucion, onBack }) {
 }
 
 function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel, onSuccess }) {
-  const [operationValue, setOperationValue] = useState(initialOperation)
+  const [operationValue] = useState(initialOperation)
   const [selectedConcept, setConcept] = useState('')
   const { concepts, createConcept } = useConceptosMovimiento()
   const { paymentMethods, methodLabel } = useMediosPago()
   const [rows, setRows] = useState([emptyRow()])
   const [detail, setDetail] = useState('')
   const [showErrors, setShowErrors] = useState(false)
-  const [confirmingRefund, setConfirmingRefund] = useState(false)
+  const [responsable, setResponsable] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [result, setResult] = useState(null)
@@ -120,15 +104,10 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     concept: !concept ? 'Seleccioná un concepto.' : '',
     rows: activeRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá un monto mayor a 0.' : '',
     detail: needsDetail && !detail.trim() ? 'Especificá el motivo o detalle del movimiento.' : '',
+    responsable: !isIncome && !responsable ? 'Elegí el responsable de la devolución.' : '',
   }
   const isValid = !Object.values(errors).some(Boolean)
   const finalConcept = (detail.trim() ? `${concept} · ${detail.trim()}` : concept).slice(0, 200)
-
-  const changeOperation = (value) => {
-    setOperationValue(value)
-    setConcept('')
-    setSubmitError('')
-  }
 
   const updateRow = (index, changes) => setRows((current) => current.map((row, position) => (position === index ? { ...row, ...changes } : row)))
 
@@ -151,17 +130,24 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     }
   }
 
-  const registerRefund = async ({ autorizado_por: responsable }) => {
-    const devolucion = await registrarDevolucionManual({
-      socio_id: socio.socio_id,
-      concepto: finalConcept,
-      monto: total,
-      medio_de_pago: activeRows[0].medio,
-      responsable,
-    })
-    setConfirmingRefund(false)
-    setResult({ kind: MANUAL_REFUND, devolucion })
-    onSuccess?.(MANUAL_REFUND)
+  const registerRefund = async () => {
+    setSaving(true)
+    setSubmitError('')
+    try {
+      const devolucion = await registrarDevolucionManual({
+        socio_id: socio.socio_id,
+        concepto: finalConcept,
+        monto: total,
+        medio_de_pago: activeRows[0].medio,
+        responsable,
+      })
+      setResult({ kind: MANUAL_REFUND, devolucion })
+      onSuccess?.(MANUAL_REFUND)
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, 'No se pudo registrar la devolución.'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const submit = (event) => {
@@ -169,11 +155,8 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     if (!socio) return
     setShowErrors(true)
     if (!isValid) return
-    if (isIncome) {
-      registerIncome()
-    } else {
-      setConfirmingRefund(true)
-    }
+    if (isIncome) registerIncome()
+    else registerRefund()
   }
 
   if (result?.kind === INCOME) {
@@ -202,16 +185,8 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
 
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
-      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
-          <FormSection icon="category" title="Tipo de movimiento" disabled={!socio}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {OPERATIONS.map((option) => (
-                <OperationOption key={option.value} operation={option} selected={operationValue === option.value} onSelect={changeOperation} />
-              ))}
-            </div>
-          </FormSection>
-
           <FormSection icon="receipt_long" title="Concepto" disabled={!socio}>
             <SelectConAlta
               key={operationValue}
@@ -302,16 +277,30 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
             />
             {showErrors && errors.detail && <p className="text-sm text-error font-medium" role="alert">{errors.detail}</p>}
           </FormSection>
+
+          {!isIncome && (
+            <FormSection icon="verified_user" title="Responsable" disabled={!socio}>
+              <Campo id="refund-responsable" label="Responsable de la devolución" requerido error={showErrors ? errors.responsable : ''}>
+                <AuthorizerSelect
+                  id="refund-responsable"
+                  value={responsable}
+                  onChange={setResponsable}
+                  invalid={showErrors && Boolean(errors.responsable)}
+                />
+              </Campo>
+            </FormSection>
+          )}
         </div>
 
         <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="movement-summary-title" aria-disabled={!socio || undefined}>
           <h3 id="movement-summary-title" className="text-lg font-bold text-on-surface">Resumen del movimiento</h3>
 
           <div className="flex flex-1 flex-col justify-between gap-3">
-            <TicketSection title="Concepto" spread={false}>
+            <TicketSection>
               <SummaryLine label="Operación" value={operation.title} />
               <SummaryLine label="Concepto" value={concept || '—'} />
               {detail.trim() && <SummaryLine label="Observación" value={detail.trim()} />}
+              {!isIncome && <SummaryLine label="Responsable" value={responsable || '—'} />}
             </TicketSection>
 
             <TicketSection title={isIncome ? 'Medios de pago' : 'Medio de devolución'}>
@@ -326,11 +315,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
               isTotal
               valueClassName={isIncome ? 'text-emerald-700' : 'text-error'}
             />
-            <p className="text-sm text-on-surface-variant">
-              {isIncome
-                ? 'Genera un recibo igual al del pago de cuotas, con el concepto en lugar de los períodos.'
-                : 'No se registra como ingreso ni modifica la deuda del socio. Al confirmar se pide el responsable.'}
-            </p>
+           
           </div>
 
           <div className="flex flex-col gap-3">
@@ -347,24 +332,11 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
         </div>
       </div>
 
-      <AuthorizationModal
-        opened={confirmingRefund}
-        title="Confirmar devolución manual"
-        description={`Se registra la devolución de ${formatAmount(total)} a ${socio?.apellido ?? ''}, ${socio?.nombre ?? ''} por "${finalConcept}".`}
-        confirmLabel="Confirmar devolución"
-        confirmIcon="check"
-        authorizerLabel="Responsable de la devolución"
-        authorizerError="Elegí el responsable de la devolución."
-        errorMessage="No se pudo registrar la devolución."
-        withReason={false}
-        onConfirm={registerRefund}
-        onClose={() => setConfirmingRefund(false)}
-      />
     </form>
   )
 }
 
-function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio = null, initialOperation = INCOME }) {
+function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio = null, initialOperation = INCOME, operation = null }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [socio, setSocio] = useState(initialSocio)
   const [registered, setRegistered] = useState(null)
@@ -395,7 +367,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
     <Modal
       opened={opened}
       onClose={onClose}
-      aria-label="Ingresos y devoluciones"
+      aria-label={operation ? OPERATION_TITLES[operation] : 'Ingresos y devoluciones'}
       title={(
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -412,7 +384,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
         </div>
       )}
       styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(registered ? receiptModalStyles(isMobile) : {}) }}
-      size="min(1240px, 95vw)"
+      size="min(960px, 95vw)"
       fullScreen={isMobile}
       centered
       padding="lg"
@@ -420,7 +392,7 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
       <OtroMovimientoForm
         key={socio ? socio.socio_id : 'empty'}
         socio={socio}
-        initialOperation={initialOperation}
+        initialOperation={operation ?? initialOperation}
         onCancel={onClose}
         onSuccess={handleSuccess}
       />

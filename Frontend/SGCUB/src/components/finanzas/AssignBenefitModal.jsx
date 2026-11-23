@@ -5,7 +5,7 @@ import { getEstadoCuenta } from '../../api/estadoCuenta'
 import { getSocio } from '../../api/socios'
 import { formatDni, formatNumber } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
-import BenefitForm from './BenefitForm'
+import ScholarshipForm from './ScholarshipForm'
 import { isOpen } from './benefitMath'
 import QuickDiscountForm from './QuickDiscountForm'
 import { TitleSkeleton } from '../shared/Skeleton'
@@ -67,7 +67,7 @@ function AssignBenefitModal({ opened, socioId, cuotaId, onClose, onSuccess }) {
 
   const title = (
     <div className="flex items-center gap-4 min-w-0">
-      <span className="shrink-0 text-sm uppercase tracking-wider font-semibold text-primary">Asignar beca o descuento</span>
+      <span className="shrink-0 text-sm uppercase tracking-wider font-semibold text-primary">Asignar beca</span>
       <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {ready ? (
@@ -100,16 +100,16 @@ function AssignBenefitModal({ opened, socioId, cuotaId, onClose, onSuccess }) {
       onClose={onClose}
       title={title}
       styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 } }}
-      size="min(1100px, 95vw)"
+      size="min(920px, 95vw)"
       fullScreen={isMobile}
       centered
       padding="lg"
       zIndex={MODAL_Z_INDEX}
     >
       {ready ? (
-        <BenefitForm socio={load.socio} cuenta={load.cuenta} onSuccess={handleSuccess} />
+        <ScholarshipForm socio={load.socio} onSuccess={handleSuccess} />
       ) : (
-        <BenefitForm key="empty" />
+        <ScholarshipForm key="empty" />
       )}
     </Modal>
   )

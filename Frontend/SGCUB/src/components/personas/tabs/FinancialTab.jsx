@@ -214,7 +214,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
       <OtroMovimientoModal
         opened={Boolean(movementOperation)}
         initialSocio={socio}
-        initialOperation={movementOperation ?? INCOME}
+        operation={movementOperation}
         onClose={() => setMovementOperation(null)}
         onSuccess={reloadFinances}
       />

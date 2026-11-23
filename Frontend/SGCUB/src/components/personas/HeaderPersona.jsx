@@ -245,7 +245,7 @@ const BENEFIT_VARIANTS = {
   neutral: { button: 'bg-surface-container-low text-on-surface border-outline-variant/40 hover:bg-surface-container disabled:hover:bg-surface-container-low', icon: 'text-outline' },
 }
 
-export function BenefitButton({ onClick, disabled = false, variant = 'outline', children = 'Asignar beca o descuento' }) {
+export function BenefitButton({ onClick, disabled = false, variant = 'outline', children = 'Asignar beca' }) {
   const style = BENEFIT_VARIANTS[variant]
   return (
     <button

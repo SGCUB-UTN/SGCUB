@@ -24,3 +24,10 @@ export const periodOptions = (rows, getPeriod) =>
   [...new Set(rows.map(getPeriod).filter(Boolean))].sort().reverse()
 
 export const currentPeriod = (today = new Date()) => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+
+export const periodStartDate = (period) => `${period}-01`
+
+export const periodEndDate = (period) => {
+  const [year, month] = period.split('-').map(Number)
+  return `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
+}

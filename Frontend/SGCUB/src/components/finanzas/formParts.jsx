@@ -125,23 +125,32 @@ export function AmountModeInput({ mode, value, onModeChange, onValueChange, inva
           </button>
         ))}
       </div>
-      <div className="relative w-full min-w-0 sm:flex-1 sm:max-w-44">
-        {!isPercentage && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>}
-        <input
-          type="number"
-          inputMode="decimal"
-          min={isPercentage ? '1' : '0.01'}
-          max={isPercentage ? '100' : undefined}
-          step={isPercentage ? '1' : '0.01'}
+      {isPercentage ? (
+        <div className="relative w-full min-w-0 sm:flex-1 [&_input]:h-11">
+          <input
+            type="number"
+            inputMode="decimal"
+            min="1"
+            max="100"
+            step="1"
+            value={value}
+            onChange={(event) => onValueChange(event.target.value)}
+            placeholder="0"
+            aria-label="Porcentaje del beneficio"
+            aria-invalid={invalid || undefined}
+            className={claseInput(invalid, `${NO_SPINNER_CLASS} font-semibold text-right pr-8`)}
+          />
+          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">%</span>
+        </div>
+      ) : (
+        <AmountInput
           value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          placeholder={isPercentage ? '0' : '0.00'}
-          aria-label={isPercentage ? 'Porcentaje del beneficio' : 'Monto del beneficio'}
-          aria-invalid={invalid || undefined}
-          className={claseInput(invalid, `${NO_SPINNER_CLASS} font-semibold text-right ${isPercentage ? 'pr-8' : 'pl-7'}`)}
+          onChange={onValueChange}
+          invalid={invalid}
+          aria-label="Monto del beneficio"
+          className="w-full min-w-0 sm:flex-1 [&_input]:h-11"
         />
-        {isPercentage && <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">%</span>}
-      </div>
+      )}
     </div>
   )
 }
