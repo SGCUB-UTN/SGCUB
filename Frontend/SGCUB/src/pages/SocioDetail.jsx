@@ -15,6 +15,7 @@ import { hasPendingDebt } from '../components/finanzas/accountStatement'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
+import useToast from '../hooks/useToast'
 
 function SocioDetail() {
   const { id } = useParams()
@@ -23,6 +24,7 @@ function SocioDetail() {
   const requestedTab = searchParams.get('tab') ?? undefined
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
+  const { showToast } = useToast()
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -77,8 +79,11 @@ function SocioDetail() {
     setErrorEliminacion('')
     try {
       await deactivateSocio(socio.socio_id)
+      const actualizado = await getSocio(socio.socio_id)
+      setCarga((actual) => ({ ...actual, datos: actualizado }))
+      refreshFinances()
       setModaldeactivateAbierto(false)
-      navigate('/padron/socios')
+      showToast({ title: 'Socio dado de baja', description: `${socio.nombre} ${socio.apellido} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
       setErrorEliminacion(requestError.response?.data?.detail || 'No se pudo dar de baja al socio.')
     } finally {
@@ -92,7 +97,9 @@ function SocioDetail() {
     try {
       const actualizado = await activateSocio(socio.socio_id)
       setCarga((actual) => ({ ...actual, datos: actualizado }))
+      refreshFinances()
       setModalActivarAbierto(false)
+      showToast({ title: 'Socio dado de alta', description: `${socio.nombre} ${socio.apellido} vuelve a estar activo.` })
     } catch (requestError) {
       setErrorActivacion(requestError.response?.data?.detail || 'No se pudo dar de alta al socio.')
     } finally {

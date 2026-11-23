@@ -1,5 +1,6 @@
 import PageHeader from '../shared/PageHeader'
 import { useEffect, useRef, useState } from 'react'
+import useToast from '../../hooks/useToast'
 
 const getInitials = (name, surname) =>
   `${name?.trim()?.[0] ?? ''}${surname?.trim()?.[0] ?? ''}`.toUpperCase() || '?'
@@ -17,6 +18,7 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
   const [imageError, setImageError] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
+  const { showToast } = useToast()
 
   // Resetea el fallback si cambia la URL (p. ej. al subir una nueva foto)
   useEffect(() => {
@@ -31,12 +33,12 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
     if (!file) return
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      alert('Formato no soportado. Usá JPG, PNG o WEBP.')
+      showToast({ tone: 'error', title: 'Formato no soportado', description: 'Usá una imagen JPG, PNG o WEBP.' })
       event.target.value = ''
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen no puede superar los 5 MB.')
+      showToast({ tone: 'error', title: 'La imagen es muy pesada', description: 'Elegí una de hasta 5 MB.' })
       event.target.value = ''
       return
     }
@@ -44,9 +46,14 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
     try {
       setUploading(true)
       await onUploadPhoto(file)
+      showToast({ title: 'Foto actualizada' })
     } catch (err) {
       console.error('Error al subir foto:', err)
-      alert(err.response?.data?.foto?.[0] || err.message || 'No se pudo subir la foto de perfil.')
+      showToast({
+        tone: 'error',
+        title: 'No se pudo subir la foto',
+        description: err.response?.data?.foto?.[0] || 'Probá de nuevo en unos minutos.',
+      })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''

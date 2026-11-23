@@ -16,6 +16,7 @@ import { teacherStatuses } from '../components/personas/profileStatus'
 import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useLocalidades from '../hooks/useLocalidades'
+import useToast from '../hooks/useToast'
 
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
@@ -30,6 +31,7 @@ function DocenteDetail() {
   const requestedTab = searchParams.get("tab") ?? undefined
   const { localidades } = useLocalidades()
   const { categorias } = useCategorias()
+  const { showToast } = useToast()
   const [cargos, setCargos] = useState([])
 
   const [carga, setCarga] = useState({ id: null, docente: null, error: null })
@@ -118,13 +120,17 @@ function DocenteDetail() {
     }
   }
 
+  const nombreDocente = `${docente?.persona_detalle?.nombre ?? ''} ${docente?.persona_detalle?.apellido ?? ''}`.trim()
+
   const confirmarBaja = async () => {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
       await deactivateDocente(docente.docente_id)
+      const actualizado = await getDocente(docente.docente_id)
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
       setModalBajaAbierto(false)
-      navigate('/padron/docentes')
+      showToast({ title: 'Docente dado de baja', description: `${nombreDocente} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
       setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el docente.')
     } finally {
@@ -139,6 +145,7 @@ function DocenteDetail() {
       const actualizado = await activateDocente(docente.docente_id, asignaciones)
       setCarga((actual) => ({ ...actual, docente: actualizado }))
       setModalAltaAbierto(false)
+      showToast({ title: 'Docente dado de alta', description: `${nombreDocente} vuelve a estar activo.` })
     } catch (requestError) {
       setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el docente.'))
     } finally {
@@ -168,7 +175,7 @@ function DocenteDetail() {
       await downloadImage(persona.foto_url, buildPhotoFilename(persona.foto_url, persona.nombre, persona.apellido))
     } catch (err) {
       console.error(err)
-      alert('No se pudo descargar la foto.')
+      showToast({ tone: 'error', title: 'No se pudo descargar la foto', description: 'Probá de nuevo en unos minutos.' })
     }
   }
 

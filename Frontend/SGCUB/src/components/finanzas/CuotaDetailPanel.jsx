@@ -8,7 +8,8 @@ import { SUMMARY_GROUP_CLASS } from './formParts'
 import { isPaid } from './accountStatement'
 import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { ListSkeleton } from '../shared/Skeleton'
-import { WhatsAppIcon, WhatsAppToast } from './WhatsAppComprobanteButton'
+import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
 const CARD_CLASS = 'rounded-lg border border-outline-variant/30 bg-surface-container-lowest shadow-sm'
@@ -44,7 +45,8 @@ const PAID_HINT = 'La cuota ya está paga'
 
 const sumItems = (items) => items.reduce((total, item) => total + Number(item.monto ?? 0) * (item.es_descuento ? -1 : 1), 0)
 
-function ReceiptRow({ comprobante, onOpen, fallbackSocio, onToast }) {
+function ReceiptRow({ comprobante, onOpen, fallbackSocio }) {
+  const { showToast } = useToast()
   const [downloading, setDownloading] = useState(false)
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false)
   const [error, setError] = useState('')
@@ -77,7 +79,7 @@ function ReceiptRow({ comprobante, onOpen, fallbackSocio, onToast }) {
         comprobanteCodigo: comprobante.codigo || `COM-${String(comprobante.numero).padStart(8, '0')}`,
         montoTotal: comprobante.monto_total,
         tipo: annulled ? 'anulado' : 'comprobante',
-        onToast,
+        onToast: showToast,
       })
     } finally {
       setSharingWhatsApp(false)
@@ -295,7 +297,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, class
   )
 }
 
-function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio, onToast }) {
+function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio }) {
   const [receipts, setReceipts] = useState({ loading: true, error: '', items: [] })
 
   useEffect(() => {
@@ -319,7 +321,6 @@ function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio, onToast }) {
               comprobante={comprobante}
               onOpen={onOpen}
               fallbackSocio={fallbackSocio}
-              onToast={onToast}
             />
           ))}
         </ul>
@@ -337,7 +338,6 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
   const [removingItem, setRemovingItem] = useState(null)
-  const [toast, setToast] = useState(null)
 
   return (
     <tr className="bg-surface-container-low/60">
@@ -352,7 +352,6 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
               fallbackSocio={cuota?.socio}
               onOpen={(comprobante) => setSelectedId(comprobante.comprobante_id)}
               className={layout.receipts}
-              onToast={setToast}
             />
             <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
           </div>
@@ -371,7 +370,6 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
           onClose={() => setRemovingItem(null)}
           onRemoved={onChanged}
         />
-        <WhatsAppToast toast={toast} onClose={() => setToast(null)} />
       </td>
     </tr>
   )

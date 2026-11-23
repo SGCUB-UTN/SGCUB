@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import useToast from '../../../hooks/useToast'
 import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useDocumentUploadForm from '../../../hooks/useDocumentUploadForm'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
@@ -20,6 +21,7 @@ const PANEL_ID = 'documentation-section-panel'
 const countByStatus = (documents, status) => documents.filter((doc) => doc.status === status).length
 
 export default function DocumentationTab({ documentation, personaId, personaType, personaInfo, readOnly = false }) {
+  const { showToast } = useToast()
   const {
     tipos,
     isLoading: loading,
@@ -85,7 +87,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error descargando ZIP:", err);
-      alert("Error al descargar el ZIP. Verifica que el usuario tenga documentos.");
+      showToast({ tone: 'error', title: 'No se pudo descargar el ZIP', description: 'Probá de nuevo en unos minutos.' })
     }
   }
 

@@ -1,4 +1,8 @@
-const FILE_MISSING_MESSAGE = 'El archivo físico ya no existe o fue eliminado del servidor.'
+export const FILE_MISSING_TOAST = {
+  tone: 'error',
+  title: 'No se encontró el archivo',
+  description: 'El archivo ya no existe o fue eliminado del servidor.',
+}
 
 const getMediaUrl = (path) => {
   if (path.startsWith('http')) return path
@@ -6,13 +10,13 @@ const getMediaUrl = (path) => {
   return `${baseUrl.replace(/\/api\/?$/, '')}${path}`
 }
 
-export const openFile = async (path) => {
+export const openFile = async (path, onMissing) => {
   const url = getMediaUrl(path)
   try {
     const response = await fetch(url, { method: 'HEAD' })
     if (response.ok) window.open(url, '_blank')
-    else alert(FILE_MISSING_MESSAGE)
+    else onMissing?.()
   } catch {
-    alert(FILE_MISSING_MESSAGE)
+    onMissing?.()
   }
 }

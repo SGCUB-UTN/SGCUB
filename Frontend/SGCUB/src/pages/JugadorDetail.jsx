@@ -24,6 +24,7 @@ import { findMissingDocumentTypes } from '../components/documental/missingDocume
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import { hasPendingDebt } from '../components/finanzas/accountStatement'
 import useSocioFinances from '../hooks/useSocioFinances'
+import useToast from '../hooks/useToast'
 import CometDescargarButton from '../components/comet/CometDescargarButton'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { RECATEGORIZATION_REVIEW_PATH } from '../components/automatizaciones/automationCatalog'
@@ -55,6 +56,7 @@ function JugadorDetail() {
 
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
+  const { showToast } = useToast()
   const documentation = useDocumentacion(jugador?.socio?.persona)
   const { documentosActivos: activos, tipos: tiposDocumento } = documentation
   const badgeConfig = React.useMemo(
@@ -147,6 +149,8 @@ function JugadorDetail() {
     }
   }
 
+  const nombreJugador = `${jugador?.socio?.nombre ?? ''} ${jugador?.socio?.apellido ?? ''}`.trim()
+
   const openModal = (setError, setOpened) => {
     setError('')
     setOpened(true)
@@ -157,9 +161,13 @@ function JugadorDetail() {
     setErrorBaja('')
     try {
       await deactivateJugador(jugador.jugador_id, { completa })
+      setJugador(await getJugador(jugador.jugador_id))
+      refreshFinances()
       setModalBajaAbierto(false)
       setModalBajaCompletaAbierto(false)
-      navigate('/padron/jugadores')
+      showToast(completa
+        ? { title: 'Jugador dado de baja', description: `${nombreJugador} quedó de baja como jugador y como socio.` }
+        : { title: 'Baja parcial registrada', description: `${nombreJugador} deja la actividad deportiva y sigue como socio.` })
     } catch (requestError) {
       setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el jugador.')
     } finally {
@@ -179,6 +187,9 @@ function JugadorDetail() {
       }
       refreshFinances()
       setModalAltaAbierto(false)
+      showToast(completa
+        ? { title: 'Jugador dado de alta', description: `${nombreJugador} vuelve a estar activo.` }
+        : { title: 'Alta como socio registrada', description: `${nombreJugador} vuelve como socio, sin actividad deportiva.` })
     } catch (requestError) {
       setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el jugador.'))
     } finally {
@@ -216,7 +227,7 @@ function JugadorDetail() {
       await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
     } catch (err) {
       console.error(err)
-      alert('No se pudo descargar la foto.')
+      showToast({ tone: 'error', title: 'No se pudo descargar la foto', description: 'Probá de nuevo en unos minutos.' })
     }
   }
 

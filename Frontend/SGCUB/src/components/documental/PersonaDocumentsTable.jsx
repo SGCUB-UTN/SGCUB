@@ -10,7 +10,8 @@ import { formatDate } from '../personas/format'
 import { parseDueDate } from './dueDate'
 import { matchesSearch } from '../shared/search'
 import DocumentStatusBadge from './DocumentStatusBadge'
-import { openFile } from './documentFile'
+import { FILE_MISSING_TOAST, openFile } from './documentFile'
+import useToast from '../../hooks/useToast'
 
 const STATUS_ORDER = { vencido: 0, por_vencer: 1, vigente: 2 }
 
@@ -45,6 +46,7 @@ function ActionButton({ icon, label, className, onClick }) {
 }
 
 export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, onDelete, onGenerate, canGenerate, isHistory = false }) {
+  const { showToast } = useToast()
   const [search, setSearch] = useState('')
   const [docType, setDocType] = useState(ALL)
 
@@ -123,7 +125,7 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
                   <ActionButton icon="article" label={`Generar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onGenerate(doc)} />
                 )}
                 {doc.archivoUrl && (
-                  <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl)} />
+                  <ActionButton icon="download" label={`Descargar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => openFile(doc.archivoUrl, () => showToast(FILE_MISSING_TOAST))} />
                 )}
                 {!isHistory && onEdit && (
                   <ActionButton icon="edit" label={`Editar ${doc.typeName}`} className={PRIMARY_ACTION_CLASS} onClick={() => onEdit(doc)} />
