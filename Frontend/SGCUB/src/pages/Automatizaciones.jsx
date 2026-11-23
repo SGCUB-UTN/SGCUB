@@ -539,8 +539,7 @@ export default function Automatizaciones() {
                       <td className="px-4 py-4 font-semibold text-slate-900">{execution.automation}</td>
                       <td className="px-4 py-4">{execution.scope}</td>
                       <td className="px-4 py-4">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${execution.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${execution.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${execution.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                           {execution.success ? 'Exitosa' : 'Fallida'}
                         </span>
                       </td>
