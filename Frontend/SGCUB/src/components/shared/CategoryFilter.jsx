@@ -43,6 +43,7 @@ export default function CategoryFilter({
   genderGroups = true,
   fullWidth = false,
   multiple = false,
+  width,
 }) {
   const [opened, setOpened] = useState(false)
   const [gender, setGender] = useState(null)
@@ -81,7 +82,7 @@ export default function CategoryFilter({
           title={disabled ? disabledReason : undefined}
           aria-haspopup="dialog"
           aria-expanded={opened && !disabled}
-          className={`${TRIGGER_CLASS} ${fullWidth ? 'w-full min-w-0' : 'w-full sm:w-auto'}`}
+          className={`${TRIGGER_CLASS} ${fullWidth ? 'w-full min-w-0' : `w-full min-w-0 ${width ?? 'sm:w-auto'}`}`}
         >
           <span className="text-on-surface-variant">Categoría:</span>
           <span className="truncate">{summaryLabel}</span>

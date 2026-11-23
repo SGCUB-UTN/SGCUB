@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton } from '../components/personas/tabs/parts'
 import StatCard from '../components/shared/StatCard'
 import useSocio from '../hooks/useSocio'
 import { LIST_VIEW } from '../api/listView'
@@ -10,6 +11,7 @@ function Padron() {
   const { socios, isLoading, error, recargarSocios } = useSocio({ onlyMembers: true, view: LIST_VIEW })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
+  const [exportSlot, setExportSlot] = useState(null)
 
   const sociosActivos = useMemo(() => socios.filter((socio) => {
     const estado = (socio.estado_administrativo_nombre ?? '').toLowerCase()
@@ -32,14 +34,10 @@ function Padron() {
           breadcrumb={[{ label: 'Personas' }, { label: 'Socios' }]}
           title="Socios"
           actions={(
-            <button
-              type="button"
-              onClick={() => navigate('/padron/socios/nuevo')}
-              className="inline-flex items-center gap-2 bg-primary text-on-primary hover:bg-primary/90 px-4 py-2 rounded shadow-sm font-label-lg text-base font-medium transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person_add</span>
-              <span className="text-xl"> Nuevo socio</span>
-            </button>
+            <div className="flex flex-wrap items-start gap-2.5">
+              <PrimaryButton icon="person_add" onClick={() => navigate('/padron/socios/nuevo')}>Nuevo socio</PrimaryButton>
+              <div ref={setExportSlot} className="contents" />
+            </div>
           )}
         />
 
@@ -58,7 +56,7 @@ function Padron() {
             status={status}
             onStatusChange={setStatus}
             onRetry={recargarSocios}
-            onEdit={(socio) => navigate(`/padron/socios/${socio.socio_id}/editar`)}
+            exportSlot={exportSlot}
           />
         </section>
       </div>

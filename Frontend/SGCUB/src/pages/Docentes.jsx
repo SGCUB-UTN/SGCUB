@@ -4,6 +4,7 @@ import { LIST_VIEW } from '../api/listView'
 import DocentesTable from '../components/docentes/DocentesTable'
 import { categoriasDeAsignaciones, esActivo } from '../components/docentes/docentesUtils'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton } from '../components/personas/tabs/parts'
 import StatCard from '../components/shared/StatCard'
 import useCategorias from '../hooks/useCategorias'
 import useDocentes from '../hooks/useDocentes'
@@ -13,6 +14,7 @@ function Docentes() {
   const { docentes, isLoading, error, recargarDocentes } = useDocentes({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
+  const [exportSlot, setExportSlot] = useState(null)
 
   const categoriasPorDocente = useMemo(
     () => Object.fromEntries(docentes.map((docente) => [docente.docente_id, categoriasDeAsignaciones(docente.asignaciones)])),
@@ -32,16 +34,12 @@ function Docentes() {
     <div className="w-full flex flex-col gap-5">
       <PageHeader
         breadcrumb={[{ label: 'Personas' }, { label: 'Docentes' }]}
-        title="Docentes y Cuerpo Técnico"
+        title="Docentes"
         actions={(
-          <button
-            type="button"
-            onClick={() => navigate('/padron/docentes/nuevo')}
-            className="inline-flex items-center gap-2 bg-primary text-on-primary hover:bg-primary/90 px-4 py-2 rounded shadow-sm font-label-lg text-base font-medium transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person_add</span>
-            <span className="text-xl"> Nuevo docente</span>
-          </button>
+          <div className="flex flex-wrap items-start gap-2.5">
+            <PrimaryButton icon="person_add" onClick={() => navigate('/padron/docentes/nuevo')}>Nuevo docente</PrimaryButton>
+            <div ref={setExportSlot} className="contents" />
+          </div>
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
@@ -59,6 +57,7 @@ function Docentes() {
           status={status}
           onStatusChange={setStatus}
           onRetry={recargarDocentes}
+          exportSlot={exportSlot}
         />
       </section>
     </div>

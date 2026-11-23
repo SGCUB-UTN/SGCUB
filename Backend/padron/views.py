@@ -10,6 +10,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
 from documental.services import PERFIL_DOCENTE, PERFIL_JUGADOR, documentation_statuses
 from finanzas.services import account_debt_summaries
+from .list_export import ListExportSerializer, list_filename, render_list_pdf
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
 from .search import normalize_text, normalized_field
@@ -983,6 +984,18 @@ def report_download(request, extension, content_type, render):
     generated_at = timezone.localtime()
     response = HttpResponse(render(build_report(filters), filters, generated_at), content_type=content_type)
     response["Content-Disposition"] = f'attachment; filename="{report_filename(generated_at, extension)}"'
+    return response
+
+
+@extend_schema(tags=["Padron / Listados"], summary="Listado filtrado en PDF", request=ListExportSerializer, responses={(200, "application/pdf"): bytes})
+@api_view(["POST"])
+def padron_list_pdf(request):
+    serializer = ListExportSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    generated_at = timezone.localtime()
+    response = HttpResponse(render_list_pdf(serializer.validated_data, generated_at), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{list_filename(serializer.validated_data["archivo"], generated_at)}"'
     return response
 
 

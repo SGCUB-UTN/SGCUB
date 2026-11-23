@@ -2590,3 +2590,43 @@ class PadronReportTests(APITestCase):
             with self.subTest(suffix=suffix):
                 response = self.client.get(f"{self.URL}{suffix}", {"entity": "otros"})
                 self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+
+class PadronListPdfTests(APITestCase):
+    URL = "/api/padron/listado/pdf/"
+
+    def setUp(self):
+        self.client.force_authenticate(get_user_model().objects.create_user(username="31999888", password="Clave-segura-123"))
+
+    def payload(self, **overrides):
+        return {
+            "titulo": "Socios",
+            "archivo": "socios",
+            "descripcion": "Estado: Activo",
+            "columnas": ["N° socio", "Nombre y apellido", "DNI"],
+            "filas": [["12", "Ana Pérez", "30.123.456"], ["13", "Luis Gómez", "28.987.654"]],
+            **overrides,
+        }
+
+    def test_genera_el_pdf_del_listado(self):
+        response = self.client.post(self.URL, self.payload(), format="json")
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("application/pdf", response["Content-Type"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn('filename="socios-', response["Content-Disposition"])
+
+    def test_genera_el_pdf_sin_filas(self):
+        response = self.client.post(self.URL, self.payload(filas=[]), format="json")
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def test_rechaza_filas_con_distinta_cantidad_de_celdas(self):
+        response = self.client.post(self.URL, self.payload(filas=[["12", "Ana Pérez"]]), format="json")
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+    def test_rechaza_nombres_de_archivo_inseguros(self):
+        response = self.client.post(self.URL, self.payload(archivo="../socios"), format="json")
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)

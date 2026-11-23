@@ -5,6 +5,7 @@ import useCategorias from '../hooks/useCategorias'
 import useJugadores from '../hooks/useJugadores'
 import { LIST_VIEW } from '../api/listView'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton } from '../components/personas/tabs/parts'
 import StatCard from '../components/shared/StatCard'
 
 function Jugadores() {
@@ -12,6 +13,7 @@ function Jugadores() {
   const { jugadores, isLoading, error, recargarJugadores } = useJugadores({ view: LIST_VIEW })
   const { categorias } = useCategorias()
   const [status, setStatus] = useState('activo')
+  const [exportSlot, setExportSlot] = useState(null)
   const totales = useMemo(() => {
     const sportStatusOf = (jugador) => (jugador.estado?.nombre ?? '').toLowerCase()
     const isDeactivated = (jugador) => {
@@ -34,14 +36,10 @@ function Jugadores() {
         breadcrumb={[{ label: 'Personas' }, { label: 'Jugadores' }]}
         title="Jugadores"
         actions={(
-          <button
-            type="button"
-            onClick={() => navigate('/padron/jugadores/nuevo')}
-            className="inline-flex items-center gap-2 bg-primary text-on-primary hover:bg-primary/90 px-4 py-2 rounded shadow-sm font-label-lg text-base font-medium transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person_add</span>
-            <span className="text-xl"> Nuevo jugador</span>
-          </button>
+          <div className="flex flex-wrap items-start gap-2.5">
+            <PrimaryButton icon="person_add" onClick={() => navigate('/padron/jugadores/nuevo')}>Nuevo jugador</PrimaryButton>
+            <div ref={setExportSlot} className="contents" />
+          </div>
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
@@ -59,7 +57,7 @@ function Jugadores() {
           status={status}
           onStatusChange={setStatus}
           onRetry={recargarJugadores}
-          onEdit={(jugador) => navigate(`/padron/jugadores/${jugador.jugador_id}/editar`)}
+          exportSlot={exportSlot}
         />
       </section>
     </div>

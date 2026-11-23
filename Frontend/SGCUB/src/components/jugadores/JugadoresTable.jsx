@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import DocumentationStatus from '../documental/DocumentationStatus'
 import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
 import AccountStatus, { PayButton } from '../finanzas/AccountStatus'
 import { accountDebt } from '../finanzas/accountDebt'
 import { notifyCajaChanged } from '../finanzas/cajaEvents'
+import ClearFiltersButton from '../shared/ClearFiltersButton'
+import ExportMenu from '../shared/ExportMenu'
 import InactiveTag from '../shared/InactiveTag'
 import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import DataTable from '../shared/DataTable'
@@ -15,15 +18,35 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import CategoryFilter from '../shared/CategoryFilter'
 import { ALL_CATEGORIES, NO_CATEGORY_VALUE } from '../shared/categoryFilters'
+import { formatExportAmount } from '../shared/listExport'
+import {
+  ACCOUNT_FILTERS,
+  ALL,
+  DOCUMENTATION_FILTERS,
+  FILTER_CLASS,
+  FILTER_WIDTH,
+  SEARCH_WIDTH,
+  filterLabel,
+  matchesAccountFilter,
+  matchesDocumentationFilter,
+} from '../shared/listFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { formatDni, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const COLUMN_COUNT = 7
 const GENDER_PREFIX = 'gender:'
+const DEFAULT_STATUS = 'activo'
+const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
+
+const STATUS_FILTERS = [
+  { value: 'activo', label: 'Activos' },
+  { value: ALL, label: 'Estado: Todos' },
+  { value: 'baja', label: 'De Baja' },
+  { value: 'baja_parcial', label: 'Baja parcial' },
+]
 
 const matchesCategory = (jugador, value) => {
   if (value === ALL_CATEGORIES) return true
@@ -45,51 +68,47 @@ const statusLabel = (jugador) => {
   return jugador.tipo_baja === 'parcial' ? 'Baja parcial' : 'De Baja'
 }
 
+const fullName = (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim()
+
 const secondaryCategoryName = (jugador) => jugador.categoria_secundaria?.nombre ?? ''
 
 const socioCanPay = (jugador) => isActiveStatus(jugador.socio?.estado_administrativo_nombre)
 
-const exportCsv = (jugadores) => {
-  const headers = ['N° Socio', 'Nombre y apellido', 'DNI', 'Categoría principal', 'Categoría secundaria', 'Documentación', 'Estado', 'Deuda', 'Cuotas vencidas']
-  const rows = jugadores.map((jugador) => [
-    jugador.socio?.numero_socio ?? '',
-    `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim() ,
-    jugador.socio?.dni ?? '',
-    jugador.categoria?.nombre ?? '',
-    secondaryCategoryName(jugador),
-    DOCUMENTATION_LABELS[jugador.documentacion?.estado] ?? '',
-    jugador.estado?.nombre ?? '',
-    accountDebt(jugador.socio?.cuenta).toFixed(2).replace('.', ','),
-    jugador.socio?.cuenta?.cuotas_vencidas ?? 0,
-  ])
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
-    .join('\r\n')
-  const link = document.createElement('a')
-  const content = '\uFEFF' + csv
-  link.href = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }))
-  link.download = `padron-jugadores-${new Date().toISOString().slice(0, 10)}.csv`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(link.href)
-}
+const EXPORT_COLUMNS = [
+  { header: 'N° socio', value: (jugador) => jugador.socio?.numero_socio },
+  { header: 'Nombre y apellido', value: fullName },
+  { header: 'DNI', value: (jugador) => formatDni(jugador.socio?.dni) },
+  { header: 'Categoría', value: (jugador) => jugador.categoria?.nombre },
+  { header: 'Categoría secundaria', value: secondaryCategoryName },
+  { header: 'Documentación', value: (jugador) => DOCUMENTATION_LABELS[jugador.documentacion?.estado] },
+  { header: 'Estado', value: statusLabel },
+  { header: 'Deuda', value: (jugador) => formatExportAmount(accountDebt(jugador.socio?.cuenta)) },
+  { header: 'Cuotas vencidas', value: (jugador) => jugador.socio?.cuenta?.cuotas_vencidas ?? 0 },
+]
 
-// Value each column is sorted by. Status: active first in ascending order.
 const SORT_VALUES = {
   numero: (jugador) => (jugador.socio?.numero_socio ? Number(jugador.socio.numero_socio) : null),
-  nombre: (jugador) => `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''}`.trim(),
+  nombre: fullName,
   documentacion: (jugador) => documentationSeverity(jugador.documentacion),
   cuenta: (jugador) => accountDebt(jugador.socio?.cuenta),
 }
-// On load: most recent first.
 const INITIAL_SORT = { columna: 'numero', direccion: 'desc' }
 
-function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange, onRetry }) {
+const categoryDescription = (value, options) => {
+  if (value === ALL_CATEGORIES) return null
+  if (value === NO_CATEGORY_VALUE) return 'Categoría: Sin categoría'
+  if (value.startsWith(GENDER_PREFIX)) return `Categoría: ${GENDER_LABELS[value.slice(GENDER_PREFIX.length)] ?? value}`
+  const option = options.find((item) => item.value === value)
+  return option ? `Categoría: ${option.name}` : null
+}
+
+function JugadoresTable({ data, categorias = [], isLoading, error, status, onStatusChange, onRetry, exportSlot }) {
   const navigate = useNavigate()
   const { openPayment } = useRegisterPayment()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState(ALL_CATEGORIES)
+  const [account, setAccount] = useState(ALL)
+  const [documentation, setDocumentation] = useState(ALL)
 
   const jugadores = useMemo(() => data ?? [], [data])
 
@@ -116,17 +135,26 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
       if (status === 'activo' && !isActive(jugador)) return false
       if (status === 'baja' && jugador.tipo_baja !== 'completa') return false
       if (status === 'baja_parcial' && jugador.tipo_baja !== 'parcial') return false
+      if (!matchesAccountFilter(jugador.socio?.cuenta, account)) return false
+      if (!matchesDocumentationFilter(jugador.documentacion, documentation)) return false
       if (!text) return true
       return matchesSearch(text, [jugador.socio?.nombre, jugador.socio?.apellido, jugador.socio?.dni, jugador.categoria?.nombre])
     })
-  }, [jugadores, search, category, status])
+  }, [jugadores, search, category, status, account, documentation])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
+  const hasFilters = search.trim() !== ''
+    || category !== ALL_CATEGORIES
+    || account !== ALL
+    || documentation !== ALL
+    || status !== DEFAULT_STATUS
   const clearFilters = () => {
     setSearch('')
     setCategory(ALL_CATEGORIES)
-    onStatusChange('todos')
+    setAccount(ALL)
+    setDocumentation(ALL)
+    onStatusChange(DEFAULT_STATUS)
     resetPage()
   }
   const sortAndReset = withPageReset(sortBy)
@@ -139,14 +167,16 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
       <div className="p-4 border-b border-outline-variant/20 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
-        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
           <TableSearchInput
             value={search}
             onChange={withPageReset(setSearch)}
-            placeholder="Filtrar por DNI, Nombre o Apellido..."
-            label="Filtrar jugadores"
+            placeholder="Buscar por nombre, DNI o categoría"
+            label="Buscar jugadores"
+            className={SEARCH_WIDTH}
           />
           <CategoryFilter
+            width={FILTER_WIDTH}
             value={category}
             categories={categoryOptions}
             hasUncategorized={hasUncategorized}
@@ -154,28 +184,51 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           />
           <FilterSelect
             className={FILTER_CLASS}
+            width={FILTER_WIDTH}
             value={status}
             onChange={(event) => onStatusChange(event.target.value)}
             aria-label="Filtrar por estado"
           >
-            <option value="activo">Estado: Activo</option>
-            <option value="todos">Estado: Todos</option>
-            <option value="baja">De Baja</option>
-            <option value="baja_parcial">Baja parcial</option>
+            {STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </FilterSelect>
-        </div>
-        <div className="flex items-center justify-end xl:shrink-0">
-          <button
-            type="button"
-            onClick={() => exportCsv(filtered)}
-            disabled={filtered.length === 0}
-            className="inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-lg font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          <FilterSelect
+            className={FILTER_CLASS}
+            width={FILTER_WIDTH}
+            value={documentation}
+            onChange={(event) => withPageReset(setDocumentation)(event.target.value)}
+            aria-label="Filtrar por documentación"
           >
-            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">file_download</span>
-            <span>Exportar jugadores</span>
-          </button>
+            {DOCUMENTATION_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </FilterSelect>
+          <FilterSelect
+            className={FILTER_CLASS}
+            width={FILTER_WIDTH}
+            value={account}
+            onChange={(event) => withPageReset(setAccount)(event.target.value)}
+            aria-label="Filtrar por estado de cuenta"
+          >
+            {ACCOUNT_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </FilterSelect>
+          <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
       </div>
+
+      {exportSlot && createPortal(
+        <ExportMenu
+          title="Jugadores"
+          filename="jugadores"
+          columns={EXPORT_COLUMNS}
+          items={sorted}
+          filters={[
+            filterLabel(STATUS_FILTERS, status, 'Estado'),
+            categoryDescription(category, categoryOptions),
+            filterLabel(DOCUMENTATION_FILTERS, documentation, 'Documentación'),
+            filterLabel(ACCOUNT_FILTERS, account, 'Cuenta'),
+            search.trim() && `Búsqueda: «${search.trim()}»`,
+          ]}
+        />,
+        exportSlot,
+      )}
 
       <DataTable
         headers={(
@@ -199,7 +252,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
           errorText="No se pudieron cargar los jugadores."
           emptyText={jugadores.length === 0 ? 'Todavía no hay jugadores cargados.' : 'Ningún jugador coincide con la búsqueda o los filtros.'}
           onRetry={onRetry}
-          onClearFilters={jugadores.length === 0 ? undefined : clearFilters}
+          onClearFilters={hasFilters ? clearFilters : undefined}
         />
 
         {!isLoading && visibleRows.map((jugador) => (
@@ -218,7 +271,7 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
                   onClick={stopRowClick}
                   className={`font-medium block text-base ${ROW_LINK_CLASS} ${isActive(jugador) ? 'text-on-surface' : 'text-on-surface-variant'}`}
                 >
-                  {jugador.socio?.nombre} {jugador.socio?.apellido}
+                  {fullName(jugador)}
                 </Link>
                 {!isActive(jugador) && <InactiveTag>{statusLabel(jugador)}</InactiveTag>}
               </div>
@@ -230,10 +283,10 @@ function JugadoresTable({ data, categorias = [], isLoading, error, status, onSta
             </td>
             <td className="max-sm:hidden py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
             <td className="max-sm:hidden py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
-            <td className="max-sm:hidden py-3 px-4 text-right" onClick={(event) => event.stopPropagation()}>
+            <td className="max-sm:hidden py-3 px-4 text-right" onClick={stopRowClick}>
               <PayButton
                 onPay={() => openPayment({ socioId: jugador.socio.socio_id, onSuccess: notifyCajaChanged })}
-                label={`Registrar pago de ${jugador.socio?.nombre} ${jugador.socio?.apellido}`}
+                label={`Registrar pago de ${fullName(jugador)}`}
                 disabledReason={socioCanPay(jugador) ? undefined : 'Los socios de baja no pueden registrar pagos'}
               />
             </td>
