@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { collectErrorMessages, formatAmount, formatDate, isActiveStatus } from '../personas/format'
+import { collectErrorMessages, formatAmount, isActiveStatus } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
