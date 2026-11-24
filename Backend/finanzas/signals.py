@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from padron.models import Socio
-from .services import create_first_cuota
+from .services import create_first_cuota, sync_cuotas_with_member_state
 from .models import CuentaCorriente, EstadoCuentaCorrienteChoices
 
 
@@ -31,6 +31,8 @@ def sync_current_account(sender, instance, created, raw=False, **kwargs):
                 lambda socio_id=instance.pk: create_first_cuota_after_account_creation(socio_id)
             )
         return
-    CuentaCorriente.objects.filter(socio=instance).exclude(estado_cuenta_corriente=state).update(
+    changed = CuentaCorriente.objects.filter(socio=instance).exclude(estado_cuenta_corriente=state).update(
         estado_cuenta_corriente=state,
     )
+    if changed:
+        transaction.on_commit(lambda socio_id=instance.pk: sync_cuotas_with_member_state(socio_id))

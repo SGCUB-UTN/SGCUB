@@ -77,12 +77,14 @@ from .services import (
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
 	grant_scholarship,
+	net_amount,
 	next_receipt_number,
 	pending_amounts,
 	register_payment,
 	revert_payment,
 	schedule_exemption_sync,
 	sync_cuota_charge,
+	sync_cuotas_with_member_state,
 	update_scholarship,
 )
 from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
@@ -1021,6 +1023,87 @@ def periodos_de(socio):
 	return list(
 		Cuota.objects.filter(movimiento__cuenta_corriente__socio=socio).order_by("periodo").values_list("periodo", flat=True)
 	)
+
+
+def conceptos_por_periodo(socio):
+	return {
+		cuota.periodo: set(cuota.items.values_list("concepto", flat=True))
+		for cuota in Cuota.objects.filter(movimiento__cuenta_corriente__socio=socio)
+	}
+
+
+class CuotasPorAltaYBajaTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.hoy = timezone.localdate()
+		self.actual = self.hoy.strftime("%Y-%m")
+		self.siguiente = next_period_start(1).strftime("%Y-%m")
+		self.socio = crear_socio("72000001", con_jugador=True)
+		generar_cuotas_mensuales(self.hoy, today=self.hoy)
+
+	def test_la_baja_del_socio_elimina_las_cuotas_impagas_posteriores_al_mes_de_baja(self):
+		paga = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=next_period_start(3).strftime("%Y-%m"))
+		Cuota.objects.filter(pk=paga.pk).update(estado_cuota=EstadoCuotaChoices.PAGA)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			self.socio.deactivate()
+
+		self.assertEqual(periodos_de(self.socio), [self.actual, paga.periodo])
+
+	def test_el_alta_genera_las_cuotas_desde_el_mes_en_curso_sin_las_del_periodo_de_baja(self):
+		hace_tres_meses = (self.hoy.replace(day=1) - timedelta(days=80)).replace(day=1)
+		viejo = crear_socio("72000002")
+		generar_cuotas_mensuales(hace_tres_meses, today=hace_tres_meses)
+		viejo.deactivate()
+		Socio.objects.filter(pk=viejo.pk).update(fecha_baja=hace_tres_meses)
+		sync_cuotas_with_member_state(viejo.pk)
+		self.assertEqual(periodos_de(viejo), [hace_tres_meses.strftime("%Y-%m")])
+
+		viejo.refresh_from_db()
+		with self.captureOnCommitCallbacks(execute=True):
+			viejo.activate()
+
+		ventana = [next_period_start(meses).strftime("%Y-%m") for meses in range(CUOTA_WINDOW_MONTHS)]
+		self.assertEqual(periodos_de(viejo), [hace_tres_meses.strftime("%Y-%m"), *ventana])
+
+	def dar_de_baja_parcial(self, desde):
+		query = f"?cobro_social_desde={desde}" if desde else ""
+		return self.client.delete(f"/api/padron/jugador/{self.socio.jugador.jugador_id}/{query}")
+
+	def test_baja_parcial_desde_el_mes_actual_quita_la_cuota_deportiva_de_todas_las_cuotas(self):
+		response = self.dar_de_baja_parcial("actual")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertTrue(all("CuotaDeportiva" not in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
+		self.assertTrue(all("CuotaSocial" in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
+
+	def test_baja_parcial_desde_el_mes_siguiente_conserva_la_cuota_deportiva_del_mes_actual(self):
+		response = self.dar_de_baja_parcial("siguiente")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		conceptos = conceptos_por_periodo(self.socio)
+		self.assertIn("CuotaDeportiva", conceptos.pop(self.actual))
+		self.assertTrue(all("CuotaDeportiva" not in conceptos_mes for conceptos_mes in conceptos.values()))
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		self.assertEqual(cuota.movimiento.monto, net_amount(cuota.items.all()))
+
+	def test_baja_parcial_sin_elegir_el_mes_no_da_de_baja(self):
+		response = self.dar_de_baja_parcial(None)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("cobro_social_desde", response.data)
+		self.socio.jugador.refresh_from_db()
+		self.assertTrue(self.socio.jugador.is_active)
+
+	def test_el_alta_del_jugador_vuelve_a_cobrar_la_cuota_deportiva(self):
+		self.dar_de_baja_parcial("actual")
+		activo = EstadoDeportivo.objects.get(nombre="Activo")
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.client.patch(f"/api/padron/jugador/{self.socio.jugador.jugador_id}/", {"estado": activo.pk}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertTrue(all("CuotaDeportiva" in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
 
 
 class CategoriaExentaTests(TestCase):

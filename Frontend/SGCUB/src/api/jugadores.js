@@ -28,8 +28,10 @@ export const patchJugador = async (jugadorId, jugador) => {
   return response.data
 }
 
-export const deactivateJugador = async (jugadorId, { completa = false } = {}) => {
-  await api.delete(`${jugadoresEndpoint}${jugadorId}/`, { params: completa ? { completa: true } : undefined })
+export const deactivateJugador = async (jugadorId, { completa = false, cobroSocialDesde } = {}) => {
+  await api.delete(`${jugadoresEndpoint}${jugadorId}/`, {
+    params: completa ? { completa: true } : { cobro_social_desde: cobroSocialDesde },
+  })
 }
 
 export const activateJugador = async (jugadorId) => {

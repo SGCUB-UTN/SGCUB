@@ -29,7 +29,7 @@ function PersonStatusContent({ action, personName, options, consequences, confir
   const visibleConsequences = [...(selectedOption?.consequences ?? []), ...consequences].filter(Boolean)
 
   const handleConfirm = () => {
-    const message = validate?.() ?? ''
+    const message = validate?.(selected) ?? ''
     setValidationError(message)
     if (!message) onConfirm(selected)
   }
@@ -51,7 +51,7 @@ function PersonStatusContent({ action, personName, options, consequences, confir
           onChange={setSelected}
         />
       )}
-      {children}
+      {typeof children === 'function' ? children(selected) : children}
       <Consequences items={visibleConsequences} />
       {(validationError || error) && (
         <Text color="red" size="base" mt="md" role="alert">

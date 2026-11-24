@@ -232,7 +232,7 @@ function SocioDetail() {
         action="baja"
         title="Confirmar baja de socio"
         personName={nombreSocio}
-        consequences={['No se le generan más cuotas.', avisoDeuda, 'La ficha queda en solo lectura.']}
+        consequences={['Se eliminan sus cuotas impagas de los meses siguientes y no se le generan más.', avisoDeuda, 'La ficha queda en solo lectura.']}
         onClose={() => setModaldeactivateAbierto(false)}
         onConfirm={confirmarEliminacion}
         loading={deactivate}

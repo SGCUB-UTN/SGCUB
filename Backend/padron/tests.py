@@ -1135,7 +1135,7 @@ class PadronViewTests(APITestCase):
 
     def test_jugador_delete_es_baja_logica(self):
         jugador = self.crear_jugador_orm()
-        response = self.client.delete(f"/api/padron/jugador/{jugador.jugador_id}/", format="json")
+        response = self.client.delete(f"/api/padron/jugador/{jugador.jugador_id}/?cobro_social_desde=siguiente", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual("Inactivo", response.data["estado"]["nombre"])
         self.assertEqual("parcial", response.data["tipo_baja"])
