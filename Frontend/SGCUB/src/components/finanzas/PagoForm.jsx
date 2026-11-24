@@ -666,8 +666,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     if (saving) return 'Registrando...'
     if (exceedsDebt) return `Excede las cuotas pendientes en ${formatAmount(roundCents(enteredTotal - pendingTotal))}`
     if (!(enteredTotal > 0)) return 'Ingresá el monto del pago'
-    if (excess > 0) return `Confirmar pago y nota de crédito • ${formatAmount(enteredTotal)}`
-    return `Confirmar pago • ${formatAmount(enteredTotal)}`
+    if (excess > 0) return 'Confirmar pago y nota de crédito'
+    return 'Confirmar pago'
   }
 
   return (

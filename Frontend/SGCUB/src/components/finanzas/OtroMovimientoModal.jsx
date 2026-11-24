@@ -180,7 +180,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
   const confirmLabel = () => {
     if (saving) return 'Registrando...'
     if (!(total > 0)) return 'Ingresá el monto'
-    return `${isIncome ? 'Confirmar ingreso' : 'Confirmar devolución'} • ${formatAmount(total)}`
+    return isIncome ? 'Confirmar ingreso' : 'Confirmar devolución'
   }
 
   return (
