@@ -517,12 +517,13 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
   const period = currentPeriod()
   const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
+  const paymentLimit = cuenta?.periodo_limite_pago ?? (debtOnly ? period : null)
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
-      .filter((cuota) => !debtOnly || !isFuture(cuota, period))
+      .filter((cuota) => !paymentLimit || !isFuture(cuota, paymentLimit))
       .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || a.cuota_id - b.cuota_id),
-    [cuenta, debtOnly, period],
+    [cuenta, paymentLimit],
   )
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))

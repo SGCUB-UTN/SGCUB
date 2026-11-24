@@ -21,6 +21,7 @@ import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { currentPeriod } from '../components/shared/periodFormat'
 import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useSocioFinances from '../hooks/useSocioFinances'
 import useToast from '../hooks/useToast'
@@ -243,7 +244,7 @@ function JugadorDetail() {
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
   const altaConEleccion = jugador.tipo_baja === 'completa'
-  const deuda = pendingDebt(finances.account)
+  const deuda = pendingDebt(finances.account, currentPeriod())
   const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
   const handleDownloadPhoto = async () => {

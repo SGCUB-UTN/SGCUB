@@ -7,7 +7,7 @@ export const AREA_ORDER = ['Padrón', 'Finanzas', 'Notificaciones', 'Sistema']
 const AUTOMATION_CATALOG = {
   'finanzas.tasks.generate_scheduled_cuotas': {
     title: 'Generar las cuotas del mes',
-    description: 'Se ejecuta todos los días y, el día de generación definido en Configuración, asegura que cada socio activo tenga creadas las cuotas del mes actual y los próximos dos meses, con sus becas y descuentos.',
+    description: 'Se ejecuta todos los días y, el día de generación definido en Configuración, asegura que cada socio activo tenga creadas las cuotas del mes actual y los próximos once meses, con sus becas y descuentos.',
     whenOff: 'Si la apagás, no se van a crear las cuotas nuevas y los socios no van a tener las cuotas próximas para pagar.',
     icon: 'request_quote',
     area: 'Finanzas',

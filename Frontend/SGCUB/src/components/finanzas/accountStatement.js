@@ -2,8 +2,8 @@ const normalizeState = (state) => String(state ?? '').toLowerCase().replaceAll('
 
 export const isPaid = (cuota) => normalizeState(cuota.estado_cuota ?? cuota.estado) === 'paga'
 
-export const pendingDebt = (account) => (account?.cuotas ?? [])
-  .filter((cuota) => !isPaid(cuota))
+export const pendingDebt = (account, untilPeriod = account?.periodo_limite_pago) => (account?.cuotas ?? [])
+  .filter((cuota) => !isPaid(cuota) && (!untilPeriod || String(cuota.periodo) <= untilPeriod))
   .reduce((total, cuota) => total + Math.max(Number(cuota.saldo_pendiente ?? 0), 0), 0)
 
 export const hasPendingDebt = (account) => pendingDebt(account) > 0

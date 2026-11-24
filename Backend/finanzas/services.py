@@ -100,7 +100,7 @@ def due_date(first_day, day):
     return first_day.replace(day=min(day, monthrange(first_day.year, first_day.month)[1]))
 
 
-CUOTA_WINDOW_MONTHS = 3
+CUOTA_WINDOW_MONTHS = 12
 
 
 def generation_periods(base_date=None, months=CUOTA_WINDOW_MONTHS):
@@ -1035,6 +1035,18 @@ def create_payment(account, payment_methods, total, note, user, concept, movemen
     return payment, receipt, movement
 
 
+def payment_period_limit(socio, today=None):
+    if not socio.is_inactive:
+        return None
+    return (socio.fecha_baja or today or timezone.localdate()).strftime(PERIOD_FORMAT)
+
+
+def validate_leave_period(socio, cuotas):
+    limit = payment_period_limit(socio)
+    if limit and any(str(cuota.periodo) > limit for cuota in cuotas):
+        raise PagoInvalidoError("El socio está dado de baja: no se pueden pagar cuotas de períodos posteriores a su baja.")
+
+
 def by_period(cuotas):
     return sorted(cuotas, key=lambda cuota: (cuota.periodo, cuota.pk))
 
@@ -1154,6 +1166,7 @@ def register_payment(
     The reverted payment may belong to another socio (it was registered on the wrong one)."""
     account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
+    validate_leave_period(account.socio, cuotas)
     validate_payment_order(account, cuotas)
     if late_fee_waiver:
         waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]

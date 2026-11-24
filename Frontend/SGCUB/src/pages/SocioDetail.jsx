@@ -11,6 +11,7 @@ import { memberStatuses } from '../components/personas/profileStatus'
 import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText, getErrorMessage } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { currentPeriod } from '../components/shared/periodFormat'
 import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -120,7 +121,7 @@ function SocioDetail() {
   const activo = isActiveStatus(socio.estado_administrativo_nombre)
   const puedePagar = activo || hasPendingDebt(finances.account)
   const nombreSocio = `${socio.nombre ?? ''} ${socio.apellido ?? ''}`.trim()
-  const deuda = pendingDebt(finances.account)
+  const deuda = pendingDebt(finances.account, currentPeriod())
   const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
   const handleDownloadPhoto = async () => {
