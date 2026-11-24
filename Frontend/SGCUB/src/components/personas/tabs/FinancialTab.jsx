@@ -184,6 +184,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
               onPay={(cuota) => openPayment({ socioId, cuotaIds: [cuota.cuota_id], onSuccess: reloadFinances })}
               onAssignBenefit={readOnly ? undefined : (cuota) => openBenefit({ socioId, cuotaId: cuota.cuota_id, onSuccess: reloadFinances })}
               onRevert={readOnly ? undefined : (cuota) => openReversal(reversalFor(account, cuota, reloadFinances))}
+              onViewReceipt={setComprobanteId}
               onChanged={reloadFinances}
               readOnly={readOnly}
             />

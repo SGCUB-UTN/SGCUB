@@ -69,16 +69,31 @@ const latestReceipt = (comprobantes) => [...(comprobantes ?? [])]
   .filter((comprobante) => comprobante.estado !== 'Anulado')
   .sort((a, b) => String(b.fecha_emision).localeCompare(String(a.fecha_emision)) || b.comprobante_id - a.comprobante_id)[0]
 
-function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
+const NO_RECEIPT_TOAST = { tone: 'error', title: 'Sin comprobante', description: 'La cuota no tiene comprobantes vigentes.' }
+
+function CuotaActions({ cuota, socio, revertible, onPay, onRevert, onViewReceipt }) {
   const { showToast } = useToast()
   const [sending, setSending] = useState(false)
+  const [opening, setOpening] = useState(false)
   const paid = isPaid(cuota)
   const phone = socio?.telefono || socio?.persona?.telefono || ''
   const hasPhone = String(phone).trim().length >= 6
 
-  const whatsappBlocker = !hasPayments(cuota)
-    ? 'La cuota todavía no tiene pagos'
-    : !hasPhone ? 'El socio no tiene un teléfono registrado' : ''
+  const receiptBlocker = !hasPayments(cuota) ? 'La cuota todavía no tiene pagos' : ''
+  const whatsappBlocker = receiptBlocker || (!hasPhone ? 'El socio no tiene un teléfono registrado' : '')
+
+  const viewReceipt = async () => {
+    setOpening(true)
+    try {
+      const receipt = latestReceipt(await getComprobantesByCuota(cuota.cuota_id))
+      if (receipt) onViewReceipt(receipt.comprobante_id)
+      else showToast(NO_RECEIPT_TOAST)
+    } catch {
+      showToast({ tone: 'error', title: 'No se pudo abrir el comprobante', description: 'Probá de nuevo en unos minutos.' })
+    } finally {
+      setOpening(false)
+    }
+  }
   const payBlocker = paid ? 'La cuota ya está paga' : !onPay ? 'No se pueden registrar pagos' : ''
   const revertBlocker = !onRevert
     ? 'La ficha está en solo lectura'
@@ -89,7 +104,7 @@ function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
     try {
       const receipt = latestReceipt(await getComprobantesByCuota(cuota.cuota_id))
       if (!receipt) {
-        showToast({ tone: 'error', title: 'Sin comprobante para enviar', description: 'La cuota no tiene comprobantes vigentes.' })
+        showToast(NO_RECEIPT_TOAST)
         return
       }
       await sendReceiptToWhatsApp({
@@ -110,6 +125,9 @@ function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
 
   return (
     <div className="flex items-center justify-end gap-1.5">
+      <RowIconButton label="Ver comprobante" disabledReason={receiptBlocker} busy={opening} onClick={viewReceipt}>
+        <RowIcon name="receipt" />
+      </RowIconButton>
       <RowIconButton tone="whatsapp" label="Enviar comprobante por WhatsApp" disabledReason={whatsappBlocker} busy={sending} onClick={sendWhatsApp}>
         <WhatsAppIcon className="w-[18px] h-[18px]" />
       </RowIconButton>
@@ -123,7 +141,7 @@ function CuotaActions({ cuota, socio, revertible, onPay, onRevert }) {
   )
 }
 
-function CuotaRow({ cuota, socio, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onChanged, readOnly }) {
+function CuotaRow({ cuota, socio, expanded, revertible, onToggle, onPay, onAssignBenefit, onRevert, onViewReceipt, onChanged, readOnly }) {
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -158,7 +176,7 @@ function CuotaRow({ cuota, socio, expanded, revertible, onToggle, onPay, onAssig
           <span className="font-semibold text-on-surface">{formatAmount(Number(cuota.monto_total ?? 0))}</span>
         </td>
         <td className="py-2 px-4">
-          <CuotaActions cuota={cuota} socio={socio} revertible={revertible} onPay={onPay} onRevert={onRevert} />
+          <CuotaActions cuota={cuota} socio={socio} revertible={revertible} onPay={onPay} onRevert={onRevert} onViewReceipt={onViewReceipt} />
         </td>
       </tr>
       {expanded && (
@@ -178,7 +196,7 @@ function CuotaRow({ cuota, socio, expanded, revertible, onToggle, onPay, onAssig
 
 // `revertibleIds` are the cuotas of the latest payment; `onRevert` starts its reversal.
 // `className` styles the table shell (e.g. edge to edge inside a section).
-function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onChanged, readOnly = false, className = '' }) {
+function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS, settlementCuotaId = null, onPay, onAssignBenefit, onRevert, onViewReceipt, onChanged, readOnly = false, className = '' }) {
   const [expandedId, setExpandedId] = useState(null)
   const [showFuture, setShowFuture] = useState(false)
   const period = currentPeriod()
@@ -199,6 +217,7 @@ function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS,
       onPay={onPay}
       onAssignBenefit={onAssignBenefit}
       onRevert={onRevert}
+      onViewReceipt={onViewReceipt}
       onChanged={onChanged}
       readOnly={readOnly}
     />
@@ -215,7 +234,7 @@ function CuotasEstadoCuentaTable({ cuotas, socio = null, revertibleIds = NO_IDS,
             <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
             <th className="py-3 px-4" scope="col">Período</th>
             <th className="py-3 px-4 text-right" scope="col">Total</th>
-            <th className="py-3 px-4 text-right w-40" scope="col">Acciones</th>
+            <th className="py-3 px-4 text-right w-52" scope="col">Acciones</th>
           </>
         )}
       >
