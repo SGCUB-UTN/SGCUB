@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from rest_framework import serializers
 from django.db import transaction
@@ -587,6 +588,52 @@ class SocioSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+def account_summary(context, socio):
+    summaries = context.get("account_summaries")
+    if summaries is None:
+        return None
+    summary = summaries.get(socio.pk, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0})
+    return {"deuda": f"{summary['deuda']:.2f}", "cuotas_vencidas": summary["cuotas_vencidas"]}
+
+
+class SocioListSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(source="persona.nombre", read_only=True)
+    apellido = serializers.CharField(source="persona.apellido", read_only=True)
+    dni = serializers.CharField(source="persona.dni", read_only=True)
+    telefono = serializers.CharField(source="persona.telefono", read_only=True)
+    estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
+    es_ex_jugador = serializers.BooleanField(source="is_former_player", read_only=True)
+    jugador_id = serializers.IntegerField(source="player_profile.jugador_id", read_only=True, allow_null=True)
+    cuenta = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Socio
+        fields = [
+            "socio_id", "numero_socio", "nombre", "apellido", "dni", "telefono", "fecha_alta",
+            "estado_administrativo_nombre", "es_ex_jugador", "jugador_id", "cuenta",
+        ]
+        read_only_fields = fields
+
+    def get_cuenta(self, socio):
+        return account_summary(self.context, socio)
+
+
+class JugadorSocioSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(source="persona.nombre", read_only=True)
+    apellido = serializers.CharField(source="persona.apellido", read_only=True)
+    dni = serializers.CharField(source="persona.dni", read_only=True)
+    estado_administrativo_nombre = serializers.CharField(source="estado_administrativo.nombre", read_only=True)
+    cuenta = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Socio
+        fields = ["socio_id", "numero_socio", "nombre", "apellido", "dni", "estado_administrativo_nombre", "cuenta"]
+        read_only_fields = fields
+
+    def get_cuenta(self, socio):
+        return account_summary(self.context, socio)
+
+
 class CategoriaSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=50)
     anio_vigente = serializers.IntegerField()
@@ -921,6 +968,33 @@ class JugadorListSerializer(serializers.ModelSerializer):
         fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "estado", "tipo_baja", "vinculos_familiares"]
 
 
+class CategoriaSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Categoria
+        fields = ["categoria_id", "nombre", "genero"]
+        read_only_fields = fields
+
+
+class JugadorTableSerializer(serializers.ModelSerializer):
+    socio = JugadorSocioSerializer(read_only=True)
+    categoria = CategoriaSummarySerializer(read_only=True)
+    categoria_secundaria = CategoriaSummarySerializer(read_only=True)
+    estado = EstadoDeportivoSerializer(read_only=True)
+    tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
+    documentacion = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Jugador
+        fields = [
+            "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja", "documentacion",
+        ]
+        read_only_fields = fields
+
+    def get_documentacion(self, player):
+        statuses = self.context.get("document_statuses")
+        return statuses.get(player.socio.persona_id) if statuses is not None else None
+
+
 class JugadorSerializerDetail(serializers.ModelSerializer):
     socio = SocioSerializer(read_only=True)
     categoria = CategoriaSerializer(read_only=True)
@@ -967,7 +1041,8 @@ class AsignacionDocenteSerializer(serializers.Serializer):
     categorias = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all(), many=True, allow_empty=False)
 
 
-def group_teacher_assignments(teacher):
+def group_teacher_assignments(teacher, category_serializer=None):
+    category_serializer = category_serializer or CategoriaSerializer
     groups = {}
     assignments = sorted(
         teacher.categorias_docente.all(),
@@ -979,8 +1054,35 @@ def group_teacher_assignments(teacher):
             "cargo_nombre": assignment.cargo.nombre if assignment.cargo else None,
             "categorias": [],
         })
-        group["categorias"].append(CategoriaSerializer(assignment.categoria).data)
+        group["categorias"].append(category_serializer(assignment.categoria).data)
     return list(groups.values())
+
+
+class PersonaSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Persona
+        fields = ["nombre", "apellido", "dni", "telefono", "email"]
+        read_only_fields = fields
+
+
+class DocenteTableSerializer(serializers.ModelSerializer):
+    persona_detalle = PersonaSummarySerializer(source="persona", read_only=True)
+    estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
+    documentacion = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Docente
+        fields = ["docente_id", "legajo", "persona_detalle", "estado_nombre", "documentacion"]
+        read_only_fields = fields
+
+    def get_documentacion(self, teacher):
+        statuses = self.context.get("document_statuses")
+        return statuses.get(teacher.persona_id) if statuses is not None else None
+
+    def to_representation(self, teacher):
+        data = super().to_representation(teacher)
+        data["asignaciones"] = group_teacher_assignments(teacher, CategoriaSummarySerializer)
+        return data
 
 
 class DocenteSerializer(serializers.ModelSerializer):

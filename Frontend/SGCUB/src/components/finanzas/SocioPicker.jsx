@@ -3,6 +3,7 @@ import useSocio from '../../hooks/useSocio'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 import { ListSkeleton } from '../shared/Skeleton'
+import StatusBadge from '../shared/StatusBadge'
 
 const MAX_RESULTS = 8
 
@@ -19,6 +20,9 @@ function ResultsList({ results, onSelect, className = '' }) {
             <span className="min-w-0">
               <span className="flex items-center gap-2">
                 <strong className="block text-on-surface truncate">{socio.apellido}, {socio.nombre}</strong>
+                {!isActiveStatus(socio.estado_administrativo_nombre) && (
+                  <StatusBadge badge={{ label: 'De baja · solo deuda', tono: 'alerta', title: 'Socio dado de baja: solo puede pagar la deuda pendiente' }} />
+                )}
                 {socio.es_jugador && (
                   <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
                     Jugador
@@ -35,7 +39,6 @@ function ResultsList({ results, onSelect, className = '' }) {
   )
 }
 
-// Search box limited to active socios: inactive ones can't register payments.
 // `compact` drops the heading, uses the full width and floats the results over the content
 // below (used as the header of the empty payment form).
 // `excludedId` leaves a socio out of the results (e.g. the one a payment was wrongly registered to)
@@ -43,6 +46,7 @@ function SocioPicker({
   onSelect,
   compact = false,
   excludedId = null,
+  includeInactive = false,
   description = 'Buscá por nombre, apellido, DNI o número de socio.',
   placeholder = 'Nombre, DNI o N° de socio',
 }) {
@@ -61,20 +65,21 @@ function SocioPicker({
     return () => document.removeEventListener('pointerdown', handleClickOutside)
   }, [])
 
-  const activeSocios = useMemo(
-    () => socios.filter((socio) => isActiveStatus(socio.estado_administrativo_nombre) && socio.socio_id !== excludedId),
-    [socios, excludedId],
+  const searchableSocios = useMemo(
+    () => socios.filter((socio) => (includeInactive || isActiveStatus(socio.estado_administrativo_nombre)) && socio.socio_id !== excludedId),
+    [socios, excludedId, includeInactive],
   )
 
   const results = useMemo(() => {
     const term = query.trim()
     if (!term) return []
-    return activeSocios
+    return searchableSocios
       .filter((socio) => matchesSearch(term, [socio.dni, socio.numero_socio, socio.nombre, socio.apellido, `${socio.nombre} ${socio.apellido}`, `${socio.apellido} ${socio.nombre}`]))
       .slice(0, MAX_RESULTS)
-  }, [query, activeSocios])
+  }, [query, searchableSocios])
 
   const noMatches = !isLoading && query.trim() && results.length === 0
+  const noMatchesText = includeInactive ? 'No encontramos socios con ese criterio.' : 'No encontramos socios activos con ese criterio.'
 
   return (
     <section
@@ -112,7 +117,7 @@ function SocioPicker({
         )}
         {compact && isOpen && noMatches && (
           <div className="absolute z-30 left-0 right-0 top-full mt-1 p-3 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-xl text-sm text-on-surface-variant">
-            No encontramos socios activos con ese criterio.
+            {noMatchesText}
           </div>
         )}
       </div>
@@ -122,7 +127,7 @@ function SocioPicker({
 
       {!compact && results.length > 0 && <ResultsList results={results} onSelect={onSelect} className="max-w-2xl overflow-hidden" />}
 
-      {!compact && noMatches && <p className="text-sm text-on-surface-variant">No encontramos socios activos con ese criterio.</p>}
+      {!compact && noMatches && <p className="text-sm text-on-surface-variant">{noMatchesText}</p>}
     </section>
   )
 }

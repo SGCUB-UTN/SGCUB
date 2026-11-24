@@ -2,8 +2,8 @@ import { api } from './conf'
 
 const docentesEndpoint = 'padron/docente/'
 
-export const getDocentes = async () => {
-  const response = await api.get(docentesEndpoint)
+export const getDocentes = async ({ view } = {}) => {
+  const response = await api.get(docentesEndpoint, { params: view ? { vista: view } : undefined })
   return response.data
 }
 

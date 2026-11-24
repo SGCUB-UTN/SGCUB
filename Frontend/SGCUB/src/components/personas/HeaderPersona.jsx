@@ -1,5 +1,6 @@
 import PageHeader from '../shared/PageHeader'
 import { useEffect, useRef, useState } from 'react'
+import useToast from '../../hooks/useToast'
 
 const getInitials = (name, surname) =>
   `${name?.trim()?.[0] ?? ''}${surname?.trim()?.[0] ?? ''}`.toUpperCase() || '?'
@@ -13,10 +14,30 @@ const STATUS_TONES = {
 
 const toneOf = (item) => item.tone ?? (item.isActive ? 'positive' : 'muted')
 
+const AVATAR_CLASS = 'relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight'
+
+function AvatarFrame({ onClick, label, busy, children }) {
+  if (!label) return <div className={AVATAR_CLASS}>{children}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={label}
+      aria-label={label}
+      aria-busy={busy}
+      className={`${AVATAR_CLASS} group cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary`}
+    >
+      {children}
+    </button>
+  )
+}
+
 function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPhoto }) {
   const [imageError, setImageError] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
+  const { showToast } = useToast()
 
   // Resetea el fallback si cambia la URL (p. ej. al subir una nueva foto)
   useEffect(() => {
@@ -31,12 +52,12 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
     if (!file) return
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      alert('Formato no soportado. Usá JPG, PNG o WEBP.')
+      showToast({ tone: 'error', title: 'Formato no soportado', description: 'Usá una imagen JPG, PNG o WEBP.' })
       event.target.value = ''
       return
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen no puede superar los 5 MB.')
+      showToast({ tone: 'error', title: 'La imagen es muy pesada', description: 'Elegí una de hasta 5 MB.' })
       event.target.value = ''
       return
     }
@@ -44,9 +65,14 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
     try {
       setUploading(true)
       await onUploadPhoto(file)
+      showToast({ title: 'Foto actualizada' })
     } catch (err) {
       console.error('Error al subir foto:', err)
-      alert(err.response?.data?.foto?.[0] || err.message || 'No se pudo subir la foto de perfil.')
+      showToast({
+        tone: 'error',
+        title: 'No se pudo subir la foto',
+        description: err.response?.data?.foto?.[0] || 'Probá de nuevo en unos minutos.',
+      })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -64,10 +90,10 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
           onChange={handleFileChange}
         />
       )}
-      <div
+      <AvatarFrame
         onClick={onUploadPhoto && !uploading ? () => fileInputRef.current?.click() : undefined}
-        title={onUploadPhoto ? (showPhoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil') : undefined}
-        className={`relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary text-[28px] font-bold shadow-md select-none tracking-tight ${onUploadPhoto ? 'cursor-pointer group' : ''}`}
+        label={onUploadPhoto ? (showPhoto ? 'Cambiar foto de perfil' : 'Subir foto de perfil') : undefined}
+        busy={uploading}
       >
         {showPhoto ? (
           <img
@@ -78,11 +104,11 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
             draggable={false}
           />
         ) : (
-          getInitials(name, surname)
+          <span aria-hidden={Boolean(onUploadPhoto)}>{getInitials(name, surname)}</span>
         )}
 
         {onUploadPhoto && (
-          <div className={`absolute inset-0 transition-opacity flex flex-col items-center justify-center text-white gap-0.5 ${uploading ? 'opacity-100 bg-black/60' : 'opacity-0 group-hover:opacity-100 bg-black/50'}`}>
+          <div className={`absolute inset-0 transition-opacity flex flex-col items-center justify-center text-white gap-0.5 ${uploading ? 'opacity-100 bg-black/60' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 bg-black/50'}`} aria-hidden="true">
             <span className={`material-symbols-outlined text-[20px] ${uploading ? 'animate-spin' : ''}`}>
               {uploading ? 'progress_activity' : 'photo_camera'}
             </span>
@@ -91,10 +117,11 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
             </span>
           </div>
         )}
-      </div>
+      </AvatarFrame>
 
       {isActive && (
         <span
+          role="img"
           className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container-lowest bg-emerald-500"
           title="Activo"
           aria-label="Activo"
@@ -109,7 +136,7 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
           aria-label="Descargar foto"
           className="absolute -bottom-1 -left-1 w-7 h-7 rounded-full bg-surface-container-lowest border border-outline-variant/40 shadow-sm text-on-surface-variant hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[16px]">download</span>
+          <span className="material-symbols-outlined text-[16px]" aria-hidden="true">download</span>
         </button>
       )}
     </div>
@@ -118,15 +145,14 @@ function Avatar({ name, surname, photoUrl, isActive, onDownloadPhoto, onUploadPh
 
 export const ACTION_GRID_CLASS ='grid grid-cols-1 gap-2 shrink-0 sm:w-fit [&_button]:w-full [&_button]:justify-center'
 
-export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, onUploadPhoto, isActive = false, status, statuses, tags = [], metadata = [], statusAction, actions, footer }) {
+export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl, onDownloadPhoto, onUploadPhoto, isActive = false, statuses = [], metadata = [], statusAction, actions, footer }) {
   const fullName = `${name ?? ''} ${surname ?? ''}`.trim() || 'Sin nombre'
-  const statusList = statuses ?? (status ? [status] : [])
 
   return (
     <>
       <PageHeader breadcrumb={breadcrumb} />
 
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm p-6 mb-6 relative overflow-hidden">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm px-6 py-3 mb-3 relative overflow-hidden">
         <div className="absolute inset-y-0 right-0 w-80 bg-gradient-to-l from-primary-fixed/25 to-transparent pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
@@ -142,9 +168,9 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
                 <h1 className="text-2xl text-on-surface font-bold tracking-tight">{fullName}</h1>
-                {statusList.length > 0 && (
+                {statuses.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {statusList.map((item) => (
+                    {statuses.map((item) => (
                       <span
                         key={item.label}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-sm font-semibold whitespace-nowrap ${STATUS_TONES[toneOf(item)]}`}
@@ -156,7 +182,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
                   </div>
                 )}
               </div>
-              {(metadata.length > 0 || tags.length > 0) && (
+              {metadata.length > 0 && (
                 <div className="flex items-center gap-y-1 gap-x-4 flex-wrap text-base text-on-surface-variant">
                   {metadata.map((item, index) => (
                     <div key={item.label} className="flex items-center gap-x-4">
@@ -186,7 +212,7 @@ export default function PersonHeader({ breadcrumb = [], name, surname, photoUrl,
   )
 }
 
-export function EditButton({ onClick, children = 'Editar legajo' }) {
+export function EditButton({ onClick, children = 'Editar' }) {
   return (
     <button
       type="button"
@@ -199,12 +225,14 @@ export function EditButton({ onClick, children = 'Editar legajo' }) {
   )
 }
 
-export function PayButton({ onClick, children = 'Registrar pago' }) {
+export function PayButton({ onClick, disabledReason, children = 'Registrar pago' }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none"
+      disabled={Boolean(disabledReason)}
+      title={disabledReason}
+      className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
     >
       <span className="material-symbols-outlined text-[20px]">payments</span>
       <span>{children}</span>
@@ -217,7 +245,7 @@ const BENEFIT_VARIANTS = {
   neutral: { button: 'bg-surface-container-low text-on-surface border-outline-variant/40 hover:bg-surface-container disabled:hover:bg-surface-container-low', icon: 'text-outline' },
 }
 
-export function BenefitButton({ onClick, disabled = false, variant = 'outline', children = 'Asignar beca o descuento' }) {
+export function BenefitButton({ onClick, disabled = false, variant = 'outline', children = 'Asignar beca' }) {
   const style = BENEFIT_VARIANTS[variant]
   return (
     <button
@@ -244,6 +272,16 @@ export function HeaderNotice({ icon, title, actions, children }) {
       </div>
       {actions && <div className="grid grid-cols-1 sm:flex sm:items-center gap-2 shrink-0">{actions}</div>}
     </div>
+  )
+}
+
+export function LockedProfileNotice({ canPay = false, actions }) {
+  return (
+    <HeaderNotice icon="lock" title="Ficha de baja" actions={actions}>
+      {canPay
+        ? 'La ficha queda en solo lectura. Solo se puede registrar el pago de la deuda pendiente.'
+        : 'La ficha queda en solo lectura.'}
+    </HeaderNotice>
   )
 }
 

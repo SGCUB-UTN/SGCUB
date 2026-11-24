@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { cancelBeca } from '../../api/becas'
 import DataTable from '../shared/DataTable'
+import TablePagination from '../shared/TablePagination'
+import usePagination from '../../hooks/usePagination'
+import ExpandableRow, { DetailList, DetailSection } from '../shared/ExpandableRow'
+import RowIconButton, { RowIcon } from '../shared/RowIconButton'
+import StatusBadge from '../shared/StatusBadge'
 import { SectionEmpty } from '../shared/FlushSection'
-import { formatAmount } from '../personas/format'
+import { formatAmount, formatDate } from '../personas/format'
 import { formatPeriod, periodOf } from '../shared/periodFormat'
 import { SCHOLARSHIP_STATES, cuotaDiscounts, isPaid, scholarshipState, todayIso } from './accountStatement'
 import AuthorizationModal from './AuthorizationModal'
@@ -12,33 +17,25 @@ import { removalBlocker } from './cuotaItems'
 import EditBenefitModal from './EditBenefitModal'
 
 
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold border whitespace-nowrap'
-
-const STATE_CLASSES = {
-  applied: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  finished: 'bg-surface-container-high text-on-surface-variant border-outline-variant/40',
-  cancelled: 'bg-error-container/40 text-on-error-container border-error/20',
-}
-
 const SCHOLARSHIP_STATE_KEYS = {
   [SCHOLARSHIP_STATES.APPLIED]: 'applied',
   [SCHOLARSHIP_STATES.FINISHED]: 'finished',
   [SCHOLARSHIP_STATES.CANCELLED]: 'cancelled',
 }
 
-const STATE_LABELS = {
-  beca: { applied: 'Aplicada', finished: 'Finalizada', cancelled: 'Cancelada' },
-  descuento: { applied: 'Aplicado', finished: 'Finalizado', cancelled: 'Cancelado' },
-}
-
 const ANNULLED_ITEM = 'Anulado'
 
 const TYPES = {
-  beca: { label: 'Beca', className: 'bg-primary/5 text-primary border-primary/20' },
-  descuento: { label: 'Descuento', className: 'bg-surface-container-high text-on-surface border-outline-variant/40' },
+  beca: { label: 'Beca', tono: 'info' },
+  descuento: { label: 'Descuento', tono: 'neutro' },
 }
 
-const ACTION_BUTTON_CLASS = 'w-8 h-8 inline-flex items-center justify-center rounded border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+const COLUMN_COUNT = 5
+const ROWS_PER_PAGE = 15
+
+const typeBadge = (row) => (row.state === 'cancelled'
+  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
+  : row.type)
 
 const monthYear = (date) => formatPeriod(periodOf(date))
 
@@ -53,16 +50,18 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
   return {
     key: `beca-${beca.beca_id}`,
     type: TYPES.beca,
-    sortDate: beca.fecha_aplicacion,
+    sortDate: beca.fecha_creacion ?? beca.fecha_aplicacion,
     validity: `${monthYear(beca.fecha_aplicacion)} → ${beca.fecha_fin ? monthYear(beca.fecha_fin) : 'Sin fecha de fin'}`,
     exclusions: beca.exclusiones ?? [],
     reason: beca.motivo,
-    cancellation: beca.motivo_cancelacion,
     value: scholarshipValue(beca),
     state,
-    stateLabel: STATE_LABELS.beca[state],
     blocker: state === 'applied' ? '' : NOT_APPLIED_HINT,
     target: { kind: SCHOLARSHIP_TARGET, beca },
+    granted: { date: beca.fecha_creacion ?? beca.fecha_aplicacion, by: beca.autorizado_por },
+    cancellation: state === 'cancelled'
+      ? { date: beca.fecha_cancelacion, by: beca.cancelado_por, reason: beca.motivo_cancelacion }
+      : null,
   }
 })
 
@@ -76,58 +75,71 @@ const discountRows = (cuotas) => cuotaDiscounts(cuotas).map((discount) => {
   return {
     key: `descuento-${discount.item.item_cuota_id}`,
     type: TYPES.descuento,
-    sortDate: `${discount.cuota.periodo}-01`,
+    sortDate: discount.item.fecha_creacion ?? `${discount.cuota.periodo}-01`,
     validity: formatPeriod(discount.cuota.periodo),
     exclusions: [],
     reason: discount.item.motivo,
-    cancellation: discount.item.motivo_anulacion,
     value: `− ${formatAmount(discount.item.monto)}`,
     state,
-    stateLabel: STATE_LABELS.descuento[state],
     blocker: state === 'applied' ? removalBlocker(discount.cuota, discount.item) : NOT_APPLIED_HINT,
     target: { kind: DISCOUNT_TARGET, ...discount },
+    granted: { date: discount.item.fecha_creacion ?? discount.item.fecha_aplicacion, by: discount.item.autorizado_por },
+    cancellation: state === 'cancelled'
+      ? { date: discount.item.fecha_anulacion, by: discount.item.anulado_por, reason: discount.item.motivo_anulacion }
+      : null,
   }
 })
 
-function ExclusionList({ exclusions }) {
-  if (!exclusions.length) return null
+function BenefitDetail({ row }) {
+  const isScholarship = row.target.kind === SCHOLARSHIP_TARGET
   return (
-    <span className="block text-sm font-normal text-on-surface-variant whitespace-normal">
-      Sin aplicar en:{' '}
-      {exclusions.map((exclusion, index) => (
-        <span key={exclusion.exclusion_beca_id} title={`${exclusion.motivo} · Autorizó ${exclusion.autorizado_por}`}>
-          {index > 0 && ', '}
-          <span className="underline decoration-dotted underline-offset-2">{formatPeriod(exclusion.periodo)}</span>
-        </span>
-      ))}
-    </span>
+    <div className="flex flex-col gap-4">
+      <DetailList
+        items={[
+          { label: isScholarship ? 'Otorgada' : 'Otorgado', value: formatDate(row.granted.date) },
+          { label: 'Autorizó', value: row.granted.by || 'Sin registrar' },
+          { label: isScholarship ? 'Vigencia' : 'Cuota', value: row.validity },
+          { label: 'Motivo', value: row.reason || '—', wide: true },
+        ]}
+      />
+      {row.exclusions.length > 0 && (
+        <DetailSection title="Meses sin aplicar">
+          <ul className="flex flex-col gap-2">
+            {row.exclusions.map((exclusion) => (
+              <li key={exclusion.exclusion_beca_id} className="text-base text-on-surface">
+                <span className="font-semibold">{formatPeriod(exclusion.periodo)}</span>
+                <span className="text-on-surface-variant"> · {exclusion.motivo} · Autorizó {exclusion.autorizado_por}</span>
+              </li>
+            ))}
+          </ul>
+        </DetailSection>
+      )}
+      {row.cancellation && (
+        <DetailSection title="Anulación" tone="error">
+          <DetailList
+            items={[
+              { label: 'Fecha', value: formatDate(row.cancellation.date) },
+              { label: 'Autorizó', value: row.cancellation.by || 'Sin registrar' },
+              { label: 'Motivo', value: row.cancellation.reason || 'Sin motivo registrado', wide: true },
+            ]}
+          />
+        </DetailSection>
+      )}
+    </div>
   )
 }
 
-function RowActions({ row, onEdit, onCancel }) {
-  const disabled = Boolean(row.blocker)
+function RowActions({ row, readOnly, onEdit, onCancel }) {
+  const blocker = readOnly ? 'La ficha está en solo lectura' : row.blocker
+  const name = `${row.type.label.toLowerCase()} ${row.validity}`
   return (
-    <div className="flex items-center justify-center gap-2">
-      <button
-        type="button"
-        onClick={() => onEdit(row.target)}
-        disabled={disabled}
-        title={row.blocker || 'Editar'}
-        aria-label={`Editar ${row.type.label.toLowerCase()} ${row.validity}`}
-        className={`${ACTION_BUTTON_CLASS} border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-low`}
-      >
-        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">edit</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onCancel(row.target)}
-        disabled={disabled}
-        title={row.blocker || 'Cancelar'}
-        aria-label={`Cancelar ${row.type.label.toLowerCase()} ${row.validity}`}
-        className={`${ACTION_BUTTON_CLASS} border-red-200 text-red-600 hover:bg-red-50`}
-      >
-        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">block</span>
-      </button>
+    <div className="flex items-center justify-end gap-1.5">
+      <RowIconButton tone="neutral" label={`Editar ${name}`} disabledReason={blocker} onClick={() => onEdit(row.target)}>
+        <RowIcon name="edit" />
+      </RowIconButton>
+      <RowIconButton tone="danger" label={`Anular ${name}`} disabledReason={blocker} onClick={() => onCancel(row.target)}>
+        <RowIcon name="cancel" />
+      </RowIconButton>
     </div>
   )
 }
@@ -142,27 +154,29 @@ function CancelScholarshipModal({ beca, onClose, onCancelled }) {
   return (
     <AuthorizationModal
       opened={Boolean(beca)}
-      title="Cancelar beca"
+      title="Anular beca"
       description={beca ? (
         <p>
-          Se cancela la beca de <strong className="text-on-surface">{scholarshipValue(beca)}</strong> ({beca.motivo}).
+          Se anula la beca de <strong className="text-on-surface">{scholarshipValue(beca)}</strong> ({beca.motivo}).
           Se quita de las cuotas impagas sin pagos registrados y no se aplicará a las cuotas que se generen.
           Las cuotas pagas o con pagos parciales no se modifican.
         </p>
       ) : null}
-      confirmLabel="Cancelar beca"
-      errorMessage="No se pudo cancelar la beca."
+      confirmLabel="Anular beca"
+      errorMessage="No se pudo anular la beca."
       onConfirm={confirm}
       onClose={onClose}
     />
   )
 }
 
-export function BenefitsTable({ becas, cuotas, onChanged }) {
+export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
+  const [expandedKey, setExpandedKey] = useState(null)
   const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
+  const { visibleRows, paginationProps } = usePagination(rows, ROWS_PER_PAGE)
 
   return (
     <>
@@ -171,45 +185,52 @@ export function BenefitsTable({ becas, cuotas, onChanged }) {
       )}
       {rows.length ? (
         <DataTable
-          tableClassName="min-w-[860px] table-fixed"
+          tableClassName="min-w-[760px]"
           headers={(
             <>
-              <th className="py-3 px-4 w-[12%]" scope="col">Tipo</th>
-              <th className="py-3 px-4 w-[26%]" scope="col">Vigencia</th>
+              <th className="py-3 pl-4 pr-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
+              <th className="py-3 px-4" scope="col">Beneficio</th>
               <th className="py-3 px-4" scope="col">Motivo</th>
-              <th className="py-3 px-4 w-[13%] text-right" scope="col">Valor</th>
-              <th className="py-3 px-4 w-[13%] text-center" scope="col">Estado</th>
-              <th className="py-3 px-4 w-[11%] text-center" scope="col">Acciones</th>
+              <th className="py-3 px-4 w-32 text-right" scope="col">Valor</th>
+              <th className="py-3 px-4 w-28 text-right" scope="col">Acciones</th>
             </>
           )}
         >
-          {rows.map((row) => (
-            <tr key={row.key}>
+          {visibleRows.map((row) => (
+            <ExpandableRow
+              key={row.key}
+              expanded={expandedKey === row.key}
+              onToggle={() => setExpandedKey((current) => (current === row.key ? null : row.key))}
+              label={`${typeBadge(row).label} ${row.validity}`}
+              colSpan={COLUMN_COUNT}
+              detail={<BenefitDetail row={row} />}
+            >
               <td className="py-3 px-4">
-                <span className={`${BADGE_CLASS} ${row.type.className}`}>{row.type.label}</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-medium text-on-surface whitespace-nowrap">{row.validity}</span>
+                  <StatusBadge size="md" badge={typeBadge(row)} />
+                </div>
               </td>
-              <td className="py-3 px-4 font-medium text-on-surface whitespace-nowrap">
-                {row.validity}
-                <ExclusionList exclusions={row.exclusions} />
+              <td className="py-3 px-4 break-words">
+                <span className="text-on-surface-variant">{row.reason || '—'}</span>
+                {row.cancellation?.reason && (
+                  <span className="block text-sm text-error">
+                    {row.target.kind === SCHOLARSHIP_TARGET ? 'Anulada' : 'Anulado'}: {row.cancellation.reason}
+                  </span>
+                )}
               </td>
-              <td className="py-3 px-4 text-on-surface-variant break-words">{row.reason || '—'}</td>
-              <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap">{row.value}</td>
-              <td className="py-3 px-4 text-center">
-                <span
-                  className={`${BADGE_CLASS} ${STATE_CLASSES[row.state]}`}
-                  title={row.state === 'cancelled' && row.cancellation ? row.cancellation : undefined}
-                >
-                  {row.stateLabel}
-                </span>
+              <td className="py-3 px-4 text-right font-semibold text-on-surface whitespace-nowrap tabular-nums">{row.value}</td>
+              <td className="py-2 px-4">
+                <RowActions row={row} readOnly={readOnly} onEdit={setEditing} onCancel={setCancelling} />
               </td>
-              <td className="py-3 px-4">
-                <RowActions row={row} onEdit={setEditing} onCancel={setCancelling} />
-              </td>
-            </tr>
+            </ExpandableRow>
           ))}
         </DataTable>
       ) : (
         becas !== null && <SectionEmpty>Sin becas ni descuentos.</SectionEmpty>
+      )}
+      {rows.length > ROWS_PER_PAGE && (
+        <TablePagination id="benefits-rows-per-page" rowsPerPageOptions={[15, 30, 60]} {...paginationProps} />
       )}
 
       <EditBenefitModal target={editing} onClose={() => setEditing(null)} onSaved={onChanged} />

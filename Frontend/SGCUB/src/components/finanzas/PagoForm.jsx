@@ -1,13 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { collectErrorMessages, formatAmount, formatDate } from '../personas/format'
+import { collectErrorMessages, formatAmount, isActiveStatus } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import AuthorizationModal from './AuthorizationModal'
 import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
-import { AmountInput, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, AuthorizerSelect, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS } from './formParts'
 import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
 import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
 import { registrarPago } from '../../api/pagos'
@@ -55,7 +54,7 @@ const EXCESS_OPTIONS = [
   {
     value: EXCESS_PARTIAL,
     title: 'Pago parcial de la siguiente cuota',
-    description: 'Se imputa todo el dinero recibido: lo que sobra queda como pago parcial de la cuota siguiente.',
+    description: 'Se usa todo el dinero recibido: lo que sobra queda como pago parcial de la cuota siguiente.',
     icon: 'event_repeat',
   },
   {
@@ -72,6 +71,24 @@ const reversalNote = (reversal) => {
   return reversal.otherSocio
     ? `Pago anulado ${reversal.codigo} registrado en el socio correcto`
     : `Vuelve a cobrar el pago anulado ${reversal.codigo}`
+}
+
+const monthName = (period) => {
+  const [year, month] = String(period).split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
+}
+
+const joinWords = (words) => (words.length > 1 ? `${words.slice(0, -1).join(', ')} y ${words.at(-1)}` : words[0] ?? '')
+
+const periodsText = (periods) => {
+  const years = []
+  periods.forEach((period) => {
+    const year = String(period).slice(0, 4)
+    const group = years.find((current) => current.year === year)
+    if (group) group.months.push(monthName(period))
+    else years.push({ year, months: [monthName(period)] })
+  })
+  return joinWords(years.map((group) => `${joinWords(group.months)} de ${group.year}`))
 }
 
 const firstCuotasTotal = (cuotas, count) => roundCents(cuotas
@@ -106,11 +123,6 @@ function CuotaBreakdownRow({
     <tr className="bg-surface-container-low/40">
       <td colSpan={COLUMN_COUNT} className="px-4 py-3 sm:pl-12">
         <div className="flex flex-col gap-2.5 max-w-xl">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-on-surface-variant">
-            <span>1° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc1)}</span></span>
-            <span className="text-outline-variant" aria-hidden="true">|</span>
-            <span>2° Vencimiento: <span className="font-semibold text-on-surface">{formatDate(cuota.fecha_venc2)}</span></span>
-          </div>
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
             {items.filter((item) => !isAdjustment(item)).map((item) => {
               const blocker = onRemoveItem && isRegistration(item) ? removalBlocker(cuota, item) : null
@@ -197,6 +209,9 @@ function CuotasTable({
 
   const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
   const futureLines = lines.filter((line) => isFuture(line.cuota, period))
+  const coveredFuture = futureLines.filter((line) => line.applied > 0)
+  const otherFuture = futureLines.filter((line) => line.applied <= 0)
+  const futureToggleLabel = coveredFuture.length > 0 ? 'Ver más cuotas futuras' : 'Ver cuotas futuras'
   const renderLine = (line) => (
     <CuotaLine
       key={line.cuota.cuota_id}
@@ -222,7 +237,7 @@ function CuotasTable({
       footer={(
         <>
           <td className="py-2 pl-3 pr-0" />
-          <th className="py-2 px-3 text-base font-semibold text-on-surface-variant" scope="row">Deuda total</th>
+          <th className="py-2 px-3 text-base font-semibold text-on-surface-variant" scope="row">Deuda a hoy</th>
           <td className="py-2 px-3 text-right text-base font-bold text-on-surface">{formatAmount(debtTotal)}</td>
         </>
       )}
@@ -235,7 +250,8 @@ function CuotasTable({
         </tr>
       )}
       {dueLines.map(renderLine)}
-      {futureLines.length > 0 && (
+      {coveredFuture.map(renderLine)}
+      {otherFuture.length > 0 && (
         <tr>
           <td colSpan={COLUMN_COUNT} className="py-1 px-3">
             <button
@@ -245,12 +261,12 @@ function CuotasTable({
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
             >
               <span className={`material-symbols-outlined text-[18px] transition-transform ${showFuture ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-              {showFuture ? 'Ocultar cuotas futuras' : `Ver cuotas futuras (${futureLines.length})`}
+              {showFuture ? 'Ocultar cuotas futuras' : `${futureToggleLabel} (${otherFuture.length})`}
             </button>
           </td>
         </tr>
       )}
-      {showFuture && futureLines.map(renderLine)}
+      {showFuture && otherFuture.map(renderLine)}
     </DataTable>
   )
 }
@@ -318,6 +334,97 @@ function CuotaLine({
         />
       )}
     </Fragment>
+  )
+}
+
+function SettlementStatus({ settledLines, partialLines }) {
+  if (settledLines.length === 0 && partialLines.length === 0) {
+    return <p className="text-base text-on-surface-variant">Ingresá el monto para ver qué cuotas se saldan.</p>
+  }
+  return (
+    <ul className="flex flex-col gap-1.5 text-base">
+      {settledLines.length > 0 && (
+        <li className="flex items-start gap-2 text-on-surface">
+          <span className="material-symbols-outlined text-[20px] text-emerald-700 shrink-0" aria-hidden="true">check_circle</span>
+          <span>Salda {periodsText(settledLines.map((line) => line.cuota.periodo))}.</span>
+        </li>
+      )}
+      {partialLines.map((line) => (
+        <li key={line.cuota.cuota_id} className="flex items-start gap-2 text-on-surface">
+          <span className="material-symbols-outlined text-[20px] text-amber-700 shrink-0" aria-hidden="true">timelapse</span>
+          <span>
+            {periodsText([line.cuota.periodo]).replace(/^./, (letter) => letter.toUpperCase())} queda con pago parcial: faltan{' '}
+            <span className="font-semibold tabular-nums">{formatAmount(roundCents(line.due - line.applied))}</span>.
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RemainingValue({ remaining, empty }) {
+  if (empty) return <span className="text-lg font-bold tabular-nums text-on-surface-variant">{formatAmount(0)}</span>
+  if (remaining > 0) return <span className="text-lg font-bold tabular-nums text-amber-700">{formatAmount(remaining)}</span>
+  return (
+    <span className="inline-flex items-center gap-1.5 text-lg font-bold text-emerald-700">
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">check_circle</span>
+      Al día
+    </span>
+  )
+}
+
+function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows, methodLabel, remaining, empty }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-base font-semibold text-on-surface-variant">A cobrar</span>
+        <span className="text-[2rem] leading-tight font-bold tabular-nums text-on-surface" aria-live="polite">{formatAmount(enteredTotal)}</span>
+      </div>
+
+      {empty
+        ? <p className="text-base text-on-surface-variant">Elegí un socio con deuda para armar el cobro.</p>
+        : <SettlementStatus settledLines={settledLines} partialLines={partialLines} />}
+
+      <div className="flex flex-col gap-1.5 pt-4 border-t border-dashed border-slate-300">
+        {completeRows.map((row) => (
+          <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
+        ))}
+        {completeRows.length === 0 && (
+          <p className="text-base text-on-surface-variant">{empty ? 'Sin medios de pago.' : 'Falta elegir el medio de pago.'}</p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-4 border-t border-dashed border-slate-300">
+        <span className="text-base font-bold text-on-surface">Queda por pagar</span>
+        <RemainingValue remaining={remaining} empty={empty} />
+      </div>
+    </div>
+  )
+}
+
+function PaymentMethodsNotice({ error, empty, onRetry }) {
+  if (!error && !empty) return null
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-error/30 bg-error-container text-on-error-container" role="alert">
+      <p className="flex items-start gap-2 text-base">
+        <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">error</span>
+        {error
+          ? 'No se pudieron cargar los medios de pago.'
+          : 'No hay medios de pago habilitados. Se activan en Ajustes › Configuración › Finanzas y facturación.'}
+      </p>
+      {error && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-error/40 text-base font-semibold text-error hover:bg-error/10 transition-colors cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[20px]" aria-hidden="true">refresh</span>
+          Reintentar
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -408,13 +515,15 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
 function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
+  const period = currentPeriod()
+  const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
+      .filter((cuota) => !debtOnly || !isFuture(cuota, period))
       .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || a.cuota_id - b.cuota_id),
-    [cuenta],
+    [cuenta, debtOnly, period],
   )
-  const period = currentPeriod()
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
   const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
@@ -430,13 +539,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   ))
   const [refundMethod, setRefundMethod] = useState('')
   const [refundReason, setRefundReason] = useState(() => (reversal ? `Sobrante del pago anulado ${reversal.codigo}` : ''))
-  const [confirmingRefund, setConfirmingRefund] = useState(false)
+  const [refundResponsable, setRefundResponsable] = useState('')
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const [receipt, setReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const { paymentMethods, methodLabel } = useMediosPago()
+  const { paymentMethods, methodLabel, error: methodsError, loading: methodsLoading, retry: retryMethods } = useMediosPago()
 
   const debtTotal = firstCuotasTotal(paymentCuotas, dueCount)
   const received = reversal ? roundCents(reversal.total) : 0
@@ -456,7 +565,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const settledLines = coveredLines.filter((line) => line.applied >= line.due)
   const partialLines = coveredLines.filter((line) => line.applied < line.due)
   const pendingBalance = roundCents(billedTotal - enteredTotal)
-  const partialFuture = partialLines.some((line) => isFuture(line.cuota, period))
 
   const [syncedCuenta, setSyncedCuenta] = useState(cuenta)
   if (cuenta !== syncedCuenta) {
@@ -494,9 +602,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const formErrors = {
     medios: allRows.some((row) => !isRowComplete(row)) ? 'Elegí el medio e ingresá el monto de cada pago.' : '',
     montos: exceedsDebt
-      ? `El pago no puede superar el total de cuotas pendientes, incluidas las futuras (${formatAmount(pendingTotal)}).${hasExcess ? ' Devolvé el excedente con una nota de crédito.' : ''}`
+      ? `El pago no puede superar ${debtOnly ? 'la deuda pendiente' : 'el total de cuotas pendientes, incluidas las futuras'} (${formatAmount(pendingTotal)}).${hasExcess ? ' Devolvé el excedente con una nota de crédito.' : ''}`
       : '',
-    devolucion: excess > 0 && (!refundMethod || !refundReason.trim()) ? 'Elegí el medio de devolución e indicá el motivo de la nota de crédito.' : '',
+    devolucion: excess > 0 && (!refundMethod || !refundReason.trim() || !refundResponsable) ? 'Elegí el medio de devolución, el responsable e indicá el motivo de la nota de crédito.' : '',
   }
   const isValid = !Object.values(formErrors).some(Boolean) && coveredLines.length > 0
 
@@ -505,15 +613,10 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     if (!socio) return
     setShowErrors(true)
     if (!isValid) return
-    // Refunds always ask who is responsible before confirming
-    if (excess > 0) {
-      setConfirmingRefund(true)
-      return
-    }
     submitPayment()
   }
 
-  const submitPayment = async (responsable = '') => {
+  const submitPayment = async () => {
     setSaving(true)
     setSubmitError('')
     try {
@@ -525,11 +628,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         medios: allRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion: observacion || reversalNote(reversal),
         nota_credito: excess > 0
-          ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable }
+          ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable: refundResponsable }
           : null,
       })
-      const detalle = await getComprobante(response.comprobante?.comprobante_id).catch(() => null)
+      const comprobanteId = response.comprobante?.comprobante_id
+      const detalle = await getComprobante(comprobanteId).catch(() => null)
       setReceipt({
+        comprobanteId,
         detalle,
         medios: allRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) })),
         montoTotal: enteredTotal,
@@ -542,12 +647,16 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
       setSubmitError(collectErrorMessages(error.response?.data).join(' ') || 'No se pudo registrar el pago.')
     } finally {
       setSaving(false)
-      setConfirmingRefund(false)
     }
   }
 
+  const reloadReceipt = async () => {
+    const detalle = await getComprobante(receipt.comprobanteId)
+    setReceipt((current) => ({ ...current, detalle }))
+  }
+
   if (receipt) {
-    return <ComprobantePago socio={socio} {...receipt} onBack={onCancel} />
+    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onBack={onCancel} />
   }
 
   const noDebt = !paymentCuotas.some((cuota) => cuotaDue(cuota) > 0)
@@ -561,9 +670,9 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   }
 
   return (
-    <form onSubmit={confirmPayment} className="flex flex-col" noValidate>
-      <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
-        <div className="flex flex-col gap-5 min-w-0">
+    <form onSubmit={confirmPayment} className="flex flex-col flex-1 min-h-0" noValidate>
+      <div className={`grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[minmax(0,1fr)] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
+        <div className="flex flex-col gap-5 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:-m-1 lg:p-1 [&>*]:shrink-0">
           <FormPanel
             id="payment-cuotas-title"
             icon="receipt_long"
@@ -637,9 +746,16 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                       className={claseInput(showErrors && excess > 0 && !refundReason.trim())}
                     />
                   </Campo>
+                  <Campo id="payment-refund-responsable" label="Responsable de la devolución" requerido className="sm:col-span-2">
+                    <AuthorizerSelect
+                      id="payment-refund-responsable"
+                      value={refundResponsable}
+                      onChange={setRefundResponsable}
+                      invalid={showErrors && excess > 0 && !refundResponsable}
+                    />
+                  </Campo>
                   <p className="sm:col-span-2 text-base text-on-surface-variant">
                     Sobrante a devolver: <strong className="text-on-surface tabular-nums">{formatAmount(excess)}</strong>
-                    {excess > 0 && ' · El responsable se pide al confirmar.'}
                   </p>
                 </div>
               )}
@@ -652,10 +768,15 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           <FormPanel
             id="payment-methods-title"
             icon="payments"
-            title="Formas de pago"
+            title="Medios de pago"
             description={socio && noDebt ? 'El socio no tiene deuda para cobrar.' : ''}
             disabled={!socio || noDebt}
           >
+            <PaymentMethodsNotice
+              error={methodsError}
+              empty={!methodsLoading && !methodsError && paymentMethods.length === 0}
+              onRetry={retryMethods}
+            />
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3 text-base font-semibold text-on-surface">
                 <span className="flex-1" aria-hidden="true">Medio de pago <span className="text-error font-bold">*</span></span>
@@ -705,7 +826,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
             </div>
             {showErrors && formErrors.medios && <p className="text-sm text-error font-medium" role="alert">{formErrors.medios}</p>}
             {formErrors.montos && <p className="text-sm text-error font-medium" role="alert">{formErrors.montos}</p>}
-            {showErrors && formErrors.descuentos && <p className="text-sm text-error font-medium" role="alert">{formErrors.descuentos}</p>}
           </FormPanel>
 
           <FormPanel id="payment-notes-title" icon="notes" title="Observaciones" disabled={!socio}>
@@ -721,70 +841,18 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           </FormPanel>
         </div>
 
-        <div className={`${TICKET_CLASS} transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>
-          <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
+        <div className={`${TICKET_CLASS} lg:min-h-0 lg:overflow-y-auto transition-opacity ${socio ? '' : 'opacity-50'}`} role="region" aria-labelledby="payment-summary-title" aria-disabled={!socio || undefined}>
+          <PaymentSummary
+            enteredTotal={enteredTotal}
+            settledLines={settledLines}
+            partialLines={partialLines}
+            completeRows={allRows.filter(isRowComplete)}
+            methodLabel={methodLabel}
+            remaining={Math.max(pendingBalance, 0)}
+            empty={!socio || noDebt}
+          />
 
-          <div className="flex flex-1 flex-col justify-between gap-3">
-            <TicketSection title="Cuotas a pagar">
-              {billedLines.length
-                ? billedLines.map((line) => (
-                  <SummaryLine
-                    key={line.cuota.cuota_id}
-                    label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                    value={formatAmount(line.due)}
-                  />
-                ))
-                : <p className="text-base text-on-surface-variant">Sin cuotas a pagar.</p>}
-            </TicketSection>
-
-            <div className="pb-3 border-b border-dashed border-slate-300">
-              <SummaryLine label="Total de cuotas" value={formatAmount(billedTotal)} isTotal />
-            </div>
-
-            <TicketSection title="Medios de pago">
-              {allRows.some(isRowComplete)
-                ? allRows.filter(isRowComplete).map((row) => (
-                  <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
-                ))
-                : <p className="text-base text-on-surface-variant">Ningún medio de pago cargado.</p>}
-            </TicketSection>
-
-            <div className="pb-3 border-b border-dashed border-slate-300">
-              <SummaryLine label="Total de medios de pago" value={formatAmount(enteredTotal)} isTotal />
-            </div>
-
-            <TicketSection title="Resultado del pago">
-              {coveredLines.length ? (
-                <>
-                  {settledLines.map((line) => (
-                    <SummaryLine
-                      key={line.cuota.cuota_id}
-                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                      value="Se salda"
-                      valueClassName="text-emerald-700"
-                    />
-                  ))}
-                  {partialLines.map((line) => (
-                    <SummaryLine
-                      key={line.cuota.cuota_id}
-                      label={`Cuota ${formatPeriod(line.cuota.periodo)}`}
-                      value="Parcial"
-                      valueClassName="text-amber-700"
-                    />
-                  ))}
-                </>
-              ) : <p className="text-base text-on-surface-variant">Ingresá el pago para ver qué cuotas se saldan.</p>}
-            </TicketSection>
-
-            <SummaryLine
-              label={partialFuture ? 'Pendiente próxima cuota' : 'Deuda pendiente'}
-              value={formatAmount(Math.max(pendingBalance, 0))}
-              isTotal
-              valueClassName={pendingBalance <= 0 ? 'text-emerald-700' : 'text-amber-700'}
-            />
-          </div>
-
-          <div className="flex flex-col gap-3">
+          <div className="mt-auto flex flex-col gap-3">
             {submitError && (
               <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
                 <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>
@@ -805,18 +873,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
         </div>
       </div>
 
-      <AuthorizationModal
-        opened={confirmingRefund}
-        title="Confirmar pago y nota de crédito"
-        description={`Se registra el pago por ${formatAmount(enteredTotal)} y una nota de crédito por ${formatAmount(excess)} sobre el comprobante ${reversal?.codigo ?? ''}.`}
-        confirmLabel="Confirmar"
-        confirmIcon="check"
-        authorizerLabel="Responsable de la devolución"
-        authorizerError="Elegí el responsable de la devolución."
-        withReason={false}
-        onConfirm={({ autorizado_por: responsable }) => submitPayment(responsable)}
-        onClose={() => setConfirmingRefund(false)}
-      />
       <RemoveCuotaItemModal
         cuota={removal?.cuota ?? null}
         item={removal?.item ?? null}

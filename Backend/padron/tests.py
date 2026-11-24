@@ -1,10 +1,19 @@
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
-from padron.serializers import SocioSerializer
+from padron.serializers import (
+    DocenteTableSerializer,
+    JugadorSocioSerializer,
+    JugadorTableSerializer,
+    PersonaSummarySerializer,
+    SocioListSerializer,
+    SocioSerializer,
+)
 
 import csv
 from datetime import date, timedelta
@@ -423,6 +432,36 @@ class PadronViewTests(APITestCase):
         response = self.client.get("/api/padron/socio/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
+
+    def test_socio_get_list_vista_listado_devuelve_solo_campos_de_la_tabla(self):
+        self.crear_socio_orm()
+        jugador = self.crear_jugador_orm()
+        jugador.deactivate()
+
+        response = self.client.get("/api/padron/socio/?vista=listado&es_jugador=false", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(2, len(response.data))
+        self.assertEqual(set(SocioListSerializer.Meta.fields), set(response.data[0].keys()))
+        ex_jugador = next(item for item in response.data if item["socio_id"] == jugador.socio.socio_id)
+        self.assertTrue(ex_jugador["es_ex_jugador"])
+        self.assertEqual(jugador.jugador_id, ex_jugador["jugador_id"])
+        self.assertEqual({"deuda": "0.00", "cuotas_vencidas": 0}, ex_jugador["cuenta"])
+
+    def test_socio_get_list_vista_listado_no_hace_consultas_por_socio(self):
+        self.crear_socio_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/socio/?vista=listado", format="json")
+        for _ in range(3):
+            self.crear_socio_orm()
+        self.crear_jugador_orm()
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/socio/?vista=listado", format="json")
+        self.assertEqual(5, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_socio_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/socio/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_socio_get_list_filtra_por_es_jugador(self):
         solo_socio = self.crear_socio_orm()
@@ -960,6 +999,44 @@ class PadronViewTests(APITestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
 
+    def test_jugador_get_list_vista_listado_devuelve_solo_campos_de_la_tabla(self):
+        jugador = self.crear_jugador_orm()
+
+        response = self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        item = response.data[0]
+        self.assertEqual(set(JugadorTableSerializer.Meta.fields), set(item.keys()))
+        self.assertEqual(set(JugadorSocioSerializer.Meta.fields), set(item["socio"].keys()))
+        self.assertEqual({"categoria_id", "nombre", "genero"}, set(item["categoria"].keys()))
+        self.assertEqual(jugador.socio.socio_id, item["socio"]["socio_id"])
+        self.assertIsNone(item["categoria_secundaria"])
+        self.assertEqual({"deuda": "0.00", "cuotas_vencidas": 0}, item["socio"]["cuenta"])
+        self.assertEqual({"estado", "vencidos", "faltantes", "por_vencer"}, set(item["documentacion"].keys()))
+
+    def test_jugador_get_list_vista_listado_filtra_por_categoria(self):
+        jugador = self.crear_jugador_orm()
+        otra = self.crear_categoria_orm(nombre="Otra")
+
+        response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={jugador.categoria_id}", format="json")
+        self.assertEqual([jugador.jugador_id], [item["jugador_id"] for item in response.data])
+        response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={otra.categoria_id}", format="json")
+        self.assertEqual([], response.data)
+
+    def test_jugador_get_list_vista_listado_no_hace_consultas_por_jugador(self):
+        self.crear_jugador_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        for index in range(3):
+            self.crear_jugador_orm(categoria=self.crear_categoria_orm(nombre=f"Categoría {index}"))
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/jugador/?vista=listado", format="json")
+        self.assertEqual(4, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_jugador_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/jugador/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
     def test_jugador_get_detail(self):
         jugador = self.crear_jugador_orm()
         response = self.client.get(f"/api/padron/jugador/{jugador.jugador_id}/", format="json")
@@ -1199,6 +1276,44 @@ class PadronViewTests(APITestCase):
         response = self.client.get("/api/padron/docente/", format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertGreaterEqual(len(response.data), 1)
+
+    def test_docente_get_list_vista_listado_devuelve_campos_y_asignaciones(self):
+        docente = self.crear_docente_orm()
+        asignacion = docente.categorias_docente.get()
+
+        response = self.client.get("/api/padron/docente/?vista=listado", format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        item = response.data[0]
+        self.assertEqual({*DocenteTableSerializer.Meta.fields, "asignaciones"}, set(item.keys()))
+        self.assertEqual(set(PersonaSummarySerializer.Meta.fields), set(item["persona_detalle"].keys()))
+        self.assertEqual({"estado", "vencidos", "faltantes", "por_vencer"}, set(item["documentacion"].keys()))
+        self.assertEqual(
+            [{
+                "cargo": asignacion.cargo_id,
+                "cargo_nombre": asignacion.cargo.nombre,
+                "categorias": [{
+                    "categoria_id": asignacion.categoria_id,
+                    "nombre": asignacion.categoria.nombre,
+                    "genero": asignacion.categoria.genero,
+                }],
+            }],
+            item["asignaciones"],
+        )
+
+    def test_docente_get_list_vista_listado_no_hace_consultas_por_docente(self):
+        self.crear_docente_orm()
+        with CaptureQueriesContext(connection) as uno:
+            self.client.get("/api/padron/docente/?vista=listado", format="json")
+        for _ in range(3):
+            self.crear_docente_orm()
+        with CaptureQueriesContext(connection) as varios:
+            response = self.client.get("/api/padron/docente/?vista=listado", format="json")
+        self.assertEqual(4, len(response.data))
+        self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+    def test_docente_get_list_rechaza_vista_desconocida(self):
+        response = self.client.get("/api/padron/docente/?vista=completa", format="json")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
 
     def test_docente_get_detail(self):
         docente = self.crear_docente_orm()
@@ -2475,3 +2590,43 @@ class PadronReportTests(APITestCase):
             with self.subTest(suffix=suffix):
                 response = self.client.get(f"{self.URL}{suffix}", {"entity": "otros"})
                 self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+
+class PadronListPdfTests(APITestCase):
+    URL = "/api/padron/listado/pdf/"
+
+    def setUp(self):
+        self.client.force_authenticate(get_user_model().objects.create_user(username="31999888", password="Clave-segura-123"))
+
+    def payload(self, **overrides):
+        return {
+            "titulo": "Socios",
+            "archivo": "socios",
+            "descripcion": "Estado: Activo",
+            "columnas": ["N° socio", "Nombre y apellido", "DNI"],
+            "filas": [["12", "Ana Pérez", "30.123.456"], ["13", "Luis Gómez", "28.987.654"]],
+            **overrides,
+        }
+
+    def test_genera_el_pdf_del_listado(self):
+        response = self.client.post(self.URL, self.payload(), format="json")
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual("application/pdf", response["Content-Type"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn('filename="socios-', response["Content-Disposition"])
+
+    def test_genera_el_pdf_sin_filas(self):
+        response = self.client.post(self.URL, self.payload(filas=[]), format="json")
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+
+    def test_rechaza_filas_con_distinta_cantidad_de_celdas(self):
+        response = self.client.post(self.URL, self.payload(filas=[["12", "Ana Pérez"]]), format="json")
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+    def test_rechaza_nombres_de_archivo_inseguros(self):
+        response = self.client.post(self.URL, self.payload(archivo="../socios"), format="json")
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)

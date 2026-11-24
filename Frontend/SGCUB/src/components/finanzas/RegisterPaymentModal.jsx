@@ -6,12 +6,21 @@ import { getEstadoCuenta } from '../../api/estadoCuenta'
 import useAssignBenefit from '../../hooks/useAssignBenefit'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { BenefitButton } from '../personas/HeaderPersona'
+import { hasPendingDebt } from './accountStatement'
 import PagoForm from './PagoForm'
 import { receiptModalStyles } from './receiptModal'
 import SocioPicker from './SocioPicker'
 import { TitleSkeleton } from '../shared/Skeleton'
+import StatusBadge from '../shared/StatusBadge'
 
 const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
+
+const FORM_HEIGHT = 'min(820px, 90dvh)'
+
+const modalLayout = (paid, isMobile) => {
+  if (paid) return receiptModalStyles(isMobile)
+  return isMobile ? {} : receiptModalStyles(false, FORM_HEIGHT)
+}
 
 function HeaderMessage({ icon, tone = 'text-on-surface-variant', children }) {
   return (
@@ -67,24 +76,30 @@ function RegisterPaymentModal({
 
   const loading = Boolean(socioId) && load.socioId !== socioId
   const loaded = Boolean(socioId) && !loading && !load.error && load.socio && load.cuenta
-  const ready = loaded && isActiveStatus(load.socio.estado_administrativo_nombre)
+  const socioActive = loaded && isActiveStatus(load.socio.estado_administrativo_nombre)
+  const ready = socioActive || (loaded && hasPendingDebt(load.cuenta))
 
   const socioSummary = () => {
     if (ready) {
       const socio = load.socio
       return (
-        <p className="min-w-0 truncate text-base text-on-surface-variant">
-          <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
-          {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
-        </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <p className="min-w-0 truncate text-base text-on-surface-variant">
+            <span className="text-lg font-bold text-on-surface">{socio.apellido}, {socio.nombre}</span>
+            {' '}(DNI {formatDni(socio.dni)} • Socio {formatNumber(socio.numero_socio)})
+          </p>
+          {!socioActive && (
+            <StatusBadge size="md" badge={{ label: 'De baja · solo deuda', tono: 'alerta', title: 'Socio dado de baja: solo puede pagar la deuda pendiente' }} />
+          )}
+        </div>
       )
     }
-    if (!socioId) return <SocioPicker compact excludedId={excludedSocioId} onSelect={(socio) => setSocioId(socio.socio_id)} />
+    if (!socioId) return <SocioPicker compact includeInactive excludedId={excludedSocioId} onSelect={(socio) => setSocioId(socio.socio_id)} />
     if (loading) return <TitleSkeleton label="Cargando estado de cuenta..." />
     if (!loaded) {
       return <HeaderMessage icon="error" tone="text-error">{load.error || 'No se encontró la cuenta corriente del socio.'}</HeaderMessage>
     }
-    return <HeaderMessage icon="person_off" tone="text-error">El socio está dado de baja. No se pueden registrar pagos a socios inactivos.</HeaderMessage>
+    return <HeaderMessage icon="person_off" tone="text-error">El socio está dado de baja y no tiene deuda pendiente.</HeaderMessage>
   }
 
   const handleSuccess = (response) => {
@@ -126,10 +141,10 @@ function RegisterPaymentModal({
           </button>
           <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
           <div className="flex-1 min-w-0">{socioSummary()}</div>
-          <BenefitButton onClick={() => assignBenefit()} disabled={!ready} />
+          <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...(paid ? receiptModalStyles(isMobile) : {}) }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...modalLayout(paid, isMobile) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered
@@ -145,7 +160,7 @@ function RegisterPaymentModal({
           reversal={reversal}
           onCancel={onClose}
           onSuccess={handleSuccess}
-          onAssignBenefit={assignBenefit}
+          onAssignBenefit={socioActive ? assignBenefit : undefined}
           onAccountChanged={refreshAccount}
         />
       ) : (

@@ -3,7 +3,8 @@ import { Button, Group, Modal, Text } from '@mantine/core'
 import CargoFields from '../../docentes/CargoFields'
 import CargosDocenteTable from '../../docentes/CargosDocenteTable'
 import { etiquetaCategoria, idsCategorias, validateCargo } from '../../docentes/docentesUtils'
-import { TabHeader, EmptyState, PrimaryButton } from './parts'
+import { SecondaryButton, TAB_CARD_CLASS, TabHeader, TableFooter } from './parts'
+import { SectionEmpty } from '../../shared/FlushSection'
 
 const aPayload = (asignaciones) => asignaciones.map((asignacion) => ({
   cargo: Number(asignacion.cargo),
@@ -121,30 +122,30 @@ export default function CategoriesTab({ asignaciones = [], cargos = [], categori
   const guardar = (nuevas) => onSave(aPayload(nuevas))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       <TabHeader
-        title="Categorías asignadas"
+        title="Cargos y categorías"
         description="Cargos que ocupa el docente y las categorías en las que participa con cada uno"
-        actions={editable && (
-          <PrimaryButton icon="add" onClick={() => setModalCargo({ asignacion: null })}>Agregar cargo</PrimaryButton>
-        )}
       />
 
-      {asignaciones.length === 0 ? (
-        <EmptyState
-          icon="groups"
-          title="Sin categorías asignadas"
-          description="Este docente todavía no tiene categorías asignadas."
-        />
-      ) : (
-        <CargosDocenteTable
-          asignaciones={asignaciones}
-          editable={editable}
-          removeDisabledReason={removeDisabledReason}
-          onEdit={(asignacion) => setModalCargo({ asignacion })}
-          onRemove={setCargoToRemove}
-        />
-      )}
+      <div className={`mt-6 ${TAB_CARD_CLASS}`}>
+        {asignaciones.length === 0 ? (
+          <SectionEmpty>Este docente todavía no tiene cargos ni categorías asignadas.</SectionEmpty>
+        ) : (
+          <CargosDocenteTable
+            asignaciones={asignaciones}
+            editable={editable}
+            removeDisabledReason={removeDisabledReason}
+            onEdit={(asignacion) => setModalCargo({ asignacion })}
+            onRemove={setCargoToRemove}
+          />
+        )}
+        {editable && (
+          <TableFooter>
+            <SecondaryButton icon="add" onClick={() => setModalCargo({ asignacion: null })}>Agregar cargo</SecondaryButton>
+          </TableFooter>
+        )}
+      </div>
 
       {modalCargo && (
         <CargoModal

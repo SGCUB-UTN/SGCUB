@@ -2,14 +2,13 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SociosTable from '../components/socios/SociosTable'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton } from '../components/personas/tabs/parts'
 import StatCard from '../components/shared/StatCard'
-import JugadorHealthEducationSummary from '../components/jugadores/JugadorHealthEducationSummary'
 import useSocio from '../hooks/useSocio'
-
-const MOSTRAR_RESUMEN_JUGADORES = false
+import { LIST_VIEW } from '../api/listView'
 
 function Padron() {
-  const { socios, isLoading, error } = useSocio({ onlyMembers: true })
+  const { socios, isLoading, error, recargarSocios } = useSocio({ onlyMembers: true, view: LIST_VIEW })
   const navigate = useNavigate()
   const [status, setStatus] = useState('activo')
 
@@ -34,25 +33,18 @@ function Padron() {
           breadcrumb={[{ label: 'Personas' }, { label: 'Socios' }]}
           title="Socios"
           actions={(
-            <button
-              type="button"
-              onClick={() => navigate('/padron/socios/nuevo')}
-              className="inline-flex items-center gap-2 bg-primary text-on-primary hover:bg-primary/90 px-4 py-2 rounded shadow-sm font-label-lg text-base font-medium transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person_add</span>
-              <span className="text-xl"> Nuevo socio</span>
-            </button>
+            <div className="flex flex-wrap items-start gap-2.5">
+              <PrimaryButton icon="person_add" onClick={() => navigate('/padron/socios/nuevo')}>Nuevo socio</PrimaryButton>
+            </div>
           )}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-          <StatCard label="Total Padrón" value={totales.total} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
-          <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-          <StatCard label="Ex Jugadores" value={totales.exJugadores} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
-          <StatCard label="De baja" value={totales.inactivos} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+          <StatCard label="Total Padrón" value={error ? '—' : totales.total} isLoading={isLoading} icon="group" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+          <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+          <StatCard label="Ex Jugadores" value={error ? '—' : totales.exJugadores} isLoading={isLoading} icon="sports_soccer" tone="info" onClick={() => setStatus('ex_jugador')} isSelected={status === 'ex_jugador'} />
+          <StatCard label="De baja" value={error ? '—' : totales.inactivos} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
         </div>
-
-        {MOSTRAR_RESUMEN_JUGADORES && <JugadorHealthEducationSummary />}
 
         <section aria-label="Socios">
           <SociosTable
@@ -60,8 +52,7 @@ function Padron() {
             isLoading={isLoading}
             error={error}
             status={status}
-            onStatusChange={setStatus}
-            onEdit={(socio) => navigate(`/padron/socios/${socio.socio_id}/editar`)}
+            onRetry={recargarSocios}
           />
         </section>
       </div>

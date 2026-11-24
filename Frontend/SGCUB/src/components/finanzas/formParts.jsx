@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAutorizantes } from '../../api/usuarios'
 import SectionHeading from '../shared/SectionHeading'
+import { formatAmount } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
@@ -38,9 +39,27 @@ export function AmountInput({ value, onChange, invalid = false, className = '', 
         value={formatAmountText(value)}
         onChange={handleChange}
         aria-invalid={invalid || undefined}
-        className={claseInput(invalid, 'pl-7 font-semibold text-right')}
+        className={claseInput(invalid, 'pl-7 font-semibold text-right tabular-nums')}
         {...props}
       />
+    </div>
+  )
+}
+
+export function BenefitValueError({ message, maxFixed = null, canUseMax = false, onUseMax }) {
+  if (!message) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1" role="alert">
+      <p className="text-sm text-error font-medium">{message}</p>
+      {canUseMax && maxFixed !== null && (
+        <button
+          type="button"
+          onClick={() => onUseMax(maxFixed.toFixed(2))}
+          className="text-sm font-semibold text-primary underline underline-offset-4 hover:text-primary/80 cursor-pointer"
+        >
+          Aplicar {formatAmount(maxFixed)}
+        </button>
+      )}
     </div>
   )
 }
@@ -50,7 +69,7 @@ export function SummaryLine({ label, value, isTotal = false, valueClassName = ''
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className={`shrink-0 ${isTotal ? 'text-base font-bold text-on-surface' : 'text-base text-on-surface-variant'}`}>{label}</span>
-      <span className={`min-w-0 text-right break-words ${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
+      <span className={`min-w-0 text-right break-words tabular-nums ${isTotal ? 'text-lg font-bold' : 'text-base font-semibold'} ${valueTone}`}>{value}</span>
     </div>
   )
 }
@@ -106,23 +125,32 @@ export function AmountModeInput({ mode, value, onModeChange, onValueChange, inva
           </button>
         ))}
       </div>
-      <div className="relative w-full min-w-0 sm:flex-1 sm:max-w-44">
-        {!isPercentage && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">$</span>}
-        <input
-          type="number"
-          inputMode="decimal"
-          min={isPercentage ? '1' : '0.01'}
-          max={isPercentage ? '100' : undefined}
-          step={isPercentage ? '1' : '0.01'}
+      {isPercentage ? (
+        <div className="relative w-full min-w-0 sm:flex-1 [&_input]:h-11">
+          <input
+            type="number"
+            inputMode="decimal"
+            min="1"
+            max="100"
+            step="1"
+            value={value}
+            onChange={(event) => onValueChange(event.target.value)}
+            placeholder="0"
+            aria-label="Porcentaje del beneficio"
+            aria-invalid={invalid || undefined}
+            className={claseInput(invalid, `${NO_SPINNER_CLASS} font-semibold text-right pr-8`)}
+          />
+          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">%</span>
+        </div>
+      ) : (
+        <AmountInput
           value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          placeholder={isPercentage ? '0' : '0.00'}
-          aria-label={isPercentage ? 'Porcentaje del beneficio' : 'Monto del beneficio'}
-          aria-invalid={invalid || undefined}
-          className={claseInput(invalid, `${NO_SPINNER_CLASS} font-semibold text-right ${isPercentage ? 'pr-8' : 'pl-7'}`)}
+          onChange={onValueChange}
+          invalid={invalid}
+          aria-label="Monto del beneficio"
+          className="w-full min-w-0 sm:flex-1 [&_input]:h-11"
         />
-        {isPercentage && <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-outline" aria-hidden="true">%</span>}
-      </div>
+      )}
     </div>
   )
 }

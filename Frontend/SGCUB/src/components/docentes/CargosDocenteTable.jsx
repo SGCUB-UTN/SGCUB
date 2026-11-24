@@ -35,7 +35,6 @@ function RemoveButton({ label, disabledReason, onClick }) {
 function CargosDocenteTable({ asignaciones, editable = false, removeDisabledReason, onEdit, onRemove }) {
   return (
     <DataTable
-      className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest shadow-sm"
       headers={(
         <>
           <th className="py-3 px-4" scope="col">Cargo</th>

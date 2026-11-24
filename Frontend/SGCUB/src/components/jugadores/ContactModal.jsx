@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Modal, Text } from '@mantine/core'
 import { api } from '../../api/conf'
 import useBarrios from '../../hooks/useBarrios'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
@@ -29,19 +30,39 @@ const contactoVacio = {
 }
 
 const MIN_DIGITOS_BUSQUEDA = 3
+const DIGITOS_DNI_COMPLETO = 7
 const DEMORA_BUSQUEDA_MS = 300
 
-const inputClass = 'w-full h-10 px-3 bg-surface-container-low rounded-lg text-base text-on-surface border border-outline-variant/40 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60'
+const INPUT_BASE = 'w-full h-10 px-3 bg-surface-container-low rounded-lg text-base text-on-surface border focus:outline-none focus:ring-2 disabled:opacity-60 read-only:bg-surface-container read-only:text-on-surface-variant'
+const inputClass = (invalid = false) => `${INPUT_BASE} ${invalid
+  ? 'border-error focus:border-error focus:ring-error/20'
+  : 'border-outline-variant/40 focus:border-primary focus:ring-primary/20'}`
 
-function InputField({ label, required, className = '', children }) {
+const FIELD_ORDER = ['dni', 'nombre', 'apellido', 'telefono', 'relacion', 'domicilio_calle', 'domicilio_numero', 'domicilio_localidad']
+
+function InputField({ id, label, required, error, className = '', children }) {
   return (
-    <label className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-base text-on-surface-variant font-semibold">
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <label htmlFor={id} className="text-base text-on-surface-variant font-semibold">
         {label}{required && <span className="text-error ml-0.5">*</span>}
-      </span>
+      </label>
       {children}
-    </label>
+      {error && <p id={`${id}-error`} className="text-sm text-error font-medium">{error}</p>}
+    </div>
   )
+}
+
+const fieldProps = (id, errors) => ({
+  id,
+  'aria-invalid': errors[id] ? true : undefined,
+  'aria-describedby': errors[id] ? `${id}-error` : undefined,
+})
+
+const formatAddress = (person, localidades) => {
+  if (!person?.domicilio_calle) return ''
+  const street = [person.domicilio_calle, person.domicilio_numero].filter(Boolean).join(' ')
+  const locality = localidades.find((item) => String(item.localidad_id) === String(person.domicilio_localidad))?.nombre
+  return [street, locality].filter(Boolean).join(', ')
 }
 
 const personaAFormulario = (persona, domicilioTitular) => ({
@@ -83,6 +104,8 @@ export default function ContactModal({
   const [coincidencias, setCoincidencias] = useState([])
   const [personaSeleccionada, setPersonaSeleccionada] = useState(editando ? contact.persona ?? null : null)
   const [tiposRelacion, setTiposRelacion] = useState(RELATIONS)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [editandoIdentidad, setEditandoIdentidad] = useState(false)
 
   useEffect(() => {
     getTiposRelacionFamiliar()
@@ -109,12 +132,6 @@ export default function ContactModal({
 
   const { localidades } = useLocalidades()
   const { barrios } = useBarrios(form.mismo_domicilio ? null : form.domicilio_localidad)
-
-  useEffect(() => {
-    const cerrarConEscape = (event) => event.key === 'Escape' && !saving && onClose()
-    window.addEventListener('keydown', cerrarConEscape)
-    return () => window.removeEventListener('keydown', cerrarConEscape)
-  }, [onClose, saving])
 
   useEffect(() => {
     const dni = form.dni.trim()
@@ -149,6 +166,7 @@ export default function ContactModal({
 
   const change = (campo) => (event) => {
     const { type, checked, value } = event.target
+    setFieldErrors((actual) => ({ ...actual, [campo]: '' }))
     setForm((actual) => ({
       ...actual,
       [campo]: type === 'checkbox' ? checked : value,
@@ -158,11 +176,14 @@ export default function ContactModal({
 
   const seleccionarPersona = (persona) => {
     setPersonaSeleccionada(persona)
+    setEditandoIdentidad(false)
+    setFieldErrors({})
     setForm((actual) => ({ ...actual, ...personaAFormulario(persona, domicilioTitular) }))
   }
 
   const quitarSeleccion = () => {
     setPersonaSeleccionada(null)
+    setEditandoIdentidad(false)
     setForm((actual) => ({
       ...contactoVacio,
       relacion: actual.relacion,
@@ -170,29 +191,34 @@ export default function ContactModal({
     }))
   }
 
+  const validate = () => {
+    const dniContacto = form.dni.trim()
+    const dniTitular = String(domicilioTitular?.dni ?? '').trim()
+    const conDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
+    const errors = {
+      dni: !dniContacto ? 'Ingresá el DNI.'
+        : dniTitular && dniContacto === dniTitular ? `No se puede registrar al mismo ${etiquetaTitular} como su propio contacto.` : '',
+      nombre: !form.nombre.trim() ? 'Ingresá el nombre.' : '',
+      apellido: !form.apellido.trim() ? 'Ingresá el apellido.' : '',
+      telefono: !form.telefono.trim() ? 'Ingresá el teléfono.' : phoneError(form.telefono) || '',
+      relacion: !form.relacion ? 'Elegí el vínculo.' : '',
+      domicilio_calle: conDomicilio && !form.domicilio_calle.trim() ? 'Completá la calle para registrar el domicilio.' : '',
+      domicilio_numero: conDomicilio && !form.domicilio_numero.trim() ? 'Completá el número.' : '',
+      domicilio_localidad: conDomicilio && !form.domicilio_localidad ? 'Elegí la localidad.' : '',
+    }
+    return Object.fromEntries(Object.entries(errors).filter(([, message]) => message))
+  }
+
   const submit = async (event) => {
     event.preventDefault()
     setError('')
 
-    const dniContacto = form.dni.trim()
-    const dniTitular = String(domicilioTitular?.dni ?? '').trim()
-    if (dniTitular && dniContacto === dniTitular) {
-      setError(`No se puede registrar al mismo ${etiquetaTitular} como su propio contacto.`)
+    const errors = validate()
+    setFieldErrors(errors)
+    const firstInvalid = FIELD_ORDER.find((field) => errors[field])
+    if (firstInvalid) {
+      document.getElementById(firstInvalid)?.focus()
       return
-    }
-
-    const telefonoInvalido = phoneError(form.telefono)
-    if (telefonoInvalido) {
-      setError(telefonoInvalido)
-      return
-    }
-
-    const requiereDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
-    if (requiereDomicilio) {
-      if (!form.domicilio_calle.trim() || !form.domicilio_numero.trim() || !form.domicilio_localidad) {
-        setError('Para registrar el domicilio del contacto debés completar calle, número y localidad.')
-        return
-      }
     }
 
     if (form.mismo_domicilio && domicilioTitular) {
@@ -243,54 +269,48 @@ export default function ContactModal({
       onClose()
     } catch (requestError) {
       setError(requestError.message || (editando ? 'No se pudo modificar el contacto.' : 'No se pudo agregar el contacto.'))
+      setTimeout(() => document.getElementById('contact-form-error')?.scrollIntoView({ block: 'nearest' }), 0)
     } finally {
       setSaving(false)
     }
   }
 
   const dniBloqueado = saving || Boolean(personaSeleccionada)
+  const identidadBloqueada = Boolean(personaSeleccionada) && !editandoIdentidad
+  const dniCompleto = form.dni.trim().length >= DIGITOS_DNI_COMPLETO
+  const sinCoincidencias = !personaSeleccionada && dniCompleto && !searching && coincidencias.length === 0
+  const domicilioTitularTexto = formatAddress(domicilioTitular, localidades)
   const bloquearMismoDomicilio = saving || tieneDomicilioRegistrado(personaSeleccionada)
   const requiereDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-inverse-surface/40" onClick={() => !saving && onClose()}>
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="titulo-agregar-contacto"
-        className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={submit}
-      >
-        <div className="flex items-start justify-between gap-4 px-6 pt-4 pb-3 border-b border-surface-container shrink-0">
-          <h2 id="titulo-agregar-contacto" className="text-xl font-bold text-on-surface">{editando ? 'Editar contacto' : 'Agregar contacto'}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="p-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors cursor-pointer"
-            aria-label="Cerrar"
-          >
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <Modal
+      opened
+      onClose={() => !saving && onClose()}
+      centered
+      size="xl"
+      title={<Text fw={700} size="xl">{editando ? 'Editar contacto' : 'Agregar contacto'}</Text>}
+    >
+      <form onSubmit={submit} noValidate className="flex flex-col">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2 flex flex-col gap-2">
-            <InputField label="DNI" required>
+            <InputField id="dni" label="DNI" required error={fieldErrors.dni}>
               <div className="relative">
                 <input
-                  className={`${inputClass} pr-10`}
+                  {...fieldProps('dni', fieldErrors)}
+                  className={`${inputClass(Boolean(fieldErrors.dni))} pr-10`}
                   inputMode="numeric"
                   autoComplete="off"
                   placeholder="Ej: 28492104"
                   value={form.dni}
-                  onChange={(event) => setForm((actual) => ({ ...actual, dni: event.target.value.replace(/\D/g, '').slice(0, 8) }))}
-                  required
+                  onChange={(event) => {
+                    setFieldErrors((actual) => ({ ...actual, dni: '' }))
+                    setForm((actual) => ({ ...actual, dni: event.target.value.replace(/\D/g, '').slice(0, 8) }))
+                  }}
                   disabled={dniBloqueado}
                   autoFocus
                 />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 flex text-on-surface-variant pointer-events-none">
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 flex text-on-surface-variant pointer-events-none" aria-hidden="true">
                   <span className={`material-symbols-outlined text-[20px] ${searching ? 'animate-spin' : ''}`}>
                     {searching ? 'progress_activity' : 'search'}
                   </span>
@@ -299,20 +319,36 @@ export default function ContactModal({
             </InputField>
 
             {personaSeleccionada && (
-              <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-primary/10 text-sm text-on-surface">
-                <span className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-xl text-primary">check_circle</span>
-                  Persona existente seleccionada
-                </span>
-                <button
-                  type="button"
-                  onClick={quitarSeleccion}
-                  disabled={saving}
-                  className={TEXT_BUTTON_CLASS}
-                >
-                  Cambiar
-                </button>
+              <div className="flex flex-col gap-2 px-3 py-2.5 rounded-lg bg-primary/10 text-base text-on-surface" role="status">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-xl text-primary" aria-hidden="true">check_circle</span>
+                    Persona ya registrada en el club
+                  </span>
+                  <span className="flex items-center gap-3">
+                    {identidadBloqueada && (
+                      <button type="button" onClick={() => setEditandoIdentidad(true)} disabled={saving} className={TEXT_BUTTON_CLASS}>
+                        Editar sus datos
+                      </button>
+                    )}
+                    <button type="button" onClick={quitarSeleccion} disabled={saving} className={TEXT_BUTTON_CLASS}>
+                      Elegir otra
+                    </button>
+                  </span>
+                </div>
+                {editandoIdentidad && (
+                  <p className="text-sm text-on-surface-variant">
+                    Los cambios en nombre, teléfono o email se guardan en la persona y se ven en todos los lugares donde figura.
+                  </p>
+                )}
               </div>
+            )}
+
+            {sinCoincidencias && (
+              <p className="flex items-center gap-2 text-base text-on-surface-variant" role="status">
+                <span className="material-symbols-outlined text-[20px] text-outline" aria-hidden="true">person_add</span>
+                No hay nadie registrado con ese DNI: se va a crear una persona nueva.
+              </p>
             )}
 
             {!personaSeleccionada && coincidencias.length > 0 && (
@@ -330,7 +366,7 @@ export default function ContactModal({
                         </span>
                         <span className="text-sm text-on-surface-variant">DNI {formatDni(persona.dni)}</span>
                       </span>
-                      <span className="material-symbols-outlined text-[20px] text-on-surface-variant">arrow_forward</span>
+                      <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">arrow_forward</span>
                     </button>
                   </li>
                 ))}
@@ -338,29 +374,33 @@ export default function ContactModal({
             )}
           </div>
 
-          <InputField label="Nombre" required>
+          <InputField id="nombre" label="Nombre" required error={fieldErrors.nombre}>
             <input
-              className={inputClass}
+              {...fieldProps('nombre', fieldErrors)}
+              className={inputClass(Boolean(fieldErrors.nombre))}
               placeholder="Ej: Marcos Agustín"
               value={form.nombre}
               onChange={change('nombre')}
-              required
+              readOnly={identidadBloqueada}
               disabled={saving}
             />
           </InputField>
-          <InputField label="Apellido" required>
+          <InputField id="apellido" label="Apellido" required error={fieldErrors.apellido}>
             <input
-              className={inputClass}
+              {...fieldProps('apellido', fieldErrors)}
+              className={inputClass(Boolean(fieldErrors.apellido))}
               placeholder="Ej: Albarracín"
               value={form.apellido}
               onChange={change('apellido')}
-              required
+              readOnly={identidadBloqueada}
               disabled={saving}
             />
           </InputField>
-          <InputField label="Correo electrónico">
+          <InputField id="email" label="Correo electrónico">
             <input
-              className={inputClass}
+              id="email"
+              className={inputClass()}
+              readOnly={identidadBloqueada}
               type="email"
               placeholder="Ej: marcos.albarracin@ejemplo.com"
               value={form.email}
@@ -368,19 +408,20 @@ export default function ContactModal({
               disabled={saving}
             />
           </InputField>
-          <InputField label="Teléfono" required>
+          <InputField id="telefono" label="Teléfono" required error={fieldErrors.telefono}>
             <input
-              className={inputClass}
+              {...fieldProps('telefono', fieldErrors)}
+              className={inputClass(Boolean(fieldErrors.telefono))}
               type="tel"
               placeholder="Ej: 221 459-2810"
               {...bindPhone({ value: form.telefono, onChange: change('telefono') })}
-              required
+              readOnly={identidadBloqueada}
               disabled={saving}
             />
           </InputField>
-          <InputField label="Relación" required className={!mostrarResponsableLegal ? 'sm:col-span-2' : ''}>
-            <select className={inputClass} value={form.relacion} onChange={change('relacion')} required disabled={saving}>
-              <option value="" disabled>Seleccionar...</option>
+          <InputField id="relacion" label="Vínculo" required error={fieldErrors.relacion} className={!mostrarResponsableLegal ? 'sm:col-span-2' : ''}>
+            <select {...fieldProps('relacion', fieldErrors)} className={inputClass(Boolean(fieldErrors.relacion))} value={form.relacion} onChange={change('relacion')} disabled={saving}>
+              <option value="" disabled>Elegí el vínculo</option>
               {relaciones.map((relacion) => <option key={relacion} value={relacion}>{relacion}</option>)}
             </select>
           </InputField>
@@ -388,7 +429,7 @@ export default function ContactModal({
             <label className="flex items-center gap-2 sm:mt-7 cursor-pointer select-none">
               <input
                 type="checkbox"
-                className="w-4 h-4 accent-primary cursor-pointer"
+                className="size-5 accent-primary cursor-pointer"
                 checked={form.responsable_legal}
                 onChange={change('responsable_legal')}
                 disabled={saving}
@@ -399,86 +440,100 @@ export default function ContactModal({
 
           <div className="sm:col-span-2 pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-base text-primary">home_pin</span>
+              <span className="text-base font-semibold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px] text-primary" aria-hidden="true">home_pin</span>
                 Domicilio del contacto
               </span>
-              <label
-                className={`flex items-center gap-2 select-none ${bloquearMismoDomicilio ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                title={bloquearMismoDomicilio ? 'Esta persona ya tiene un domicilio registrado' : undefined}
-              >
+              <label className={`flex items-center gap-2 select-none ${bloquearMismoDomicilio ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
-                  className="w-4 h-4 accent-primary cursor-pointer disabled:cursor-not-allowed"
+                  className="size-5 accent-primary cursor-pointer disabled:cursor-not-allowed"
                   checked={form.mismo_domicilio}
                   onChange={change('mismo_domicilio')}
                   disabled={bloquearMismoDomicilio}
                 />
-                <span className="text-sm text-on-surface font-medium">
+                <span className="text-base text-on-surface font-medium">
                   Vive en el mismo domicilio que el {etiquetaTitular}
                 </span>
               </label>
             </div>
+            {bloquearMismoDomicilio && !saving && (
+              <p className="text-sm text-on-surface-variant">Esta persona ya tiene un domicilio registrado, por eso no se puede usar el del {etiquetaTitular}.</p>
+            )}
+            {form.mismo_domicilio && (
+              <p className="text-base text-on-surface-variant">
+                {domicilioTitularTexto
+                  ? <>Se usa el domicilio del {etiquetaTitular}: <strong className="text-on-surface">{domicilioTitularTexto}</strong></>
+                  : `El ${etiquetaTitular} todavía no tiene un domicilio completo cargado.`}
+              </p>
+            )}
 
             {!form.mismo_domicilio && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <InputField label="Calle" required={requiereDomicilio}>
+                <InputField id="domicilio_calle" label="Calle" required={requiereDomicilio} error={fieldErrors.domicilio_calle}>
                   <input
-                    className={inputClass}
+                    {...fieldProps('domicilio_calle', fieldErrors)}
+                    className={inputClass(Boolean(fieldErrors.domicilio_calle))}
                     placeholder="Ej: Calle 50"
                     value={form.domicilio_calle}
                     onChange={change('domicilio_calle')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Número" required={requiereDomicilio}>
+                <InputField id="domicilio_numero" label="Número" required={requiereDomicilio} error={fieldErrors.domicilio_numero}>
                   <input
-                    className={inputClass}
+                    {...fieldProps('domicilio_numero', fieldErrors)}
+                    className={inputClass(Boolean(fieldErrors.domicilio_numero))}
                     placeholder="Ej: 1240"
                     value={form.domicilio_numero}
                     onChange={change('domicilio_numero')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Piso">
+                <InputField id="domicilio_piso" label="Piso">
                   <input
-                    className={inputClass}
+                    id="domicilio_piso"
+                    className={inputClass()}
                     placeholder="Ej: 3"
                     value={form.domicilio_piso}
                     onChange={change('domicilio_piso')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Departamento">
+                <InputField id="domicilio_departamento" label="Departamento">
                   <input
-                    className={inputClass}
+                    id="domicilio_departamento"
+                    className={inputClass()}
                     placeholder="Ej: B"
                     value={form.domicilio_departamento}
                     onChange={change('domicilio_departamento')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Entre calle 1">
+                <InputField id="domicilio_entre_calle_1" label="Entre calle 1">
                   <input
-                    className={inputClass}
+                    id="domicilio_entre_calle_1"
+                    className={inputClass()}
                     placeholder="Ej: Calle 19"
                     value={form.domicilio_entre_calle_1}
                     onChange={change('domicilio_entre_calle_1')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Entre calle 2">
+                <InputField id="domicilio_entre_calle_2" label="Entre calle 2">
                   <input
-                    className={inputClass}
+                    id="domicilio_entre_calle_2"
+                    className={inputClass()}
                     placeholder="Ej: Calle 20"
                     value={form.domicilio_entre_calle_2}
                     onChange={change('domicilio_entre_calle_2')}
                     disabled={saving}
                   />
                 </InputField>
-                <InputField label="Localidad" required={requiereDomicilio}>
+                <InputField id="domicilio_localidad" label="Localidad" required={requiereDomicilio} error={fieldErrors.domicilio_localidad}>
                   <select
-                    className={inputClass}
+                    {...fieldProps('domicilio_localidad', fieldErrors)}
+                    className={inputClass(Boolean(fieldErrors.domicilio_localidad))}
                     value={form.domicilio_localidad}
                     onChange={change('domicilio_localidad')}
                     disabled={saving}
@@ -489,15 +544,16 @@ export default function ContactModal({
                     ))}
                   </select>
                 </InputField>
-                <InputField label="Barrio">
+                <InputField id="domicilio_barrio" label="Barrio">
                   <select
-                    className={inputClass}
+                    id="domicilio_barrio"
+                    className={inputClass()}
                     value={form.domicilio_barrio}
                     onChange={change('domicilio_barrio')}
                     disabled={saving || !form.domicilio_localidad}
                   >
                     <option value="">
-                      {form.domicilio_localidad ? 'Sin especificar' : 'Seleccione primero la localidad'}
+                      {form.domicilio_localidad ? 'Sin especificar' : 'Elegí primero la localidad'}
                     </option>
                     {barrios.map((b) => (
                       <option key={b.barrio_id} value={String(b.barrio_id)}>{b.nombre}</option>
@@ -509,17 +565,17 @@ export default function ContactModal({
           </div>
 
           {error && (
-            <p className="sm:col-span-2 px-3 py-2 rounded-lg bg-error-container/40 text-sm text-on-error-container">{error}</p>
+            <p id="contact-form-error" className="sm:col-span-2 px-3 py-2 rounded-lg bg-error-container/40 text-base text-on-error-container" role="alert">{error}</p>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-surface-container shrink-0">
+        <div className="flex justify-end gap-2 pt-4 mt-6 border-t border-surface-container">
           <SecondaryButton onClick={onClose} disabled={saving}>Cancelar</SecondaryButton>
           <PrimaryButton type="submit" icon={editando ? 'save' : 'person_add'} disabled={saving}>
             {saving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Agregar contacto'}
           </PrimaryButton>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

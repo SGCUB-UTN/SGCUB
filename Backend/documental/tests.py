@@ -6,7 +6,9 @@ from datetime import date, datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.db import connection
 from django.test import SimpleTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 import pypdfium2 as pdfium
@@ -29,6 +31,15 @@ from padron.models import (
 
 from .markdown import inline_markdown, parse_markdown
 from .models import Documento, EstadoDocumento, TipoDocumento
+from .services import (
+    FALTANTE,
+    PERFIL_DOCENTE,
+    PERFIL_JUGADOR,
+    POR_VENCER,
+    VENCIDO,
+    VIGENTE,
+    documentation_statuses,
+)
 
 
 class TipoDocumentoTests(APITestCase):
@@ -276,6 +287,46 @@ class PadronDocumentalTests(APITestCase):
 
     def estados(self, persona):
         return {documento["tipo_documento"]: documento["estado"] for documento in persona["documentos"]}
+
+    def test_estado_documental_por_persona_toma_el_mas_grave(self):
+        sin_documentos = self.jugador("72000001").socio.persona
+        con_vencido = self.jugador("72000002").socio.persona
+        self.documento(con_vencido, self.apto)
+        self.documento(con_vencido, self.seguro, dias=-3)
+        por_vencer = self.jugador("72000003").socio.persona
+        self.documento(por_vencer, self.apto)
+        self.documento(por_vencer, self.seguro, dias=1)
+        al_dia = self.jugador("72000004").socio.persona
+        self.documento(al_dia, self.apto)
+        self.documento(al_dia, self.seguro)
+
+        estados = documentation_statuses(
+            [sin_documentos.pk, con_vencido.pk, por_vencer.pk, al_dia.pk], PERFIL_JUGADOR
+        )
+
+        self.assertEqual({"estado": FALTANTE, "vencidos": 0, "faltantes": 2, "por_vencer": 0}, estados[sin_documentos.pk])
+        self.assertEqual({"estado": VENCIDO, "vencidos": 1, "faltantes": 0, "por_vencer": 0}, estados[con_vencido.pk])
+        self.assertEqual({"estado": POR_VENCER, "vencidos": 0, "faltantes": 0, "por_vencer": 1}, estados[por_vencer.pk])
+        self.assertEqual({"estado": VIGENTE, "vencidos": 0, "faltantes": 0, "por_vencer": 0}, estados[al_dia.pk])
+
+    def test_estado_documental_por_persona_usa_los_tipos_del_perfil(self):
+        persona = self.docente("72000011").persona
+        self.documento(persona, self.seguro)
+        self.documento(persona, self.cv)
+
+        self.assertEqual(VIGENTE, documentation_statuses([persona.pk], PERFIL_DOCENTE)[persona.pk]["estado"])
+        self.assertEqual(FALTANTE, documentation_statuses([persona.pk], PERFIL_JUGADOR)[persona.pk]["estado"])
+
+    def test_estado_documental_por_persona_no_hace_consultas_por_persona(self):
+        uno = [self.jugador("72000021").socio.persona_id]
+        varios = uno + [self.jugador(f"7200003{index}").socio.persona_id for index in range(3)]
+
+        with CaptureQueriesContext(connection) as consultas_uno:
+            documentation_statuses(uno, PERFIL_JUGADOR)
+        with CaptureQueriesContext(connection) as consultas_varios:
+            documentation_statuses(varios, PERFIL_JUGADOR)
+
+        self.assertEqual(len(consultas_uno.captured_queries), len(consultas_varios.captured_queries))
 
     def test_incluye_solo_jugadores_y_docentes_activos(self):
         jugador = self.jugador("71000001")

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import PermissionGate from '../../auth/PermissionGate';
 import { PERMISSIONS } from '../../auth/permissions';
@@ -6,11 +6,14 @@ import StatusBadge from '../shared/StatusBadge';
 import './sidebar.css';
 
 const DURACION_CONTRAER = 220;
+const DEMORA_DESPLEGAR = 120;
+const DEMORA_CONTRAER = 150;
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpen = false, onNavigate, onPeekChange }) {
   const { pathname } = useLocation();
 
   const [alertas, setAlertas] = useState(null);
+  const [alertasError, setAlertasError] = useState(false);
 
   useEffect(() => {
     const fetchAlertas = async () => {
@@ -18,8 +21,10 @@ export default function Sidebar({ collapsed, onToggle }) {
         const { getAlertasCount } = await import('../../api/documentacion');
         const data = await getAlertasCount();
         setAlertas(data);
+        setAlertasError(false);
       } catch (err) {
         console.error('Error fetching alertas count:', err);
+        setAlertasError(true);
       }
     };
     
@@ -29,11 +34,36 @@ export default function Sidebar({ collapsed, onToggle }) {
     return () => window.removeEventListener('documentacionCambiada', fetchAlertas);
   }, []);
 
+  const [mouseEncima, setMouseEncima] = useState(false);
+  const [focoTeclado, setFocoTeclado] = useState(false);
+  const hoverTimer = useRef(null);
+  const desplegado = collapsed && (mouseEncima || focoTeclado);
+  const contraido = collapsed && !desplegado;
+
+  useEffect(() => {
+    onPeekChange?.(desplegado);
+  }, [desplegado, onPeekChange]);
+
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+
+  const programarHover = (valor, demora) => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setMouseEncima(valor), demora);
+  };
+
+  const handleFocus = (event) => {
+    if (event.target.matches(':focus-visible')) setFocoTeclado(true);
+  };
+
+  const handleBlur = (event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) setFocoTeclado(false);
+  };
+
   const [contrayendo, setContrayendo] = useState(false);
-  const [collapsedAnterior, setCollapsedAnterior] = useState(collapsed);
-  if (collapsed !== collapsedAnterior) {
-    setCollapsedAnterior(collapsed);
-    setContrayendo(collapsed);
+  const [contraidoAnterior, setContraidoAnterior] = useState(contraido);
+  if (contraido !== contraidoAnterior) {
+    setContraidoAnterior(contraido);
+    setContrayendo(contraido);
   }
 
   useEffect(() => {
@@ -42,57 +72,76 @@ export default function Sidebar({ collapsed, onToggle }) {
     return () => clearTimeout(timer);
   }, [contrayendo]);
 
-  const claseEstado = contrayendo ? 'app-sidebar--collapsing' : collapsed ? 'app-sidebar--collapsed' : '';
-  const personasActive = ['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/reportes']
-    .some((route) => pathname === route || pathname.startsWith(`${route}/`));
-  const finanzasActive = ['/finanzas', '/finanzas/cuotas', '/resumen-financiero', '/morosidad', '/caja']
-    .some((route) => pathname === route || pathname.startsWith(`${route}/`));
-  const comunicacionesActive = pathname === '/comunicaciones' || pathname.startsWith('/comunicaciones/');
-  const adminActive = ['/usuarios', '/automatizaciones', '/configuracion']
-    .some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const claseEstado = mobile
+    ? mobileOpen ? 'app-sidebar--mobile-open' : ''
+    : contrayendo
+    ? 'app-sidebar--collapsing'
+    : contraido
+      ? 'app-sidebar--collapsed'
+      : desplegado
+        ? 'app-sidebar--peek'
+        : '';
+  const matches = (routes) => routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const finanzasActive = matches(['/finanzas', '/resumen-financiero', '/caja']);
+  const padronActive = matches(['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/categorias', '/docentes', '/categorias']);
+  const comunicacionesActive = matches(['/comunicaciones']);
+  const reportesActive = matches(['/padron/reportes', '/morosidad']);
+  const ajustesActive = matches(['/usuarios', '/automatizaciones', '/configuracion']);
 
   const [openSections, setOpenSections] = useState({
-    personas: personasActive,
     finanzas: finanzasActive,
+    padron: padronActive,
     comunicaciones: comunicacionesActive,
-    admin: adminActive,
+    reportes: reportesActive,
+    ajustes: ajustesActive,
   });
 
   useEffect(() => {
     setOpenSections((current) => ({
       ...current,
-      ...(personasActive && { personas: true }),
       ...(finanzasActive && { finanzas: true }),
+      ...(padronActive && { padron: true }),
       ...(comunicacionesActive && { comunicaciones: true }),
-      ...(adminActive && { admin: true }),
+      ...(reportesActive && { reportes: true }),
+      ...(ajustesActive && { ajustes: true }),
     }));
-  }, [personasActive, finanzasActive, comunicacionesActive, adminActive]);
+  }, [finanzasActive, padronActive, comunicacionesActive, reportesActive, ajustesActive]);
 
   return (
-    <aside className={`app-sidebar ${claseEstado}`}>
+    <aside
+      id="app-sidebar"
+      className={`app-sidebar ${claseEstado}`}
+      onMouseEnter={() => collapsed && programarHover(true, DEMORA_DESPLEGAR)}
+      onMouseLeave={() => programarHover(false, DEMORA_CONTRAER)}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    >
       <div className="app-sidebar-content">
         <div className="app-sidebar-scroll">
-          <nav className="app-sidebar-nav">
+          <nav
+            className="app-sidebar-nav"
+            aria-label="Navegación principal"
+            onClick={(event) => mobile && event.target.closest('a') && onNavigate?.()}
+          >
             <NavLink end to="/" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors text-base font-semibold ${isActive ? 'app-sidebar-link--active' : ''}`}>
               <div className="flex items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[20px]">grid_view</span>
+                <span className="material-symbols-outlined text-[20px]" aria-hidden="true">grid_view</span>
                 <span className="app-sidebar-label text-base">Inicio</span>
               </div>
             </NavLink>
-            
-            {/* Sección Personas */}
+
             <details
-              open={openSections.personas}
+              open={openSections.padron}
               onToggle={(e) => {
                 const isOpen = e.currentTarget.open;
-                setOpenSections((prev) => (prev.personas === isOpen ? prev : { ...prev, personas: isOpen }));
+                setOpenSections((prev) => (prev.padron === isOpen ? prev : { ...prev, padron: isOpen }));
               }}
               className="app-sidebar-group flex flex-col gap-0.5"
             >
-              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${personasActive ? 'app-sidebar-section--active' : ''}`}>
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${padronActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">groups</span>
-                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Personas</span>
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">groups</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Padrón</span>
                 </div>
                 <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
               </summary>
@@ -109,22 +158,21 @@ export default function Sidebar({ collapsed, onToggle }) {
                     <span className="app-sidebar-label text-base">Jugadores</span>
                   </span>
                 </NavLink>
-                <NavLink to="/padron/docentes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                <NavLink to="/padron/docentes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive || pathname.startsWith('/docentes') ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">school</span>
                     <span className="app-sidebar-label text-base">Docentes</span>
                   </span>
                 </NavLink>
-                <NavLink to="/padron/reportes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                <NavLink to="/padron/categorias" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive || pathname.startsWith('/categorias/') ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">monitoring</span>
-                    <span className="app-sidebar-label text-base">Reportes</span>
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">sports_soccer</span>
+                    <span className="app-sidebar-label text-base">Categorías</span>
                   </span>
                 </NavLink>
               </div>
             </details>
 
-            {/* Sección Finanzas */}
             <details
               open={openSections.finanzas}
               onToggle={(e) => {
@@ -135,22 +183,16 @@ export default function Sidebar({ collapsed, onToggle }) {
             >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${finanzasActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">account_balance_wallet</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">Finanzas</span>
                 </div>
                 <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
               </summary>
               <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
-                <NavLink to="/resumen-financiero" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance</span>
-                    <span className="app-sidebar-label text-base">Resumen financiero</span>
-                  </span>
-                </NavLink>
-                <NavLink to="/morosidad" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
-                  <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">warning</span>
-                    <span className="app-sidebar-label text-base">Reporte de morosidad</span>
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
+                    <span className="app-sidebar-label text-base">Caja y cobros</span>
                   </span>
                 </NavLink>
                 <NavLink to="/finanzas/cuotas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
@@ -159,37 +201,49 @@ export default function Sidebar({ collapsed, onToggle }) {
                     <span className="app-sidebar-label text-base">Cuotas</span>
                   </span>
                 </NavLink>
-                <NavLink to="/caja" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                <NavLink to="/resumen-financiero" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
                   <span className="app-sidebar-subitem-main">
-                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">point_of_sale</span>
-                    <span className="app-sidebar-label text-base">Caja y cobros</span>
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">account_balance</span>
+                    <span className="app-sidebar-label text-base">Resumen financiero</span>
                   </span>
                 </NavLink>
               </div>
             </details>
 
             <NavLink to="/documental" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
-                <div className="flex items-center gap-space-sm">
+              <div className="flex items-center gap-space-sm">
+                <span className="relative inline-flex" aria-hidden="true">
                   <span className="material-symbols-outlined text-[20px]">folder_shared</span>
-                  <span className="app-sidebar-label font-body-md text-body-md">Documental</span>
-                </div>
-                {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
-                  <span className="app-sidebar-badges font-label-sm flex items-center gap-1">
-                    {alertas.vencidos > 0 && (
-                      <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', hideDot: true, title: 'Vencidos' }} />
-                    )}
-                    {alertas.proximos > 0 && (
-                      <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', hideDot: true, title: 'Por vencer' }} />
-                    )}
+                  {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
+                    <span className={`app-sidebar-alert-dot ${alertas.vencidos > 0 ? 'bg-error' : 'bg-amber-600'}`} />
+                  )}
+                </span>
+                <span className="app-sidebar-label text-base font-semibold text-on-surface">Documentación</span>
+              </div>
+              {alertas && (alertas.vencidos > 0 || alertas.proximos > 0) && (
+                <span className="app-sidebar-badges font-label-sm flex items-center gap-1">
+                  <span className="sr-only">
+                    {[
+                      alertas.vencidos > 0 && `${alertas.vencidos} vencidos`,
+                      alertas.proximos > 0 && `${alertas.proximos} por vencer`,
+                    ].filter(Boolean).join(', ')}
                   </span>
-                )}
-            </NavLink>
-            
-            <NavLink to="/padron/categorias" className={({ isActive }) => `app-sidebar-link app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface font-medium transition-colors ${isActive ? 'app-sidebar-section--active' : ''}`}>
-                <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">sports_soccer</span>
-                  <span className="app-sidebar-label font-body-md text-body-md">Categorías</span>
-                </div>
+                  <span className="contents" aria-hidden="true">
+                  {alertas.vencidos > 0 && (
+                    <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', title: 'Vencidos' }} />
+                  )}
+                  {alertas.proximos > 0 && (
+                    <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', title: 'Por vencer' }} />
+                  )}
+                  </span>
+                </span>
+              )}
+              {alertasError && !alertas && (
+                <span className="app-sidebar-badges flex items-center text-on-surface-variant" title="No se pudieron cargar las alertas">
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden="true">sync_problem</span>
+                  <span className="sr-only">No se pudieron cargar las alertas</span>
+                </span>
+              )}
             </NavLink>
 
             <details
@@ -202,7 +256,7 @@ export default function Sidebar({ collapsed, onToggle }) {
             >
               <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${comunicacionesActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">campaign</span>
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">campaign</span>
                   <span className="app-sidebar-label text-base font-semibold text-on-surface">Comunicaciones</span>
                 </div>
                 <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
@@ -222,19 +276,50 @@ export default function Sidebar({ collapsed, onToggle }) {
                 </NavLink>
               </div>
             </details>
-            {/* Sección Administración */}
+
             <details
-              open={openSections.admin}
+              open={openSections.reportes}
               onToggle={(e) => {
                 const isOpen = e.currentTarget.open;
-                setOpenSections((prev) => (prev.admin === isOpen ? prev : { ...prev, admin: isOpen }));
+                setOpenSections((prev) => (prev.reportes === isOpen ? prev : { ...prev, reportes: isOpen }));
               }}
               className="app-sidebar-group flex flex-col gap-0.5"
             >
-              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${adminActive ? 'app-sidebar-section--active' : ''}`}>
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${reportesActive ? 'app-sidebar-section--active' : ''}`}>
                 <div className="flex items-center gap-space-sm">
-                  <span className="material-symbols-outlined text-[20px]">manage_accounts</span>
-                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Administración</span>
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">monitoring</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Reportes</span>
+                </div>
+                <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
+              </summary>
+              <div className="flex flex-col gap-0.5 pl-3 border-l-2 border-outline-variant/30 ml-4 my-0.5">
+                <NavLink to="/padron/reportes" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">groups</span>
+                    <span className="app-sidebar-label text-base">Padrón</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/morosidad" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">warning</span>
+                    <span className="app-sidebar-label text-base">Morosidad</span>
+                  </span>
+                </NavLink>
+              </div>
+            </details>
+
+            <details
+              open={openSections.ajustes}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open;
+                setOpenSections((prev) => (prev.ajustes === isOpen ? prev : { ...prev, ajustes: isOpen }));
+              }}
+              className="app-sidebar-group flex flex-col gap-0.5"
+            >
+              <summary className={`app-sidebar-section flex items-center justify-between px-space-sm py-2 rounded text-on-surface-variant font-medium select-none cursor-pointer ${ajustesActive ? 'app-sidebar-section--active' : ''}`}>
+                <div className="flex items-center gap-space-sm">
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">tune</span>
+                  <span className="app-sidebar-label text-base font-semibold text-on-surface">Ajustes</span>
                 </div>
                 <span className="app-sidebar-section-chevron material-symbols-outlined" aria-hidden="true">chevron_right</span>
               </summary>
@@ -263,7 +348,6 @@ export default function Sidebar({ collapsed, onToggle }) {
                 </PermissionGate>
               </div>
             </details>
-            
           </nav>
         </div>
       </div>
@@ -272,11 +356,12 @@ export default function Sidebar({ collapsed, onToggle }) {
           type="button"
           className="app-sidebar-toggle"
           onClick={onToggle}
-          aria-label={collapsed ? 'Mostrar menú' : 'Ocultar menú'}
-          title={collapsed ? 'Mostrar menú' : 'Ocultar menú'}
+          aria-label={collapsed ? 'Fijar menú abierto' : 'Contraer menú'}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Fijar menú abierto' : 'Contraer menú'}
         >
-          <span className="app-sidebar-toggle-label">{collapsed ? 'Mostrar menú' : 'Contraer menú'}</span>
-          <span className="material-symbols-outlined text-[18px]">keyboard_double_arrow_left</span>
+          <span className="app-sidebar-toggle-label">{collapsed ? 'Fijar menú abierto' : 'Contraer menú'}</span>
+          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">keyboard_double_arrow_left</span>
         </button>
       </div>
     </aside>

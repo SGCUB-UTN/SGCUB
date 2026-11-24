@@ -8,6 +8,9 @@ from rest_framework.decorators import api_view, parser_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
+from documental.services import PERFIL_DOCENTE, PERFIL_JUGADOR, documentation_statuses
+from finanzas.services import account_debt_summaries
+from .list_export import ListExportSerializer, list_filename, render_list_pdf
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
 from .search import normalize_text, normalized_field
@@ -19,14 +22,17 @@ from .serializers import (
     CargoDocenteSerializer,
     DocenteCategoriaSerializer,
     PersonaSerializer,
+    SocioListSerializer,
     SocioSerializer,
     CategoriaSerializer,
     CategoriaListSerializer,
     EstadoDeportivoSerializer,
     JugadorSerializer,
     JugadorListSerializer,
+    JugadorTableSerializer,
     JugadorSerializerDetail,
     DocenteSerializer,
+    DocenteTableSerializer,
     VinculoFamiliarSerializer,
     EstadoAdministrativoSerializer,
     GeneroSerializer,
@@ -41,6 +47,7 @@ from .serializers import (
 )
 
 PERSONA_SEARCH_LIMIT = 10
+LIST_VIEW = "listado"
 
 
 def request_user(request):
@@ -58,6 +65,10 @@ def talle_sort_key(nombre):
     if name in letter_ranks:
         return (1, letter_ranks[name], "")
     return (2, 0, name)
+
+
+def invalid_view_response():
+    return Response({"vista": f"Debe ser '{LIST_VIEW}'."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(tags=["Padron / Genero"], request=GeneroSerializer, responses=GeneroSerializer)
@@ -266,9 +277,15 @@ def persona_detail(request, pk):
 @api_view(["GET", "POST"])
 def socio_list_create(request):
     if request.method == "GET":
-        members = Socio.objects.select_related(
-            "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador__estado"
-        )
+        view = request.query_params.get("vista")
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
+            members = Socio.objects.select_related("persona", "estado_administrativo", "jugador__estado")
+        else:
+            members = Socio.objects.select_related(
+                "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "estado_administrativo", "jugador__estado"
+            )
         is_player = request.query_params.get("es_jugador")
         if is_player is not None:
             if is_player not in ("true", "false"):
@@ -277,6 +294,10 @@ def socio_list_create(request):
                 Q(estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO) & ~Q(jugador__estado__nombre=ESTADO_DEPORTIVO_ACTIVO)
             )
             members = members.exclude(members_only) if is_player == "true" else members.filter(members_only)
+        if view == LIST_VIEW:
+            members = list(members)
+            context = {"request": request, "account_summaries": account_debt_summaries([member.pk for member in members])}
+            return Response(SocioListSerializer(members, many=True, context=context).data)
         serializer = SocioSerializer(members, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -450,17 +471,33 @@ def estado_detail(request, pk):
 @api_view(["GET", "POST"])
 def jugador_list_create(request):
     if request.method == "GET":
-        players = Jugador.objects.select_related(
-            "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
-            "categoria", "categoria_secundaria", "estado",
-        ).prefetch_related(
-            *persona_serializer_prefetches("vinculos_familiares__persona"),
-        )
+        view = request.query_params.get("vista")
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
+            players = Jugador.objects.select_related(
+                "socio__persona", "socio__estado_administrativo", "categoria", "categoria_secundaria", "estado",
+            )
+        else:
+            players = Jugador.objects.select_related(
+                "socio__persona__genero", "socio__persona__domicilio__localidad", "socio__persona__domicilio__barrio", "socio__estado_administrativo",
+                "categoria", "categoria_secundaria", "estado",
+            ).prefetch_related(
+                *persona_serializer_prefetches("vinculos_familiares__persona"),
+            )
         category_id = request.query_params.get("categoria")
         if category_id:
             if not category_id.isdigit():
                 return Response({"categoria": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
             players = players.filter(Q(categoria_id=category_id) | Q(categoria_secundaria_id=category_id))
+        if view == LIST_VIEW:
+            players = list(players)
+            context = {
+                "request": request,
+                "account_summaries": account_debt_summaries([player.socio_id for player in players]),
+                "document_statuses": documentation_statuses([player.socio.persona_id for player in players], PERFIL_JUGADOR),
+            }
+            return Response(JugadorTableSerializer(players, many=True, context=context).data)
         serializer = JugadorListSerializer(players, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -507,6 +544,19 @@ def jugador_detail(request, pk):
 @api_view(["GET", "POST"])
 def docente_list_create(request):
     if request.method == "GET":
+        view = request.query_params.get("vista")
+        if view not in (None, LIST_VIEW):
+            return invalid_view_response()
+        if view == LIST_VIEW:
+            teachers = list(Docente.objects.select_related("persona", "estado").prefetch_related(
+                "categorias_docente__cargo",
+                "categorias_docente__categoria",
+            ))
+            context = {
+                "request": request,
+                "document_statuses": documentation_statuses([teacher.persona_id for teacher in teachers], PERFIL_DOCENTE),
+            }
+            return Response(DocenteTableSerializer(teachers, many=True, context=context).data)
         teachers = Docente.objects.select_related(
             "persona__genero", "persona__domicilio__localidad", "persona__domicilio__barrio", "persona__socio__jugador", "estado"
         ).prefetch_related(
@@ -934,6 +984,18 @@ def report_download(request, extension, content_type, render):
     generated_at = timezone.localtime()
     response = HttpResponse(render(build_report(filters), filters, generated_at), content_type=content_type)
     response["Content-Disposition"] = f'attachment; filename="{report_filename(generated_at, extension)}"'
+    return response
+
+
+@extend_schema(tags=["Padron / Listados"], summary="Listado filtrado en PDF", request=ListExportSerializer, responses={(200, "application/pdf"): bytes})
+@api_view(["POST"])
+def padron_list_pdf(request):
+    serializer = ListExportSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    generated_at = timezone.localtime()
+    response = HttpResponse(render_list_pdf(serializer.validated_data, generated_at), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{list_filename(serializer.validated_data["archivo"], generated_at)}"'
     return response
 
 

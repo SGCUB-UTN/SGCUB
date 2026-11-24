@@ -8,7 +8,7 @@ const BODY_CLASS ='divide-y divide-outline-variant/20 font-body-sm text-on-surfa
 export default function DataTable({ headers, children, footer = null, className = '', tableClassName = '', bodyClassName = '', headerCase = 'upper' }) {
   return (
     <div className={`overflow-x-auto ${className}`}>
-      <table className={`w-full text-left border-collapse text-sm ${tableClassName}`}>
+      <table className={`w-full text-left border-collapse text-base ${tableClassName}`}>
         <thead>
           <tr className={`${HEADER_ROW_CLASS} ${HEADER_CASE_CLASS[headerCase]}`}>{headers}</tr>
         </thead>

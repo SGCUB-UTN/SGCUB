@@ -207,6 +207,7 @@ export default function DocumentacionDashboard() {
         tipos={uploadTipos}
         isEditing={upload.isEditing}
         error={upload.error}
+        saving={upload.saving}
         subtitle={uploadRow ? `${personaName(uploadRow)} · DNI ${uploadRow.dni}` : undefined}
       />
     </div>

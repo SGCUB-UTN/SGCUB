@@ -1,39 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/conf'
+import { LIST_VIEW } from '../api/listView'
 import DocentesTable from '../components/docentes/DocentesTable'
-import { esActivo } from '../components/docentes/docentesUtils'
+import { categoriasDeAsignaciones, esActivo } from '../components/docentes/docentesUtils'
 import PageHeader from '../components/shared/PageHeader'
+import { PrimaryButton } from '../components/personas/tabs/parts'
 import StatCard from '../components/shared/StatCard'
 import useCategorias from '../hooks/useCategorias'
 import useDocentes from '../hooks/useDocentes'
 
 function Docentes() {
   const navigate = useNavigate()
-  const { docentes, isLoading, error } = useDocentes()
+  const { docentes, isLoading, error, recargarDocentes } = useDocentes({ view: LIST_VIEW })
   const { categorias } = useCategorias()
-  const [categoriasPorDocente, setCategoriasPorDocente] = useState({})
   const [status, setStatus] = useState('activo')
 
-  useEffect(() => {
-    let cancelado = false
-    api.get('padron/docente-categoria/')
-      .then((response) => {
-        if (cancelado) return
-        const agrupadas = {}
-        ;(response.data ?? []).forEach(({ docente, categoria, cargo }) => {
-          if (!docente || !categoria) return
-          agrupadas[docente.docente_id] = [...(agrupadas[docente.docente_id] ?? []), { ...categoria, cargo }]
-        })
-        setCategoriasPorDocente(agrupadas)
-      })
-      .catch(() => {
-        if (!cancelado) setCategoriasPorDocente({})
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [])
+  const categoriasPorDocente = useMemo(
+    () => Object.fromEntries(docentes.map((docente) => [docente.docente_id, categoriasDeAsignaciones(docente.asignaciones)])),
+    [docentes],
+  )
 
   const totales = useMemo(() => {
     const activos = docentes.filter(esActivo).length
@@ -48,22 +33,17 @@ function Docentes() {
     <div className="w-full flex flex-col gap-5">
       <PageHeader
         breadcrumb={[{ label: 'Personas' }, { label: 'Docentes' }]}
-        title="Docentes y Cuerpo Técnico"
+        title="Docentes"
         actions={(
-          <button
-            type="button"
-            onClick={() => navigate('/padron/docentes/nuevo')}
-            className="inline-flex items-center gap-2 bg-primary text-on-primary hover:bg-primary/90 px-4 py-2 rounded shadow-sm font-label-lg text-base font-medium transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person_add</span>
-            <span className="text-xl"> Nuevo docente</span>
-          </button>
+          <div className="flex flex-wrap items-start gap-2.5">
+            <PrimaryButton icon="person_add" onClick={() => navigate('/padron/docentes/nuevo')}>Nuevo docente</PrimaryButton>
+          </div>
         )}
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-10">
-        <StatCard label="Total" value={totales.total} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
-        <StatCard label="Activos" value={totales.activos} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
-        <StatCard label="De Baja" value={totales.bajas} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
+        <StatCard label="Total" value={error ? '—' : totales.total} isLoading={isLoading} icon="school" tone="neutral" onClick={() => setStatus('todos')} isSelected={status === 'todos'} />
+        <StatCard label="Activos" value={error ? '—' : totales.activos} isLoading={isLoading} icon="how_to_reg" tone="positive" onClick={() => setStatus('activo')} isSelected={status === 'activo'} />
+        <StatCard label="De baja" value={error ? '—' : totales.bajas} isLoading={isLoading} icon="person_off" tone="muted" onClick={() => setStatus('baja')} isSelected={status === 'baja'} />
       </div>
       <section aria-label="Docentes">
         <DocentesTable
@@ -73,7 +53,7 @@ function Docentes() {
           isLoading={isLoading}
           error={error}
           status={status}
-          onStatusChange={setStatus}
+          onRetry={recargarDocentes}
         />
       </section>
     </div>

@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateDocente, deactivateDocente, getCargosDocente, getDocente, patchDocente } from '../api/docentes'
 import ActivateDocenteModal from '../components/docentes/ActivateDocenteModal'
-import DeactivateDocenteModal from '../components/docentes/DeactivateDocenteModal'
-import PersonHeader, { DeactivateButton, ActivateButton } from '../components/personas/HeaderPersona'
+import PersonStatusModal from '../components/personas/PersonStatusModal'
+import PersonHeader, { DeactivateButton, ActivateButton, LockedProfileNotice } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import FamilyTab from '../components/personas/tabs/FamilyTab'
@@ -13,9 +13,10 @@ import DocumentationTab from '../components/personas/tabs/DocumentationTab'
 import { getContactsPayload, getContactsPayloadWith } from '../components/jugadores/contacts'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { teacherStatuses } from '../components/personas/profileStatus'
-import { yearsSince, formatDni, formatDate, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
+import { yearsSince, formatDni, formatDate, formatNumber, yearsText, isActiveStatus, getErrorMessage } from '../components/personas/format'
 import useCategorias from '../hooks/useCategorias'
 import useLocalidades from '../hooks/useLocalidades'
+import useToast from '../hooks/useToast'
 
 import useDocumentacion from "../hooks/useDocumentacion"
 import { buildDocumentBadges } from '../components/documental/documentBadges'
@@ -30,6 +31,7 @@ function DocenteDetail() {
   const requestedTab = searchParams.get("tab") ?? undefined
   const { localidades } = useLocalidades()
   const { categorias } = useCategorias()
+  const { showToast } = useToast()
   const [cargos, setCargos] = useState([])
 
   const [carga, setCarga] = useState({ id: null, docente: null, error: null })
@@ -118,15 +120,19 @@ function DocenteDetail() {
     }
   }
 
+  const nombreDocente = `${docente?.persona_detalle?.nombre ?? ''} ${docente?.persona_detalle?.apellido ?? ''}`.trim()
+
   const confirmarBaja = async () => {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
       await deactivateDocente(docente.docente_id)
+      const actualizado = await getDocente(docente.docente_id)
+      setCarga((actual) => ({ ...actual, docente: actualizado }))
       setModalBajaAbierto(false)
-      navigate('/padron/docentes')
+      showToast({ title: 'Docente dado de baja', description: `${nombreDocente} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
-      setErrorBaja(requestError.response?.data?.detail || 'No se pudo dar de baja el docente.')
+      setErrorBaja(getErrorMessage(requestError, 'No se pudo dar de baja al docente.'))
     } finally {
       setDandoDeBaja(false)
     }
@@ -139,8 +145,9 @@ function DocenteDetail() {
       const actualizado = await activateDocente(docente.docente_id, asignaciones)
       setCarga((actual) => ({ ...actual, docente: actualizado }))
       setModalAltaAbierto(false)
+      showToast({ title: 'Docente dado de alta', description: `${nombreDocente} vuelve a estar activo.` })
     } catch (requestError) {
-      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta el docente.'))
+      setErrorAlta(getErrorMessage(requestError, 'No se pudo dar de alta al docente.'))
     } finally {
       setDandoDeAlta(false)
     }
@@ -168,7 +175,7 @@ function DocenteDetail() {
       await downloadImage(persona.foto_url, buildPhotoFilename(persona.foto_url, persona.nombre, persona.apellido))
     } catch (err) {
       console.error(err)
-      alert('No se pudo descargar la foto.')
+      showToast({ tone: 'error', title: 'No se pudo descargar la foto', description: 'Probá de nuevo en unos minutos.' })
     }
   }
 
@@ -203,14 +210,14 @@ function DocenteDetail() {
     },
     {
       id: 'familiar',
-      label: 'Familiar / Contactos',
+      label: 'Familiares y contactos',
       icon: 'family_restroom',
       content: (
         <FamilyTab
           contacts={contactos}
-          onAdd={agregarContacto}
-          onEdit={editarContacto}
-          onDelete={eliminarContacto}
+          onAdd={activo ? agregarContacto : undefined}
+          onEdit={activo ? editarContacto : undefined}
+          onDelete={activo ? eliminarContacto : undefined}
           domicilioTitular={persona}
           etiquetaTitular="docente"
           mostrarResponsableLegal={false}
@@ -222,18 +229,18 @@ function DocenteDetail() {
       label: 'Documentación',
       icon: 'folder_shared',
       badge: badgeConfig,
-      content: <DocumentationTab documentation={documentation} personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" />,
+      content: <DocumentationTab documentation={documentation} personaId={docente?.persona?.persona_id || docente?.persona} personaInfo={persona} personaType="docente" readOnly={!activo} />,
     },
     {
       id: 'categorias',
-      label: 'Categorías',
+      label: 'Cargos y categorías',
       icon: 'groups',
       content: (
         <CategoriesTab
           asignaciones={docente.asignaciones ?? []}
           cargos={cargos}
           categorias={categorias}
-          editable
+          editable={activo}
           isActive={activo}
           onSave={guardarAsignaciones}
         />
@@ -247,36 +254,41 @@ function DocenteDetail() {
         breadcrumb={[
           { label: 'Personas' },
           { label: 'Docentes', to: '/padron/docentes' },
-          { label: `Legajo #${docente.legajo}` },
+          { label: `Legajo ${formatNumber(docente.legajo)}` },
         ]}
         name={persona.nombre}
         surname={persona.apellido}
         photoUrl={persona.foto_url}
         onDownloadPhoto={handleDownloadPhoto}
-        onUploadPhoto={handleUploadPhoto}
+        onUploadPhoto={activo ? handleUploadPhoto : undefined}
         isActive={activo}
         statuses={teacherStatuses(activo)}
         metadata={[
           { label: 'DNI', value: formatDni(persona.dni) },
-          { label: 'Legajo', value: `#${docente.legajo}`, highlighted: true },
-          { label: 'Fecha de ingreso', value: formatDate(docente.fecha_ingreso) },
+          { label: 'Legajo', value: formatNumber(docente.legajo), highlighted: true },
+          { label: 'Alta', value: formatDate(docente.fecha_ingreso) },
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
           ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}
-        statusAction={activo ? (
+        statusAction={activo && (
           <DeactivateButton
             onClick={() => {
               setErrorBaja('')
               setModalBajaAbierto(true)
             }}
           />
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorAlta('')
-              setModalAltaKey((key) => key + 1)
-              setModalAltaAbierto(true)
-            }}
+        )}
+        footer={!activo && (
+          <LockedProfileNotice
+            actions={(
+              <ActivateButton
+                onClick={() => {
+                  setErrorAlta('')
+                  setModalAltaKey((key) => key + 1)
+                  setModalAltaAbierto(true)
+                }}
+              />
+            )}
           />
         )}
       />
@@ -286,20 +298,24 @@ function DocenteDetail() {
       <ActivateDocenteModal
         key={modalAltaKey}
         opened={modalAltaAbierto}
-        onClose={() => !dandoDeAlta && setModalAltaAbierto(false)}
+        onClose={() => setModalAltaAbierto(false)}
         onConfirm={confirmarAlta}
-        docente={docente}
+        personName={nombreDocente}
+        needsCargo={(docente.asignaciones ?? []).length === 0}
         cargos={cargos}
         categorias={categorias}
         loading={dandoDeAlta}
         error={errorAlta}
       />
 
-      <DeactivateDocenteModal
+      <PersonStatusModal
         opened={modalBajaAbierto}
-        onClose={() => !dandoDeBaja && setModalBajaAbierto(false)}
+        action="baja"
+        title="Confirmar baja de docente"
+        personName={nombreDocente}
+        consequences={['Conserva sus cargos y categorías asignadas.', 'La ficha queda en solo lectura.']}
+        onClose={() => setModalBajaAbierto(false)}
         onConfirm={confirmarBaja}
-        docente={docente}
         loading={dandoDeBaja}
         error={errorBaja}
       />

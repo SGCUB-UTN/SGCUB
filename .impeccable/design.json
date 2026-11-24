@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-21T00:00:00Z",
+  "title": "Design System: SGCUB",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Azul Berisso", "tonalRamp": ["#001e30", "#004566", "#006493", "#2a82b8", "#5a9fcc", "#8ccdff", "#cae6ff", "#eaf5ff"] },
+      "primary-container": { "role": "primary", "displayName": "Celeste Berisso", "tonalRamp": ["#00344f", "#005a85", "#0083c2", "#38b6ff", "#6cc8ff", "#9cd9ff", "#c9eaff", "#eaf6ff"] },
+      "primary-fixed": { "role": "primary", "displayName": "Bruma Berisso", "tonalRamp": ["#004b70", "#1e6f99", "#4f93bd", "#7db3d8", "#a6cdeb", "#cae6ff", "#dff0ff", "#f2f9ff"] },
+      "secondary": { "role": "secondary", "displayName": "Azul Secretaría", "tonalRamp": ["#001d31", "#004b73", "#006398", "#2f82bb", "#5bb8fe", "#93ccff", "#cce5ff", "#ecf5ff"] },
+      "tertiary": { "role": "tertiary", "displayName": "Pizarra", "tonalRamp": ["#131b2e", "#2a3246", "#3f465c", "#565e74", "#7a8199", "#a5acc5", "#dae2fd", "#f0f3ff"] },
+      "error": { "role": "error", "displayName": "Deuda", "tonalRamp": ["#410002", "#690005", "#93000a", "#ba1a1a", "#de3730", "#ff897d", "#ffdad6", "#fff8f7"] },
+      "background": { "role": "neutral", "displayName": "Papel Celeste", "tonalRamp": ["#0b1c30", "#213145", "#3e4850", "#6e7882", "#bec8d2", "#dce9ff", "#eff4ff", "#f8f9ff"] },
+      "surface-container-lowest": { "role": "neutral", "displayName": "Blanco Planilla" },
+      "surface-container-low": { "role": "neutral", "displayName": "Celeste Lavado" },
+      "surface-container": { "role": "neutral", "displayName": "Celeste Ficha" },
+      "surface-container-high": { "role": "neutral", "displayName": "Celeste Sello" },
+      "on-surface": { "role": "neutral", "displayName": "Tinta Actas" },
+      "on-surface-variant": { "role": "neutral", "displayName": "Tinta Gris" },
+      "outline": { "role": "neutral", "displayName": "Línea Guía" },
+      "outline-variant": { "role": "neutral", "displayName": "Línea Suave" },
+      "success-soft": { "role": "semantic", "displayName": "Al día (fondo)", "canonical": "var(--color-emerald-50)" },
+      "success-ink": { "role": "semantic", "displayName": "Al día (texto)", "canonical": "var(--color-emerald-700)" },
+      "warning-soft": { "role": "semantic", "displayName": "Alerta (fondo)", "canonical": "var(--color-amber-50)" },
+      "warning-ink": { "role": "semantic", "displayName": "Alerta (texto)", "canonical": "var(--color-amber-700)" },
+      "dark-primary": { "role": "primary", "displayName": "Azul Berisso (oscuro)" },
+      "dark-background": { "role": "neutral", "displayName": "Grafito" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Números protagonistas en tableros; uso escaso." },
+      "headline": { "displayName": "Headline", "purpose": "Título de página en PageHeader." },
+      "title": { "displayName": "Title", "purpose": "Títulos de panel, botones principales, ítems de menú." },
+      "body": { "displayName": "Body", "purpose": "Texto base de trabajo (16px)." },
+      "body-compact": { "displayName": "Body compact", "purpose": "Celdas de tablas densas, búsqueda, botones secundarios." },
+      "label": { "displayName": "Label", "purpose": "Rótulos de KPI y encabezados de grupo, en mayúsculas." },
+      "figure": { "displayName": "Figure", "purpose": "Montos, saldos y contadores con cifras tabulares." }
+    },
+    "shadows": [
+      { "name": "reposo", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Paneles, botones primarios y campos destacados (shadow-sm)." },
+      { "name": "flotante", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Menús desplegables y popovers (shadow-md)." },
+      { "name": "modal", "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)", "purpose": "Modales y diálogos (shadow-xl)." },
+      { "name": "barra-inferior", "value": "0 -6px 16px rgba(15,23,42,0.08)", "purpose": "Barras de acción fijas al pie." }
+    ],
+    "motion": [
+      { "name": "sidebar-collapse", "value": "220ms ease", "purpose": "Ancho del sidebar, margen del contenido y rotación del chevron de sección." },
+      { "name": "color-transition", "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Hover de botones, ítems y filas (transition-colors)." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "layout-compact", "value": "700px" },
+      { "name": "xl", "value": "1280px" }
+    ],
+    "layout": {
+      "headerHeight": "70px",
+      "sidebarWidth": "260px",
+      "sidebarCollapsedWidth": "72px",
+      "mainPadding": "70px 2.5rem 1.5rem"
+    },
+    "darkMode": {
+      "mechanism": "html.dark class toggled by ThemeProvider; persisted in localStorage key sgcub-theme",
+      "remapsTailwindPalettes": ["slate", "gray", "emerald", "amber", "red", "sky", "blue", "pink"]
+    }
+  },
+  "components": [
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal de la página o del modal (Registrar pago, Guardar, Nuevo socio).",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z\"/></svg>Registrar pago</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: var(--color-primary, #006493); color: var(--color-on-primary, #ffffff); border: none; border-radius: 4px; font-family: Inter, system-ui, sans-serif; font-size: 16px; font-weight: 600; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--color-primary, #006493) 90%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #006493) 60%, transparent); } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acción alternativa junto a la principal (Cancelar, Exportar).",
+      "html": "<button class=\"ds-btn-secondary\">Exportar PDF</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; padding: 8px 16px; background: var(--color-surface-container-lowest, #ffffff); color: var(--color-on-surface, #0b1c30); border: 1px solid color-mix(in srgb, var(--color-outline-variant, #bec8d2) 40%, transparent); border-radius: 4px; font-family: Inter, system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-secondary:hover { background: var(--color-surface-container-low, #eff4ff); } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #006493) 60%, transparent); }"
+    },
+    {
+      "name": "Botón de texto",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Acción liviana dentro de un panel (Ver todo, Editar).",
+      "html": "<button class=\"ds-btn-text\">Ver estado de cuenta</button>",
+      "css": ".ds-btn-text { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: transparent; color: var(--color-primary, #006493); border: none; border-radius: 6px; font-family: Inter, system-ui, sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; transition: background-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-btn-text:hover { background: color-mix(in srgb, var(--color-primary, #006493) 5%, transparent); } .ds-btn-text:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #006493) 60%, transparent); }"
+    },
+    {
+      "name": "Búsqueda de tabla",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Campo de búsqueda en las barras de filtro de las tablas.",
+      "html": "<div class=\"ds-search\"><svg class=\"ds-search-icon\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z\"/></svg><input class=\"ds-search-input\" type=\"text\" placeholder=\"Buscar por nombre o DNI\" aria-label=\"Buscar\"></div>",
+      "css": ".ds-search { position: relative; width: 320px; } .ds-search-icon { position: absolute; left: 16px; top: 11px; color: var(--color-outline, #6e7882); } .ds-search-input { width: 100%; height: 40px; padding: 0 16px 0 44px; box-sizing: border-box; background: var(--color-surface-container-low, #eff4ff); color: var(--color-on-surface, #0b1c30); border: 1px solid color-mix(in srgb, var(--color-outline-variant, #bec8d2) 40%, transparent); border-radius: 2px; font-family: Inter, system-ui, sans-serif; font-size: 14px; transition: background-color 150ms, border-color 150ms; } .ds-search-input::placeholder { color: var(--color-outline, #6e7882); } .ds-search-input:focus { outline: none; border-color: var(--color-primary, #006493); background: var(--color-surface-container-lowest, #ffffff); }"
+    },
+    {
+      "name": "Badge de estado",
+      "kind": "chip",
+      "refersTo": "badge-ok",
+      "description": "Estado de socio, pago o documentación: siempre con texto y punto de color.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-ok\"><span class=\"ds-dot\"></span>Al día</span><span class=\"ds-badge ds-badge-alerta\"><span class=\"ds-dot\"></span>Por vencer</span><span class=\"ds-badge ds-badge-error\"><span class=\"ds-dot\"></span>Con deuda</span><span class=\"ds-badge ds-badge-info\">Categoría principal</span></div>",
+      "css": ".ds-badges { display: flex; gap: 8px; flex-wrap: wrap; } .ds-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 12px; font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; line-height: 16px; } .ds-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; } .ds-badge-ok { background: oklch(97.9% 0.021 166.113); color: oklch(50.8% 0.118 165.612); } .ds-badge-ok .ds-dot { background: oklch(69.6% 0.17 162.48); } .ds-badge-alerta { background: oklch(98.7% 0.022 95.277); color: oklch(55.5% 0.163 48.998); } .ds-badge-alerta .ds-dot { background: oklch(76.9% 0.188 70.08); } .ds-badge-error { background: var(--color-error-container, #ffdad6); color: var(--color-on-error-container, #93000a); } .ds-badge-error .ds-dot { background: var(--color-error, #ba1a1a); } .ds-badge-info { background: color-mix(in srgb, var(--color-primary-fixed, #cae6ff) 30%, transparent); color: var(--color-primary, #006493); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Contenedor base de contenido: hoja blanca casi plana con borde suave.",
+      "html": "<section class=\"ds-panel\"><header class=\"ds-panel-head\">Estado de cuenta</header><div class=\"ds-panel-body\"><p class=\"ds-kpi-label\">Saldo</p><p class=\"ds-kpi-value\">-$ 24.500</p></div></section>",
+      "css": ".ds-panel { width: 320px; background: var(--color-surface-container-lowest, #ffffff); border: 1px solid color-mix(in srgb, var(--color-outline-variant, #bec8d2) 30%, transparent); border-radius: 4px; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); overflow: hidden; font-family: Inter, system-ui, sans-serif; } .ds-panel-head { padding: 12px 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant, #bec8d2) 30%, transparent); font-size: 16px; font-weight: 600; color: var(--color-on-surface, #0b1c30); } .ds-panel-body { padding: 16px 20px; } .ds-kpi-label { margin: 0; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-on-surface-variant, #3e4850); } .ds-kpi-value { margin: 4px 0 0; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-error, #ba1a1a); }"
+    },
+    {
+      "name": "Ítem de navegación",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Ítems del sidebar: reposo, hover y activo con barra izquierda en Azul Berisso.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item\" href=\"#\">Socios</a><a class=\"ds-nav-item ds-nav-item-active\" href=\"#\" aria-current=\"page\">Jugadores</a><a class=\"ds-nav-item\" href=\"#\">Docentes</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 2px; width: 240px; padding: 8px 4px; background: var(--color-surface-container-lowest, #ffffff); font-family: Inter, system-ui, sans-serif; } .ds-nav-item { display: flex; align-items: center; padding: 6px 8px; border-radius: 2px; border-left: 2px solid transparent; color: var(--color-on-surface-variant, #3e4850); font-size: 16px; text-decoration: none; transition: background-color 150ms, color 150ms; } .ds-nav-item:hover { background: var(--color-surface-container-low, #eff4ff); color: var(--color-on-surface, #0b1c30); } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #006493) 60%, transparent); } .ds-nav-item-active { background: var(--color-surface-container, #e5eeff); color: var(--color-primary, #006493); border-left-color: var(--color-primary, #006493); font-weight: 700; }"
+    },
+    {
+      "name": "Pestañas subrayadas",
+      "kind": "custom",
+      "refersTo": "nav-item-active",
+      "description": "Pestañas de sección dentro de una página, con conteo opcional.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab ds-tab-active\" role=\"tab\" aria-selected=\"true\">Activos <span class=\"ds-tab-count\">(128)</span></button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">De baja <span class=\"ds-tab-count\">(14)</span></button></div>",
+      "css": ".ds-tabs { display: flex; gap: 24px; border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant, #bec8d2) 40%, transparent); font-family: Inter, system-ui, sans-serif; } .ds-tab { margin-bottom: -1px; padding: 12px 0; background: none; border: none; border-bottom: 2px solid transparent; color: var(--color-on-surface-variant, #3e4850); font-size: 16px; cursor: pointer; transition: color 150ms, border-color 150ms; } .ds-tab:hover { color: var(--color-on-surface, #0b1c30); border-bottom-color: var(--color-outline-variant, #bec8d2); } .ds-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #006493) 60%, transparent); } .ds-tab-active { color: var(--color-primary, #006493); border-bottom-color: var(--color-primary, #006493); font-weight: 600; } .ds-tab-count { font-weight: 400; color: var(--color-on-surface-variant, #3e4850); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La Secretaría del Club",
+    "overview": "Es la secretaría de un club de barrio que funciona bien. A la vez es ventanilla: un pago se registra en segundos y desde cualquier pantalla. También es libro de actas: cada dato queda asentado, prolijo y fácil de encontrar. Y es una oficina ordenada: la información necesaria se ve sin buscarla y nada distrae del trámite. Las tres facetas pesan lo mismo, y una pantalla nueva tiene que cumplir con las tres.\n\nLa interfaz es amable y cercana. La usan personas de todas las edades, algunas con poca práctica con la computadora, así que nunca intimida. El fondo es claro y levemente frío. El Azul Berisso es el único acento. Las superficies son casi planas y se separan por tono y por bordes suaves, no por sombras. La amabilidad no viene de la decoración sino del tamaño, el aire y la claridad: textos legibles, botones fáciles de acertar y estados que se entienden de un vistazo.\n\nLa identidad del club está siempre presente a través del escudo en el encabezado, los comprobantes y las comunicaciones. La interfaz no compite con él.",
+    "keyCharacteristics": [
+      "Un solo acento cromático (Azul Berisso) sobre neutros claros con tinte azulado.",
+      "Superficies casi planas: tono y borde primero, sombra solo para lo que flota.",
+      "Inter en toda la interfaz, cuerpo en 16px y cifras tabulares en montos y KPIs.",
+      "Navegación lateral fija con secciones plegables y encabezado fijo con el escudo.",
+      "Estados (al día, alerta, deuda) siempre con color y texto, nunca solo con color.",
+      "Modo claro por defecto y modo oscuro completo (gris neutro con azul sobrio)."
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "El Azul Berisso es el único acento. Si algo necesita llamar la atención y no es una acción ni un estado activo, se resuelve con jerarquía tipográfica, no con otro color.", "section": "colors" },
+      { "name": "The Estado Con Palabras Rule", "body": "Al día, alerta y deuda siempre llevan texto o ícono además del color. Un usuario tiene que poder leer el estado de un socio aunque no distinga el verde del ámbar.", "section": "colors" },
+      { "name": "The Dieciséis Rule", "body": "El texto que se lee para trabajar arranca en 16px. Los tamaños de 11–13px (label-sm, body-sm, text-xs) quedan para metadatos y badges, nunca para información que el usuario necesita para decidir.", "section": "typography" },
+      { "name": "The Cifra Alineada Rule", "body": "Todo monto o conteo usa cifras tabulares.", "section": "typography" },
+      { "name": "The Flota o No Rule", "body": "Si un elemento no está por encima del contenido (modal, menú, toast), no lleva más que shadow-sm. Para agrupar se usan tono y borde, no sombra.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar Azul Berisso solo para acciones, estados activos y foco.",
+      "Do separar superficies con tono (blanco sobre background) y bordes outline-variant al 30–40%.",
+      "Do usar 16px como tamaño base del texto de trabajo y botones principales de 40px de alto.",
+      "Do acompañar cada color de estado con texto o ícono (StatusBadge).",
+      "Do mostrar montos y conteos con tabular-nums.",
+      "Do reutilizar PANEL_CLASS, TEXT_BUTTON_CLASS, PageHeader, KpiGrid, UnderlineTabs y StatusBadge antes de crear variantes nuevas.",
+      "Do verificar cada pantalla en modo claro y oscuro, usando los tokens --color-* y nunca hex sueltos.",
+      "Do mantener visible el escudo del club en el encabezado, los comprobantes y las comunicaciones."
+    ],
+    "donts": [
+      "Don't introducir un segundo color de acento ni gradientes decorativos.",
+      "Don't usar sombras marcadas (shadow-md o más) en elementos que no flotan.",
+      "Don't usar texto de 11–13px para información que el usuario necesita para decidir.",
+      "Don't asumir que rounded-full da un círculo: vale 12px.",
+      "Don't usar bg-white o colores Tailwind crudos sin chequear el modo oscuro. Hoy funcionan solo por los remapeos de html.dark.",
+      "Don't obligar a navegar a otra página para registrar un pago."
+    ]
+  }
+}

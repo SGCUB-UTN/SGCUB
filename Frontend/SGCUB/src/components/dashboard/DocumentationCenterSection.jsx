@@ -11,10 +11,10 @@ import { HeadingSkeleton, RingSkeleton, SkeletonBlock, SkeletonStatus } from '..
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const SEGMENTS = [
-  { key: 'valid', label: 'Vigente', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600' },
-  { key: 'expiring', label: 'Próxima a vencer', fill: 'bg-amber-600', stroke: 'stroke-amber-600' },
-  { key: 'missing', label: 'Faltante', fill: 'bg-outline', stroke: 'stroke-outline' },
-  { key: 'expired', label: 'Vencida', fill: 'bg-error', stroke: 'stroke-error' },
+  { key: 'valid', label: 'Vigentes', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600' },
+  { key: 'expiring', label: 'Próximos a vencer', fill: 'bg-amber-600', stroke: 'stroke-amber-600' },
+  { key: 'expired', label: 'Vencidos', fill: 'bg-error', stroke: 'stroke-error' },
+  { key: 'missing', label: 'Faltantes', fill: 'bg-outline', stroke: 'stroke-outline' },
 ]
 
 const upToDate = (profile) => (
@@ -38,7 +38,7 @@ function DocumentStateChart({ documents }) {
 
   return (
     <div className="min-w-0 h-full flex flex-col">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Estado de la documentación</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Estado de los documentos</h3>
       <div className="mt-2 flex items-center gap-4">
         <DonutChart
           segments={segments}
@@ -46,13 +46,13 @@ function DocumentStateChart({ documents }) {
           size={120}
           stroke={16}
           centerValue={formatPercentage(shareOf(documents.valid + documents.expiring, total))}
-          caption="vigente"
-          label={`Estado de la documentación: ${SEGMENTS.map((segment) => `${formatCount(documents[segment.key])} ${segment.label.toLowerCase()}`).join(', ')}`}
-          emptyLabel="Sin documentación exigida ni cargada"
+          caption="vigentes"
+          label={`Estado de los documentos: ${SEGMENTS.map((segment) => `${formatCount(documents[segment.key])} ${segment.label.toLowerCase()}`).join(', ')}`}
+          emptyLabel="Sin documentos exigidos ni cargados"
           activeKey={activeKey}
           onActiveChange={setActiveKey}
         />
-        <ul className="flex flex-col gap-1 min-w-0 text-sm">
+        <ul className="flex flex-col gap-1 min-w-0 text-sm sm:text-base">
           {SEGMENTS.map((segment) => {
             const interaction = legendItemProps(segment.key, activeKey, setActiveKey)
             return (
@@ -92,22 +92,22 @@ export default function DocumentationCenterSection({ isLoading, documentation })
   if (isLoading) return <DocumentationCenterSkeleton />
 
   return (
-    <section className={PANEL_CLASS} aria-labelledby="documentation-center-title">
+    <section className={`${PANEL_CLASS} flex flex-col`} aria-labelledby="documentation-center-title">
       <SectionHeading
         id="documentation-center-title"
         icon="folder_shared"
         title="Documentación"
         className={HEADING_CLASS}
         actions={(
-          <Link to="/documental" className={`${TEXT_BUTTON_CLASS} text-sm`}>
+          <Link to="/documental" className={`${TEXT_BUTTON_CLASS} text-base`}>
             Ver control documental
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
           </Link>
         )}
       />
-      <div className={BODY_CLASS}>
+      <div className={`${BODY_CLASS} flex-1 flex flex-col justify-center`}>
         {documentation ? (
-          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <DocumentStateChart documents={documentation.documents} />
             <div className="flex-1 min-w-0 flex flex-col gap-4 sm:pl-6 sm:border-l border-outline-variant/40">
               <KpiColumn
@@ -123,7 +123,7 @@ export default function DocumentationCenterSection({ isLoading, documentation })
             </div>
           </div>
         ) : (
-          <p className="text-sm text-on-surface-variant">Sin datos de documentación.</p>
+          <p className="text-base text-on-surface-variant">Sin datos de documentación.</p>
         )}
       </div>
     </section>

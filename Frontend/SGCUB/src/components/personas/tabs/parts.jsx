@@ -3,8 +3,8 @@ import { INSET_PADDING_X_CLASS } from '../../shared/flushTable'
 
 export function RecordSection({ title, color = 'bg-primary-container', extra, children }) {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between pb-1 border-b border-surface-container mb-4">
+    <section className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 min-h-10 pb-3 border-b border-surface-container">
         <h2 className="flex items-baseline gap-2 text-2xl text-on-surface font-bold tracking-tight">
           <span className={`w-1 h-[0.7em] shrink-0 rounded ${color}`} aria-hidden="true" />
           {title}
@@ -30,6 +30,8 @@ export function TabHeader({ title, description, actions, divider = true }) {
     </div>
   )
 }
+
+export const TAB_CARD_CLASS = 'min-w-0 overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest'
 
 export const TAB_PANEL_CLASS = 'min-w-0 overflow-hidden rounded-b-xl border-x border-b border-outline-variant/30 bg-surface-container-lowest'
 
@@ -61,22 +63,28 @@ export function SegmentedTabs({ label, sections, value, onChange, panelId, class
 
 export function TableFooter({ className = '', children }) {
   return (
-    <div className={`flex flex-wrap justify-end gap-2 py-3 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS} ${className}`}>
+    <div className={`flex flex-wrap justify-end gap-2 py-2 border-t border-outline-variant/30 bg-surface-container-low/40 ${INSET_PADDING_X_CLASS} ${className}`}>
       {children}
     </div>
   )
 }
 
-export function Field({ label, value, icon, iconClass = 'text-outline', help, className = '' }) {
+const FIELD_TONES = {
+  default: 'text-on-surface',
+  alert: 'text-amber-700',
+}
+
+export function Field({ label, value, icon, iconClass = 'text-outline', help, tone = 'default', className = '' }) {
   const isEmpty = value === null || value === undefined || value === ''
+  const iconColor = tone === 'alert' && !isEmpty ? 'text-amber-700' : iconClass
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
-      <span className="text-base text-on-surface-variant font-semibold">{label}</span>
-      <div className="relative flex items-center w-full min-h-10 px-3 py-2 bg-surface-container-low rounded-lg text-base text-on-surface">
-        {icon && <span className={`material-symbols-outlined text-base mr-2 ${iconClass}`}>{icon}</span>}
-        <span className={`truncate ${isEmpty ? 'text-outline' : ''}`}>{isEmpty ? 'No registrado' : value}</span>
-      </div>
-      {help && <span className="text-xs text-on-surface-variant font-medium">{help}</span>}
+    <div className={`flex flex-col gap-1 min-w-0 ${className}`}>
+      <span className="text-sm text-on-surface-variant">{label}</span>
+      <span className={`flex items-start gap-2 text-base break-words ${isEmpty ? 'text-on-surface-variant' : `font-semibold ${FIELD_TONES[tone]}`}`}>
+        {icon && <span className={`material-symbols-outlined shrink-0 mt-0.5 ${iconColor}`} style={{ fontSize: 18 }} aria-hidden="true">{icon}</span>}
+        <span className="min-w-0">{isEmpty ? 'No registrado' : value}</span>
+      </span>
+      {help && <span className="text-sm text-on-surface-variant">{help}</span>}
     </div>
   )
 }
@@ -106,9 +114,11 @@ export function KPI({ label, value, icon, tone = 'neutral' }) {
 export function EmptyState({ icon, title, description }) {
   return (
     <div className="flex flex-col items-center justify-center text-center gap-2 py-12 px-4 border border-dashed border-outline-variant/50 rounded-xl">
-      <span className="material-symbols-outlined text-xl text-outline">{icon}</span>
+      <span className="inline-flex items-center justify-center size-12 mb-1 rounded-full bg-surface-container-low text-outline" aria-hidden="true">
+        <span className="material-symbols-outlined" style={{ fontSize: 28 }}>{icon}</span>
+      </span>
       <p className="text-lg font-semibold text-on-surface">{title}</p>
-      {description && <p className="text-xl text-on-surface-variant max-w-md">{description}</p>}
+      {description && <p className="text-base text-on-surface-variant max-w-md">{description}</p>}
     </div>
   )
 }
@@ -120,7 +130,7 @@ export function PrimaryButton({ icon, children, ...props }) {
       className="inline-flex items-center gap-2 h-10 px-4 bg-primary text-on-primary hover:bg-primary/90 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
       {...props}
     >
-      {icon && <span className="material-symbols-outlined text-[20px]">{icon}</span>}
+      {icon && <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>}
       <span>{children}</span>
     </button>
   )
@@ -133,7 +143,7 @@ export function SecondaryButton({ icon, children, className = '', ...props }) {
       className={`inline-flex items-center gap-2 h-10 px-4 bg-surface-container-low hover:bg-surface-container text-on-surface border border-outline-variant/40 rounded-lg text-base font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-surface-container-low ${className}`}
       {...props}
     >
-      {icon && <span className="material-symbols-outlined text-[20px]">{icon}</span>}
+      {icon && <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{icon}</span>}
       <span>{children}</span>
     </button>
   )

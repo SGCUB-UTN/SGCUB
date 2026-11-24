@@ -55,7 +55,7 @@ export default function DonutChart({
             cy={size / 2}
             r={radius}
             fill="none"
-            className={`${arc.strokeClass} cursor-pointer ${ARC_MOTION}`}
+            className={`${arc.strokeClass} ${onSelect ? 'cursor-pointer' : ''} ${ARC_MOTION}`}
             style={{
               strokeWidth: arc.key === activeKey ? stroke + ACTIVE_GROWTH : stroke,
               opacity: activeKey !== null && arc.key !== activeKey ? 0.35 : 1,
@@ -72,13 +72,13 @@ export default function DonutChart({
         {active ? (
           <>
             <span className="text-lg font-bold tabular-nums text-on-surface leading-tight">{active.display}</span>
-            <span className="max-w-full truncate text-xs font-semibold text-on-surface">{active.label}</span>
-            <span className="text-xs tabular-nums text-on-surface-variant">{active.share}</span>
+            <span className="max-w-full truncate text-sm font-semibold text-on-surface">{active.label}</span>
+            <span className="text-sm tabular-nums text-on-surface-variant">{active.share}</span>
           </>
         ) : (
           <>
             <span className="text-lg font-bold tabular-nums text-on-surface leading-tight">{centerValue ?? formatWholeMoney(total)}</span>
-            <span className="text-xs text-on-surface-variant">{caption}</span>
+            <span className="text-sm text-on-surface-variant">{caption}</span>
           </>
         )}
       </div>

@@ -3,7 +3,7 @@ import CuotaSituationChart from './CuotaSituationChart'
 import { formatMoney, formatWholeMoney } from '../cuota/cuotaPeriod'
 import { KpiColumn } from '../shared/Kpi'
 import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../shared/panel'
-import { formatPeriod } from '../shared/periodFormat'
+import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import SectionHeading from '../shared/SectionHeading'
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus } from '../shared/Skeleton'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
@@ -39,22 +39,28 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
   const label = cuotas ? `Estado de las cuotas de ${formatPeriod(cuotas.period)}` : 'Estado de las cuotas'
 
   return (
-    <section className={PANEL_CLASS} aria-labelledby="cuota-status-title">
+    <section className={`${PANEL_CLASS} flex flex-col`} aria-labelledby="cuota-status-title">
       <SectionHeading
         id="cuota-status-title"
         icon="donut_large"
-        title="Finanzas"
+        title={(
+          <>
+            Finanzas
+            <span className="text-outline-variant font-normal" aria-hidden="true">|</span>
+            <span className="font-normal text-on-surface-variant">{formatPeriod(cuotas?.period ?? currentPeriod())}</span>
+          </>
+        )}
         className={HEADING_CLASS}
         actions={(
-          <Link to="/finanzas/cuotas" className={`${TEXT_BUTTON_CLASS} text-sm`}>
+          <Link to={cuotas?.period ? `/finanzas/cuotas?periodo=${cuotas.period}` : '/finanzas/cuotas'} className={`${TEXT_BUTTON_CLASS} text-base`}>
             Ver cuotas
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
           </Link>
         )}
       />
-      <div className={BODY_CLASS}>
+      <div className={`${BODY_CLASS} flex-1 flex flex-col justify-center`}>
         {cuotas ? (
-          <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="shrink-0">
               <CuotaSituationChart situation={cuotas} label={label} />
             </div>
@@ -62,13 +68,13 @@ export default function CuotaStatusSection({ isLoading, cuotas, income }) {
               <div className="flex-1 min-w-0 flex flex-col gap-4 sm:pl-6 sm:border-l border-outline-variant/40">
                 <KpiColumn label="Ingresos por cuotas" value={formatWholeMoney(income.cuotas)} title={formatMoney(income.cuotas)} />
                 <div className="pt-4 border-t border-outline-variant/40">
-                  <KpiColumn label="Otros movimientos" value={formatWholeMoney(income.other)} title={formatMoney(income.other)} />
+                  <KpiColumn label="Otros ingresos" value={formatWholeMoney(income.other)} title={formatMoney(income.other)} />
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <p className="text-sm text-on-surface-variant">Sin datos de cuotas.</p>
+          <p className="text-base text-on-surface-variant">Sin datos de cuotas.</p>
         )}
       </div>
     </section>

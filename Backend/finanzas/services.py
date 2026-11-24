@@ -33,6 +33,7 @@ from .models import (
     ItemPago,
     ModalidadMontoChoices,
     MovimientoCuenta,
+    OVERDUE_CUOTA_STATES,
     Pago,
     SecuenciaComprobante,
     TipoComprobanteChoices,
@@ -344,11 +345,69 @@ def ensure_cuota_without_payments(cuota):
 
 @transaction.atomic
 def sync_cuota_charge(cuota):
+    was_paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
     _, movement = lock_cuota_charge(cuota)
     amount = net_amount(ItemCuota.objects.filter(cuota=cuota))
     movement.monto = amount
     movement.save(update_fields=["monto"])
     refresh_cuota_state(cuota, amount - applied_amount(cuota))
+    is_paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
+    if is_paid and not was_paid:
+        issue_settlement_receipt(cuota)
+    elif was_paid and not is_paid:
+        annul_settlement_receipts(cuota)
+
+
+SETTLEMENT_CONCEPT = "Cuota saldada con beca o descuento"
+NO_PAYMENT_METHOD = "-"
+
+
+def settlement_imputations(cuota):
+    """Zero-amount imputations: the receipts of cuotas settled with a scholarship or a discount."""
+    return active_imputations().filter(movimiento_destino__cuota=cuota, monto_aplicado=0)
+
+
+def issue_settlement_receipt(cuota, user=None):
+    """A cuota settled with a scholarship or a discount gets its receipt, for $0 and without payment
+    methods, so the benefit shows in it like in any other receipt."""
+    if settlement_imputations(cuota).exists():
+        return None
+    lines = imputation_lines(cuota, Decimal("0.00"))
+    if not lines:
+        return None
+    account = cuota.movimiento.cuenta_corriente
+    payment, receipt, movement = create_payment(account, [], Decimal("0.00"), "", user, f"{SETTLEMENT_CONCEPT} {cuota.periodo}")
+    imputation = Imputacion.objects.create(
+        movimiento_origen=movement,
+        movimiento_destino=cuota.movimiento,
+        fecha=timezone.now(),
+        monto_aplicado=Decimal("0.00"),
+        saldo_pendiente=Decimal("0.00"),
+    )
+    DetalleImputacion.objects.bulk_create([
+        DetalleImputacion(imputacion=imputation, concepto=concept, monto=line_amount)
+        for concept, line_amount in lines.items()
+    ])
+    record_transaction(
+        Accion.PAGO_REGISTRADO,
+        f"Cuota {cuota.periodo} saldada con beca o descuento",
+        user,
+        socio=account.socio,
+        amount=Decimal("0.00"),
+        reference=receipt_code(receipt),
+        detail={"pago_id": payment.pk, "cuota_id": cuota.pk},
+    )
+    return receipt
+
+
+def annul_settlement_receipts(cuota):
+    for imputation in settlement_imputations(cuota).select_related("movimiento_origen__pago"):
+        payment = imputation.movimiento_origen.pago
+        payment.estado_pago = EstadoPagoChoices.ANULADO
+        payment.motivo_anulacion = "Se revirtió el saldo de la cuota con beca o descuento"
+        payment.fecha_anulacion = timezone.now()
+        payment.save(update_fields=["estado_pago", "motivo_anulacion", "fecha_anulacion"])
+        Comprobante.objects.filter(pago=payment).update(estado=EstadoComprobanteChoices.ANULADO)
 
 
 @transaction.atomic
@@ -659,6 +718,31 @@ def pending_amounts(cuotas):
     return pending
 
 
+def account_debt_summaries(socio_ids, today=None):
+    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
+    cuotas = list(
+        Cuota.objects.filter(
+            movimiento__cuenta_corriente__socio__in=socio_ids,
+            periodo__lte=current_period,
+        )
+        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
+        .select_related("movimiento__cuenta_corriente")
+    )
+    pending = pending_amounts(cuotas)
+    summaries = {}
+    for cuota in cuotas:
+        amount = pending[cuota.pk]
+        if amount <= 0:
+            continue
+        summary = summaries.setdefault(
+            cuota.movimiento.cuenta_corriente.socio_id, {"deuda": Decimal("0.00"), "cuotas_vencidas": 0}
+        )
+        summary["deuda"] += amount
+        if cuota.estado_cuota in OVERDUE_CUOTA_STATES:
+            summary["cuotas_vencidas"] += 1
+    return summaries
+
+
 def cuota_state(cuota, pending, today):
     if pending <= 0:
         return EstadoCuotaChoices.PAGA
@@ -728,10 +812,23 @@ REFUND_SEQUENCES = {
 }
 DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
 PARTIAL_PAYMENT_PREFIX = " - Abono parcial"
+RECEIPT_LINE_ORDER = (
+    ConceptoItemChoices.CUOTA_SOCIAL,
+    ConceptoItemChoices.CUOTA_DEPORTIVA,
+    ConceptoItemChoices.MORA,
+    ConceptoItemChoices.OTRO,
+    ConceptoItemChoices.CONDONACION_MORA,
+    ConceptoItemChoices.DESCUENTO_UNICO,
+    ConceptoItemChoices.BECA,
+)
+
+
+def receipt_line_order(concept):
+    return RECEIPT_LINE_ORDER.index(concept) if concept in RECEIPT_LINE_ORDER else len(RECEIPT_LINE_ORDER)
 
 
 def detail_lines(totals):
-    ordered = sorted(totals.items(), key=lambda pair: (pair[0] in DISCOUNT_CONCEPTS, charge_order(pair[0])))
+    ordered = sorted(totals.items(), key=lambda pair: receipt_line_order(pair[0]))
     return [
         {"concepto": concept, "concepto_nombre": ConceptoItemChoices(concept).label, "monto": amount}
         for concept, amount in ordered
@@ -741,7 +838,8 @@ def detail_lines(totals):
 def mark_partial_line(lines):
     charges = [line for line in lines if line["concepto"] not in DISCOUNT_CONCEPTS]
     if charges:
-        charges[-1]["concepto_nombre"] = f"{charges[-1]['concepto_nombre']}{PARTIAL_PAYMENT_PREFIX}"
+        line = max(charges, key=lambda line: charge_order(line["concepto"]))
+        line["concepto_nombre"] = f"{line['concepto_nombre']}{PARTIAL_PAYMENT_PREFIX}"
     return lines
 
 
@@ -858,7 +956,7 @@ def receipt_detail(receipt):
         "medios": [
             {"medio_de_pago": item.medio_de_pago, "monto": item.monto}
             for item in payment.items_pago.order_by("pk")
-        ],
+        ] or [{"medio_de_pago": NO_PAYMENT_METHOD, "monto": Decimal("0.00")}],
     }
 
 
@@ -1146,6 +1244,7 @@ def latest_cuota_payment(account):
         Pago.objects.filter(
             movimiento__cuenta_corriente=account,
             movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO,
+            movimiento__monto__gt=0,
             estado_pago=EstadoPagoChoices.ACREDITADO,
         )
         .order_by("-fecha", "-pk")
@@ -1470,18 +1569,19 @@ def assign_benefit(
     cuota = lock_cuota(cuota_id)
     items = list(cuota.items.all())
     base = discount_base(items)
-    if mode == ModalidadMontoChoices.MONTO_FIJO and value > base:
-        raise BeneficioInvalidoError("El monto fijo no puede superar el valor de la cuota.")
-
-    paid = cuota.estado_cuota == EstadoCuotaChoices.PAGA
-    remaining = discountable_pending(cuota, items, pending_amounts([cuota])[cuota.pk])
-    amount = min(benefit_amount(mode, value, base), base)
 
     if kind == BENEFIT_DISCOUNT:
-        if paid:
+        if cuota.estado_cuota == EstadoCuotaChoices.PAGA:
             raise CuotaConPagosError("La cuota está paga y no puede recibir un descuento.")
-        if amount > remaining:
-            raise BeneficioInvalidoError("El descuento supera el saldo pendiente de la cuota, sin contar recargos.")
+        remaining = pending_amounts([cuota])[cuota.pk]
+        if remaining <= 0:
+            raise BeneficioInvalidoError("La cuota no tiene saldo pendiente para descontar.")
+        if mode == ModalidadMontoChoices.MONTO_FIJO and value > remaining:
+            raise BeneficioInvalidoError(
+                f"El máximo que podés descontar es {format_amount(remaining)}, lo que le resta pagar a la cuota."
+            )
+        # A percentage discount is taken from what is left to pay, late fees included
+        amount = benefit_amount(mode, value, remaining)
         item = ItemCuota.objects.create(
             cuota=cuota,
             concepto=ConceptoItemChoices.DESCUENTO_UNICO,
@@ -1504,6 +1604,8 @@ def assign_benefit(
         )
         return None, item
 
+    if mode == ModalidadMontoChoices.MONTO_FIJO and value > base:
+        raise BeneficioInvalidoError(f"El monto de la beca no puede superar el valor de la cuota ({format_amount(base)}).")
     account = cuota.movimiento.cuenta_corriente
     scholarship = create_scholarship(account.socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
     items = refresh_scholarship_items(account, SCHOLARSHIP_GRANTED_REASON, authorized_by, user)
@@ -1563,13 +1665,21 @@ def scholarship_item(scholarship, cuota, amount):
     )
 
 
+def scholarship_discount(scholarship, base, remaining):
+    """A 100% scholarship settles all that is left to pay, late fees included; any other one is taken
+    from the value of the cuota, up to what is left."""
+    remaining = max(remaining, Decimal("0.00"))
+    if scholarship.porcentaje is not None and scholarship.porcentaje >= 100:
+        return remaining
+    return min(scholarship.discount_for(base), remaining)
+
+
 def apply_scholarship(scholarship, cuota):
     items = list(cuota.items.all())
     pending = pending_amounts([cuota])[cuota.pk]
     if pending <= 0 or not scholarship.covers_period(cuota_period_start(cuota)):
         return None
-    # A scholarship larger than what is left to pay only covers the remaining amount
-    amount = min(scholarship.discount_for(discount_base(items)), discountable_pending(cuota, items, pending))
+    amount = scholarship_discount(scholarship, discount_base(items), pending)
     if amount <= 0:
         return None
     item = scholarship_item(scholarship, cuota, amount)
@@ -1587,13 +1697,10 @@ def is_linked_scholarship(item):
 
 def scholarship_amounts(items, scholarships):
     base = discount_base(items)
-    available = base - sum(
-        (item.monto for item in items if item.es_descuento and item.concepto != ConceptoItemChoices.CONDONACION_MORA),
-        Decimal("0.00"),
-    )
+    available = net_amount(items)
     amounts = {}
     for scholarship in scholarships:
-        amount = min(scholarship.discount_for(base), max(available, Decimal("0.00")))
+        amount = scholarship_discount(scholarship, base, available)
         if amount > 0:
             amounts[scholarship.pk] = amount
             available -= amount
@@ -1769,7 +1876,7 @@ def remove_benefit(cuota, item, reason, authorized_by, user):
 
 
 def latest_payment_date(cuota):
-    return active_imputations().filter(movimiento_destino__cuota=cuota).aggregate(
+    return active_imputations().filter(movimiento_destino__cuota=cuota, monto_aplicado__gt=0).aggregate(
         latest=Max("movimiento_origen__pago__fecha"),
     )["latest"]
 

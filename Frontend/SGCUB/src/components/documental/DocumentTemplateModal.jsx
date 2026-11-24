@@ -151,7 +151,7 @@ function TemplateDocumentView({ tipo, personaId, onUpload }) {
             onClick={sendWhatsApp}
             disabled={!canSend || Boolean(busy)}
             title={canSend ? 'Enviar por WhatsApp' : 'No hay un teléfono cargado'}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#20ba5a] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 text-base font-semibold text-[#063a1c] shadow-sm transition-colors hover:bg-[#20ba5a] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
             <WhatsAppIcon className="h-4 w-4 shrink-0" />
             {busy === 'whatsapp' ? 'Preparando...' : 'WhatsApp'}

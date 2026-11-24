@@ -18,7 +18,8 @@ import { downloadCashMovementsCsv } from './cashMovementsCsv'
 import { conceptGroup } from './conceptOrigins'
 import { descargarComprobantePdf } from '../../api/comprobantes'
 import { descargarDevolucionPdf } from '../../api/devoluciones'
-import { WhatsAppIcon, WhatsAppToast } from './WhatsAppComprobanteButton'
+import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
 const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
@@ -123,7 +124,7 @@ function ComprobantesTable({
   const [conceptFilter, setConceptFilter] = useState(ALL)
   const [downloadingKey, setDownloadingKey] = useState(null)
   const [sharingWhatsAppKey, setSharingWhatsAppKey] = useState(null)
-  const [toast, setToast] = useState(null)
+  const { showToast } = useToast()
   const filters = SCOPE_FILTERS[scope]
 
   const unifiedItems = useMemo(() => {
@@ -279,7 +280,7 @@ function ComprobantesTable({
         comprobanteCodigo: item.refCode,
         montoTotal: item.amount,
         tipo,
-        onToast: setToast,
+        onToast: showToast,
       })
     } finally {
       setSharingWhatsAppKey(null)
@@ -485,8 +486,6 @@ function ComprobantesTable({
 
         <TablePagination id="comprobantes-rows-per-page" {...paginationProps} />
       </div>
-
-      <WhatsAppToast toast={toast} onClose={() => setToast(null)} />
     </section>
   )
 }

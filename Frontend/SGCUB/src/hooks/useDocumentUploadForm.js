@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { collectErrorMessages } from '../components/personas/format'
+import useToast from './useToast'
 
 const getEmptyUploadForm = (tipoDocumento = '') => ({
   tipo_documento: tipoDocumento,
@@ -32,6 +33,8 @@ export default function useDocumentUploadForm({ tipos, create, update }) {
   const [form, setForm] = useState(getEmptyUploadForm())
   const [target, setTarget] = useState({ personaId: null, document: null })
   const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const { showToast } = useToast()
 
   const findTipo = (tipoId) => tipos.find(t => String(t.id_tipo_documento) === String(tipoId))
   const requiresDueDate = (tipoId) => Boolean(findTipo(tipoId)?.requiere_vencimiento)
@@ -64,7 +67,7 @@ export default function useDocumentUploadForm({ tipos, create, update }) {
     setIsOpen(true)
   }
 
-  const close = () => setIsOpen(false)
+  const close = () => !saving && setIsOpen(false)
 
   const handleChange = (e) => {
     const { name, value, type, files, checked } = e.target
@@ -92,6 +95,20 @@ export default function useDocumentUploadForm({ tipos, create, update }) {
     e.preventDefault()
     setError(null)
     const isEditing = Boolean(target.document)
+    if (!form.tipo_documento) {
+      setError('Elegí el tipo de documento.')
+      return
+    }
+    const needsDueDate = requiresDueDate(form.tipo_documento) || !form.sin_vencimiento
+    if (needsDueDate && !form.fecha_vencimiento) {
+      setError('Indicá la fecha de vencimiento o marcá "Sin vencimiento".')
+      return
+    }
+    if (form.fecha_emision && form.fecha_vencimiento && form.fecha_vencimiento <= form.fecha_emision) {
+      setError('La fecha de vencimiento debe ser posterior a la fecha de emisión.')
+      return
+    }
+    setSaving(true)
     try {
       const formData = new FormData()
       formData.append('persona', target.personaId)
@@ -117,9 +134,12 @@ export default function useDocumentUploadForm({ tipos, create, update }) {
       setIsOpen(false)
       setForm(getEmptyUploadForm())
       setTarget({ personaId: null, document: null })
+      showToast({ title: isEditing ? 'Documento actualizado' : 'Documento cargado' })
     } catch (requestError) {
       console.error('Error uploading document:', requestError)
       setError(getSaveErrorMessage(requestError))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -128,6 +148,7 @@ export default function useDocumentUploadForm({ tipos, create, update }) {
     form,
     isEditing: Boolean(target.document),
     error,
+    saving,
     openNew,
     openEdit,
     close,

@@ -35,6 +35,7 @@ import NotificacionDetail from './pages/NotificacionDetail'
 import Automatizaciones from './pages/Automatizaciones'
 import RecategorizacionRevision from './pages/RecategorizacionRevision'
 import Configuracion from './pages/Configuracion'
+import NotFound from './pages/NotFound'
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -220,6 +221,10 @@ export const router = createBrowserRouter([
             path: 'categorias/:id',
             element: <CategoriaDetail />,
           },
+          {
+            path: '*',
+            element: <NotFound />,
+          },
         ],
       },
     ],
@@ -239,10 +244,4 @@ export const router = createBrowserRouter([
     label: 'Admin',
     showInNavigation: true,
   },
-    ],
-  
-  {
-    path: '*',
-    element: <h1>404 - Página no encontrada</h1>,
-  }
-)
+])

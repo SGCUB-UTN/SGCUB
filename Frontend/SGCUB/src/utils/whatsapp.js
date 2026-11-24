@@ -228,7 +228,7 @@ export async function sendReceiptToWhatsApp({
       await copyReceiptBlobToClipboard(blob)
       imagenCopiada = true
       onToast?.({
-        type: 'success',
+        tone: 'success',
         title: '¡Comprobante copiado al portapapeles!',
         description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
       })
@@ -241,7 +241,7 @@ export async function sendReceiptToWhatsApp({
       await copyReceiptBlobToClipboard(blob)
       imagenCopiada = true
       onToast?.({
-        type: 'success',
+        tone: 'success',
         title: '¡Comprobante copiado al portapapeles!',
         description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
       })
@@ -255,7 +255,7 @@ export async function sendReceiptToWhatsApp({
       await copyReceiptImageToClipboard(comprobanteRef.current)
       imagenCopiada = true
       onToast?.({
-        type: 'success',
+        tone: 'success',
         title: '¡Comprobante copiado al portapapeles!',
         description: 'En WhatsApp presioná Ctrl + V para pegar la imagen en la conversación.',
       })
@@ -272,7 +272,7 @@ export async function sendReceiptToWhatsApp({
         await descargarComprobantePdf(comprobanteId)
       }
       onToast?.({
-        type: 'info',
+        tone: 'info',
         title: 'Comprobante descargado',
         description: 'Descargamos el PDF para que lo adjuntes directamente en WhatsApp.',
       })

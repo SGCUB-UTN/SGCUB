@@ -16,7 +16,8 @@ import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import DocumentStatusBadge from './DocumentStatusBadge'
 import { downloadDocumentalCsv } from './documentalCsv'
-import { openFile } from './documentFile'
+import { FILE_MISSING_TOAST, openFile } from './documentFile'
+import useToast from '../../hooks/useToast'
 import { notifiablePersonas } from './documentNotices'
 import {
   ALL,
@@ -147,6 +148,7 @@ const notifyBlockReason = (row) => {
 }
 
 function RowActions({ row, onNotify, onUpload }) {
+  const { showToast } = useToast()
   const name = personaName(row)
   const notifyBlocker = notifyBlockReason(row)
   const notifyLabel = notifyBlocker ?? `Notificar a ${name}`
@@ -154,7 +156,7 @@ function RowActions({ row, onNotify, onUpload }) {
     <div className="flex justify-end gap-1">
       <button
         type="button"
-        onClick={() => openFile(row.archivo_url)}
+        onClick={() => openFile(row.archivo_url, () => showToast(FILE_MISSING_TOAST))}
         disabled={!row.archivo_url}
         className={ICON_BUTTON_CLASS}
         aria-label={row.archivo_url ? `Ver ${row.tipo_documento_nombre} de ${name}` : 'Sin archivo cargado'}

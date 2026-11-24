@@ -5,8 +5,9 @@ import {
   patchJugador,
   postJugador,
 } from '../api/jugadores'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
-function useJugadores() {
+function useJugadores({ view } = {}) {
   const [jugadores, setJugadores] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -16,13 +17,13 @@ function useJugadores() {
     setError(null)
 
     try {
-      setJugadores(await getJugadores())
+      setJugadores(await getJugadores({ view }))
     } catch (requestError) {
       setError(requestError)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [view])
 
   const crearJugador = useCallback(async (jugador) => {
     const jugadorCreado = await postJugador(jugador)
@@ -45,10 +46,17 @@ function useJugadores() {
     cargarJugadores()
   }, [cargarJugadores])
 
+  useEffect(() => {
+    if (!view) return undefined
+    window.addEventListener(CAJA_CHANGED_EVENT, cargarJugadores)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, cargarJugadores)
+  }, [view, cargarJugadores])
+
   return {
     jugadores,
     isLoading,
     error,
+    recargarJugadores: cargarJugadores,
     crearJugador,
     editarJugador,
     darDeBajaJugador,

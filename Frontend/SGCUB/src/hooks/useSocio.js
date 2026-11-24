@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { deactivateSocio, getSocios, postSocio, putSocio } from '../api/socios'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
-function useSocio({ onlyMembers = false } = {}) {
+function useSocio({ onlyMembers = false, view } = {}) {
   const [socios, setSocios] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11,14 +12,14 @@ function useSocio({ onlyMembers = false } = {}) {
     setError(null)
 
     try {
-      const sociosRecibidos = await getSocios({ onlyMembers })
+      const sociosRecibidos = await getSocios({ onlyMembers, view })
       setSocios(sociosRecibidos)
     } catch (requestError) {
       setError(requestError)
     } finally {
       setIsLoading(false)
     }
-  }, [onlyMembers])
+  }, [onlyMembers, view])
 
   const crearSocio = useCallback(async (socio) => {
     const socioCreado = await postSocio(socio)
@@ -40,6 +41,12 @@ function useSocio({ onlyMembers = false } = {}) {
   useEffect(() => {
     cargarSocios()
   }, [cargarSocios])
+
+  useEffect(() => {
+    if (!view) return undefined
+    window.addEventListener(CAJA_CHANGED_EVENT, cargarSocios)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, cargarSocios)
+  }, [view, cargarSocios])
 
   return {
     socios,

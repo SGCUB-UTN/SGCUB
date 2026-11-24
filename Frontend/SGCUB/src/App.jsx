@@ -1,11 +1,14 @@
 import { RouterProvider } from 'react-router-dom'
 import AuthProvider from './auth/AuthProvider'
+import ToastProvider from './components/shared/ToastProvider'
 import { router } from './routes'
 
 function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </AuthProvider>
   )
 }

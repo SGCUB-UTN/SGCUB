@@ -1,8 +1,10 @@
 import { useCometJugadorEstado, useDownloadPlanillaJugador } from '../../hooks/useComet'
+import useToast from '../../hooks/useToast'
 
 export default function CometDescargarButton({ jugadorId }) {
   const { estado, isLoading } = useCometJugadorEstado(jugadorId)
   const { descargar, downloading } = useDownloadPlanillaJugador()
+  const { showToast } = useToast()
 
   const aptoVigente = Boolean(estado?.apto_fisico_vigente)
 
@@ -10,7 +12,7 @@ export default function CometDescargarButton({ jugadorId }) {
     if (!jugadorId || !aptoVigente || downloading) return
     const res = await descargar(jugadorId)
     if (!res.ok && res.error) {
-      alert(res.error)
+      showToast({ tone: 'error', title: 'No se pudo descargar la planilla', description: res.error })
     }
   }
 

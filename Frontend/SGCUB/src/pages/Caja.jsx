@@ -20,6 +20,7 @@ import useRegisterPayment from '../hooks/useRegisterPayment'
 import { ErrorFile } from '../components/personas/FileStatus'
 import { PanelSkeleton } from '../components/shared/Skeleton'
 import { isActiveStatus } from '../components/personas/format'
+import { hasPendingDebt } from '../components/finanzas/accountStatement'
 
 const SIN_SOCIO = { loading: false, socio: null, cuenta: null, error: null }
 
@@ -66,6 +67,9 @@ function Caja() {
     return () => { activo = false }
   }, [socioId])
 
+  const cargado = !carga.loading && Boolean(socioId) && Boolean(carga.socio) && Boolean(carga.cuenta)
+  const puedePagar = cargado && (isActiveStatus(carga.socio.estado_administrativo_nombre) || hasPendingDebt(carga.cuenta))
+
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
       <PageHeader
@@ -91,12 +95,12 @@ function Caja() {
           backText="Volver a socios"
         />
       )}
-      {!carga.loading && socioId && carga.socio && carga.cuenta && !isActiveStatus(carga.socio.estado_administrativo_nombre) && (
+      {cargado && !puedePagar && (
         <p className="p-4 bg-surface-container-low rounded-lg text-on-surface-variant">
-          El socio está dado de baja. No se pueden registrar pagos a socios inactivos.
+          El socio está dado de baja y no tiene deuda pendiente.
         </p>
       )}
-      {!carga.loading && socioId && carga.socio && carga.cuenta && isActiveStatus(carga.socio.estado_administrativo_nombre) && (
+      {cargado && puedePagar && (
         <PagoForm
           socio={carga.socio}
           cuenta={carga.cuenta}

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import ActiveStatusBadge from '../shared/ActiveStatusBadge'
+import { Link, useNavigate } from 'react-router-dom'
+import DocumentationStatus from '../documental/DocumentationStatus'
+import { DOCUMENTATION_LABELS, documentationSeverity } from '../documental/documentationStates'
+import ClearFiltersButton from '../shared/ClearFiltersButton'
+import ExportMenu from '../shared/ExportMenu'
+import InactiveTag from '../shared/InactiveTag'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
@@ -9,15 +14,31 @@ import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
 import CategoryFilter from '../shared/CategoryFilter'
 import { ALL_CATEGORIES, NO_CATEGORY_VALUE } from '../shared/categoryFilters'
+import {
+  ALL,
+  DOCUMENTATION_FILTERS,
+  FILTER_CLASS,
+  FILTER_WIDTH,
+  SEARCH_WIDTH,
+  filterLabel,
+  matchesDocumentationFilter,
+} from '../shared/listFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { formatDni } from '../personas/format'
-import { cargosDe, esActivo, exportarNominaCSV } from './docentesUtils'
+import { cargosDe, esActivo } from './docentesUtils'
 import { matchesSearch } from '../shared/search'
 
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
-const COLUMN_COUNT = 6
+const COLUMN_COUNT = 5
 const GENDER_PREFIX = 'gender:'
+const NO_ROLE = 'Sin cargo'
+const GENDER_LABELS = { M: 'Masculino', F: 'Femenino' }
+
+const STATUS_FILTERS = [
+  { value: 'activo', label: 'Activos' },
+  { value: ALL, label: 'Todos' },
+  { value: 'baja', label: 'De baja' },
+]
 
 const matchesDocenteCategory = (docenteCategorias, value) => {
   if (value === ALL_CATEGORIES) return true
@@ -32,21 +53,61 @@ const matchesDocenteCategory = (docenteCategorias, value) => {
 const fullName = (docente) =>
   [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido].filter(Boolean).join(' ')
 
-const categoryNames = (categorias) =>
-  categorias.length > 0 ? categorias.map((categoria) => categoria.nombre).join(', ') : '—'
+const assignmentsText = (asignaciones = []) => asignaciones
+  .map(({ cargo_nombre: cargoNombre, categorias = [] }) => {
+    const names = categorias.map((categoria) => categoria.nombre).join(', ')
+    return names ? `${cargoNombre ?? NO_ROLE}: ${names}` : cargoNombre ?? NO_ROLE
+  })
+  .join('; ')
+
+function RoleAssignments({ asignaciones = [] }) {
+  if (asignaciones.length === 0) return <span>—</span>
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {asignaciones.map(({ cargo, cargo_nombre: cargoNombre, categorias = [] }) => (
+        <li key={cargo ?? NO_ROLE}>
+          <span className="text-on-surface">{cargoNombre ?? NO_ROLE}</span>
+          {categorias.length > 0 && (
+            <span className="text-on-surface-variant"> · {categorias.map((categoria) => categoria.nombre).join(', ')}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const EXPORT_COLUMNS = [
+  { header: 'Legajo', value: (docente) => docente.legajo },
+  { header: 'Nombre y apellido', value: fullName },
+  { header: 'DNI', value: (docente) => formatDni(docente.persona_detalle?.dni) },
+  { header: 'Teléfono', value: (docente) => docente.persona_detalle?.telefono },
+  { header: 'Email', value: (docente) => docente.persona_detalle?.email },
+  { header: 'Cargo y categorías', value: (docente) => assignmentsText(docente.asignaciones) },
+  { header: 'Documentación', value: (docente) => DOCUMENTATION_LABELS[docente.documentacion?.estado] },
+  { header: 'Estado', value: (docente) => (esActivo(docente) ? 'Activo' : 'De baja') },
+]
 
 const SORT_VALUES = {
   legajo: (docente) => (docente.legajo ? Number(docente.legajo) : null),
-  nombre: (docente) => fullName(docente),
-  estado: (docente) => (esActivo(docente) ? 0 : 1),
+  nombre: fullName,
+  documentacion: (docente) => documentationSeverity(docente.documentacion),
 }
 const INITIAL_SORT = { columna: 'legajo', direccion: 'desc' }
 
-function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onStatusChange }) {
+const categoryDescription = (value, options) => {
+  if (value === ALL_CATEGORIES) return null
+  if (value === NO_CATEGORY_VALUE) return 'Categoría: Sin categoría'
+  if (value.startsWith(GENDER_PREFIX)) return `Categoría: ${GENDER_LABELS[value.slice(GENDER_PREFIX.length)] ?? value}`
+  const option = options.find((item) => item.value === value)
+  return option ? `Categoría: ${option.name}` : null
+}
+
+function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoading, error, status, onRetry }) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [cargo, setCargo] = useState('todos')
+  const [cargo, setCargo] = useState(ALL)
   const [category, setCategory] = useState(ALL_CATEGORIES)
+  const [documentation, setDocumentation] = useState(ALL)
 
   const docentes = useMemo(() => data ?? [], [data])
 
@@ -75,17 +136,29 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
     const text = search.trim()
     return docentes.filter((docente) => {
       const docenteCategorias = categoriasPorDocente[docente.docente_id] ?? []
-      if (cargo !== 'todos' && !cargosDe(docenteCategorias).includes(cargo)) return false
+      if (cargo !== ALL && !cargosDe(docenteCategorias).includes(cargo)) return false
       if (!matchesDocenteCategory(docenteCategorias, category)) return false
       if (status === 'activo' && !esActivo(docente)) return false
       if (status === 'baja' && esActivo(docente)) return false
+      if (!matchesDocumentationFilter(docente.documentacion, documentation)) return false
       if (!text) return true
       return matchesSearch(text, [docente.persona_detalle?.nombre, docente.persona_detalle?.apellido, docente.persona_detalle?.dni, docente.legajo])
     })
-  }, [docentes, categoriasPorDocente, search, cargo, category, status])
+  }, [docentes, categoriasPorDocente, search, cargo, category, status, documentation])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
+  const hasFilters = search.trim() !== ''
+    || cargo !== ALL
+    || category !== ALL_CATEGORIES
+    || documentation !== ALL
+  const clearFilters = () => {
+    setSearch('')
+    setCargo(ALL)
+    setCategory(ALL_CATEGORIES)
+    setDocumentation(ALL)
+    resetPage()
+  }
   const sortAndReset = withPageReset(sortBy)
   const [previousStatus, setPreviousStatus] = useState(status)
   if (status !== previousStatus) {
@@ -96,23 +169,26 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
   return (
     <div className="min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm">
       <div className="p-4 border-b border-outline-variant/20 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
-        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
           <TableSearchInput
             value={search}
             onChange={withPageReset(setSearch)}
-            placeholder="Filtrar por DNI, Nombre, Apellido o Legajo..."
-            label="Filtrar docentes"
+            placeholder="Buscar por nombre, DNI o legajo"
+            label="Buscar docentes"
+            className={SEARCH_WIDTH}
           />
           <FilterSelect
             className={FILTER_CLASS}
+            width={FILTER_WIDTH}
             value={cargo}
             onChange={(event) => withPageReset(setCargo)(event.target.value)}
             aria-label="Filtrar por cargo"
           >
-            <option value="todos">Cargo: Todos</option>
+            <option value={ALL}>Cargo</option>
             {availableCargos.map((item) => <option key={item} value={item}>{item}</option>)}
           </FilterSelect>
           <CategoryFilter
+            width={FILTER_WIDTH}
             value={category}
             categories={categoryOptions}
             hasUncategorized={hasUncategorized}
@@ -120,37 +196,38 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           />
           <FilterSelect
             className={FILTER_CLASS}
-            value={status}
-            onChange={(event) => onStatusChange(event.target.value)}
-            aria-label="Filtrar por estado"
+            width={FILTER_WIDTH}
+            value={documentation}
+            onChange={(event) => withPageReset(setDocumentation)(event.target.value)}
+            aria-label="Filtrar por documentación"
           >
-            <option value="activo">Estado: Activo</option>
-            <option value="todos">Estado: Todos</option>
-            <option value="baja">De baja / Inactivo</option>
+            {DOCUMENTATION_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </FilterSelect>
+          <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
-        <div className="flex items-center justify-end xl:shrink-0">
-          <button
-            type="button"
-            onClick={() => exportarNominaCSV(filtered, categoriasPorDocente)}
-            disabled={filtered.length === 0}
-            className="inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-lg font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">file_download</span>
-            <span>Exportar nómina</span>
-          </button>
-        </div>
+        <ExportMenu
+          title="Docentes"
+          filename="docentes"
+          columns={EXPORT_COLUMNS}
+          items={sorted}
+          filters={[
+            filterLabel(STATUS_FILTERS, status, 'Estado'),
+            cargo !== ALL && `Cargo: ${cargo}`,
+            categoryDescription(category, categoryOptions),
+            filterLabel(DOCUMENTATION_FILTERS, documentation, 'Documentación'),
+            search.trim() && `Búsqueda: «${search.trim()}»`,
+          ]}
+        />
       </div>
 
       <DataTable
         headers={(
           <>
-            <SortableHeader className="py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
+            <SortableHeader className="max-sm:hidden py-3 px-4 w-28 whitespace-nowrap" etiqueta="N° Legajo" columna="legajo" orden={sort} onOrdenar={sortAndReset} />
             <SortableHeader className="py-3 px-4" etiqueta="Nombre y Apellido" columna="nombre" orden={sort} onOrdenar={sortAndReset} />
             <th className="py-3 px-4" scope="col">DNI</th>
-            <th className="py-3 px-4" scope="col">Cargo</th>
-            <th className="py-3 px-4" scope="col">Categorías</th>
-            <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="estado" orden={sort} onOrdenar={sortAndReset} />
+            <th className="max-sm:hidden py-3 px-4" scope="col">Cargo y categorías</th>
+            <SortableHeader className="max-sm:hidden py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentacion" orden={sort} onOrdenar={sortAndReset} />
           </>
         )}
       >
@@ -161,32 +238,37 @@ function DocentesTable({ data, categorias = [], categoriasPorDocente = {}, isLoa
           error={error}
           loadingText="Cargando docentes..."
           errorText="No se pudieron cargar los docentes."
-          emptyText="No hay docentes que coincidan con el filtro."
+          emptyText={docentes.length === 0 ? 'Todavía no hay docentes cargados.' : 'Ningún docente coincide con la búsqueda o los filtros.'}
+          onRetry={onRetry}
+          onClearFilters={hasFilters ? clearFilters : undefined}
         />
 
-        {!isLoading && visibleRows.map((docente) => {
-          const docenteCategorias = categoriasPorDocente[docente.docente_id] ?? []
-          return (
-            <tr
-              key={docente.docente_id}
-              onClick={() => navigate(`/padron/docentes/${docente.docente_id}`)}
-              className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
-            >
-              <td className="py-3 px-4 font-bold text-primary text-base pl-6">
-                {docente.legajo ? `#${docente.legajo}` : '—'}
-              </td>
-              <td className="py-3 px-4">
-                <span className="font-medium text-on-surface block text-base">{fullName(docente) || '—'}</span>
-              </td>
-              <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{cargosDe(docenteCategorias).join(', ') || '—'}</td>
-              <td className="py-3 px-4 text-on-surface-variant">{categoryNames(docenteCategorias)}</td>
-              <td className="py-3 px-4">
-                <ActiveStatusBadge isActive={esActivo(docente)} label={esActivo(docente) ? 'Activo' : 'De baja'} />
-              </td>
-            </tr>
-          )
-        })}
+        {!isLoading && visibleRows.map((docente) => (
+          <tr
+            key={docente.docente_id}
+            onClick={() => navigate(`/padron/docentes/${docente.docente_id}`)}
+            className="hover:bg-surface-container-low/80 transition-colors cursor-pointer group"
+          >
+            <td className="max-sm:hidden py-3 px-4 font-bold text-primary text-base pl-6">
+              {docente.legajo ? `#${docente.legajo}` : '—'}
+            </td>
+            <td className="py-3 px-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link
+                  to={`/padron/docentes/${docente.docente_id}`}
+                  onClick={stopRowClick}
+                  className={`font-medium block text-base ${ROW_LINK_CLASS} ${esActivo(docente) ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                >
+                  {fullName(docente) || '—'}
+                </Link>
+                {!esActivo(docente) && <InactiveTag>De baja</InactiveTag>}
+              </div>
+            </td>
+            <td className="py-3 px-4 text-on-surface-variant">{formatDni(docente.persona_detalle?.dni)}</td>
+            <td className="max-sm:hidden py-3 px-4"><RoleAssignments asignaciones={docente.asignaciones} /></td>
+            <td className="max-sm:hidden py-3 px-4"><DocumentationStatus documentacion={docente.documentacion} /></td>
+          </tr>
+        ))}
       </DataTable>
 
       <TablePagination id="docentes-rows-per-page" {...paginationProps} />

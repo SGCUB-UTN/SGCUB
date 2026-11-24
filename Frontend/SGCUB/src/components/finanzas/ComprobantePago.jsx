@@ -14,10 +14,14 @@ function ComprobantePago({
   observacion,
   numero,
   fecha: fechaEmision,
+  comprobanteId: registeredId = null,
+  onRetryDetalle = null,
   onBack,
   backLabel = 'Volver al estado de cuenta',
 }) {
   const [clubConfig, setClubConfig] = useState(null)
+  const [retrying, setRetrying] = useState(false)
+  const [retryFailed, setRetryFailed] = useState(false)
   const comprobanteRef = useRef(null)
   const fecha = fechaEmision ? formatDate(fechaEmision) : new Date().toLocaleDateString('es-AR')
 
@@ -36,7 +40,20 @@ function ComprobantePago({
   const socioCompleto = { ...(socio || {}), ...(detalle?.socio || {}) }
   const clubNombre = clubConfig?.club_nombre || 'Club Universitario de Berisso'
   const codigoComprobante = detalle?.codigo ?? (numero ? `X ${String(numero).padStart(8, '0')}` : 'Pendiente')
-  const comprobanteId = detalle?.comprobante_id
+  const comprobanteId = detalle?.comprobante_id ?? registeredId
+  const missingDetalle = !detalle && Boolean(onRetryDetalle)
+
+  const retryDetalle = async () => {
+    setRetrying(true)
+    setRetryFailed(false)
+    try {
+      await onRetryDetalle()
+    } catch {
+      setRetryFailed(true)
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5 flex-1 min-h-0">
@@ -51,6 +68,26 @@ function ComprobantePago({
           Registrado
         </span>
       </div>
+
+      {missingDetalle && (
+        <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-amber-700/30 bg-amber-50 text-on-surface" role="alert">
+          <p className="flex items-start gap-2 text-base">
+            <span className="material-symbols-outlined text-[20px] text-amber-700 shrink-0" aria-hidden="true">warning</span>
+            {retryFailed
+              ? 'Todavía no se pudo cargar el comprobante. El pago está registrado; podés reintentar o verlo después desde el estado de cuenta.'
+              : 'El pago quedó registrado, pero no se pudo cargar el comprobante completo.'}
+          </p>
+          <button
+            type="button"
+            onClick={retryDetalle}
+            disabled={retrying}
+            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-outline-variant/60 bg-surface-container-lowest text-base font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+          >
+            <span className={`material-symbols-outlined text-[20px] ${retrying ? 'animate-spin' : ''}`} aria-hidden="true">refresh</span>
+            {retrying ? 'Cargando...' : 'Reintentar'}
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges]">
         <ReciboComprobante

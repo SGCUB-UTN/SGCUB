@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { activateSocio, deactivateSocio, getSocio } from '../api/socios'
-import ActivateSocioModal from '../components/socios/ActivateSocioModal'
-import DeactivateSocioModal from '../components/socios/DeactivateSocioModal'
-import PersonHeader, { ActivateButton, DeactivateButton, PayButton } from '../components/personas/HeaderPersona'
+import PersonStatusModal from '../components/personas/PersonStatusModal'
+import PersonHeader, { ActivateButton, DeactivateButton, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
 import { FinancialStatement } from '../components/personas/tabs/FinancialTab'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { memberStatuses } from '../components/personas/profileStatus'
-import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText } from '../components/personas/format'
+import { yearsSince, isActiveStatus, formatDni, formatDate, formatNumber, yearsText, getErrorMessage } from '../components/personas/format'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
+import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useLocalidades from '../hooks/useLocalidades'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import useSocioFinances from '../hooks/useSocioFinances'
+import useToast from '../hooks/useToast'
+import { downloadImage, buildPhotoFilename } from '../utils/downloadImage'
+import { uploadPersonaFoto } from '../api/personaFoto'
 
 function SocioDetail() {
   const { id } = useParams()
@@ -22,6 +26,7 @@ function SocioDetail() {
   const requestedTab = searchParams.get('tab') ?? undefined
   const { localidades } = useLocalidades()
   const { openPayment } = useRegisterPayment()
+  const { showToast } = useToast()
 
   const [carga, setCarga] = useState({ id: null, datos: null, error: null })
   const loading = carga.id !== id
@@ -76,10 +81,13 @@ function SocioDetail() {
     setErrorEliminacion('')
     try {
       await deactivateSocio(socio.socio_id)
+      const actualizado = await getSocio(socio.socio_id)
+      setCarga((actual) => ({ ...actual, datos: actualizado }))
+      refreshFinances()
       setModaldeactivateAbierto(false)
-      navigate('/padron/socios')
+      showToast({ title: 'Socio dado de baja', description: `${socio.nombre} ${socio.apellido} quedó de baja. La ficha pasa a solo lectura.` })
     } catch (requestError) {
-      setErrorEliminacion(requestError.response?.data?.detail || 'No se pudo dar de baja al socio.')
+      setErrorEliminacion(getErrorMessage(requestError, 'No se pudo dar de baja al socio.'))
     } finally {
       setdeactivate(false)
     }
@@ -91,9 +99,11 @@ function SocioDetail() {
     try {
       const actualizado = await activateSocio(socio.socio_id)
       setCarga((actual) => ({ ...actual, datos: actualizado }))
+      refreshFinances()
       setModalActivarAbierto(false)
+      showToast({ title: 'Socio dado de alta', description: `${socio.nombre} ${socio.apellido} vuelve a estar activo.` })
     } catch (requestError) {
-      setErrorActivacion(requestError.response?.data?.detail || 'No se pudo dar de alta al socio.')
+      setErrorActivacion(getErrorMessage(requestError, 'No se pudo dar de alta al socio.'))
     } finally {
       setActivando(false)
     }
@@ -108,6 +118,27 @@ function SocioDetail() {
   }
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)
+  const puedePagar = activo || hasPendingDebt(finances.account)
+  const nombreSocio = `${socio.nombre ?? ''} ${socio.apellido ?? ''}`.trim()
+  const deuda = pendingDebt(finances.account)
+  const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
+
+  const handleDownloadPhoto = async () => {
+    if (!socio.foto_url) return
+    try {
+      await downloadImage(socio.foto_url, buildPhotoFilename(socio.foto_url, socio.nombre, socio.apellido))
+    } catch (err) {
+      console.error(err)
+      showToast({ tone: 'error', title: 'No se pudo descargar la foto', description: 'Probá de nuevo en unos minutos.' })
+    }
+  }
+
+  const handleUploadPhoto = async (file) => {
+    const personaId = socio.persona?.persona_id || socio.persona
+    if (!personaId) return
+    const personaActualizada = await uploadPersonaFoto(personaId, file)
+    setCarga((actual) => ({ ...actual, datos: { ...actual.datos, foto_url: personaActualizada.foto_url } }))
+  }
 
   const tabs = [
     {
@@ -127,7 +158,7 @@ function SocioDetail() {
       label: 'Financiero',
       icon: 'account_balance_wallet',
       badge: cuotaBadges,
-      content: <FinancialStatement socio={socio} finances={finances} />,
+      content: <FinancialStatement socio={socio} finances={finances} readOnly={!activo} />,
     },
   ]
 
@@ -141,6 +172,9 @@ function SocioDetail() {
         ]}
         name={socio.nombre}
         surname={socio.apellido}
+        photoUrl={socio.foto_url}
+        onDownloadPhoto={handleDownloadPhoto}
+        onUploadPhoto={activo ? handleUploadPhoto : undefined}
         isActive={activo}
         statuses={memberStatuses(socio, finances.account)}
         metadata={[
@@ -149,42 +183,57 @@ function SocioDetail() {
           { label: 'Alta', value: formatDate(socio.fecha_alta) },
           { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
         ]}
-        statusAction={activo ? (
+        statusAction={activo && (
           <DeactivateButton
             onClick={() => {
               setErrorEliminacion('')
               setModaldeactivateAbierto(true)
             }}
           />
-        ) : (
-          <ActivateButton
-            onClick={() => {
-              setErrorActivacion('')
-              setModalActivarAbierto(true)
-            }}
+        )}
+        actions={(
+          <PayButton
+            onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })}
+            disabledReason={puedePagar ? undefined : 'Socio de baja sin deuda pendiente'}
           />
         )}
-        actions={activo && (
-          <PayButton onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })} />
+        footer={!activo && (
+          <LockedProfileNotice
+            canPay={puedePagar}
+            actions={(
+              <ActivateButton
+                onClick={() => {
+                  setErrorActivacion('')
+                  setModalActivarAbierto(true)
+                }}
+              />
+            )}
+          />
         )}
       />
 
       <PersonTabs key={`${id}-${requestedTab}`} tabs={tabs} defaultTab={requestedTab} />
 
-      <ActivateSocioModal
+      <PersonStatusModal
         opened={modalActivarAbierto}
-        onClose={() => !activando && setModalActivarAbierto(false)}
+        action="alta"
+        title="Confirmar alta de socio"
+        personName={nombreSocio}
+        consequences={['Vuelve a generar la cuota mensual.', 'La ficha vuelve a ser editable.']}
+        onClose={() => setModalActivarAbierto(false)}
         onConfirm={confirmarActivacion}
-        socio={socio}
         loading={activando}
         error={errorActivacion}
       />
 
-      <DeactivateSocioModal
+      <PersonStatusModal
         opened={modaldeactivateAbierto}
-        onClose={() => !deactivate && setModaldeactivateAbierto(false)}
+        action="baja"
+        title="Confirmar baja de socio"
+        personName={nombreSocio}
+        consequences={['No se le generan más cuotas.', avisoDeuda, 'La ficha queda en solo lectura.']}
+        onClose={() => setModaldeactivateAbierto(false)}
         onConfirm={confirmarEliminacion}
-        socio={socio}
         loading={deactivate}
         error={errorEliminacion}
       />

@@ -2,11 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Modal } from '@mantine/core'
 import { getComprobante } from '../../api/comprobantes'
 import { getConfiguracionGeneral } from '../../api/configuracion'
-import { revertirPago } from '../../api/pagos'
 import useMediosPago from '../../hooks/useMediosPago'
 import useRevertPayment from '../../hooks/useRevertPayment'
 import { formatAmount, formatDate } from '../personas/format'
-import AuthorizationModal from './AuthorizationModal'
+import AnnulIncomeModal from './AnnulIncomeModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
@@ -17,9 +16,15 @@ import { receiptModalStyles } from './receiptModal'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
-const ANNUL_INCOME_DESCRIPTION = 'El comprobante pasa a anulado y el ingreso deja de contarse. Si hay que devolver el dinero, emití una nota de crédito.'
 
 const MODAL_STYLES = receiptModalStyles()
+
+const NO_PAYMENT_METHOD = { medio: '-', monto: 0 }
+
+const paymentMethodsOf = (pago, methodLabel) => {
+  const items = (pago?.items_pago ?? []).map((item) => ({ medio: methodLabel(item.medio_de_pago), monto: item.monto }))
+  return items.length ? items : [NO_PAYMENT_METHOD]
+}
 
 function InfoRow({ label, children }) {
   return (
@@ -71,7 +76,7 @@ function CreditNotes({ detalle, methodLabel }) {
   )
 }
 
-function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged }) {
+function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, readOnly }) {
   const [state, setState] = useState({ loading: true, error: '', data: null })
   const [action, setAction] = useState(null)
   const [justReverted, setJustReverted] = useState(false)
@@ -107,11 +112,10 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
     openReversal({ comprobanteId: detalle.comprobante_id, onChanged })
   }
 
-  const annulIncome = async ({ motivo, autorizado_por: responsable }) => {
-    const updated = await revertirPago(detalle.pago, { motivo, responsable })
+  const incomeAnnulled = (updated, { refunded }) => {
     setState({ loading: false, error: '', data: updated })
     setAction(null)
-    setJustReverted(true)
+    setJustReverted(refunded ? 'refunded' : 'pending')
     onChanged?.()
   }
 
@@ -142,7 +146,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
               detalle={detalle}
               codigo={detalle.codigo}
               fecha={formatDate(detalle.fecha_emision)}
-              medios={(pago?.items_pago ?? []).map((item) => ({ medio: methodLabel(item.medio_de_pago), monto: item.monto }))}
+              medios={paymentMethodsOf(pago, methodLabel)}
               montoTotal={detalle.monto_total}
               observacion={pago?.observacion}
               anulado={anulado}
@@ -162,20 +166,24 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 
             {justReverted && (
               <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-                <p className="font-semibold text-on-surface">Ingreso anulado.</p>
-                <p className="text-sm text-on-surface-variant">Si le devolvés el dinero al socio, emití una nota de crédito.</p>
+                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
+                <p className="text-sm text-on-surface-variant">
+                  {justReverted === 'refunded'
+                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
+                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
+                </p>
               </div>
             )}
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
-            {detalle.revertible && (
+            {!readOnly && detalle.revertible && (
               <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40 mr-auto`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
             )}
-            {anulado && isIncome && available > 0 && (
+            {!readOnly && anulado && isIncome && available > 0 && (
               <button
                 type="button"
                 onClick={() => setAction('creditNote')}
@@ -200,17 +208,11 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
         </div>
       )}
 
-      <AuthorizationModal
+      <AnnulIncomeModal
         opened={action === 'revert'}
-        title="Anular ingreso"
-        description={ANNUL_INCOME_DESCRIPTION}
-        confirmLabel="Anular ingreso"
-        confirmIcon="undo"
-        authorizerLabel="Responsable"
-        authorizerError="Elegí el responsable."
-        errorMessage="No se pudo anular el ingreso."
-        onConfirm={annulIncome}
+        comprobante={detalle}
         onClose={() => setAction(null)}
+        onAnnulled={incomeAnnulled}
       />
       <NotaCreditoModal
         opened={action === 'creditNote'}
@@ -223,7 +225,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged })
 }
 
 // Detail of a receipt with its actions: revert it (or annul an income), charge it again and refund it
-function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged }) {
+function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged, readOnly = false }) {
   if (!comprobanteId) return null
   return (
     <ComprobanteDetailContent
@@ -232,6 +234,7 @@ function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged }) {
       opened={opened}
       onClose={onClose}
       onChanged={onChanged}
+      readOnly={readOnly}
     />
   )
 }

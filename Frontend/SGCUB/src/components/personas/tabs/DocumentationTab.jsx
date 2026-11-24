@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
+import useToast from '../../../hooks/useToast'
+import { PrimaryButton, SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TableFooter, TabHeader } from './parts'
 import useDocumentUploadForm from '../../../hooks/useDocumentUploadForm'
 import DocumentacionUploadModal from '../../documental/DocumentacionUploadModal'
 import DocumentacionDeleteModal from '../../documental/DocumentacionDeleteModal'
@@ -19,7 +20,8 @@ const PANEL_ID = 'documentation-section-panel'
 
 const countByStatus = (documents, status) => documents.filter((doc) => doc.status === status).length
 
-export default function DocumentationTab({ documentation, personaId, personaType, personaInfo }) {
+export default function DocumentationTab({ documentation, personaId, personaType, personaInfo, readOnly = false }) {
+  const { showToast } = useToast()
   const {
     tipos,
     isLoading: loading,
@@ -34,6 +36,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [docToDelete, setDocToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const [activeSection, setActiveSection] = useState(ACTIVE)
   const [templateTipo, setTemplateTipo] = useState(null)
 
@@ -62,12 +65,17 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
   const confirmDelete = async () => {
     if (!docToDelete) return
+    setDeleting(true)
     try {
       await borrarDocumento(docToDelete.id_documento)
       setDeleteModalOpen(false)
       setDocToDelete(null)
+      showToast({ title: 'Documento eliminado' })
     } catch (error) {
       console.error('Error deleting document:', error)
+      showToast({ tone: 'error', title: 'No se pudo eliminar el documento', description: 'Probá de nuevo en unos minutos.' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -85,7 +93,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error descargando ZIP:", err);
-      alert("Error al descargar el ZIP. Verifica que el usuario tenga documentos.");
+      showToast({ tone: 'error', title: 'No se pudo descargar el ZIP', description: 'Probá de nuevo en unos minutos.' })
     }
   }
 
@@ -101,8 +109,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
   return (
     <div className="flex flex-col">
       <TabHeader
-        title="Documentación requerida"
-        description="Habilitaciones, certificados y títulos de la persona."
+        title="Documentación"
       />
 
       <KpiGrid columns={4} className={`py-5 border-b border-surface-container ${INSET_PADDING_X_CLASS}`}>
@@ -113,7 +120,12 @@ export default function DocumentationTab({ documentation, personaId, personaType
       </KpiGrid>
 
       {missingTipos.length > 0 && (
-        <MissingDocumentsTable tipos={missingTipos} onUpload={handleNewClick} onGenerate={setTemplateTipo} className="mt-6" />
+        <MissingDocumentsTable
+          tipos={missingTipos}
+          onUpload={readOnly ? undefined : handleNewClick}
+          onGenerate={readOnly ? undefined : setTemplateTipo}
+          className="mt-6"
+        />
       )}
 
       <SegmentedTabs
@@ -135,16 +147,20 @@ export default function DocumentationTab({ documentation, personaId, personaType
                 <PersonaDocumentsTable
                   documents={documentosActivos}
                   getTypeName={getNombreTipo}
-                  onEdit={upload.openEdit}
-                  onDelete={handleDeleteClick}
+                  onEdit={readOnly ? undefined : upload.openEdit}
+                  onDelete={readOnly ? undefined : handleDeleteClick}
                   canGenerate={canGenerate}
-                  onGenerate={(doc) => setTemplateTipo(findTipo(doc.tipo_documento))}
+                  onGenerate={readOnly ? undefined : (doc) => setTemplateTipo(findTipo(doc.tipo_documento))}
                 />
               )}
               <TableFooter>
                 <SecondaryButton icon="folder_zip" onClick={() => handleDownloadZip(ACTIVE)} disabled={documentosActivos.length === 0 && !personaInfo?.foto_url}>Descargar ZIP</SecondaryButton>
-                <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
-                <SecondaryButton icon="upload_file" onClick={() => handleNewClick()}>Agregar documento</SecondaryButton>
+                {!readOnly && (
+                  <>
+                    <GenerateDocumentMenu tipos={generableTipos} onSelect={setTemplateTipo} />
+                    <PrimaryButton icon="upload_file" onClick={() => handleNewClick()}>Cargar documento</PrimaryButton>
+                  </>
+                )}
               </TableFooter>
             </>
           )}
@@ -156,7 +172,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
                 <PersonaDocumentsTable
                   documents={documentosHistoricos}
                   getTypeName={getNombreTipo}
-                  onDelete={handleDeleteClick}
+                  onDelete={readOnly ? undefined : handleDeleteClick}
                   isHistory
                 />
               )}
@@ -177,6 +193,7 @@ export default function DocumentationTab({ documentation, personaId, personaType
         tipos={tiposFiltrados} 
         isEditing={upload.isEditing}
         error={upload.error}
+        saving={upload.saving}
       />
 
       <DocumentTemplateModal
@@ -188,10 +205,11 @@ export default function DocumentationTab({ documentation, personaId, personaType
 
       <DocumentacionDeleteModal 
         isOpen={deleteModalOpen} 
-        onClose={() => setDeleteModalOpen(false)} 
-        onConfirm={confirmDelete} 
-        document={docToDelete} 
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        document={docToDelete}
         typeName={docToDelete ? getNombreTipo(docToDelete.tipo_documento) : ''}
+        deleting={deleting}
       />
     </div>
   )

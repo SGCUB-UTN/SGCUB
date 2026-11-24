@@ -63,6 +63,7 @@ from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
 from .services import (
 	CategoriaExentaError,
+	account_debt_summaries,
 	annul_exempt_cuotas,
 	apply_surcharges,
 	assign_benefit,
@@ -1553,6 +1554,46 @@ class EstadoCuentaPendienteTests(PagoTestBase):
 		self.assertEqual(Decimal(str(cuotas[self.agosto.pk]["monto_pagado"])), Decimal("250.00"))
 
 
+
+class ResumenDeudaPorSocioTests(PagoTestBase):
+	def test_suma_lo_pendiente_hasta_el_periodo_actual_como_el_estado_de_cuenta(self):
+		self.pagar([self.agosto], "400.00")
+		crear_cuota_con_cargo(self.cuenta, "2026-10", "1000.00")
+
+		resumen = account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+
+		self.assertEqual(Decimal("1600.00"), resumen[self.socio.pk]["deuda"])
+
+	def test_cuenta_las_cuotas_vencidas_con_saldo(self):
+		self.agosto.estado_cuota = EstadoCuotaChoices.VENCIDA_2
+		self.agosto.save(update_fields=["estado_cuota"])
+
+		resumen = account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+
+		self.assertEqual(1, resumen[self.socio.pk]["cuotas_vencidas"])
+
+	def test_no_incluye_socios_al_dia(self):
+		self.pagar([self.agosto, self.septiembre], "2000.00")
+
+		self.assertEqual({}, account_debt_summaries([self.socio.pk], today=date(2026, 9, 15)))
+
+	def test_no_hace_consultas_por_socio(self):
+		otros = []
+		for index in range(3):
+			persona = Persona.objects.create(nombre="Otro", apellido=f"Socio {index}", dni=f"4000000{index}")
+			socio = Socio.objects.create(persona=persona)
+			crear_cuota_con_cargo(account_for(socio), "2026-09", "500.00")
+			otros.append(socio.pk)
+
+		with CaptureQueriesContext(connection) as uno:
+			account_debt_summaries([self.socio.pk], today=date(2026, 9, 15))
+		with CaptureQueriesContext(connection) as varios:
+			resumen = account_debt_summaries([self.socio.pk, *otros], today=date(2026, 9, 15))
+
+		self.assertEqual(4, len(resumen))
+		self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+
 class ReversionPagoTests(PagoTestBase):
 	def revertir(self, pago_id, motivo="Se omitió un descuento", responsable="Tesorera", **extra):
 		return self.client.post(
@@ -2062,17 +2103,61 @@ class BeneficioCuotaTests(APITestCase):
 		self.assertEqual(Beca.objects.get().porcentaje, Decimal("100.00"))
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
 
-	def test_unpaid_late_fees_are_left_out_of_the_discountable_amount(self):
+	def test_a_fixed_discount_can_cover_unpaid_late_fees(self):
 		self.add_late_fee("300.00")
 
-		too_much = self.asignar(valor="2500.01")
-		response = self.asignar(valor="2500.00")
+		too_much = self.asignar(valor="2800.01")
+		response = self.asignar(valor="2800.00")
 
 		self.assertEqual(too_much.status_code, 400)
+		self.assertIn("2.800,00", str(too_much.data["detail"]))
 		self.assertEqual(response.status_code, 201, response.data)
-		self.assertEqual(self.pending_without_fees(), Decimal("0.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+		self.assertEqual(self.cargo(), Decimal("0.00"))
+
+	def test_a_percentage_discount_is_taken_from_what_is_left_to_pay(self):
+		self.pay("1000.00")
+
+		response = self.asignar(modalidad="Porcentaje", valor="50")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("750.00"))
 		self.assertNotEqual(self.state(), EstadoCuotaChoices.PAGA)
-		self.assertEqual(self.cargo(), Decimal("300.00"))
+
+	def test_a_full_discount_settles_a_partially_paid_cuota_with_late_fees(self):
+		self.add_late_fee("300.00")
+		self.pay("1000.00")
+
+		response = self.asignar(modalidad="Porcentaje", valor="100")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("1800.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_full_scholarship_settles_the_late_fees_too(self):
+		self.add_late_fee("300.00")
+
+		response = self.asignar(tipo="Beca", modalidad="Porcentaje", valor="100", fecha_fin="2026-12-31")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("2800.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_full_scholarship_settles_a_partially_paid_cuota_with_late_fees(self):
+		self.add_late_fee("300.00")
+		self.pay("1000.00")
+
+		response = self.asignar(tipo="Beca", modalidad="Porcentaje", valor="100", fecha_fin="2026-12-31")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		self.assertEqual(Decimal(response.data["item"]["monto"]), Decimal("1800.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_fixed_scholarship_cannot_exceed_the_value_of_the_cuota(self):
+		response = self.asignar(tipo="Beca", valor="2500.01", fecha_fin="2026-12-31")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Beca.objects.exists())
 
 	def test_late_fees_already_paid_do_not_reduce_the_discountable_amount(self):
 		self.add_late_fee("300.00")
@@ -2083,6 +2168,67 @@ class BeneficioCuotaTests(APITestCase):
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def settlement_receipt(self):
+		imputation = Imputacion.objects.get(movimiento_destino__cuota=self.cuota, monto_aplicado=0)
+		return Comprobante.objects.get(pago=imputation.movimiento_origen.pago)
+
+	def receipt_lines(self, receipt):
+		response = self.client.get(reverse("comprobante-detail", args=[receipt.pk]))
+		self.assertEqual(response.status_code, 200, response.data)
+		return response.data, {line["concepto"]: Decimal(str(line["monto"])) for line in response.data["desglose"]}
+
+	def test_a_discount_that_settles_the_cuota_issues_a_zero_receipt_showing_it(self):
+		response = self.asignar(modalidad="Porcentaje", valor="100")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = self.settlement_receipt()
+		self.assertEqual(receipt.monto_total, Decimal("0.00"))
+		data, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["DescuentoUnico"], Decimal("-2500.00"))
+		self.assertEqual(sum((amount for amount in lines.values() if amount > 0), Decimal("0.00")), Decimal("2500.00"))
+		self.assertEqual(data["medios_de_pago"], "-")
+
+	def test_a_scholarship_that_settles_a_partially_paid_cuota_issues_a_zero_receipt(self):
+		self.pay("1000.00")
+
+		response = self.asignar(tipo="Beca", modalidad="Porcentaje", valor="100", fecha_fin="2026-12-31")
+
+		self.assertEqual(response.status_code, 201, response.data)
+		receipt = self.settlement_receipt()
+		_, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["Beca"], Decimal("-1500.00"))
+		self.assertEqual(sum(lines.values(), Decimal("0.00")), Decimal("0.00"))
+		self.assertEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_discount_that_does_not_settle_the_cuota_issues_no_receipt(self):
+		self.asignar(valor="500.00")
+
+		self.assertFalse(Imputacion.objects.filter(movimiento_destino__cuota=self.cuota).exists())
+
+	def test_reverting_the_settlement_annuls_its_zero_receipt(self):
+		self.asignar(modalidad="Porcentaje", valor="100")
+		receipt = self.settlement_receipt()
+
+		response = self.client.post(
+			reverse("cuota-revertir-saldo", args=[self.cuota.pk]),
+			{"motivo": "Descuento mal cargado", "responsable": "Tesorería"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200, response.data)
+		receipt.refresh_from_db()
+		self.assertEqual(receipt.estado, "Anulado")
+		self.assertNotEqual(self.state(), EstadoCuotaChoices.PAGA)
+
+	def test_a_paid_cuota_with_a_discount_shows_it_in_the_receipt(self):
+		self.asignar(valor="500.00")
+		self.pay("2000.00")
+
+		receipt = Comprobante.objects.exclude(monto_total=0).get()
+		_, lines = self.receipt_lines(receipt)
+		self.assertEqual(lines["DescuentoUnico"], Decimal("-500.00"))
+		self.assertEqual(sum((amount for amount in lines.values() if amount > 0), Decimal("0.00")), Decimal("2500.00"))
 
 	def test_paid_cuota_only_accepts_a_scholarship_for_next_periods(self):
 		self.pay("2500.00")
@@ -2483,7 +2629,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		segundo = self.pagar("1000.00")
 		tercero = self.pagar("1300.00")
 
-		self.assertEqual(self.desglose(primero), [("Mora", Decimal("200.00")), ("CuotaSocial", Decimal("200.00"))])
+		self.assertEqual(self.desglose(primero), [("CuotaSocial", Decimal("200.00")), ("Mora", Decimal("200.00"))])
 		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("800.00")), ("CuotaDeportiva", Decimal("200.00"))])
 		self.assertEqual(self.desglose(tercero), [("CuotaDeportiva", Decimal("1300.00"))])
 
@@ -2507,6 +2653,19 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("1300.00"))
 		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Cuota Deportiva - Abono parcial"])
 		self.assertEqual(Imputacion.objects.get().saldo_pendiente, Decimal("1300.00"))
+
+	def test_el_detalle_muestra_social_deportiva_recargos_y_descuentos_en_ese_orden(self):
+		self.agregar_mora(self.cuota, "200.00")
+		self.asignar_beca("500.00")
+
+		detalle = self.pagar("1300.00")
+
+		self.assertEqual(self.nombres_del_periodo(detalle), [
+			"Cuota Social",
+			"Cuota Deportiva - Abono parcial",
+			"Recargo por mora",
+			"Beca",
+		])
 
 	def test_pago_que_cancela_el_saldo_no_es_parcial(self):
 		self.pagar("1200.00")
@@ -2533,7 +2692,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		primero_releido = self.client.get(reverse("comprobante-detail", args=[Comprobante.objects.get(numero=primero["numero"]).pk])).data
 
 		self.assertEqual(self.desglose(primero_releido), [("CuotaSocial", Decimal("400.00"))])
-		self.assertEqual(self.desglose(segundo), [("Mora", Decimal("200.00")), ("CuotaSocial", Decimal("400.00"))])
+		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("400.00")), ("Mora", Decimal("200.00"))])
 
 	def test_pago_de_varias_cuotas_lista_los_periodos_y_suma_el_desglose(self):
 		noviembre = self.generar("2026-11")

@@ -40,15 +40,17 @@ export default function MissingDocumentsTable({ tipos, onUpload, onGenerate, cla
                     Generar
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => onUpload(tipo)}
-                  aria-label={`Cargar ${tipo.nombre}`}
-                  className={ROW_BUTTON_CLASS}
-                >
-                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">upload_file</span>
-                  Cargar
-                </button>
+                {onUpload && (
+                  <button
+                    type="button"
+                    onClick={() => onUpload(tipo)}
+                    aria-label={`Cargar ${tipo.nombre}`}
+                    className={ROW_BUTTON_CLASS}
+                  >
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">upload_file</span>
+                    Cargar
+                  </button>
+                )}
               </div>
             </td>
           </tr>

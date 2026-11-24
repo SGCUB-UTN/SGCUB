@@ -3,21 +3,22 @@ import { useNavigate } from 'react-router-dom'
 import usePersonaSearch from '../../hooks/usePersonaSearch'
 import useRegisterPayment from '../../hooks/useRegisterPayment'
 import { formatDni } from '../personas/format'
+import { notifyCajaChanged } from '../finanzas/cajaEvents'
 
 const LISTBOX_ID = 'header-search-results'
 
-const PROFILE_TONES = {
-  socio: 'bg-primary/10 text-primary',
-  jugador: 'bg-emerald-50 text-emerald-700',
-  docente: 'bg-amber-50 text-amber-700',
-  vinculo: 'bg-surface-container-high text-on-surface-variant',
+const PROFILE_ICONS = {
+  socio: 'person',
+  jugador: 'sports',
+  docente: 'school',
+  vinculo: 'family_restroom',
 }
 
-function SearchMessage({ icon, children }) {
+function SearchMessage({ icon, spin = false, children }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-3 text-sm text-on-surface-variant">
-      <span className="material-symbols-outlined text-[18px]">{icon}</span>
-      {children}
+    <div className="flex items-start gap-2 px-3 py-3 text-base text-on-surface-variant" role="status">
+      <span className={`material-symbols-outlined text-[20px] shrink-0 ${spin ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true">{icon}</span>
+      <span>{children}</span>
     </div>
   )
 }
@@ -45,7 +46,7 @@ export default function HeaderSearch() {
   }
 
   const pay = (result) => {
-    openPayment({ socioId: result.socioId })
+    openPayment({ socioId: result.socioId, onSuccess: notifyCajaChanged })
     closeSearch()
   }
 
@@ -71,13 +72,22 @@ export default function HeaderSearch() {
     } else if (event.key === 'Enter') {
       event.preventDefault()
       select(results[highlightedIndex])
+    } else if ((event.key === '.' || event.key === ',') && !isSearching && results[highlightedIndex]?.socioId) {
+      event.preventDefault()
+      pay(results[highlightedIndex])
     }
   }
 
   const renderContent = () => {
-    if (isSearching) return <SearchMessage icon="progress_activity">Buscando...</SearchMessage>
-    if (error) return <SearchMessage icon="error">No se pudo realizar la búsqueda.</SearchMessage>
-    if (results.length === 0) return <SearchMessage icon="person_off">Sin resultados.</SearchMessage>
+    if (isSearching) return <SearchMessage icon="progress_activity" spin>Buscando...</SearchMessage>
+    if (error) return <SearchMessage icon="error">No se pudo buscar. Revisá la conexión y probá de nuevo.</SearchMessage>
+    if (results.length === 0) {
+      return (
+        <SearchMessage icon="person_off">
+          No encontramos a «{query.trim()}». Probá con el apellido o con el DNI sin puntos.
+        </SearchMessage>
+      )
+    }
 
     return (
       <ul id={LISTBOX_ID} role="listbox" className="flex flex-col divide-y divide-outline-variant/30 max-h-96 overflow-y-auto">
@@ -105,14 +115,20 @@ export default function HeaderSearch() {
                     {result.detail && ` · ${result.detail}`}
                   </span>
                 </span>
-                <span className={`shrink-0 px-2 py-0.5 rounded-md text-sm font-medium ${PROFILE_TONES[result.profile]}`}>{result.label}</span>
+                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface-variant text-sm font-medium">
+                  {PROFILE_ICONS[result.profile] && (
+                    <span className="material-symbols-outlined text-[16px]" aria-hidden="true">{PROFILE_ICONS[result.profile]}</span>
+                  )}
+                  {result.label}
+                </span>
               </button>
               {result.socioId && (
                 <button
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => pay(result)}
-                  title="Registrar pago"
+                  title="Registrar pago (tecla . o ,)"
+                  aria-keyshortcuts=". ,"
                   aria-label={`Registrar pago de ${result.name}`}
                   className="inline-flex items-center gap-1 h-8 px-2.5 shrink-0 rounded-md border border-primary/30 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors cursor-pointer"
                 >
@@ -129,15 +145,16 @@ export default function HeaderSearch() {
 
   return (
     <div className="relative flex items-center">
-      <span className="material-symbols-outlined absolute left-3 text-outline text-[20px]">search</span>
+      <span className="material-symbols-outlined absolute left-3 text-outline text-[20px]" aria-hidden="true">search</span>
       <input
         ref={inputRef}
-        className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:bg-surface-container-lowest transition-colors"
-        placeholder="Búsqueda global (DNI, nombre, apellido, n° de socio)"
+        className="w-full h-10 pl-10 pr-20 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline text-base focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-colors"
+        placeholder="Buscar por nombre, DNI o n° de socio"
+        aria-label="Buscar socios, jugadores y docentes"
         type="text"
         role="combobox"
         aria-expanded={showDropdown}
-        aria-controls={LISTBOX_ID}
+        aria-controls={showDropdown && results.length > 0 ? LISTBOX_ID : undefined}
         aria-autocomplete="list"
         aria-activedescendant={showDropdown && results.length > 0 ? `${LISTBOX_ID}-${highlightedIndex}` : undefined}
         value={query}

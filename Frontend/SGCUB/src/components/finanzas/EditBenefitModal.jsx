@@ -3,11 +3,12 @@ import { Modal, Text } from '@mantine/core'
 import { putBeca } from '../../api/becas'
 import { putDescuento } from '../../api/cuotas'
 import { getErrorMessage } from '../personas/format'
-import { formatPeriod } from '../shared/periodFormat'
+import { formatPeriod, periodEndDate, periodOf, periodStartDate } from '../shared/periodFormat'
+import PeriodField from '../shared/PeriodField'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AmountModeInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS } from './formParts'
-import { FIXED, PERCENTAGE, SCHOLARSHIP_TARGET, benefitPayload, benefitValueError, remainingWithoutFees, roundCents } from './benefitMath'
+import { AmountModeInput, AuthorizerSelect, BenefitValueError, SUBMIT_BUTTON_CLASS } from './formParts'
+import { FIXED, PERCENTAGE, SCHOLARSHIP_TARGET, benefitPayload, benefitValueError, exceedsMax, remainingToPay, roundCents } from './benefitMath'
 
 const REASON_MAX_LENGTH = 140
 
@@ -19,13 +20,13 @@ const initialValues = (target) => {
     return {
       mode: beca.porcentaje != null ? PERCENTAGE : FIXED,
       value: String(Number(beca.porcentaje ?? beca.monto)),
-      startDate: beca.fecha_aplicacion,
-      endDate: beca.fecha_fin ?? '',
+      startPeriod: periodOf(beca.fecha_aplicacion),
+      endPeriod: beca.fecha_fin ? periodOf(beca.fecha_fin) : '',
       noEndDate: !beca.fecha_fin,
       reason: beca.motivo ?? '',
     }
   }
-  return { mode: FIXED, value: String(Number(target.item.monto)), startDate: '', endDate: '', noEndDate: true, reason: target.item.motivo ?? '' }
+  return { mode: FIXED, value: String(Number(target.item.monto)), startPeriod: '', endPeriod: '', noEndDate: true, reason: target.item.motivo ?? '' }
 }
 
 function EditBenefitForm({ target, onCancel, onSaved }) {
@@ -38,16 +39,16 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
 
   const change = (changes) => setValues((current) => ({ ...current, ...changes }))
   const numericValue = Number(values.value)
-  const maxDiscount = isScholarship ? null : roundCents(remainingWithoutFees(target.cuota) + Number(target.item.monto))
+  const maxDiscount = isScholarship ? null : roundCents(remainingToPay(target.cuota) + Number(target.item.monto))
 
   const errors = {
-    startDate: isScholarship && !values.startDate ? 'Indicá desde cuándo rige la beca.' : '',
-    endDate: (() => {
+    startPeriod: isScholarship && !values.startPeriod ? 'Elegí el mes y el año desde el que rige la beca.' : '',
+    endPeriod: (() => {
       if (!isScholarship || values.noEndDate) return ''
-      if (!values.endDate) return 'Indicá hasta cuándo rige o marcá "Sin fecha de finalización".'
-      return values.endDate < values.startDate ? 'No puede ser anterior a la fecha de inicio.' : ''
+      if (!values.endPeriod) return 'Elegí el mes y el año hasta el que rige, o marcá "Sin fecha de finalización".'
+      return values.endPeriod < values.startPeriod ? 'No puede ser anterior al período de inicio.' : ''
     })(),
-    value: benefitValueError(values.mode, numericValue, maxDiscount),
+    value: benefitValueError(values.mode, numericValue, { maxFixed: maxDiscount }),
     authorizer: !authorizer ? 'Elegí quién autoriza el cambio.' : '',
     reason: !values.reason.trim() ? 'Indicá el motivo.' : '',
   }
@@ -65,8 +66,8 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
       if (isScholarship) {
         await putBeca(target.beca.beca_id, {
           ...payload,
-          fecha_aplicacion: values.startDate,
-          fecha_fin: values.noEndDate ? null : values.endDate,
+          fecha_aplicacion: periodStartDate(values.startPeriod),
+          fecha_fin: values.noEndDate ? null : periodEndDate(values.endPeriod),
         })
       } else {
         await putDescuento(target.item.item_cuota_id, payload)
@@ -88,30 +89,28 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
 
       {isScholarship && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-          <Campo id="edit-benefit-start" label="Desde" requerido error={fieldError('startDate')}>
-            <input
+          <Campo id="edit-benefit-start" label="Desde" requerido error={fieldError('startPeriod')}>
+            <PeriodField
               id="edit-benefit-start"
-              type="date"
-              value={values.startDate}
-              onChange={(event) => change({ startDate: event.target.value })}
-              className={claseInput(Boolean(fieldError('startDate')))}
+              value={values.startPeriod}
+              onChange={(startPeriod) => change({ startPeriod })}
+              invalid={Boolean(fieldError('startPeriod'))}
             />
           </Campo>
-          <Campo id="edit-benefit-end" label="Hasta" requerido={!values.noEndDate} error={fieldError('endDate')}>
-            <input
+          <Campo id="edit-benefit-end" label="Hasta" requerido={!values.noEndDate} error={fieldError('endPeriod')}>
+            <PeriodField
+              key={values.noEndDate ? 'sin-fin' : 'con-fin'}
               id="edit-benefit-end"
-              type="date"
-              min={values.startDate}
-              value={values.endDate}
-              onChange={(event) => change({ endDate: event.target.value })}
+              value={values.endPeriod}
+              onChange={(endPeriod) => change({ endPeriod })}
               disabled={values.noEndDate}
-              className={claseInput(Boolean(fieldError('endDate')))}
+              invalid={Boolean(fieldError('endPeriod'))}
             />
             <label className="self-start flex items-center gap-2 text-sm font-medium text-on-surface-variant cursor-pointer">
               <input
                 type="checkbox"
                 checked={values.noEndDate}
-                onChange={(event) => change({ noEndDate: event.target.checked, ...(event.target.checked && { endDate: '' }) })}
+                onChange={(event) => change({ noEndDate: event.target.checked, ...(event.target.checked && { endPeriod: '' }) })}
                 className="h-4 w-4 accent-primary"
               />
               Sin fecha de finalización
@@ -129,7 +128,12 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
           onValueChange={(value) => change({ value })}
           invalid={Boolean(fieldError('value'))}
         />
-        {fieldError('value') && <p className="text-sm text-error font-medium" role="alert">{errors.value}</p>}
+        <BenefitValueError
+          message={fieldError('value')}
+          maxFixed={maxDiscount}
+          canUseMax={exceedsMax(values.mode, numericValue, maxDiscount)}
+          onUseMax={(value) => change({ value })}
+        />
       </div>
 
       <Campo id="edit-benefit-authorizer" label="Autorizado por" requerido error={fieldError('authorizer')}>
