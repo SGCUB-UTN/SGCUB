@@ -2629,7 +2629,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		segundo = self.pagar("1000.00")
 		tercero = self.pagar("1300.00")
 
-		self.assertEqual(self.desglose(primero), [("Mora", Decimal("200.00")), ("CuotaSocial", Decimal("200.00"))])
+		self.assertEqual(self.desglose(primero), [("CuotaSocial", Decimal("200.00")), ("Mora", Decimal("200.00"))])
 		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("800.00")), ("CuotaDeportiva", Decimal("200.00"))])
 		self.assertEqual(self.desglose(tercero), [("CuotaDeportiva", Decimal("1300.00"))])
 
@@ -2653,6 +2653,19 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		self.assertEqual(Decimal(str(periodo["saldo_pendiente"])), Decimal("1300.00"))
 		self.assertEqual(self.nombres_del_periodo(detalle), ["Cuota Social", "Cuota Deportiva - Abono parcial"])
 		self.assertEqual(Imputacion.objects.get().saldo_pendiente, Decimal("1300.00"))
+
+	def test_el_detalle_muestra_social_deportiva_recargos_y_descuentos_en_ese_orden(self):
+		self.agregar_mora(self.cuota, "200.00")
+		self.asignar_beca("500.00")
+
+		detalle = self.pagar("1300.00")
+
+		self.assertEqual(self.nombres_del_periodo(detalle), [
+			"Cuota Social",
+			"Cuota Deportiva - Abono parcial",
+			"Recargo por mora",
+			"Beca",
+		])
 
 	def test_pago_que_cancela_el_saldo_no_es_parcial(self):
 		self.pagar("1200.00")
@@ -2679,7 +2692,7 @@ class DesgloseComprobanteTests(ComprobanteTestBase):
 		primero_releido = self.client.get(reverse("comprobante-detail", args=[Comprobante.objects.get(numero=primero["numero"]).pk])).data
 
 		self.assertEqual(self.desglose(primero_releido), [("CuotaSocial", Decimal("400.00"))])
-		self.assertEqual(self.desglose(segundo), [("Mora", Decimal("200.00")), ("CuotaSocial", Decimal("400.00"))])
+		self.assertEqual(self.desglose(segundo), [("CuotaSocial", Decimal("400.00")), ("Mora", Decimal("200.00"))])
 
 	def test_pago_de_varias_cuotas_lista_los_periodos_y_suma_el_desglose(self):
 		noviembre = self.generar("2026-11")

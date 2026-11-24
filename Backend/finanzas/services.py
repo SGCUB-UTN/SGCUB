@@ -812,10 +812,23 @@ REFUND_SEQUENCES = {
 }
 DISCOUNT_CONCEPTS = (ConceptoItemChoices.CONDONACION_MORA, ConceptoItemChoices.BECA, ConceptoItemChoices.DESCUENTO_UNICO)
 PARTIAL_PAYMENT_PREFIX = " - Abono parcial"
+RECEIPT_LINE_ORDER = (
+    ConceptoItemChoices.CUOTA_SOCIAL,
+    ConceptoItemChoices.CUOTA_DEPORTIVA,
+    ConceptoItemChoices.MORA,
+    ConceptoItemChoices.OTRO,
+    ConceptoItemChoices.CONDONACION_MORA,
+    ConceptoItemChoices.DESCUENTO_UNICO,
+    ConceptoItemChoices.BECA,
+)
+
+
+def receipt_line_order(concept):
+    return RECEIPT_LINE_ORDER.index(concept) if concept in RECEIPT_LINE_ORDER else len(RECEIPT_LINE_ORDER)
 
 
 def detail_lines(totals):
-    ordered = sorted(totals.items(), key=lambda pair: (pair[0] in DISCOUNT_CONCEPTS, charge_order(pair[0])))
+    ordered = sorted(totals.items(), key=lambda pair: receipt_line_order(pair[0]))
     return [
         {"concepto": concept, "concepto_nombre": ConceptoItemChoices(concept).label, "monto": amount}
         for concept, amount in ordered
@@ -825,7 +838,8 @@ def detail_lines(totals):
 def mark_partial_line(lines):
     charges = [line for line in lines if line["concepto"] not in DISCOUNT_CONCEPTS]
     if charges:
-        charges[-1]["concepto_nombre"] = f"{charges[-1]['concepto_nombre']}{PARTIAL_PAYMENT_PREFIX}"
+        line = max(charges, key=lambda line: charge_order(line["concepto"]))
+        line["concepto_nombre"] = f"{line['concepto_nombre']}{PARTIAL_PAYMENT_PREFIX}"
     return lines
 
 
