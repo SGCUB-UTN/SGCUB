@@ -33,7 +33,7 @@ const MIN_DIGITOS_BUSQUEDA = 3
 const DIGITOS_DNI_COMPLETO = 7
 const DEMORA_BUSQUEDA_MS = 300
 
-const INPUT_BASE = 'w-full h-10 px-3 bg-surface-container-low rounded-lg text-base text-on-surface border focus:outline-none focus:ring-2 disabled:opacity-60 read-only:bg-surface-container read-only:text-on-surface-variant'
+const INPUT_BASE = 'w-full h-10 px-3 bg-surface-container-lowest rounded-lg text-base text-on-surface border focus:outline-none focus:ring-2 disabled:opacity-60 [&:is([readonly],[data-locked])]:bg-surface-container [&:is([readonly],[data-locked])]:text-on-surface-variant [&[data-locked]]:pointer-events-none'
 const inputClass = (invalid = false) => `${INPUT_BASE} ${invalid
   ? 'border-error focus:border-error focus:ring-error/20'
   : 'border-outline-variant/40 focus:border-primary focus:ring-primary/20'}`
@@ -281,6 +281,8 @@ export default function ContactModal({
   const sinCoincidencias = !personaSeleccionada && dniCompleto && !searching && coincidencias.length === 0
   const domicilioTitularTexto = formatAddress(domicilioTitular, localidades)
   const bloquearMismoDomicilio = saving || tieneDomicilioRegistrado(personaSeleccionada)
+  const domicilioBloqueado = identidadBloqueada && tieneDomicilioRegistrado(personaSeleccionada)
+  const selectBloqueadoProps = domicilioBloqueado ? { 'data-locked': true, 'aria-readonly': true, tabIndex: -1 } : {}
   const requiereDomicilio = !form.mismo_domicilio && tieneDatosDomicilioParciales(form)
 
   return (
@@ -338,7 +340,7 @@ export default function ContactModal({
                 </div>
                 {editandoIdentidad && (
                   <p className="text-sm text-on-surface-variant">
-                    Los cambios en nombre, teléfono o email se guardan en la persona y se ven en todos los lugares donde figura.
+                    Los cambios en sus datos personales y su domicilio se guardan en la persona y se ven en todos los lugares donde figura.
                   </p>
                 )}
               </div>
@@ -477,6 +479,7 @@ export default function ContactModal({
                     placeholder="Ej: Calle 50"
                     value={form.domicilio_calle}
                     onChange={change('domicilio_calle')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -487,6 +490,7 @@ export default function ContactModal({
                     placeholder="Ej: 1240"
                     value={form.domicilio_numero}
                     onChange={change('domicilio_numero')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -497,6 +501,7 @@ export default function ContactModal({
                     placeholder="Ej: 3"
                     value={form.domicilio_piso}
                     onChange={change('domicilio_piso')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -507,6 +512,7 @@ export default function ContactModal({
                     placeholder="Ej: B"
                     value={form.domicilio_departamento}
                     onChange={change('domicilio_departamento')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -517,6 +523,7 @@ export default function ContactModal({
                     placeholder="Ej: Calle 19"
                     value={form.domicilio_entre_calle_1}
                     onChange={change('domicilio_entre_calle_1')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -527,6 +534,7 @@ export default function ContactModal({
                     placeholder="Ej: Calle 20"
                     value={form.domicilio_entre_calle_2}
                     onChange={change('domicilio_entre_calle_2')}
+                    readOnly={domicilioBloqueado}
                     disabled={saving}
                   />
                 </InputField>
@@ -536,6 +544,7 @@ export default function ContactModal({
                     className={inputClass(Boolean(fieldErrors.domicilio_localidad))}
                     value={form.domicilio_localidad}
                     onChange={change('domicilio_localidad')}
+                    {...selectBloqueadoProps}
                     disabled={saving}
                   >
                     <option value="">Sin especificar</option>
@@ -550,6 +559,7 @@ export default function ContactModal({
                     className={inputClass()}
                     value={form.domicilio_barrio}
                     onChange={change('domicilio_barrio')}
+                    {...selectBloqueadoProps}
                     disabled={saving || !form.domicilio_localidad}
                   >
                     <option value="">
