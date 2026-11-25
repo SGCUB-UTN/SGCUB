@@ -9,7 +9,7 @@ export const getJugadores = async ({ view } = {}) => {
 }
 
 export const getJugadoresByCategoria = async (categoriaId) => {
-  const response = await api.get(jugadoresEndpoint, { params: { categoria: categoriaId } })
+  const response = await api.get(jugadoresEndpoint, { params: { categoria: categoriaId, vista: 'listado' } })
   return response.data
 }
 
