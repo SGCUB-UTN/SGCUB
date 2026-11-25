@@ -17,7 +17,7 @@ const SORT_VALUES = {
 const INITIAL_SORT = { columna: 'maxAge', direccion: 'desc' }
 const COLUMN_COUNT = 5
 
-function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = false }) {
+function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = false, emptyText }) {
   const navigate = useNavigate()
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(categorias, SORT_VALUES, INITIAL_SORT)
 
@@ -107,7 +107,7 @@ function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = fals
           error={error}
           loadingText="Cargando categorías..."
           errorText="No se pudieron cargar las categorías."
-          emptyText="No hay categorías que coincidan con el filtro."
+          emptyText={emptyText}
         />
 
         {!isLoading && sorted.map((categoria) => (

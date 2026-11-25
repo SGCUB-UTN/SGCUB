@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import CategoriasTable from '../components/categorias/CategoriasTable'
 import PageHeader from '../components/shared/PageHeader'
+import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import useCategorias from '../hooks/useCategorias'
 
 function Categorias() {
@@ -12,6 +14,12 @@ function Categorias() {
       <PageHeader
         breadcrumb={[{ label: 'Categorías' }]}
         title="Categorías"
+        actions={(
+          <Link to="/configuracion?tab=deporte" className={`${TEXT_BUTTON_CLASS} text-base`}>
+            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">settings</span>
+            Editar categorías
+          </Link>
+        )}
       />
 
       <section aria-label="Listado de categorías">

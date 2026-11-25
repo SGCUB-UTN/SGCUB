@@ -33,6 +33,9 @@ function CategoriasTable({ data, isLoading, error, genero, onGeneroChange }) {
         isLoading={isLoading}
         error={error}
         showGenero={tab.id === ALL_CATEGORIES}
+        emptyText={(data ?? []).length === 0
+          ? 'Todavía no hay categorías cargadas. Se crean en Configuración → Deporte.'
+          : 'No hay categorías que coincidan con el filtro.'}
       />
     ),
   }))
