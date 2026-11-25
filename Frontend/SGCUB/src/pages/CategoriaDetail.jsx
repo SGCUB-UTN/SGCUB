@@ -225,7 +225,7 @@ function CategoriaDetail() {
           {jugadores?.length === 0 && (
             <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores en esta categoría." />
           )}
-          {jugadores?.length > 0 && <CategoriaJugadoresTable jugadores={jugadores} />}
+          {jugadores?.length > 0 && <CategoriaJugadoresTable jugadores={jugadores} categoriaNombre={categoria.nombre} />}
         </div>
       ),
     },
