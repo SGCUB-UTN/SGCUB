@@ -52,7 +52,7 @@ function LigaDetail() {
         {jugadores.length === 0 ? (
           <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores registrados en esta liga." />
         ) : (
-          <LigaJugadoresTable jugadores={jugadores} />
+          <LigaJugadoresTable jugadores={jugadores} ligaNombre={liga.nombre} />
         )}
       </div>
     </div>
