@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ClubSettings from '../components/configuracion/ClubSettings'
 import CommunicationSettings from '../components/configuracion/CommunicationSettings'
+import DeporteSettings from '../components/configuracion/DeporteSettings'
 import ConfigurationHistoryModal from '../components/configuracion/ConfigurationHistoryModal'
 import DocumentSettings from '../components/configuracion/DocumentSettings'
 import FinancialSettings from '../components/configuracion/FinancialSettings'
@@ -81,7 +82,7 @@ export default function Configuracion() {
 
       {config.isLoading && (
         <SkeletonStatus label="Cargando configuración...">
-          <TabsSkeleton tabs={5} />
+          <TabsSkeleton tabs={6} />
         </SkeletonStatus>
       )}
       {config.error && <Notice tone="error">No se pudo cargar la configuración. Recargá la página para volver a intentar.</Notice>}
@@ -102,6 +103,12 @@ export default function Configuracion() {
                   onReverted={(version) => setNotice({ tone: 'success', message: revertedMessage(version) })}
                 />
               ),
+            },
+            {
+              id: 'deporte',
+              label: 'Deporte',
+              icon: 'sports_soccer',
+              content: <DeporteSettings />,
             },
             {
               id: 'personas',

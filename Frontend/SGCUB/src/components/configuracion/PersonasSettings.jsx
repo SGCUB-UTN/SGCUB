@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Group, Modal, Text } from '@mantine/core'
+import { Modal, Text } from '@mantine/core'
 import {
-  getCargosDocente,
-  postCargoDocente,
-  patchCargoDocente,
-  deleteCargoDocente,
   getLocalidades,
   postLocalidad,
   patchLocalidad,
@@ -31,199 +27,7 @@ import { TableSkeletonRows } from '../shared/Skeleton'
 import { BUTTON_CLASSES, SMALL_BUTTON_CLASSES, TABLE_CLASSES } from './settingsForm'
 import { Field, INPUT_CLASS, IconButton, Notice, SelectInput, SettingsSection } from './settingsParts'
 import { compareObrasSociales, compareTalles } from './personasSettingsSort'
-
-function InUseBadge({ inUse }) {
-  if (!inUse) return <span className="text-xs text-on-surface-variant font-normal">—</span>
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
-      <span className="material-symbols-outlined text-[14px] text-slate-500" aria-hidden="true">check</span>
-      En uso
-    </span>
-  )
-}
-
-function ConfirmDeleteModal({ opened, onClose, onConfirm, title, message }) {
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleConfirm = async () => {
-    setDeleting(true)
-    setError('')
-    try {
-      await onConfirm()
-      onClose()
-    } catch (err) {
-      setError(getErrorMessage(err, 'No se pudo eliminar el elemento.'))
-      setDeleting(false)
-    }
-  }
-
-  return (
-    <Modal opened={opened} onClose={() => !deleting && onClose()} centered title={<Text fw={700} size="xl">{title}</Text>}>
-      <p className="text-base text-on-surface-variant mb-4">{message}</p>
-      {error && <div className="mb-4"><Notice tone="error">{error}</Notice></div>}
-      <Group position="right">
-        <Button variant="default" onClick={onClose} disabled={deleting}>Cancelar</Button>
-        <Button color="red" onClick={handleConfirm} loading={deleting}>Eliminar</Button>
-      </Group>
-    </Modal>
-  )
-}
-
-// ----------------------------------------------------
-// SECCIÓN 1: CARGOS DOCENTES
-// ----------------------------------------------------
-function CargosDocentesSection() {
-  const [cargos, setCargos] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [modal, setModal] = useState({ opened: false, cargo: null })
-  const [nombre, setNombre] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [deleteModal, setDeleteModal] = useState({ opened: false, cargo: null })
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      setCargos(await getCargosDocente())
-    } catch (err) {
-      setError(getErrorMessage(err, 'No se pudieron cargar los cargos docentes.'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [])
-
-  const openCreate = () => {
-    setModal({ opened: true, cargo: null })
-    setNombre('')
-    setFormError('')
-  }
-
-  const openEdit = (cargo) => {
-    setModal({ opened: true, cargo })
-    setNombre(cargo.nombre)
-    setFormError('')
-  }
-
-  const handleSave = async (e) => {
-    e.preventDefault()
-    if (!nombre.trim()) {
-      setFormError('El nombre es obligatorio.')
-      return
-    }
-    setSaving(true)
-    setFormError('')
-    try {
-      if (modal.cargo) {
-        await patchCargoDocente(modal.cargo.cargo_id, { nombre: nombre.trim() })
-      } else {
-        await postCargoDocente({ nombre: nombre.trim() })
-      }
-      setModal({ opened: false, cargo: null })
-      await load()
-    } catch (err) {
-      setFormError(getErrorMessage(err, 'No se pudo guardar el cargo.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!deleteModal.cargo) return
-    await deleteCargoDocente(deleteModal.cargo.cargo_id)
-    await load()
-  }
-
-  return (
-    <SettingsSection
-      icon="school"
-      title="Cargos de docentes"
-      description="Configurá los diferentes roles o cargos que pueden desempeñar los profesores y formadores (Director Técnico, Ayudante, Preparador Físico, etc.)."
-      flush
-      extra={(
-        <button type="button" className={SMALL_BUTTON_CLASSES.primary} onClick={openCreate}>
-          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
-          Nuevo cargo
-        </button>
-      )}
-    >
-      {error && <div className="p-4"><Notice tone="error">{error}</Notice></div>}
-      <div className={TABLE_CLASSES.wrapper}>
-        <table className={TABLE_CLASSES.table}>
-          <thead className={TABLE_CLASSES.head}>
-            <tr>
-              <th className={TABLE_CLASSES.headCell}>Nombre del cargo</th>
-              <th className={TABLE_CLASSES.headCell}>Estado</th>
-              <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando cargos..." />
-            ) : cargos.length === 0 ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay cargos cargados.</td></tr>
-            ) : (
-              cargos.map((cargo) => (
-                <tr key={cargo.cargo_id} className={TABLE_CLASSES.row}>
-                  <td className={`${TABLE_CLASSES.cell} font-medium text-on-surface`}>{cargo.nombre}</td>
-                  <td className={TABLE_CLASSES.cell}><InUseBadge inUse={cargo.en_uso} /></td>
-                  <td className={TABLE_CLASSES.actionsCell}>
-                    <div className="flex justify-end gap-1">
-                      <IconButton icon="edit" label="Editar" onClick={() => openEdit(cargo)} />
-                      <IconButton
-                        icon="delete"
-                        label={cargo.en_uso ? 'Está asignado a docentes: no se puede eliminar' : 'Eliminar'}
-                        disabled={cargo.en_uso}
-                        onClick={() => setDeleteModal({ opened: true, cargo })}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Modal
-        opened={modal.opened}
-        onClose={() => !saving && setModal({ opened: false, cargo: null })}
-        centered
-        title={<Text fw={700} size="xl">{modal.cargo ? 'Editar cargo docente' : 'Nuevo cargo docente'}</Text>}
-      >
-        <form onSubmit={handleSave} className="flex flex-col gap-4">
-          <Field label="Nombre del cargo" htmlFor="cargo-nombre" error={formError}>
-            <input
-              id="cargo-nombre"
-              className={INPUT_CLASS}
-              value={nombre}
-              maxLength={100}
-              placeholder="Ej: Director Técnico"
-              onChange={(e) => setNombre(e.target.value)}
-              required
-              data-autofocus
-            />
-          </Field>
-          <div className="flex justify-end gap-2 mt-2">
-            <button type="button" className={BUTTON_CLASSES.secondary} onClick={() => setModal({ opened: false, cargo: null })} disabled={saving}>Cancelar</button>
-            <button type="submit" className={BUTTON_CLASSES.primary} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
-          </div>
-        </form>
-      </Modal>
-
-      <ConfirmDeleteModal
-        opened={deleteModal.opened}
-        onClose={() => setDeleteModal({ opened: false, cargo: null })}
-        onConfirm={handleDelete}
-        title="¿Eliminar cargo docente?"
-        message={`¿Estás seguro de que querés eliminar el cargo "${deleteModal.cargo?.nombre}"?`}
-      />
-    </SettingsSection>
-  )
-}
+import { ConfirmDeleteModal, InUseBadge, SubTabs } from './catalogParts'
 
 // ----------------------------------------------------
 // SECCIÓN 2: LOCALIDADES Y BARRIOS
@@ -1095,46 +899,22 @@ function TallesSection() {
 // COMPONENTE PRINCIPAL: PERSONAS SETTINGS
 // ----------------------------------------------------
 const SUBTABS = [
-  { id: 'cargos', label: 'Cargos docentes', icon: 'school' },
-  { id: 'geografia', label: 'Localidades y barrios', icon: 'location_city' },
-  { id: 'relaciones', label: 'Vínculos familiares', icon: 'diversity_1' },
   { id: 'obras_sociales', label: 'Obras sociales', icon: 'health_and_safety' },
+  { id: 'relaciones', label: 'Vínculos familiares', icon: 'diversity_1' },
   { id: 'talles', label: 'Talles', icon: 'apparel' },
+  { id: 'geografia', label: 'Localidades y barrios', icon: 'location_city' },
 ]
 
 export default function PersonasSettings() {
-  const [activeSubTab, setActiveSubTab] = useState('cargos')
+  const [activeSubTab, setActiveSubTab] = useState(SUBTABS[0].id)
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Selector de sub-sección con estilo pills */}
-      <div className="flex flex-wrap gap-2 border-b border-outline-variant/30 pb-3">
-        {SUBTABS.map((tab) => {
-          const active = activeSubTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveSubTab(tab.id)}
-              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                active
-                  ? 'bg-primary text-on-primary shadow-xs'
-                  : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{tab.icon}</span>
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {activeSubTab === 'cargos' && <CargosDocentesSection />}
-      {activeSubTab === 'geografia' && <GeografiaSection />}
-      {activeSubTab === 'relaciones' && <RelacionesSection />}
+      <SubTabs tabs={SUBTABS} active={activeSubTab} onChange={setActiveSubTab} />
       {activeSubTab === 'obras_sociales' && <ObrasSocialesSection />}
+      {activeSubTab === 'relaciones' && <RelacionesSection />}
       {activeSubTab === 'talles' && <TallesSection />}
+      {activeSubTab === 'geografia' && <GeografiaSection />}
     </div>
   )
 }
-

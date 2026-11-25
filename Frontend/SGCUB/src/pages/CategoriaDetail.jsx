@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { deleteCategoria, getCategoria, patchCategoria } from '../api/categorias'
+import { useParams } from 'react-router-dom'
+import { getCategoria } from '../api/categorias'
 import { downloadPlanillasCategoria } from '../api/comet'
 import { downloadCategoriaDocumentosZip } from '../api/documentacion'
 import { deleteDocenteCategoria, docenteCategoriaByCategoria } from '../api/docenteCategoria'
@@ -9,14 +9,11 @@ import { getJugadoresByCategoria } from '../api/jugadores'
 import AssignDocenteModal from '../components/categorias/AssignDocenteModal'
 import CategoriaDocenteTable from '../components/categorias/CategoriaDocenteTable'
 import CategoriaEmptyState from '../components/categorias/CategoriaEmptyState'
-import CategoriaFormModal from '../components/categorias/CategoriaFormModal'
 import CategoriaHeader from '../components/categorias/CategoriaHeader'
 import CategoriaJugadoresTable from '../components/categorias/CategoriaJugadoresTable'
-import ConfirmCategoriaModal from '../components/categorias/ConfirmCategoriaModal'
 import ConfirmRemoveDocenteModal from '../components/categorias/ConfirmRemoveDocenteModal'
 import { formatRangoEdad, GENERO_BADGE_CLASSES, getGeneroLabel, getTipoLabel } from '../components/categorias/categoriaFormat'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
-import { DeactivateButton, EditButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import { PrimaryButton, TabHeader } from '../components/personas/tabs/parts'
 import { getErrorMessage } from '../components/personas/format'
@@ -38,7 +35,6 @@ const ErrorAlert = ({ message }) => (
 
 function CategoriaDetail() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const { docentes, editarDocente, recargarDocentes } = useDocentes()
   const { categorias } = useCategorias()
   const [cargos, setCargos] = useState([])
@@ -48,8 +44,6 @@ function CategoriaDetail() {
   const { categoria, docenteCategorias, jugadores, error } = detail
 
   const [modalKey, setModalKey] = useState(0)
-  const [isFormOpen, setIsFormOpen] = useState(false)
-  const [isDeletionOpen, setIsDeletionOpen] = useState(false)
   const [isAssignOpen, setIsAssignOpen] = useState(false)
   const [removal, setRemoval] = useState({ opened: false, docenteCategoria: null })
   const [downloadingComet, setDownloadingComet] = useState(false)
@@ -134,16 +128,6 @@ function CategoriaDetail() {
   const reloadDocenteCategorias = async () => {
     const receivedDocenteCategorias = await docenteCategoriaByCategoria(id)
     setDetail((current) => ({ ...current, docenteCategorias: receivedDocenteCategorias }))
-  }
-
-  const handleUpdate = async (data) => {
-    const updated = await patchCategoria(categoria.categoria_id, data)
-    setDetail((current) => ({ ...current, categoria: updated }))
-  }
-
-  const handleDelete = async () => {
-    await deleteCategoria(categoria.categoria_id)
-    navigate('/padron/categorias')
   }
 
   const openRemoval = (docenteCategoria) => {
@@ -300,31 +284,9 @@ function CategoriaDetail() {
           { label: 'Género', value: getGeneroLabel(categoria.genero) },
           { label: 'Tipo', value: getTipoLabel(categoria.tipo) },
         ]}
-        actions={(
-          <>
-            <EditButton onClick={() => openModal(setIsFormOpen)}>Editar</EditButton>
-            <DeactivateButton icon="delete" onClick={() => openModal(setIsDeletionOpen)}>Eliminar</DeactivateButton>
-          </>
-        )}
       />
 
       <PersonTabs key={id} tabs={tabs} />
-
-      <CategoriaFormModal
-        key={`form-${modalKey}`}
-        opened={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        onSubmit={handleUpdate}
-        categoria={categoria}
-      />
-
-      <ConfirmCategoriaModal
-        key={`delete-${modalKey}`}
-        opened={isDeletionOpen}
-        onClose={() => setIsDeletionOpen(false)}
-        onConfirm={handleDelete}
-        categoria={categoria}
-      />
 
       <AssignDocenteModal
         key={`assign-${modalKey}`}
