@@ -114,6 +114,7 @@ function LigasSection() {
   const [error, setError] = useState('')
   const [modal, setModal] = useState({ opened: false, item: null })
   const [nombre, setNombre] = useState('')
+  const [abreviatura, setAbreviatura] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [deleteModal, setDeleteModal] = useState({ opened: false, item: null })
@@ -134,26 +135,29 @@ function LigasSection() {
   const openCreate = () => {
     setModal({ opened: true, item: null })
     setNombre('')
+    setAbreviatura('')
     setFormError('')
   }
   const openEdit = (item) => {
     setModal({ opened: true, item })
     setNombre(item.nombre)
+    setAbreviatura(item.abreviatura ?? '')
     setFormError('')
   }
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!nombre.trim()) {
-      setFormError('El nombre es obligatorio.')
+    if (!nombre.trim() || !abreviatura.trim()) {
+      setFormError('El nombre y la abreviatura son obligatorios.')
       return
     }
     setSaving(true)
     setFormError('')
     try {
+      const data = { nombre: nombre.trim(), abreviatura: abreviatura.trim() }
       if (modal.item) {
-        await patchLiga(modal.item.liga_id, { nombre: nombre.trim() })
+        await patchLiga(modal.item.liga_id, data)
       } else {
-        await postLiga({ nombre: nombre.trim() })
+        await postLiga(data)
       }
       setModal({ opened: false, item: null })
       await load()
@@ -188,19 +192,21 @@ function LigasSection() {
           <thead className={TABLE_CLASSES.head}>
             <tr>
               <th className={TABLE_CLASSES.headCell}>Liga</th>
+              <th className={TABLE_CLASSES.headCell}>Abreviatura</th>
               <th className={TABLE_CLASSES.headCell}>Estado</th>
               <th className={`${TABLE_CLASSES.headCell} text-right`}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeletonRows colSpan={3} rows={3} cellClassName="py-4 px-6" label="Cargando ligas..." />
+              <TableSkeletonRows colSpan={4} rows={3} cellClassName="py-4 px-6" label="Cargando ligas..." />
             ) : ligas.length === 0 ? (
-              <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay ligas registradas.</td></tr>
+              <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-on-surface-variant">No hay ligas registradas.</td></tr>
             ) : (
               ligas.map((liga) => (
                 <tr key={liga.liga_id} className={TABLE_CLASSES.row}>
                   <td className={`${TABLE_CLASSES.cell} font-medium text-on-surface`}>{liga.nombre}</td>
+                  <td className={TABLE_CLASSES.cell}>{liga.abreviatura}</td>
                   <td className={TABLE_CLASSES.cell}><InUseBadge inUse={liga.en_uso} /></td>
                   <td className={TABLE_CLASSES.actionsCell}>
                     <div className="flex justify-end gap-1">
@@ -237,6 +243,17 @@ function LigasSection() {
               onChange={(e) => setNombre(e.target.value)}
               required
               data-autofocus
+            />
+          </Field>
+          <Field label="Abreviatura" htmlFor="liga-abreviatura" hint="Se muestra en la ficha del jugador y donde hay poco espacio.">
+            <input
+              id="liga-abreviatura"
+              className={`${INPUT_CLASS} uppercase`}
+              value={abreviatura}
+              maxLength={10}
+              placeholder="Ej: LP"
+              onChange={(e) => setAbreviatura(e.target.value)}
+              required
             />
           </Field>
           <div className="flex justify-end gap-2 mt-2">
