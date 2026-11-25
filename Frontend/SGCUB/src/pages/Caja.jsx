@@ -137,6 +137,7 @@ function Caja() {
         error={movimientos.error}
         onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
         onSelectDevolucion={setDevolucionSeleccionada}
+        onChanged={recargarTodo}
       />
 
       <ComprobanteDetailModal

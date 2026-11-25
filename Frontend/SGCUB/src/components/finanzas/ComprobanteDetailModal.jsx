@@ -9,7 +9,7 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
-import { availableToRefund } from './refunds'
+import { availableToRefund, isCancelledRefund } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
 import ReciboComprobante from './ReciboComprobante'
 import { receiptModalStyles } from './receiptModal'
@@ -46,23 +46,33 @@ function CreditNotes({ detalle, methodLabel }) {
         {notes.map((note) => (
           <div key={note.devolucion_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0">
-              <p className="font-semibold text-on-surface">{note.codigo} · {formatAmount(note.monto)}</p>
+              <p className="font-semibold text-on-surface">
+                {note.codigo} · <span className={isCancelledRefund(note) ? 'line-through text-outline' : ''}>{formatAmount(note.monto)}</span>
+                {isCancelledRefund(note) && <span className="ml-2 text-sm font-semibold text-error">Cancelada</span>}
+              </p>
               <p className="text-sm text-on-surface-variant break-words">
                 {formatDate(note.fecha)} · {methodLabel(note.medio_de_pago)} · Responsable: {note.responsable}
               </p>
+              {isCancelledRefund(note) && (
+                <p className="text-sm text-on-surface-variant break-words">
+                  Cancelada por {note.cancelado_por || '—'}: {note.motivo_cancelacion || 'sin motivo registrado'}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <WhatsAppComprobanteButton
-                socio={detalle.socio}
-                devolucionId={note.devolucion_id}
-                comprobanteCodigo={note.codigo}
-                montoTotal={note.monto}
-                tipo="nota_credito"
-                label="WhatsApp"
-                className="h-9 px-3 text-xs min-w-0"
-              />
-              <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
-            </div>
+            {!isCancelledRefund(note) && (
+              <div className="flex items-center gap-2 shrink-0">
+                <WhatsAppComprobanteButton
+                  socio={detalle.socio}
+                  devolucionId={note.devolucion_id}
+                  comprobanteCodigo={note.codigo}
+                  montoTotal={note.monto}
+                  tipo="nota_credito"
+                  label="WhatsApp"
+                  className="h-9 px-3 text-xs min-w-0"
+                />
+                <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
+              </div>
+            )}
           </div>
         ))}
       </div>

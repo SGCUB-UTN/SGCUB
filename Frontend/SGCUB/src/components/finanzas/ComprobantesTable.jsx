@@ -19,6 +19,8 @@ import { conceptGroup } from './conceptOrigins'
 import { descargarComprobantePdf } from '../../api/comprobantes'
 import { descargarDevolucionPdf } from '../../api/devoluciones'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import CancelRefundModal from './CancelRefundModal'
+import { CANCELLED_REFUND_BLOCKER, REFUND_CANCELLED, isCancelledRefund } from './refunds'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
@@ -29,6 +31,7 @@ const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const WHATSAPP_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60'
 const WHATSAPP_DISABLED_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant/30 text-on-surface-variant/30 cursor-not-allowed'
+const CANCEL_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-error/30 text-error hover:bg-error-container/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
 const DOWNLOAD_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 disabled:cursor-not-allowed'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
@@ -74,8 +77,12 @@ const SCOPE_FILTERS = {
   ingresos: { label: 'Estado', field: 'status', options: STATUS_OPTIONS, conceptLabel: 'Concepto' },
   devoluciones: {
     label: 'Tipo',
-    field: 'filterCode',
-    options: [{ value: 'NotaCredito', label: TYPES.NotaCredito.label }, { value: 'Manual', label: TYPES.Manual.label }],
+    field: 'refundFilter',
+    options: [
+      { value: 'NotaCredito', label: TYPES.NotaCredito.label },
+      { value: 'Manual', label: TYPES.Manual.label },
+      { value: REFUND_CANCELLED, label: 'Cancelada' },
+    ],
     conceptLabel: 'Motivo',
   },
 }
@@ -98,6 +105,15 @@ const receiptDetail = (comprobante, refunded) => {
   return refunded > 0 ? `Devuelto con notas de crédito: ${formatAmount(refunded)}` : `Pago #${comprobante.pago}`
 }
 
+const refundDetail = (devolucion) => {
+  if (isCancelledRefund(devolucion)) {
+    return `Cancelada por ${devolucion.cancelado_por || '—'}: ${devolucion.motivo_cancelacion || 'sin motivo registrado'}`
+  }
+  return devolucion.comprobante_anulado_codigo
+    ? `Sobre el comprobante anulado ${devolucion.comprobante_anulado_codigo} · Responsable: ${devolucion.responsable}`
+    : `Responsable: ${devolucion.responsable}`
+}
+
 const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : '')
 
 const SORT_VALUES = {
@@ -117,6 +133,7 @@ function ComprobantesTable({
   error,
   onSelect,
   onSelectDevolucion,
+  onChanged,
 }) {
   const [scope, setScope] = useState('todos')
   const [search, setSearch] = useState('')
@@ -124,6 +141,7 @@ function ComprobantesTable({
   const [conceptFilter, setConceptFilter] = useState(ALL)
   const [downloadingKey, setDownloadingKey] = useState(null)
   const [sharingWhatsAppKey, setSharingWhatsAppKey] = useState(null)
+  const [cancellingRefund, setCancellingRefund] = useState(null)
   const { showToast } = useToast()
   const filters = SCOPE_FILTERS[scope]
 
@@ -156,31 +174,35 @@ function ComprobantesTable({
       }
     })
 
-    const refundItems = devoluciones.map((devolucion) => ({
-      key: `devolucion-${devolucion.devolucion_id}`,
-      kind: 'devolucion',
-      raw: devolucion,
-      filterCode: devolucion.tipo,
-      refCode: devolucion.codigo,
-      typeLabel: TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre,
-      badgeLabel: TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre,
-      badgeClass: TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
-      date: devolucion.fecha,
-      sortDate: `${String(devolucion.fecha ?? '').slice(0, 10)}-D${String(devolucion.numero).padStart(8, '0')}`,
-      sortNumber: devolucion.numero,
-      socio: devolucion.socio,
-      socioLabel: socioName(devolucion.socio),
-      concept: devolucion.concepto,
-      subConcept: devolucion.comprobante_anulado_codigo
-        ? `Sobre el comprobante anulado ${devolucion.comprobante_anulado_codigo} · Responsable: ${devolucion.responsable}`
-        : `Responsable: ${devolucion.responsable}`,
-      paymentMethod: devolucion.medio_de_pago_nombre,
-      amount: Number(devolucion.monto ?? 0),
-      isPositive: false,
-      isAnulado: false,
-      status: ACTIVE,
-      ...groupFields(devolucion.concepto),
-    }))
+    const refundItems = devoluciones.map((devolucion) => {
+      const cancelled = isCancelledRefund(devolucion)
+      const typeLabel = TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre
+      return {
+        key: `devolucion-${devolucion.devolucion_id}`,
+        kind: 'devolucion',
+        raw: devolucion,
+        filterCode: devolucion.tipo,
+        refundFilter: cancelled ? REFUND_CANCELLED : devolucion.tipo,
+        refCode: devolucion.codigo,
+        typeLabel: cancelled ? `${typeLabel} cancelada` : typeLabel,
+        badgeLabel: cancelled ? 'Cancelada' : typeLabel,
+        badgeClass: cancelled ? ANNULLED_BADGE : TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
+        date: devolucion.fecha,
+        sortDate: `${String(devolucion.fecha ?? '').slice(0, 10)}-D${String(devolucion.numero).padStart(8, '0')}`,
+        sortNumber: devolucion.numero,
+        socio: devolucion.socio,
+        socioLabel: socioName(devolucion.socio),
+        concept: devolucion.concepto,
+        subConcept: refundDetail(devolucion),
+        paymentMethod: devolucion.medio_de_pago_nombre,
+        amount: Number(devolucion.monto ?? 0),
+        isPositive: false,
+        isAnulado: cancelled,
+        isCancelledRefund: cancelled,
+        status: cancelled ? INACTIVE : ACTIVE,
+        ...groupFields(devolucion.concepto),
+      }
+    })
 
     return [...receiptItems, ...refundItems]
   }, [comprobantes, devoluciones])
@@ -285,6 +307,17 @@ function ComprobantesTable({
     } finally {
       setSharingWhatsAppKey(null)
     }
+  }
+
+  const openCancelRefund = (event, item) => {
+    event.stopPropagation()
+    setCancellingRefund(item.raw)
+  }
+
+  const refundCancelled = (updated) => {
+    setCancellingRefund(null)
+    onChanged?.()
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
   }
 
   const handleDownload = async (event, item) => {
@@ -447,16 +480,16 @@ function ComprobantesTable({
                   <button
                     type="button"
                     onClick={(event) => handleSendWhatsApp(event, item)}
-                    disabled={!item.socio?.telefono || sharingWhatsAppKey === item.key}
+                    disabled={!item.socio?.telefono || item.isCancelledRefund || sharingWhatsAppKey === item.key}
                     title={
-                      item.socio?.telefono
+                      item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : item.socio?.telefono
                         ? item.socio.es_menor && item.socio.responsable_nombre
                           ? `Enviar por WhatsApp a ${item.socio.responsable_nombre} (Responsable de ${item.socioLabel}) (${item.socio.telefono})`
                           : `Enviar por WhatsApp (${item.socio.telefono})`
                         : 'Sin teléfono registrado'
                     }
                     aria-label={`Enviar ${item.refCode} por WhatsApp`}
-                    className={item.socio?.telefono ? WHATSAPP_ICON_BUTTON_CLASS : WHATSAPP_DISABLED_BUTTON_CLASS}
+                    className={item.socio?.telefono && !item.isCancelledRefund ? WHATSAPP_ICON_BUTTON_CLASS : WHATSAPP_DISABLED_BUTTON_CLASS}
                   >
                     {sharingWhatsAppKey === item.key ? (
                       <span className="material-symbols-outlined text-[18px] animate-spin" aria-hidden="true">
@@ -469,8 +502,8 @@ function ComprobantesTable({
                   <button
                     type="button"
                     onClick={(event) => handleDownload(event, item)}
-                    disabled={downloadingKey === item.key}
-                    title={`Descargar PDF (${item.refCode})`}
+                    disabled={downloadingKey === item.key || item.isCancelledRefund}
+                    title={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : `Descargar PDF (${item.refCode})`}
                     aria-label={`Descargar PDF de ${item.refCode}`}
                     className={DOWNLOAD_ICON_BUTTON_CLASS}
                   >
@@ -478,6 +511,19 @@ function ComprobantesTable({
                       {downloadingKey === item.key ? 'progress_activity' : 'download'}
                     </span>
                   </button>
+                  {item.kind === 'devolucion' && (
+                    <button
+                      type="button"
+                      onClick={(event) => openCancelRefund(event, item)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      disabled={item.isCancelledRefund}
+                      title={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : `Cancelar devolución (${item.refCode})`}
+                      aria-label={`Cancelar devolución ${item.refCode}`}
+                      className={CANCEL_ICON_BUTTON_CLASS}
+                    >
+                      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>
@@ -486,6 +532,13 @@ function ComprobantesTable({
 
         <TablePagination id="comprobantes-rows-per-page" {...paginationProps} />
       </div>
+
+      <CancelRefundModal
+        opened={Boolean(cancellingRefund)}
+        devolucion={cancellingRefund}
+        onClose={() => setCancellingRefund(null)}
+        onCancelled={refundCancelled}
+      />
     </section>
   )
 }

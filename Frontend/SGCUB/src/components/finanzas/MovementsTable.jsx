@@ -10,6 +10,8 @@ import { formatAmount, formatDate } from '../personas/format'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 import AnnulIncomeModal from './AnnulIncomeModal'
+import CancelRefundModal from './CancelRefundModal'
+import { CANCELLED_REFUND_BLOCKER, isCancelledRefund } from './refunds'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 
 const COLUMN_COUNT = 5
@@ -17,6 +19,7 @@ const ROWS_PER_PAGE = 15
 
 const KIND_BADGES = {
   Anulado: { label: 'Anulado', tono: 'error' },
+  Cancelada: { label: 'Cancelada', tono: 'error' },
   NotaCredito: { label: 'Nota de crédito', tono: 'alerta' },
   Manual: { label: 'Manual', tono: 'neutro' },
 }
@@ -42,9 +45,9 @@ const refundMovement = (devolucion, income) => ({
   key: `devolucion-${devolucion.devolucion_id}`,
   raw: devolucion,
   isRefund: true,
-  anulado: false,
+  anulado: isCancelledRefund(devolucion),
   kind: 'Devolución',
-  badge: KIND_BADGES[devolucion.tipo] ?? KIND_BADGES.Manual,
+  badge: isCancelledRefund(devolucion) ? KIND_BADGES.Cancelada : KIND_BADGES[devolucion.tipo] ?? KIND_BADGES.Manual,
   codigo: devolucion.codigo,
   fecha: devolucion.fecha,
   concepto: devolucion.concepto,
@@ -70,9 +73,10 @@ function RefundList({ refunds }) {
     <ul className="flex flex-col gap-2">
       {refunds.map((devolucion) => (
         <li key={devolucion.devolucion_id} className="text-base text-on-surface">
-          <span className="font-semibold tabular-nums">{formatAmount(devolucion.monto)}</span>
+          <span className={`font-semibold tabular-nums ${isCancelledRefund(devolucion) ? 'line-through text-outline' : ''}`}>{formatAmount(devolucion.monto)}</span>
           <span className="text-on-surface-variant">
             {' '}por {devolucion.medio_de_pago_nombre || 'medio sin registrar'} · {formatDate(devolucion.fecha)} · {devolucion.codigo}
+            {isCancelledRefund(devolucion) && ' · Cancelada'}
           </span>
         </li>
       ))}
@@ -94,12 +98,13 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
       {anulado && (
         <DetailSection title="Anulación y devolución" tone="error">
           <DetailList items={[{ label: 'Motivo', value: comprobante.motivo_anulacion || 'Sin motivo registrado', wide: true }]} />
-          {refunds.length > 0 ? (
+          {refunds.length > 0 && (
             <div className="flex flex-col gap-1">
               <p className="text-sm text-on-surface-variant">Dinero devuelto</p>
               <RefundList refunds={refunds} />
             </div>
-          ) : (
+          )}
+          {refunds.every(isCancelledRefund) && (
             <p className="text-base text-on-surface">Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.</p>
           )}
         </DetailSection>
@@ -121,6 +126,17 @@ function RefundDetail({ devolucion, income }) {
           { label: 'Motivo', value: refundReason(devolucion), wide: true },
         ]}
       />
+      {isCancelledRefund(devolucion) && (
+        <DetailSection title="Cancelación" tone="error">
+          <DetailList
+            items={[
+              { label: 'Fecha', value: formatDate(devolucion.fecha_cancelacion) },
+              { label: 'Responsable', value: devolucion.cancelado_por || '—' },
+              { label: 'Motivo', value: devolucion.motivo_cancelacion || 'Sin motivo registrado', wide: true },
+            ]}
+          />
+        </DetailSection>
+      )}
       {devolucion.comprobante_anulado_codigo && (
         <DetailSection title="Ingreso que se devuelve">
           <DetailList
@@ -137,16 +153,17 @@ function RefundDetail({ devolucion, income }) {
   )
 }
 
-function MovementActions({ movement, socio, readOnly, onOpen, onAnnul }) {
+function MovementActions({ movement, socio, readOnly, onOpen, onAnnul, onCancelRefund }) {
   const { showToast } = useToast()
   const [sending, setSending] = useState(false)
   const phone = socio?.telefono || socio?.persona?.telefono || ''
   const hasPhone = String(phone).trim().length >= 6
 
-  const annulBlocker = movement.isRefund
-    ? 'Las devoluciones no se pueden deshacer'
-    : movement.anulado ? 'El ingreso ya está anulado'
-      : readOnly ? 'La ficha está en solo lectura' : ''
+  const readOnlyBlocker = readOnly ? 'La ficha está en solo lectura' : ''
+  const annulBlocker = movement.anulado ? 'El ingreso ya está anulado' : readOnlyBlocker
+  const cancelBlocker = movement.anulado ? CANCELLED_REFUND_BLOCKER : readOnlyBlocker
+  const whatsAppBlocker = movement.isRefund && movement.anulado ? CANCELLED_REFUND_BLOCKER
+    : hasPhone ? '' : 'El socio no tiene un teléfono registrado'
 
   const sendWhatsApp = async () => {
     setSending(true)
@@ -175,7 +192,7 @@ function MovementActions({ movement, socio, readOnly, onOpen, onAnnul }) {
       <RowIconButton
         tone="whatsapp"
         label="Enviar por WhatsApp"
-        disabledReason={hasPhone ? '' : 'El socio no tiene un teléfono registrado'}
+        disabledReason={whatsAppBlocker}
         busy={sending}
         onClick={sendWhatsApp}
       >
@@ -184,9 +201,15 @@ function MovementActions({ movement, socio, readOnly, onOpen, onAnnul }) {
       <RowIconButton tone="neutral" label="Ver comprobante" onClick={() => onOpen(movement)}>
         <RowIcon name="receipt_long" />
       </RowIconButton>
-      <RowIconButton tone="danger" label="Anular ingreso" disabledReason={annulBlocker} onClick={() => onAnnul(movement.raw)}>
-        <RowIcon name="undo" />
-      </RowIconButton>
+      {movement.isRefund ? (
+        <RowIconButton tone="danger" label="Cancelar devolución" disabledReason={cancelBlocker} onClick={() => onCancelRefund(movement.raw)}>
+          <RowIcon name="close" />
+        </RowIconButton>
+      ) : (
+        <RowIconButton tone="danger" label="Anular ingreso" disabledReason={annulBlocker} onClick={() => onAnnul(movement.raw)}>
+          <RowIcon name="undo" />
+        </RowIconButton>
+      )}
     </div>
   )
 }
@@ -195,6 +218,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
   const { showToast } = useToast()
   const [expandedKey, setExpandedKey] = useState(null)
   const [annulling, setAnnulling] = useState(null)
+  const [cancellingRefund, setCancellingRefund] = useState(null)
   const movements = otherMovements(movimientos)
   const { visibleRows, paginationProps } = usePagination(movements, ROWS_PER_PAGE)
 
@@ -205,6 +229,12 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
     showToast(refunded
       ? { title: 'Ingreso anulado y devuelto', description: `${codigo} quedó anulado y se emitió una nota de crédito por ${formatAmount(amount)}.` }
       : { title: 'Ingreso anulado', description: `${codigo} quedó anulado. Si hay que devolver el dinero, emití una nota de crédito desde el comprobante.` })
+  }
+
+  const refundCancelled = (updated) => {
+    setCancellingRefund(null)
+    onChanged?.()
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
   }
 
   if (movimientos === null) {
@@ -257,7 +287,14 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
               {movement.anulado ? '' : movement.isRefund ? '− ' : '+ '}{formatAmount(movement.monto)}
             </td>
             <td className="py-2 px-4">
-              <MovementActions movement={movement} socio={socio} readOnly={readOnly} onOpen={onOpen} onAnnul={setAnnulling} />
+              <MovementActions
+                movement={movement}
+                socio={socio}
+                readOnly={readOnly}
+                onOpen={onOpen}
+                onAnnul={setAnnulling}
+                onCancelRefund={setCancellingRefund}
+              />
             </td>
           </ExpandableRow>
         ))}
@@ -271,6 +308,13 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
         comprobante={annulling}
         onClose={() => setAnnulling(null)}
         onAnnulled={incomeAnnulled}
+      />
+
+      <CancelRefundModal
+        opened={Boolean(cancellingRefund)}
+        devolucion={cancellingRefund}
+        onClose={() => setCancellingRefund(null)}
+        onCancelled={refundCancelled}
       />
     </>
   )
