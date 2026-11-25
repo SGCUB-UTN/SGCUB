@@ -193,8 +193,6 @@ function CuotasTable({
   lines,
   debtTotal,
   period,
-  showFuture,
-  onToggleFuture,
   expandedIds,
   onToggleExpand,
   onRemoveItem,
@@ -210,13 +208,13 @@ function CuotasTable({
 
   const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
   const futureLines = lines.filter((line) => isFuture(line.cuota, period))
-  const coveredFuture = futureLines.filter((line) => line.applied > 0)
-  const otherFuture = futureLines.filter((line) => line.applied <= 0)
-  const futureToggleLabel = coveredFuture.length > 0 ? 'Ver más cuotas futuras' : 'Ver cuotas futuras'
+  const coveredCount = futureLines.filter((line) => line.applied > 0).length
+  const visibleFuture = futureLines.slice(0, Math.max(1, coveredCount))
   const renderLine = (line) => (
     <CuotaLine
       key={line.cuota.cuota_id}
       line={line}
+      upcoming={isFuture(line.cuota, period)}
       expandedIds={expandedIds}
       onToggleExpand={onToggleExpand}
       onRemoveItem={onRemoveItem}
@@ -251,29 +249,14 @@ function CuotasTable({
         </tr>
       )}
       {dueLines.map(renderLine)}
-      {coveredFuture.map(renderLine)}
-      {otherFuture.length > 0 && (
-        <tr>
-          <td colSpan={COLUMN_COUNT} className="py-1 px-3">
-            <button
-              type="button"
-              onClick={onToggleFuture}
-              aria-expanded={showFuture}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[18px] transition-transform ${showFuture ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-              {showFuture ? 'Ocultar cuotas futuras' : `${futureToggleLabel} (${otherFuture.length})`}
-            </button>
-          </td>
-        </tr>
-      )}
-      {showFuture && otherFuture.map(renderLine)}
+      {visibleFuture.map(renderLine)}
     </DataTable>
   )
 }
 
 function CuotaLine({
   line,
+  upcoming = false,
   expandedIds,
   onToggleExpand,
   onRemoveItem,
@@ -299,6 +282,7 @@ function CuotaLine({
         </td>
         <td className="py-1.5 px-3">
           <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
               <span
                 className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
@@ -307,7 +291,11 @@ function CuotaLine({
                 {cuotaStateShortLabel(cuota.estado_cuota)}
               </span>
             )}
-            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
+            {upcoming && (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
+                Próxima
+              </span>
+            )}
           </div>
         </td>
         <td className="py-1.5 px-3 text-right">
@@ -529,7 +517,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   )
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
-  const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
   const [removal, setRemoval] = useState(null)
   const paymentCuotas = pendingCuotas
@@ -693,8 +680,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                 lines={lines}
                 debtTotal={debtTotal}
                 period={period}
-                showFuture={showFuture}
-                onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
                 onToggleExpand={toggleExpand}
                 onRemoveItem={onAccountChanged ? (cuota, item) => setRemoval({ cuota, item }) : undefined}
