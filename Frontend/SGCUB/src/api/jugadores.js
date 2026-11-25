@@ -13,6 +13,11 @@ export const getJugadoresByCategoria = async (categoriaId) => {
   return response.data
 }
 
+export const getJugadoresByLiga = async (ligaId) => {
+  const response = await api.get(jugadoresEndpoint, { params: { liga: ligaId } })
+  return response.data
+}
+
 export const getJugador = async (jugadorId) => {
   const response = await api.get(`${jugadoresEndpoint}${jugadorId}/`)
   return response.data

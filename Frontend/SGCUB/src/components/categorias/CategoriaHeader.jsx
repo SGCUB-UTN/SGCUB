@@ -2,7 +2,7 @@ import { Fragment } from 'react'
 import PageHeader from '../shared/PageHeader'
 import { ACTION_GRID_CLASS } from '../personas/HeaderPersona'
 
-export default function CategoriaHeader({ breadcrumb = [], title, badge, metadata = [], actions }) {
+export default function CategoriaHeader({ breadcrumb = [], title, icon = 'sports_soccer', badge, metadata = [], actions }) {
   return (
     <>
       <PageHeader breadcrumb={breadcrumb} />
@@ -12,7 +12,7 @@ export default function CategoriaHeader({ breadcrumb = [], title, badge, metadat
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
             <div className="w-15 h-15 shrink-0 rounded-full bg-gradient-to-br from-primary-container to-secondary flex items-center justify-center text-on-primary shadow-md select-none">
-              <span className="material-symbols-outlined" style={{ fontSize: 36 }} aria-hidden="true">sports_soccer</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 36 }} aria-hidden="true">{icon}</span>
             </div>
 
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">

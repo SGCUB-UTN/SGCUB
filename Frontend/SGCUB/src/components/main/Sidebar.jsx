@@ -83,7 +83,7 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
         : '';
   const matches = (routes) => routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const finanzasActive = matches(['/finanzas', '/resumen-financiero', '/caja']);
-  const padronActive = matches(['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/categorias', '/docentes', '/categorias']);
+  const padronActive = matches(['/padron/socios', '/padron/jugadores', '/padron/docentes', '/padron/categorias', '/padron/ligas', '/docentes', '/categorias']);
   const comunicacionesActive = matches(['/comunicaciones']);
   const reportesActive = matches(['/padron/reportes', '/morosidad']);
   const ajustesActive = matches(['/usuarios', '/automatizaciones', '/configuracion']);
@@ -168,6 +168,12 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                   <span className="app-sidebar-subitem-main">
                     <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">sports_soccer</span>
                     <span className="app-sidebar-label text-base">Categorías</span>
+                  </span>
+                </NavLink>
+                <NavLink to="/padron/ligas" className={({ isActive }) => `app-sidebar-link flex items-center justify-between px-space-sm py-1.5 rounded text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors ${isActive ? 'app-sidebar-link--active' : ''}`}>
+                  <span className="app-sidebar-subitem-main">
+                    <span className="app-sidebar-subitem-icon material-symbols-outlined" aria-hidden="true">emoji_events</span>
+                    <span className="app-sidebar-label text-base">Ligas</span>
                   </span>
                 </NavLink>
               </div>
