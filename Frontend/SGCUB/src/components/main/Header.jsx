@@ -6,6 +6,7 @@ import useTheme from "../../hooks/useTheme";
 import useRegisterPayment from "../../hooks/useRegisterPayment";
 import OtroMovimientoModal from "../finanzas/OtroMovimientoModal";
 import { notifyCajaChanged } from "../finanzas/cajaEvents";
+import { INCOME, MANUAL_REFUND } from "../finanzas/conceptOrigins";
 import { PrimaryButton, SecondaryButton } from "../personas/tabs/parts";
 import HeaderSearch from "./HeaderSearch";
 import HelpModal from "./HelpModal";
@@ -30,7 +31,7 @@ export default function Header({ collapsed = false, peek = false, mobile = false
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [menuOpened, setMenuOpened] = useState(false);
-  const [movimientoAbierto, setMovimientoAbierto] = useState(false);
+  const [movementOperation, setMovementOperation] = useState(null);
   const [ayudaAbierta, setAyudaAbierta] = useState(false);
   const { openPayment } = useRegisterPayment();
 
@@ -69,10 +70,35 @@ export default function Header({ collapsed = false, peek = false, mobile = false
               <PrimaryButton icon="payments" title="Registrar pago" onClick={() => openPayment({ onSuccess: notifyCajaChanged })}>
                 <span className="max-xl:sr-only">Pagar</span>
               </PrimaryButton>
-              <SecondaryButton icon="swap_horiz" title="Otros movimientos" onClick={() => setMovimientoAbierto(true)}>
-                <span className="max-xl:sr-only">Otro movimiento
-                </span>
-              </SecondaryButton>
+              <Menu trigger="click" position="bottom-end" shadow="md" width={220} withinPortal>
+                <Menu.Target>
+                  <SecondaryButton icon="swap_horiz" title="Otros movimientos">
+                    <span className="max-xl:sr-only">Otro movimiento</span>
+                  </SecondaryButton>
+                </Menu.Target>
+                <Menu.Dropdown className="p-1">
+                  <Menu.Item
+                  icon={
+                    <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">
+                      add_circle
+                    </span>
+                  }
+                    onClick={() => setMovementOperation(INCOME)}
+                  >
+                    <span className="text-base text-on-surface">Registrar ingreso</span>
+                  </Menu.Item>
+                  <Menu.Item
+                  icon={
+                    <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">
+                      remove_circle
+                    </span>
+                  }
+                    onClick={() => setMovementOperation(MANUAL_REFUND)}
+                  >
+                    <span className="text-base text-on-surface">Registrar devolución</span>
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             </div>
           )}
           {user && (
@@ -158,8 +184,9 @@ export default function Header({ collapsed = false, peek = false, mobile = false
       </div>
 
       <OtroMovimientoModal
-        opened={movimientoAbierto}
-        onClose={() => setMovimientoAbierto(false)}
+        opened={Boolean(movementOperation)}
+        operation={movementOperation}
+        onClose={() => setMovementOperation(null)}
         onSuccess={notifyCajaChanged}
       />
       <HelpModal opened={ayudaAbierta} onClose={() => setAyudaAbierta(false)} />

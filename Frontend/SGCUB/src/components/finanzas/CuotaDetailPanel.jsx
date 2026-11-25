@@ -252,7 +252,7 @@ function SummaryRow({ label, value, className = 'text-on-surface' }) {
   )
 }
 
-function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, className }) {
+function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, onAssignScholarship, extraActions, className }) {
   const paid = isPaid(cuota)
   const pending = Number(cuota.saldo_pendiente ?? 0)
   const payable = !paid && pending > 0
@@ -273,7 +273,7 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, class
           )}
         </div>
       </div>
-      {(onPay || onAssignBenefit || extraActions) && (
+      {(onPay || onAssignBenefit || onAssignScholarship || extraActions) && (
         <div className="flex flex-col gap-2 [&>button]:justify-center">
           {onPay && payable && (
             <PrimaryButton icon="payments" onClick={() => onPay(cuota)}>
@@ -282,7 +282,12 @@ function PaymentSummaryCard({ cuota, onPay, onAssignBenefit, extraActions, class
           )}
           {onAssignBenefit && (
             <SecondaryButton icon="sell" onClick={() => onAssignBenefit(cuota)} disabled={paid} title={paid ? PAID_HINT : undefined}>
-              Agregar beca o descuento
+              Agregar descuento
+            </SecondaryButton>
+          )}
+          {onAssignScholarship && (
+            <SecondaryButton icon="school" onClick={() => onAssignScholarship(cuota)}>
+              Asignar beca
             </SecondaryButton>
           )}
           {extraActions}
@@ -329,7 +334,7 @@ function ReceiptsCard({ cuotaId, onOpen, className, fallbackSocio }) {
   )
 }
 
-function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, extraActions, flat = false, readOnly = false }) {
+function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onAssignScholarship, onChanged, extraActions, flat = false, readOnly = false }) {
   const layout = flat ? LAYOUTS.flat : LAYOUTS.cards
   const [selectedId, setSelectedId] = useState(null)
   const [removingItem, setRemovingItem] = useState(null)
@@ -343,7 +348,7 @@ function CuotaDetailPanel({ cuota, colSpan, onPay, onAssignBenefit, onChanged, e
               <ConceptsCard cuota={cuota} onRemove={onChanged && !readOnly ? setRemovingItem : undefined} className={layout.concepts} />
             </div>
             <div className={layout.side}>
-              <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} extraActions={extraActions} className={layout.summary} />
+              <PaymentSummaryCard cuota={cuota} onPay={onPay} onAssignBenefit={onAssignBenefit} onAssignScholarship={onAssignScholarship} extraActions={extraActions} className={layout.summary} />
             </div>
           </div>
           <ReceiptsCard

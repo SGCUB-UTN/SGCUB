@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { deleteCuota, getCuota, patchCuota } from '../api/cuotas'
+import { deleteCuota } from '../api/cuotas'
 import AutomationStatus from '../components/cuota/AutomationStatus'
 import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
 import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
-import EditCuotaModal from '../components/cuota/EditCuotaModal'
 import GenerateCuotasModal from '../components/cuota/GenerateCuotasModal'
 import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
@@ -17,15 +16,7 @@ import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
-import { collectErrorMessages } from '../components/personas/format'
 import SectionDivider from '../components/shared/SectionDivider'
-
-const FORMULARIO_INICIAL = {
-  socio_id: '',
-  periodo: '',
-  fecha_venc1: '',
-  fecha_venc2: '',
-}
 
 const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
@@ -39,35 +30,14 @@ function Cuotas() {
   const { summary, cuotas, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
-  const [modalEditar, setModalEditar] = useState(false)
   const [modalEliminar, setModalEliminar] = useState(false)
   const [cuotaSeleccionada, setCuotaSeleccionada] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [errorFormulario, setErrorFormulario] = useState('')
-  const [formulario, setFormulario] = useState(FORMULARIO_INICIAL)
   const [logRun, setLogRun] = useState(null)
   const [generateOpen, setGenerateOpen] = useState(false)
-  const [actionError, setActionError] = useState('')
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
-
-  const abrirEditar = async (row) => {
-    setActionError('')
-    try {
-      const cuota = await getCuota(row.cuota_id)
-      setCuotaSeleccionada(cuota)
-      setFormulario({
-        socio_id: cuota.socio?.socio_id ?? '',
-        periodo: cuota.periodo ?? '',
-        fecha_venc1: cuota.fecha_venc1 ?? '',
-        fecha_venc2: cuota.fecha_venc2 ?? '',
-      })
-      setErrorFormulario('')
-      setModalEditar(true)
-    } catch {
-      setActionError('No se pudo abrir la cuota para editarla.')
-    }
-  }
 
   const abrirEliminar = (row) => {
     setCuotaSeleccionada(row)
@@ -76,38 +46,9 @@ function Cuotas() {
   }
 
   const cerrarModal = () => {
-    setModalEditar(false)
     setModalEliminar(false)
     setCuotaSeleccionada(null)
-    setFormulario(FORMULARIO_INICIAL)
     setErrorFormulario('')
-  }
-
-  const guardarCuota = async (event) => {
-    event.preventDefault()
-    setGuardando(true)
-    setErrorFormulario('')
-
-    try {
-      if (!formulario.fecha_venc1 || !formulario.fecha_venc2) {
-        throw new Error('Completá los campos obligatorios.')
-      }
-      await patchCuota(cuotaSeleccionada.cuota_id, {
-        fecha_venc1: formulario.fecha_venc1,
-        fecha_venc2: formulario.fecha_venc2,
-      })
-
-      cerrarModal()
-      reload()
-    } catch (requestError) {
-      const data = requestError.response?.data
-      const message = data && typeof data === 'object'
-        ? collectErrorMessages(data).join(' ')
-        : requestError.message
-      setErrorFormulario(message || 'No se pudo guardar la cuota.')
-    } finally {
-      setGuardando(false)
-    }
   }
 
   const eliminarCuota = async () => {
@@ -164,9 +105,6 @@ function Cuotas() {
 
       <section className={PANEL_CLASS} aria-labelledby="period-cuotas-title">
         <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
-        {actionError && (
-          <p role="alert" className="mx-4 sm:mx-5 mt-4 text-sm text-error bg-error-container rounded px-3 py-2">{actionError}</p>
-        )}
         <PeriodCuotasTable
           key={period}
           rows={cuotas.data ?? []}
@@ -174,8 +112,8 @@ function Cuotas() {
           error={cuotas.error}
           period={period}
           onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
-          onAssignBenefit={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
-          onEdit={abrirEditar}
+          onAssignDiscount={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
+          onAssignScholarship={(row) => openBenefit({ socioId: row.socio_id, onSuccess: reload })}
           onDelete={abrirEliminar}
           onChanged={reload}
         />
@@ -184,17 +122,6 @@ function Cuotas() {
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 
       <GenerateCuotasModal opened={generateOpen} onClose={() => setGenerateOpen(false)} onGenerated={reload} />
-
-      <EditCuotaModal
-        opened={modalEditar}
-        onClose={() => !guardando && cerrarModal()}
-        onSubmit={guardarCuota}
-        formulario={formulario}
-        onChange={(campo, valor) => setFormulario((actual) => ({ ...actual, [campo]: valor }))}
-        loading={guardando}
-        error={errorFormulario}
-        cuota={cuotaSeleccionada}
-      />
 
       <DeleteCuotaModal
         opened={modalEliminar}

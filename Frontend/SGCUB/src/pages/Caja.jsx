@@ -21,6 +21,7 @@ import { ErrorFile } from '../components/personas/FileStatus'
 import { PanelSkeleton } from '../components/shared/Skeleton'
 import { isActiveStatus } from '../components/personas/format'
 import { hasPendingDebt } from '../components/finanzas/accountStatement'
+import { INCOME, MANUAL_REFUND } from '../components/finanzas/conceptOrigins'
 
 const SIN_SOCIO = { loading: false, socio: null, cuenta: null, error: null }
 
@@ -36,7 +37,8 @@ function Caja() {
   const movimientos = useMovimientosCaja(period)
   const [comprobanteId, setComprobanteId] = useState(null)
   const [devolucionSeleccionada, setDevolucionSeleccionada] = useState(null)
-  const [movimientoAbierto, setMovimientoAbierto] = useState(false)
+  const [movementOperation, setMovementOperation] = useState(null)
+  const [paymentFormKey, setPaymentFormKey] = useState(0)
 
   const recargarCaja = movimientos.reload
 
@@ -80,8 +82,11 @@ function Caja() {
             <PrimaryButton icon="payments" onClick={() => openPayment({ onSuccess: recargarCaja })}>
               Registrar pago
             </PrimaryButton>
-            <SecondaryButton icon="currency_exchange" onClick={() => setMovimientoAbierto(true)}>
-              Registrar movimiento
+            <SecondaryButton icon="add_circle" onClick={() => setMovementOperation(INCOME)}>
+              Registrar ingreso
+            </SecondaryButton>
+            <SecondaryButton icon="remove_circle" onClick={() => setMovementOperation(MANUAL_REFUND)}>
+              Registrar devolución
             </SecondaryButton>
           </div>
         )}
@@ -102,10 +107,15 @@ function Caja() {
       )}
       {cargado && puedePagar && (
         <PagoForm
+          key={paymentFormKey}
           socio={carga.socio}
           cuenta={carga.cuenta}
           onCancel={() => navigate(`/padron/socios/${socioId}?tab=financiero`)}
           onSuccess={recargarCaja}
+          onReverted={() => {
+            recargarTodo()
+            setPaymentFormKey((key) => key + 1)
+          }}
         />
       )}
 
@@ -145,9 +155,10 @@ function Caja() {
       />
 
       <OtroMovimientoModal
-        opened={movimientoAbierto}
+        opened={Boolean(movementOperation)}
         initialSocio={carga.socio}
-        onClose={() => setMovimientoAbierto(false)}
+        operation={movementOperation}
+        onClose={() => setMovementOperation(null)}
         onSuccess={recargarTodo}
       />
     </div>

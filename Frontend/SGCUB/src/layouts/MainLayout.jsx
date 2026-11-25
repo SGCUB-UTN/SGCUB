@@ -51,8 +51,8 @@ export default function MainLayout() {
 
   return (
     <AssignBenefitProvider>
-      <RegisterPaymentProvider>
-        <RevertPaymentProvider>
+      <RevertPaymentProvider>
+        <RegisterPaymentProvider>
           <div className={`main-layout ${contraido ? 'main-layout--collapsed' : ''}`}>
             <a
               href="#contenido"
@@ -84,8 +84,8 @@ export default function MainLayout() {
               </main>
             </div>
           </div>
-        </RevertPaymentProvider>
-      </RegisterPaymentProvider>
+        </RegisterPaymentProvider>
+      </RevertPaymentProvider>
     </AssignBenefitProvider>
   );
 }

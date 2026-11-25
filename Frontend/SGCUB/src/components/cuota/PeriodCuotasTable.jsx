@@ -17,7 +17,6 @@ import { GENERO_BADGE_CLASSES } from '../categorias/categoriaFormat'
 import CategoryFilter from '../shared/CategoryFilter'
 import NotifyCuotasModal from './NotifyCuotasModal'
 import { ALL_CATEGORIES, NO_CATEGORY, categoryMatches, categoryOptions, findGender } from '../shared/categoryFilters'
-import { SecondaryButton } from '../personas/tabs/parts'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { TextSkeleton } from '../shared/Skeleton'
@@ -142,7 +141,7 @@ function BulkActionsBar({ rows, onExport, onClear }) {
   )
 }
 
-function CuotaDetailRow({ row, onPay, onAssignBenefit, onEdit, onDelete, onChanged }) {
+function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onDelete, onChanged }) {
   const [detail, setDetail] = useState({ loading: true, error: false, cuota: null })
 
   useEffect(() => {
@@ -170,16 +169,14 @@ function CuotaDetailRow({ row, onPay, onAssignBenefit, onEdit, onDelete, onChang
       cuota={detail.cuota}
       colSpan={COLUMN_COUNT}
       onPay={() => onPay(row)}
-      onAssignBenefit={() => onAssignBenefit(row)}
+      onAssignBenefit={() => onAssignDiscount(row)}
+      onAssignScholarship={() => onAssignScholarship(row)}
       onChanged={onChanged}
       extraActions={!row.paid && (
-        <>
-          <SecondaryButton icon="edit_calendar" onClick={() => onEdit(row)}>Editar vencimientos</SecondaryButton>
-          <button type="button" onClick={() => onDelete(row)} className={DELETE_BUTTON_CLASS}>
-            <Icon name="delete" size={20} />
-            Eliminar cuota
-          </button>
-        </>
+        <button type="button" onClick={() => onDelete(row)} className={DELETE_BUTTON_CLASS}>
+          <Icon name="delete" size={20} />
+          Eliminar cuota
+        </button>
       )}
       flat
     />
@@ -192,8 +189,8 @@ export default function PeriodCuotasTable({
   error = null,
   period,
   onPay,
-  onAssignBenefit,
-  onEdit,
+  onAssignDiscount,
+  onAssignScholarship,
   onDelete,
   onChanged,
 }) {
@@ -411,8 +408,8 @@ export default function PeriodCuotasTable({
                     key={`${row.cuota_id}-${row.pending}`}
                     row={row}
                     onPay={onPay}
-                    onAssignBenefit={onAssignBenefit}
-                    onEdit={onEdit}
+                    onAssignDiscount={onAssignDiscount}
+                    onAssignScholarship={onAssignScholarship}
                     onDelete={onDelete}
                     onChanged={onChanged}
                   />
