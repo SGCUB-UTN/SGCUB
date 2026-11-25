@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { getSocio } from '../api/socios'
 import { getEstadoCuenta } from '../api/estadoCuenta'
 import PeriodSelector from '../components/cuota/PeriodSelector'
@@ -26,7 +26,6 @@ import { INCOME, MANUAL_REFUND } from '../components/finanzas/conceptOrigins'
 const SIN_SOCIO = { loading: false, socio: null, cuenta: null, error: null }
 
 function Caja() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const socioId = searchParams.get('socio')
   const requestedPeriod = searchParams.get('periodo')
@@ -110,7 +109,6 @@ function Caja() {
           key={paymentFormKey}
           socio={carga.socio}
           cuenta={carga.cuenta}
-          onCancel={() => navigate(`/padron/socios/${socioId}?tab=financiero`)}
           onSuccess={recargarCaja}
           onReverted={() => {
             recargarTodo()

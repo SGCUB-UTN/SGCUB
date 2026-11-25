@@ -158,7 +158,6 @@ function RegisterPaymentModal({
           cuenta={load.cuenta}
           initialCuotaIds={initialCuotaIds}
           reversal={reversal}
-          onCancel={onClose}
           onSuccess={handleSuccess}
           onRevertStart={onClose}
           onReverted={() => onSuccess?.()}
@@ -166,7 +165,7 @@ function RegisterPaymentModal({
           onAccountChanged={refreshAccount}
         />
       ) : (
-        <PagoForm key="empty" onCancel={onClose} />
+        <PagoForm key="empty" />
       )}
     </Modal>
   )

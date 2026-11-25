@@ -515,7 +515,7 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted }) {
   const { openReversal } = useRevertPayment()
   const period = currentPeriod()
   const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
@@ -664,7 +664,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   }
 
   if (receipt) {
-    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onRevert={revertPayment} onBack={onCancel} />
+    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onRevert={revertPayment} />
   }
 
   const noDebt = !paymentCuotas.some((cuota) => cuotaDue(cuota) > 0)

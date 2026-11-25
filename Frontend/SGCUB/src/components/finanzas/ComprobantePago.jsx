@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatDate } from '../personas/format'
-import { SecondaryButton } from '../personas/tabs/parts'
 import { getConfiguracionGeneral } from '../../api/configuracion'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
@@ -17,8 +16,6 @@ function ComprobantePago({
   comprobanteId: registeredId = null,
   onRetryDetalle = null,
   onRevert = null,
-  onBack,
-  backLabel = 'Volver al estado de cuenta',
 }) {
   const [clubConfig, setClubConfig] = useState(null)
   const [retrying, setRetrying] = useState(false)
@@ -113,10 +110,9 @@ function ComprobantePago({
             className="inline-flex items-center justify-center gap-2 h-10 px-4 border border-error/40 rounded-lg text-base font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer sm:mr-auto"
           >
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">undo</span>
-            Revertir pago
+            {detalle.es_ingreso ? 'Anular ingreso' : 'Revertir pago'}
           </button>
         )}
-        <SecondaryButton icon="arrow_back" onClick={onBack}>{backLabel}</SecondaryButton>
         <DownloadComprobanteButton comprobanteId={comprobanteId} />
         <WhatsAppComprobanteButton
           socio={socioCompleto}
