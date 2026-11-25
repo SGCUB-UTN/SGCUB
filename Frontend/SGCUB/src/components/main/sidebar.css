@@ -46,6 +46,7 @@
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 8px 4px;
 }
 
