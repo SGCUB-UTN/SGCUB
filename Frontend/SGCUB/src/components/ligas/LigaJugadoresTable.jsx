@@ -25,7 +25,7 @@ import {
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import { formatDni, isActiveStatus } from '../personas/format'
 
-const COLUMN_COUNT = 7
+const COLUMN_COUNT = 8
 
 const fullName = (jugador) => `${jugador.socio?.apellido ?? ''}, ${jugador.socio?.nombre ?? ''}`
 const stateLabel = (jugador) => (isActiveStatus(jugador.estado?.nombre) ? jugador.estado?.nombre : 'Baja parcial')
@@ -69,7 +69,7 @@ const categoryLabel = (value, categories) => {
 
 const fileSlug = (text) => String(text ?? '').trim().toLowerCase().replace(/\s+/g, '-')
 
-function LigaJugadoresTable({ jugadores, ligaNombre }) {
+function LigaJugadoresTable({ jugadores, ligaNombre, onRemove }) {
   const navigate = useNavigate()
   const [category, setCategory] = useState(ALL)
   const [documentation, setDocumentation] = useState(ALL)
@@ -148,6 +148,7 @@ function LigaJugadoresTable({ jugadores, ligaNombre }) {
             <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentation" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Financiero" columna="account" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="state" orden={sort} onOrdenar={sortBy} />
+            <th className="py-3 px-4 pr-6 text-right" scope="col">Acciones</th>
           </>
         )}
       >
@@ -176,6 +177,22 @@ function LigaJugadoresTable({ jugadores, ligaNombre }) {
               <td className="py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
               <td className="py-3 px-4">
                 <ActiveStatusBadge isActive={active} label={stateLabel(jugador)} />
+              </td>
+              <td className="py-3 px-4 pr-6">
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center p-2 rounded-lg text-on-surface-variant hover:text-error hover:bg-error-container/60 transition-colors cursor-pointer"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onRemove(jugador)
+                    }}
+                    title="Quitar de la liga"
+                    aria-label={`Quitar a ${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''} de la liga`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">person_remove</span>
+                  </button>
+                </div>
               </td>
             </tr>
           )

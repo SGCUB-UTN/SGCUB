@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { getJugadoresByLiga } from '../api/jugadores'
+import { getJugadoresByLiga, patchJugador } from '../api/jugadores'
 import { getLiga } from '../api/ligas'
 import CategoriaEmptyState from '../components/categorias/CategoriaEmptyState'
 import CategoriaHeader from '../components/categorias/CategoriaHeader'
 import AddJugadorLigaModal from '../components/ligas/AddJugadorLigaModal'
+import ConfirmRemoveJugadorLigaModal from '../components/ligas/ConfirmRemoveJugadorLigaModal'
 import LigaJugadoresTable from '../components/ligas/LigaJugadoresTable'
 import { LoadingFile, ErrorFile } from '../components/personas/FileStatus'
 import { getErrorMessage } from '../components/personas/format'
@@ -17,6 +18,7 @@ function LigaDetail() {
   const [detail, setDetail] = useState({ id: null, liga: null, jugadores: [], error: null })
   const [modalKey, setModalKey] = useState(0)
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [removal, setRemoval] = useState({ opened: false, jugador: null })
 
   useEffect(() => {
     let active = true
@@ -37,11 +39,31 @@ function LigaDetail() {
   }
 
   const handleAdded = async (jugador) => {
-    const jugadores = await getJugadoresByLiga(id)
-    setDetail((current) => ({ ...current, jugadores }))
+    await reloadJugadores()
     showToast({
       title: 'Jugador agregado',
       description: `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''} quedó registrado en ${detail.liga.nombre}.`.trim(),
+    })
+  }
+
+  const reloadJugadores = async () => {
+    const jugadores = await getJugadoresByLiga(id)
+    setDetail((current) => ({ ...current, jugadores }))
+  }
+
+  const openRemoval = (jugador) => {
+    setModalKey((key) => key + 1)
+    setRemoval({ opened: true, jugador })
+  }
+
+  const handleRemove = async () => {
+    const { jugador } = removal
+    const ligas = (jugador.ligas ?? []).map((item) => item.liga_id).filter((ligaId) => ligaId !== detail.liga.liga_id)
+    await patchJugador(jugador.jugador_id, { ligas })
+    await reloadJugadores()
+    showToast({
+      title: 'Jugador quitado',
+      description: `${jugador.socio?.nombre ?? ''} ${jugador.socio?.apellido ?? ''} ya no figura en ${detail.liga.nombre}.`.trim(),
     })
   }
 
@@ -75,7 +97,7 @@ function LigaDetail() {
         {jugadores.length === 0 ? (
           <CategoriaEmptyState icon="groups" title="Sin jugadores" description="Todavía no hay jugadores registrados en esta liga." />
         ) : (
-          <LigaJugadoresTable jugadores={jugadores} ligaNombre={liga.nombre} />
+          <LigaJugadoresTable jugadores={jugadores} ligaNombre={liga.nombre} onRemove={openRemoval} />
         )}
       </div>
 
@@ -86,6 +108,15 @@ function LigaDetail() {
         onAdded={handleAdded}
         liga={liga}
         assignedJugadorIds={jugadores.map((jugador) => jugador.jugador_id)}
+      />
+
+      <ConfirmRemoveJugadorLigaModal
+        key={`remove-${modalKey}`}
+        opened={removal.opened}
+        onClose={() => setRemoval((current) => ({ ...current, opened: false }))}
+        onConfirm={handleRemove}
+        jugador={removal.jugador}
+        liga={liga}
       />
     </div>
   )
