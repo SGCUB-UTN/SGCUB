@@ -1,4 +1,8 @@
 import { useNavigate } from 'react-router-dom'
+import DocumentationStatus from '../documental/DocumentationStatus'
+import { documentationSeverity } from '../documental/documentationStates'
+import AccountStatus from '../finanzas/AccountStatus'
+import { accountDebt } from '../finanzas/accountDebt'
 import ActiveStatusBadge from '../shared/ActiveStatusBadge'
 import DataTable from '../shared/DataTable'
 import SortableHeader from '../shared/SortableHeader'
@@ -11,6 +15,8 @@ const SORT_VALUES = {
   number: (jugador) => Number(jugador.socio?.numero_socio ?? 0),
   name: fullName,
   category: (jugador) => jugador.categoria?.nombre ?? '',
+  documentation: (jugador) => documentationSeverity(jugador.documentacion),
+  account: (jugador) => accountDebt(jugador.socio?.cuenta),
   state: (jugador) => jugador.estado?.nombre ?? '',
 }
 const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
@@ -29,6 +35,8 @@ function LigaJugadoresTable({ jugadores }) {
           <SortableHeader className="py-3 px-4" etiqueta="Apellido y nombre" columna="name" orden={sort} onOrdenar={sortBy} />
           <th className="py-3 px-4" scope="col">DNI</th>
           <SortableHeader className="py-3 px-4" etiqueta="Categoría" columna="category" orden={sort} onOrdenar={sortBy} />
+          <SortableHeader className="py-3 px-4 whitespace-nowrap" etiqueta="Documentación" columna="documentation" orden={sort} onOrdenar={sortBy} />
+          <SortableHeader className="py-3 px-4 whitespace-nowrap text-right" etiqueta="Financiero" columna="account" orden={sort} onOrdenar={sortBy} />
           <SortableHeader className="py-3 px-4" etiqueta="Estado" columna="state" orden={sort} onOrdenar={sortBy} />
         </>
       )}
@@ -47,6 +55,8 @@ function LigaJugadoresTable({ jugadores }) {
             <td className="py-3 px-4 font-medium text-base">{fullName(jugador)}</td>
             <td className="py-3 px-4 text-on-surface-variant">{formatDni(jugador.socio?.dni)}</td>
             <td className="py-3 px-4 text-on-surface-variant">{jugador.categoria?.nombre ?? '—'}</td>
+            <td className="py-3 px-4"><DocumentationStatus documentacion={jugador.documentacion} /></td>
+            <td className="py-3 px-4 text-right whitespace-nowrap"><AccountStatus cuenta={jugador.socio?.cuenta} /></td>
             <td className="py-3 px-4">
               <ActiveStatusBadge isActive={active} label={active ? jugador.estado?.nombre : 'Baja parcial'} />
             </td>
