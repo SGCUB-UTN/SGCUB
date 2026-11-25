@@ -1069,6 +1069,7 @@ class PadronViewTests(APITestCase):
         self.assertEqual({"categoria_id", "nombre", "genero"}, set(item["categoria"].keys()))
         self.assertEqual(jugador.socio.socio_id, item["socio"]["socio_id"])
         self.assertIsNone(item["categoria_secundaria"])
+        self.assertEqual([], item["ligas"])
         self.assertEqual({"deuda": "0.00", "cuotas_vencidas": 0}, item["socio"]["cuenta"])
         self.assertEqual({"estado", "vencidos", "faltantes", "por_vencer"}, set(item["documentacion"].keys()))
 
@@ -1081,12 +1082,20 @@ class PadronViewTests(APITestCase):
         response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={otra.categoria_id}", format="json")
         self.assertEqual([], response.data)
 
+    def test_jugador_get_list_vista_listado_devuelve_las_ligas_abreviadas(self):
+        jugador = self.crear_jugador_orm()
+        jugador.ligas.add(Liga.objects.create(nombre="Liga Platense", abreviatura="LP"))
+
+        response = self.client.get(f"/api/padron/jugador/?vista=listado&categoria={jugador.categoria_id}", format="json")
+        self.assertEqual([{"liga_id": jugador.ligas.get().pk, "nombre": "Liga Platense", "abreviatura": "LP"}], response.data[0]["ligas"])
+
     def test_jugador_get_list_vista_listado_no_hace_consultas_por_jugador(self):
-        self.crear_jugador_orm()
+        liga = Liga.objects.create(nombre="Liga Platense", abreviatura="LP")
+        self.crear_jugador_orm().ligas.add(liga)
         with CaptureQueriesContext(connection) as uno:
             self.client.get("/api/padron/jugador/?vista=listado", format="json")
         for index in range(3):
-            self.crear_jugador_orm(categoria=self.crear_categoria_orm(nombre=f"Categoría {index}"))
+            self.crear_jugador_orm(categoria=self.crear_categoria_orm(nombre=f"Categoría {index}")).ligas.add(liga)
         with CaptureQueriesContext(connection) as varios:
             response = self.client.get("/api/padron/jugador/?vista=listado", format="json")
         self.assertEqual(4, len(response.data))

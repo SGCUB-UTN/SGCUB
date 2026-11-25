@@ -1039,6 +1039,7 @@ class JugadorTableSerializer(serializers.ModelSerializer):
     socio = JugadorSocioSerializer(read_only=True)
     categoria = CategoriaSummarySerializer(read_only=True)
     categoria_secundaria = CategoriaSummarySerializer(read_only=True)
+    ligas = LigaSummarySerializer(many=True, read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
     documentacion = serializers.SerializerMethodField()
@@ -1046,7 +1047,7 @@ class JugadorTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = Jugador
         fields = [
-            "jugador_id", "socio", "categoria", "categoria_secundaria", "estado", "tipo_baja", "documentacion",
+            "jugador_id", "socio", "categoria", "categoria_secundaria", "ligas", "estado", "tipo_baja", "documentacion",
         ]
         read_only_fields = fields
 
