@@ -26,7 +26,10 @@ export default function useDocumentacionPadron() {
     return () => { active = false }
   }, [])
 
-  const reload = useCallback(() => setVersion((current) => current + 1), [])
+  const reload = useCallback(() => {
+    setLoad((current) => ({ ...current, error: null }))
+    setVersion((current) => current + 1)
+  }, [])
 
   useEffect(() => {
     window.addEventListener('documentacionCambiada', reload)

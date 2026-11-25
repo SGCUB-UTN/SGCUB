@@ -84,7 +84,7 @@ function DashboardSkeleton() {
 
 export default function DocumentacionDashboard() {
   const navigate = useNavigate()
-  const { isLoading, error, personas, rows, tipos, resumen } = useDocumentacionPadron()
+  const { isLoading, error, personas, rows, tipos, resumen, reload } = useDocumentacionPadron()
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
   const [filters, setFilters] = useState(INITIAL_FILTERS)
@@ -101,6 +101,7 @@ export default function DocumentacionDashboard() {
     upload.openNew(row.persona_id, row.tipo_documento)
   }
 
+  const exportableRows = filterRows(rows, filters)
   const disabledPlayers = personas.filter((persona) => !persona.habilitado && persona.perfil === PROFILES.JUGADOR)
 
   const notifyPersonas = (selected) => navigate('/comunicaciones', { state: { debtNotice: selectionNotice(selected) } })
@@ -115,7 +116,7 @@ export default function DocumentacionDashboard() {
     try {
       await downloadPadronDocumentalPdf(reportParams(filters))
     } catch {
-      setExportError('No se pudo generar el PDF del reporte.')
+      setExportError('No se pudo generar el PDF del reporte. Probá de nuevo.')
     } finally {
       setIsExporting(false)
     }
@@ -126,7 +127,7 @@ export default function DocumentacionDashboard() {
     document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const selectCategory = (categoriaId) => showTable({ ...INITIAL_FILTERS, categoria: String(categoriaId) })
+  const selectCategory = (categoriaId) => showTable({ ...filters, categoria: String(categoriaId) })
 
   const selectState = (estado) => showTable({ ...filters, estado })
 
@@ -147,9 +148,9 @@ export default function DocumentacionDashboard() {
                 Notificar a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
               </PrimaryButton>
               <ExportMenu
-                disabled={!resumen}
+                disabled={!resumen || exportableRows.length === 0}
                 isExporting={isExporting}
-                onCsv={() => downloadDocumentalCsv(filterRows(rows, filters), filters.estado)}
+                onCsv={() => downloadDocumentalCsv(exportableRows, filters.estado)}
                 onPdf={exportPdf}
               />
             </div>
@@ -160,12 +161,18 @@ export default function DocumentacionDashboard() {
         </p>
       </div>
 
-      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
+      {exportError && <p className="text-base text-error" role="alert">{exportError}</p>}
 
-      {error && !resumen && (
-        <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">
-          No se pudo cargar el control documental.
-        </p>
+      {error && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-error-container/40 border border-error/20 rounded-md text-on-error-container" role="alert">
+          <span className="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">cloud_off</span>
+          <p className="flex-1 text-base">
+            {resumen
+              ? 'No pudimos actualizar el control documental. Estás viendo los últimos datos que se cargaron.'
+              : 'No pudimos traer el control documental. Revisá la conexión y probá de nuevo.'}
+          </p>
+          <SecondaryButton icon="refresh" onClick={reload}>Reintentar</SecondaryButton>
+        </div>
       )}
 
       {isLoading && <DashboardSkeleton />}

@@ -10,6 +10,7 @@ import TableTabs from '../shared/TableTabs'
 import { tabPanelId } from '../shared/tabIds'
 import CategoryFilter from '../shared/CategoryFilter'
 import { NO_CATEGORY } from '../shared/categoryFilters'
+import ClearFiltersButton from '../shared/ClearFiltersButton'
 import { formatCount } from '../cuota/cuotaPeriod'
 import { formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
@@ -22,6 +23,7 @@ import { notifiablePersonas } from './documentNotices'
 import {
   ALL,
   DOCUMENT_STATES,
+  INITIAL_FILTERS,
   PROFILES,
   PROFILE_LABELS,
   STATE_ORDER,
@@ -194,13 +196,14 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
   const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
 
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [shownFilters, setShownFilters] = useState(filters)
   if (shownFilters !== filters) {
     setShownFilters(filters)
+    setSelectedKeys(new Set())
     resetPage()
   }
 
-  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const selectedRows = useMemo(() => rows.filter((row) => selectedKeys.has(row.key)), [rows, selectedKeys])
   const notifiable = useMemo(() => notifiablePersonas(selectedRows, personas), [selectedRows, personas])
 
@@ -218,6 +221,10 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
   })
 
   const change = (field) => (value) => onFiltersChange({ ...filters, [field]: value })
+  const hasFilters = Object.keys(INITIAL_FILTERS).some((field) => (
+    field === 'search' ? filters.search.trim() !== '' : filters[field] !== INITIAL_FILTERS[field]
+  ))
+  const clearFilters = () => onFiltersChange(INITIAL_FILTERS)
 
   const emptyText = matching.length === rows.length ? activeTab.emptyText : 'Ningún documento coincide con la búsqueda o los filtros.'
 
@@ -254,6 +261,7 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
             hasUncategorized={hasUncategorized}
             onChange={change('categoria')}
           />
+          <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
       </div>
 
@@ -285,7 +293,12 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
             </>
           )}
         >
-          <TableMessageRow colSpan={COLUMN_COUNT} isEmpty={visibleRows.length === 0} emptyText={emptyText} />
+          <TableMessageRow
+            colSpan={COLUMN_COUNT}
+            isEmpty={visibleRows.length === 0}
+            emptyText={emptyText}
+            onClearFilters={hasFilters ? clearFilters : undefined}
+          />
 
           {visibleRows.map((row) => (
             <tr key={row.key} className={`transition-colors ${selectedKeys.has(row.key) ? 'bg-primary/5' : 'hover:bg-surface-container-low/80'}`}>
