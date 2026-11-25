@@ -18,6 +18,7 @@ const SORT_VALUES = {
 const INITIAL_SORT = { columna: 'maxAge', direccion: 'desc' }
 const COLUMN_COUNT = 5
 const NO_PLAYERS_HINT = 'La categoría no tiene jugadores'
+const DOWNLOAD_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-outline-variant/40 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent'
 
 const omittedText = (total) => {
   const count = Number(total)
@@ -76,14 +77,14 @@ function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = fals
     <div className="min-w-0">
       <DataTable
         headerCase="title"
-        tableClassName="table-fixed min-w-[680px]"
+        tableClassName="table-fixed min-w-[860px]"
         headers={(
           <>
             <SortableHeader className="py-3 px-4 w-40" etiqueta="Edad" columna="maxAge" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4 pl-6" etiqueta="Nombre" columna="name" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4 w-32 text-center" etiqueta="Jugadores" columna="jugadores" orden={sort} onOrdenar={sortBy} />
             <SortableHeader className="py-3 px-4 w-32 text-center" etiqueta="Docentes" columna="docentes" orden={sort} onOrdenar={sortBy} />
-            <th className="py-3 px-4 w-32 text-center font-medium text-on-surface-variant text-sm">Acciones</th>
+            <th className="py-3 px-4 w-80 text-center font-medium text-on-surface-variant text-sm" scope="col">Descargar</th>
           </>
         )}
       >
@@ -117,30 +118,32 @@ function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = fals
               <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_jugadores ?? '—'}</td>
               <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_docentes ?? '—'}</td>
               <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-center gap-1">
+                <div className="flex items-center justify-center gap-2">
                   <button
                     type="button"
                     title={sinJugadores ? NO_PLAYERS_HINT : 'Descargar planillas COMET (PDF)'}
                     onClick={(e) => handleDownloadPlanillas(e, categoria)}
                     disabled={sinJugadores || descargandoCometId === categoria.categoria_id}
-                    className="p-1.5 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer"
+                    className={DOWNLOAD_BUTTON_CLASS}
                     aria-label={`Descargar planillas COMET de ${categoria.nombre}`}
                   >
-                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
                       {descargandoCometId === categoria.categoria_id ? 'progress_activity' : 'description'}
                     </span>
+                    Planillas COMET
                   </button>
                   <button
                     type="button"
                     title={sinJugadores ? NO_PLAYERS_HINT : 'Descargar documentación de la categoría (ZIP)'}
                     onClick={(e) => handleDownloadZip(e, categoria)}
                     disabled={sinJugadores || descargandoZipId === categoria.categoria_id}
-                    className="p-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent cursor-pointer"
-                    aria-label={`Descargar documentación de ${categoria.nombre}`}
+                    className={DOWNLOAD_BUTTON_CLASS}
+                    aria-label={`Descargar documentación de ${categoria.nombre} en ZIP`}
                   >
-                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
                       {descargandoZipId === categoria.categoria_id ? 'progress_activity' : 'folder_zip'}
                     </span>
+                    Documentación
                   </button>
                 </div>
               </td>
