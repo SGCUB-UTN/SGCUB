@@ -987,7 +987,7 @@ class PadronViewTests(APITestCase):
     def test_jugador_post_con_ligas(self):
         categoria = self.crear_categoria_orm()
         socio = self.crear_socio_menor_orm()
-        primera, segunda = Liga.objects.create(nombre="Liga Platense"), Liga.objects.create(nombre="Liga Amateur")
+        primera, segunda = Liga.objects.create(nombre="Liga Platense", abreviatura="LP"), Liga.objects.create(nombre="Liga Amateur", abreviatura="LA")
         payload = {"socio": socio.socio_id, **self.datos_jugador(categoria.categoria_id), "ligas": [primera.pk, segunda.pk]}
         response = self.client.post("/api/padron/jugador/", payload, format="json")
         self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
@@ -996,18 +996,22 @@ class PadronViewTests(APITestCase):
 
         response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {"ligas": [segunda.pk]}, format="json")
         self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
-        self.assertEqual([{"liga_id": segunda.pk, "nombre": "Liga Amateur"}], response.data["ligas"])
+        self.assertEqual([{"liga_id": segunda.pk, "nombre": "Liga Amateur", "abreviatura": "LA"}], response.data["ligas"])
 
         response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {"ligas": []}, format="json")
         self.assertEqual([], response.data["ligas"])
 
     def test_liga_crud_bloquea_eliminar_en_uso_y_registra_historial(self):
-        response = self.client.post("/api/padron/liga/", {"nombre": "  Liga   Platense "})
+        response = self.client.post("/api/padron/liga/", {"nombre": "  Liga   Platense ", "abreviatura": " lp "})
         self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
-        self.assertEqual("Liga Platense", response.data["nombre"])
+        self.assertEqual(("Liga Platense", "LP"), (response.data["nombre"], response.data["abreviatura"]))
         liga_id = response.data["liga_id"]
 
-        self.assertEqual(status.HTTP_400_BAD_REQUEST, self.client.post("/api/padron/liga/", {"nombre": "liga platense"}).status_code)
+        response = self.client.post("/api/padron/liga/", {"nombre": "liga platense", "abreviatura": "lp"})
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn("nombre", response.data)
+        self.assertIn("abreviatura", response.data)
+        self.assertIn("abreviatura", self.client.post("/api/padron/liga/", {"nombre": "Otra liga"}).data)
 
         response = self.client.patch(f"/api/padron/liga/{liga_id}/", {"nombre": "Liga Platense de Fútbol"})
         self.assertEqual("Liga Platense de Fútbol", response.data["nombre"])
@@ -1023,7 +1027,7 @@ class PadronViewTests(APITestCase):
         self.assertEqual(3, HistorialConfiguracion.objects.filter(seccion="Personas", campo__startswith="Liga").count())
 
     def test_liga_cuenta_y_lista_activos_y_baja_parcial_sin_baja_completa(self):
-        liga = Liga.objects.create(nombre="Liga Platense")
+        liga = Liga.objects.create(nombre="Liga Platense", abreviatura="LP")
         activo = self.crear_jugador_orm()
         parcial = self.crear_jugador_orm(categoria=activo.categoria)
         completa = self.crear_jugador_orm(categoria=activo.categoria)

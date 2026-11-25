@@ -59,6 +59,7 @@ class ObraSocial(models.Model):
 class Liga(models.Model):
     liga_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100, unique=True)
+    abreviatura = models.CharField(max_length=10, unique=True)
 
     class Meta:
         db_table = "liga"

@@ -304,23 +304,33 @@ def league_players(league):
 
 class LigaSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(max_length=100)
+    abreviatura = serializers.CharField(max_length=10)
     en_uso = serializers.SerializerMethodField()
     cantidad_jugadores = serializers.SerializerMethodField()
 
     class Meta:
         model = Liga
-        fields = ["liga_id", "nombre", "en_uso", "cantidad_jugadores"]
+        fields = ["liga_id", "nombre", "abreviatura", "en_uso", "cantidad_jugadores"]
+
+    def unique_value(self, field, value, message):
+        duplicated = Liga.objects.filter(**{f"{field}__iexact": value})
+        if self.instance:
+            duplicated = duplicated.exclude(pk=self.instance.pk)
+        if duplicated.exists():
+            raise serializers.ValidationError(message)
+        return value
 
     def validate_nombre(self, value):
         name = " ".join(value.split())
         if not name:
             raise serializers.ValidationError("Ingresá el nombre de la liga.")
-        duplicated = Liga.objects.filter(nombre__iexact=name)
-        if self.instance:
-            duplicated = duplicated.exclude(pk=self.instance.pk)
-        if duplicated.exists():
-            raise serializers.ValidationError("Ya existe una liga con ese nombre.")
-        return name
+        return self.unique_value("nombre", name, "Ya existe una liga con ese nombre.")
+
+    def validate_abreviatura(self, value):
+        abbreviation = "".join(value.split()).upper()
+        if not abbreviation:
+            raise serializers.ValidationError("Ingresá la abreviatura de la liga.")
+        return self.unique_value("abreviatura", abbreviation, "Ya existe una liga con esa abreviatura.")
 
     def get_en_uso(self, obj):
         total = getattr(obj, "total_jugadores", None)
@@ -334,7 +344,7 @@ class LigaSerializer(serializers.ModelSerializer):
 class LigaSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Liga
-        fields = ["liga_id", "nombre"]
+        fields = ["liga_id", "nombre", "abreviatura"]
         read_only_fields = fields
 
 
