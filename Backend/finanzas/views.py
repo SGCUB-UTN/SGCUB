@@ -25,6 +25,7 @@ from .models import (
 	Cuota,
 	Devolucion,
 	EjecucionTareaCuota,
+	EstadoDevolucionChoices,
 	Imputacion,
 	ItemPago,
 	ItemCuota,
@@ -70,6 +71,7 @@ from .serializers import (
 	ItemPagoSerializer,
 	ItemCuotaSerializer,
 	MovimientoCuentaSerializer,
+	CancelacionDevolucionSerializer,
 	DevolucionManualSerializer,
 	DevolucionSerializer,
 	IngresoSerializer,
@@ -94,6 +96,7 @@ from .services import (
 	SocioInactivoError,
 	affected_cuotas,
 	assign_benefit,
+	cancel_refund,
 	cancel_scholarship,
 	create_credit_note,
 	create_cuota,
@@ -356,7 +359,7 @@ def _requested_month(request):
 @api_view(["GET"])
 def comprobante_list(request):
 	refunded = (
-		Devolucion.objects.filter(comprobante_anulado=OuterRef("pk"))
+		Devolucion.objects.vigentes().filter(comprobante_anulado=OuterRef("pk"))
 		.values("comprobante_anulado")
 		.annotate(total=Sum("monto"))
 		.values("total")
@@ -451,6 +454,7 @@ def _refunds_queryset():
 		"cuenta_corriente__socio__jugador",
 		"comprobante_anulado",
 		"usuario",
+		"usuario_cancelacion",
 	).prefetch_related(
 		"cuenta_corriente__socio__jugador__vinculos_familiares__persona",
 	)
@@ -496,10 +500,39 @@ def devolucion_detail(request, pk):
 	return Response(DevolucionSerializer(get_object_or_404(_refunds_queryset(), pk=pk)).data)
 
 
+@extend_schema(tags=["Finanzas/Devolucion"], request=CancelacionDevolucionSerializer, responses=DevolucionSerializer)
+@api_view(["POST"])
+def devolucion_cancelar(request, pk):
+	"""Cancels a refund registered by mistake, recording who authorized it and why."""
+	get_object_or_404(Devolucion, pk=pk)
+	serializer = CancelacionDevolucionSerializer(data=request.data)
+	if not serializer.is_valid():
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+	data = serializer.validated_data
+	try:
+		cancel_refund(pk, data["motivo"], data["responsable"], _current_user(request))
+	except DevolucionInvalidaError as error:
+		return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+	return Response(DevolucionSerializer(get_object_or_404(_refunds_queryset(), pk=pk)).data)
+
+
+def _cancelled_refund_response(refund):
+	if refund.estado != EstadoDevolucionChoices.CANCELADA:
+		return None
+	return Response(
+		{"detail": "La devolución está cancelada: su comprobante ya no se puede descargar ni enviar."},
+		status=status.HTTP_409_CONFLICT,
+	)
+
+
 @extend_schema(tags=["Finanzas/Devolucion"], responses={(200, "application/pdf"): bytes})
 @api_view(["GET"])
 def devolucion_pdf(request, pk):
 	refund = get_object_or_404(_refunds_queryset(), pk=pk)
+	blocked = _cancelled_refund_response(refund)
+	if blocked:
+		return blocked
 	response = HttpResponse(render_refund_pdf(refund), content_type="application/pdf")
 	response["Content-Disposition"] = f'attachment; filename="{refund_filename(refund)}"'
 	return response
@@ -509,6 +542,9 @@ def devolucion_pdf(request, pk):
 @api_view(["GET"])
 def devolucion_imagen(request, pk):
 	refund = get_object_or_404(_refunds_queryset(), pk=pk)
+	blocked = _cancelled_refund_response(refund)
+	if blocked:
+		return blocked
 	response = HttpResponse(render_refund_image(refund), content_type="image/png")
 	response["Content-Disposition"] = f'inline; filename="{refund_filename(refund)}.png"'
 	return response

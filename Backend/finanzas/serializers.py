@@ -207,6 +207,11 @@ class DevolucionManualSerializer(serializers.Serializer):
     responsable = serializers.CharField(max_length=120, trim_whitespace=True)
 
 
+class CancelacionDevolucionSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=180, trim_whitespace=True)
+    responsable = serializers.CharField(max_length=120, trim_whitespace=True)
+
+
 class RegistroPagoSerializer(serializers.Serializer):
     socio_id = serializers.IntegerField(min_value=1)
     cuota_ids = serializers.ListField(
@@ -511,6 +516,7 @@ class DevolucionSerializer(serializers.ModelSerializer):
         source="comprobante_anulado.monto_total", max_digits=10, decimal_places=2, read_only=True, default=None,
     )
     usuario_nombre = serializers.SerializerMethodField()
+    usuario_cancelacion_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Devolucion
@@ -518,6 +524,7 @@ class DevolucionSerializer(serializers.ModelSerializer):
             "devolucion_id", "tipo", "tipo_nombre", "numero", "codigo", "fecha", "socio", "concepto", "monto",
             "medio_de_pago", "medio_de_pago_nombre", "comprobante_anulado", "comprobante_anulado_codigo",
             "comprobante_anulado_fecha", "comprobante_anulado_monto", "responsable", "usuario", "usuario_nombre",
+            "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion_nombre",
         ]
         read_only_fields = fields
 
@@ -535,6 +542,9 @@ class DevolucionSerializer(serializers.ModelSerializer):
 
     def get_usuario_nombre(self, obj):
         return user_display_name(obj.usuario)
+
+    def get_usuario_cancelacion_nombre(self, obj):
+        return user_display_name(obj.usuario_cancelacion) if obj.usuario_cancelacion_id else None
 
 
 class CuentaCorrienteSerializer(serializers.ModelSerializer):

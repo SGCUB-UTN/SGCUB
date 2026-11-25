@@ -68,6 +68,7 @@ from .services import (
 	annul_exempt_cuotas,
 	apply_surcharges,
 	assign_benefit,
+	cancel_refund,
 	cancel_scholarship,
 	create_credit_note,
 	create_manual_refund,
@@ -878,6 +879,56 @@ class DevolucionesManualesTests(APITestCase):
 
 		self.assertEqual([item["devolucion_id"] for item in response.data], [septiembre["devolucion_id"]])
 		self.assertEqual(invalido.status_code, 400)
+
+	def cancelar(self, devolucion_id, **extra):
+		datos = {"motivo": "Se cargó por error", "responsable": "Presidente"}
+		datos.update(extra)
+		return self.client.post(reverse("devolucion-cancelar", args=[devolucion_id]), datos, format="json")
+
+	def test_cancela_la_devolucion_registrando_quien_y_por_que(self):
+		devolucion = self.devolver().data
+
+		response = self.cancelar(devolucion["devolucion_id"])
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertEqual(response.data["estado"], "Cancelada")
+		self.assertEqual(response.data["motivo_cancelacion"], "Se cargó por error")
+		self.assertEqual(response.data["cancelado_por"], "Presidente")
+		self.assertEqual(response.data["usuario_cancelacion_nombre"], "caja")
+		self.assertIsNotNone(response.data["fecha_cancelacion"])
+		self.assertEqual(response.data["codigo"], devolucion["codigo"])
+		registro = RegistroAuditoria.objects.get(accion=AccionAuditoriaChoices.DEVOLUCION_CANCELADA)
+		self.assertEqual(registro.responsable, "Presidente")
+		self.assertEqual(registro.referencia, devolucion["codigo"])
+		self.assertEqual(registro.monto, Decimal("180000.00"))
+
+	def test_no_se_cancela_dos_veces(self):
+		devolucion = self.devolver().data
+		self.cancelar(devolucion["devolucion_id"])
+
+		response = self.cancelar(devolucion["devolucion_id"])
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.data["detail"], "La devolución ya está cancelada.")
+
+	def test_el_motivo_y_el_responsable_son_obligatorios(self):
+		devolucion = self.devolver().data
+
+		self.assertEqual(self.cancelar(devolucion["devolucion_id"], motivo="").status_code, 400)
+		self.assertEqual(self.cancelar(devolucion["devolucion_id"], responsable="").status_code, 400)
+		self.assertEqual(self.cancelar(999999).status_code, 404)
+
+	def test_sigue_en_el_listado_pero_su_comprobante_no_se_descarga(self):
+		devolucion = self.devolver().data
+		self.cancelar(devolucion["devolucion_id"])
+
+		listado = self.client.get(reverse("devolucion-list"), {"socio_id": self.socio.pk})
+		pdf = self.client.get(reverse("devolucion-pdf", args=[devolucion["devolucion_id"]]))
+		imagen = self.client.get(reverse("devolucion-imagen", args=[devolucion["devolucion_id"]]))
+
+		self.assertEqual([item["estado"] for item in listado.data], ["Cancelada"])
+		self.assertEqual(pdf.status_code, 409)
+		self.assertEqual(imagen.status_code, 409)
 
 
 class BecaModeloTests(TestCase):
@@ -1999,6 +2050,23 @@ class NotaCreditoTests(PagoTestBase):
 		detalle = self.client.get(reverse("comprobante-detail", args=[self.comprobante_id])).data
 		self.assertEqual(Decimal(str(detalle["monto_devuelto"])), Decimal("1000.00"))
 		self.assertEqual(len(detalle["notas_credito"]), 2)
+
+	def test_cancelar_una_nota_libera_su_monto_para_volver_a_devolver(self):
+		self.revertir()
+		nota = self.emitir("1000.00").data
+
+		cancelada = self.client.post(reverse("devolucion-cancelar", args=[nota["devolucion_id"]]), {
+			"motivo": "Medio de pago equivocado", "responsable": "Tesorera",
+		}, format="json")
+		detalle = self.client.get(reverse("comprobante-detail", args=[self.comprobante_id])).data
+		listado = self.client.get(reverse("comprobante-list")).data
+		nueva = self.emitir("1000.00")
+
+		self.assertEqual(cancelada.status_code, 200, cancelada.data)
+		self.assertEqual(Decimal(str(detalle["monto_devuelto"])), Decimal("0.00"))
+		self.assertEqual([item["estado"] for item in detalle["notas_credito"]], ["Cancelada"])
+		self.assertEqual(Decimal(str(listado[0]["monto_devuelto"])), Decimal("0.00"))
+		self.assertEqual(nueva.status_code, 201, nueva.data)
 
 	def test_volver_a_cobrar_con_descuento_y_devolver_el_excedente_en_la_misma_operacion(self):
 		self.revertir()
@@ -3467,6 +3535,15 @@ class ResumenFinancieroTests(APITestCase):
 				"conceptos": [{"nombre": "Transferencia de más", "monto": Decimal("180.00"), "cantidad": 1, "porcentaje": Decimal("64.3")}],
 			},
 		})
+
+	def test_las_devoluciones_canceladas_no_suman(self):
+		nota = create_credit_note(self.comprobante_anulado.pk, Decimal("100.00"), "Efectivo", "Carga duplicada", "Tesorera")
+		cancel_refund(nota.pk, "Se emitió por error", "Tesorera")
+
+		devoluciones = self.resumen().data["devoluciones"]
+
+		self.assertEqual(devoluciones["total"], Decimal("180.00"))
+		self.assertEqual(devoluciones["notas_credito"]["cantidad"], 0)
 
 	def test_agrupa_los_conceptos_por_su_nombre_sin_el_detalle(self):
 		for detalle, monto in (("Rifa de fin de año", "40.00"), ("Alquiler de cancha", "60.00")):

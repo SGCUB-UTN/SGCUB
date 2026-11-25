@@ -370,7 +370,7 @@ def receipt_notes(receipt):
     if receipt.estado != EstadoComprobanteChoices.ANULADO:
         return []
     notes = []
-    for credit_note in receipt.notas_credito.order_by("pk"):
+    for credit_note in receipt.notas_credito.vigentes().order_by("pk"):
         notes.append(f"Devuelto por nota de crédito {refund_code(credit_note)} ({format_amount(credit_note.monto)})")
     return notes
 

@@ -122,7 +122,7 @@ def payment_method_rows(receipts, total):
 
 def refunds_summary(first_day):
     refunds = list(
-        Devolucion.objects.filter(fecha__year=first_day.year, fecha__month=first_day.month).values("tipo", "concepto", "monto")
+        Devolucion.objects.vigentes().filter(fecha__year=first_day.year, fecha__month=first_day.month).values("tipo", "concepto", "monto")
     )
     total = sum((row["monto"] for row in refunds), ZERO)
     manual = [row for row in refunds if row["tipo"] == TipoDevolucionChoices.MANUAL]
