@@ -6,7 +6,7 @@ import SortableHeader from '../shared/SortableHeader'
 import TableMessageRow from '../shared/TableMessageRow'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import useToast from '../../hooks/useToast'
-import { formatRangoEdad, GENERO_TAB_TONES } from './categoriaFormat'
+import { formatRangoEdad } from './categoriaFormat'
 import { downloadPlanillasCategoria } from '../../api/comet'
 import { downloadCategoriaDocumentosZip } from '../../api/documentacion'
 
@@ -117,13 +117,13 @@ function CategoriasGeneroTable({ categorias, isLoading, error, showGenero = fals
                 >
                   {categoria.nombre}
                 </Link>
-                {showGenero && GENERO_TAB_TONES[categoria.genero] && (
-                  <span className={`ml-1.5 font-semibold ${GENERO_TAB_TONES[categoria.genero].text}`}>({categoria.genero})</span>
+                {showGenero && categoria.genero && (
+                  <span className="ml-1.5 font-normal text-on-surface-variant">({categoria.genero})</span>
                 )}
               </td>
               <td className="py-3 px-4 text-on-surface-variant">{formatRangoEdad(categoria)}</td>
-              <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_jugadores ?? '—'}</td>
-              <td className="py-3 px-4 text-center font-bold text-on-surface-variant">{categoria.cantidad_docentes ?? '—'}</td>
+              <td className="py-3 px-4 text-center font-medium text-on-surface tabular-nums">{categoria.cantidad_jugadores ?? '—'}</td>
+              <td className="py-3 px-4 text-center font-medium text-on-surface tabular-nums">{categoria.cantidad_docentes ?? '—'}</td>
               <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-center gap-2">
                   <button
