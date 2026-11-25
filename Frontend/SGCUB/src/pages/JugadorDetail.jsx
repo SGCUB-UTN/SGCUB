@@ -300,6 +300,7 @@ function JugadorDetail() {
           deportivo={{
             categoria: jugador.categoria?.nombre,
             categoria_secundaria: jugador.categoria_secundaria?.nombre,
+            ligas: jugador.ligas ?? [],
             obra_social: jugador.obra_social,
             talla: jugador.tallaIndumentaria,
           }}
@@ -358,10 +359,6 @@ function JugadorDetail() {
           { label: 'Socio N°', value: formatNumber(socio.numero_socio), highlighted: true },
           { label: 'Alta', value: formatDate(socio.fecha_alta) },
           { label: 'Antigüedad', value: yearsText(yearsSince(socio.fecha_alta)) },
-          {
-            label: 'Categoría',
-            value: [jugador.categoria?.nombre || 'Sin categoría', jugador.categoria_secundaria?.nombre].filter(Boolean).join(', '),
-          },
         ]}
         statusAction={activo && (
           <DeactivateButton

@@ -91,6 +91,11 @@ export default function PersonalDataTab({ persona, localidades = [], deportivo, 
           <div className={GRID_CLASS}>
             <Field label="Categoría principal" value={deportivo.categoria} icon="sports_soccer" />
             <Field label="Categoría secundaria" value={deportivo.categoria_secundaria} icon="sports_soccer" />
+            <Field
+              label="Ligas"
+              value={deportivo.ligas?.length ? <span title={deportivo.ligas.map((liga) => liga.nombre).join(', ')}>{deportivo.ligas.map((liga) => liga.abreviatura).join(', ')}</span> : ''}
+              icon="emoji_events"
+            />
             <Field label="Talle de indumentaria" value={deportivo.talla} icon="checkroom" />
           </div>
         </RecordSection>
