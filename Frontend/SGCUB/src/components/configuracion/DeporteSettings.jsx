@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal, Text } from '@mantine/core'
+import { useSearchParams } from 'react-router-dom'
 import { deleteCargoDocente, getCargosDocente, patchCargoDocente, postCargoDocente } from '../../api/personasConfig'
 import { deleteLiga, getLigas, patchLiga, postLiga } from '../../api/ligas'
 import CategoriaFormModal from '../categorias/CategoriaFormModal'
@@ -433,7 +434,9 @@ const SUBTABS = [
 ]
 
 export default function DeporteSettings() {
-  const [activeSubTab, setActiveSubTab] = useState(SUBTABS[0].id)
+  const [searchParams] = useSearchParams()
+  const requested = searchParams.get('seccion')
+  const [activeSubTab, setActiveSubTab] = useState(SUBTABS.some((tab) => tab.id === requested) ? requested : SUBTABS[0].id)
 
   return (
     <div className="flex flex-col gap-6">

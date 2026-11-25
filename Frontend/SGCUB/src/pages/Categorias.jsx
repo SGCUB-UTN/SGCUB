@@ -25,7 +25,7 @@ function Categorias() {
         breadcrumb={[{ label: 'Categorías' }]}
         title="Categorías"
         actions={(
-          <Link to="/configuracion?tab=deporte" className={`${TEXT_BUTTON_CLASS} text-base`}>
+          <Link to="/configuracion?tab=deporte&seccion=categorias" className={`${TEXT_BUTTON_CLASS} text-base`}>
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">settings</span>
             Editar categorías
           </Link>

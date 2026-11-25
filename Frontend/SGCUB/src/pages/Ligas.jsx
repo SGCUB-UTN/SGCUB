@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom'
 import { getLigas } from '../api/ligas'
 import LigasListTable from '../components/ligas/LigasListTable'
 import PageHeader from '../components/shared/PageHeader'
+import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import TableSearchInput from '../components/shared/TableSearchInput'
 import { matchesSearch } from '../components/shared/search'
+
+const EDIT_LEAGUES_PATH = '/configuracion?tab=deporte&seccion=ligas'
 
 function Ligas() {
   const [carga, setCarga] = useState({ isLoading: true, error: null, ligas: [] })
@@ -26,7 +29,16 @@ function Ligas() {
 
   return (
     <div className="w-full flex flex-col gap-5">
-      <PageHeader breadcrumb={[{ label: 'Ligas' }]} title="Ligas" />
+      <PageHeader
+        breadcrumb={[{ label: 'Ligas' }]}
+        title="Ligas"
+        actions={(
+          <Link to={EDIT_LEAGUES_PATH} className={`${TEXT_BUTTON_CLASS} text-base`}>
+            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">settings</span>
+            Editar ligas
+          </Link>
+        )}
+      />
 
       <TableSearchInput
         value={search}
@@ -48,7 +60,7 @@ function Ligas() {
       {noLeagues && (
         <p className="text-base text-on-surface-variant">
           Las ligas se agregan en{' '}
-          <Link to="/configuracion?tab=deporte" className="font-semibold text-primary hover:underline">Configuración → Deporte</Link>.
+          <Link to={EDIT_LEAGUES_PATH} className="font-semibold text-primary hover:underline">Configuración → Deporte</Link>.
         </p>
       )}
     </div>
