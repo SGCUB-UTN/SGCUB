@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 from django.db import transaction
-from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
+from .models import CargoDocente, DocenteCategoria, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, Domicilio, EDAD_MAYORIA, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_ADMINISTRATIVO_INACTIVO, SIZES_CHOICES, age_from, ObraSocial, Liga, TalleIndumentaria, TipoRelacionFamiliar
 from finanzas.services import create_or_update_player_current_cuota, schedule_exemption_sync
 
 from io import BytesIO
@@ -296,6 +296,46 @@ class ObraSocialSerializer(serializers.ModelSerializer):
 
     def get_en_uso(self, obj):
         return Jugador.objects.filter(obra_social__iexact=obj.nombre).exists()
+
+
+def league_players(league):
+    return league.jugadores.filter(socio__estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO)
+
+
+class LigaSerializer(serializers.ModelSerializer):
+    nombre = serializers.CharField(max_length=100)
+    en_uso = serializers.SerializerMethodField()
+    cantidad_jugadores = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Liga
+        fields = ["liga_id", "nombre", "en_uso", "cantidad_jugadores"]
+
+    def validate_nombre(self, value):
+        name = " ".join(value.split())
+        if not name:
+            raise serializers.ValidationError("Ingresá el nombre de la liga.")
+        duplicated = Liga.objects.filter(nombre__iexact=name)
+        if self.instance:
+            duplicated = duplicated.exclude(pk=self.instance.pk)
+        if duplicated.exists():
+            raise serializers.ValidationError("Ya existe una liga con ese nombre.")
+        return name
+
+    def get_en_uso(self, obj):
+        total = getattr(obj, "total_jugadores", None)
+        return obj.jugadores.exists() if total is None else total > 0
+
+    def get_cantidad_jugadores(self, obj):
+        count = getattr(obj, "jugadores_visibles", None)
+        return league_players(obj).count() if count is None else count
+
+
+class LigaSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Liga
+        fields = ["liga_id", "nombre"]
+        read_only_fields = fields
 
 
 class TalleIndumentariaSerializer(serializers.ModelSerializer):
@@ -770,6 +810,7 @@ class JugadorSerializer(serializers.ModelSerializer):
     nuevo_socio = SocioSerializer(required=False, write_only=True, allow_null=True)
     categoria = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all())
     categoria_secundaria = serializers.PrimaryKeyRelatedField(queryset=Categoria.objects.all(), allow_null=True, required=False)
+    ligas = serializers.PrimaryKeyRelatedField(queryset=Liga.objects.all(), many=True, required=False)
     obra_social = serializers.CharField(max_length=50)
     tallaIndumentaria = serializers.CharField(max_length=20)
     estado = serializers.PrimaryKeyRelatedField(queryset=EstadoDeportivo.objects.all(), required=False)
@@ -788,6 +829,7 @@ class JugadorSerializer(serializers.ModelSerializer):
             "nuevo_socio",
             "categoria",
             "categoria_secundaria",
+            "ligas",
             "obra_social",
             "esquema_vacunacion",
             "nivel_educacion",
@@ -906,7 +948,9 @@ class JugadorSerializer(serializers.ModelSerializer):
         validated_data.pop("estado", None)
 
         contacts_data = validated_data.pop("vinculos_familiares", [])
+        leagues = validated_data.pop("ligas", [])
         player = Jugador.objects.create(**validated_data)
+        player.ligas.set(leagues)
         player.activate_member_if_inactive()
         for contact_data in contacts_data:
             contact_data["jugador"] = player
@@ -959,6 +1003,7 @@ class JugadorListSerializer(serializers.ModelSerializer):
     socio = SocioSerializer(read_only=True)
     categoria = CategoriaSerializer(read_only=True)
     categoria_secundaria = CategoriaSerializer(read_only=True)
+    ligas = LigaSummarySerializer(many=True, read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     vinculos_familiares = VinculoFamiliarSerializer(many=True, read_only=True)
     tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
@@ -970,7 +1015,7 @@ class JugadorListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Jugador
-        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "estado", "tipo_baja", "vinculos_familiares"]
+        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "ligas", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "estado", "tipo_baja", "vinculos_familiares"]
 
 
 class CategoriaSummarySerializer(serializers.ModelSerializer):
@@ -1004,6 +1049,7 @@ class JugadorSerializerDetail(serializers.ModelSerializer):
     socio = SocioSerializer(read_only=True)
     categoria = CategoriaSerializer(read_only=True)
     categoria_secundaria = CategoriaSerializer(read_only=True)
+    ligas = LigaSummarySerializer(many=True, read_only=True)
     estado = EstadoDeportivoSerializer(read_only=True)
     vinculos_familiares = serializers.SerializerMethodField()
     tipo_baja = serializers.CharField(source="deactivation_type", read_only=True, allow_null=True)
@@ -1020,7 +1066,7 @@ class JugadorSerializerDetail(serializers.ModelSerializer):
 
     class Meta:
         model = Jugador
-        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "vinculos_familiares", "estado", "tipo_baja"]
+        fields = ["jugador_id", "socio", "categoria", "categoria_secundaria", "ligas", "obra_social", "esquema_vacunacion", "nivel_educacion", "tallaIndumentaria", "vinculos_familiares", "estado", "tipo_baja"]
         read_only_fields = ["jugador_id"]
 
 

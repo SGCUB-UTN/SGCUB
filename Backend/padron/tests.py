@@ -23,6 +23,7 @@ from unittest.mock import Mock, patch
 from configuracion.models import HistorialConfiguracion
 from .models import (
     ActualizacionCategoriasEjecucion,
+    Liga,
     Barrio,
     CargoDocente,
     Categoria,
@@ -982,6 +983,60 @@ class PadronViewTests(APITestCase):
         self.assertEqual("99887766", response.data["socio"]["dni"])
         self.assertTrue(Socio.objects.filter(persona__dni="99887766").exists())
         self.assertTrue(Jugador.objects.filter(socio__persona__dni="99887766").exists())
+
+    def test_jugador_post_con_ligas(self):
+        categoria = self.crear_categoria_orm()
+        socio = self.crear_socio_menor_orm()
+        primera, segunda = Liga.objects.create(nombre="Liga Platense"), Liga.objects.create(nombre="Liga Amateur")
+        payload = {"socio": socio.socio_id, **self.datos_jugador(categoria.categoria_id), "ligas": [primera.pk, segunda.pk]}
+        response = self.client.post("/api/padron/jugador/", payload, format="json")
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        jugador = Jugador.objects.get(socio=socio)
+        self.assertEqual({primera.pk, segunda.pk}, set(jugador.ligas.values_list("pk", flat=True)))
+
+        response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {"ligas": [segunda.pk]}, format="json")
+        self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
+        self.assertEqual([{"liga_id": segunda.pk, "nombre": "Liga Amateur"}], response.data["ligas"])
+
+        response = self.client.patch(f"/api/padron/jugador/{jugador.jugador_id}/", {"ligas": []}, format="json")
+        self.assertEqual([], response.data["ligas"])
+
+    def test_liga_crud_bloquea_eliminar_en_uso_y_registra_historial(self):
+        response = self.client.post("/api/padron/liga/", {"nombre": "  Liga   Platense "})
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code, response.data)
+        self.assertEqual("Liga Platense", response.data["nombre"])
+        liga_id = response.data["liga_id"]
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, self.client.post("/api/padron/liga/", {"nombre": "liga platense"}).status_code)
+
+        response = self.client.patch(f"/api/padron/liga/{liga_id}/", {"nombre": "Liga Platense de Fútbol"})
+        self.assertEqual("Liga Platense de Fútbol", response.data["nombre"])
+
+        jugador = self.crear_jugador_orm()
+        jugador.ligas.add(liga_id)
+        response = self.client.delete(f"/api/padron/liga/{liga_id}/")
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertTrue(Liga.objects.filter(pk=liga_id).exists())
+
+        jugador.ligas.clear()
+        self.assertEqual(status.HTTP_204_NO_CONTENT, self.client.delete(f"/api/padron/liga/{liga_id}/").status_code)
+        self.assertEqual(3, HistorialConfiguracion.objects.filter(seccion="Personas", campo__startswith="Liga").count())
+
+    def test_liga_cuenta_y_lista_activos_y_baja_parcial_sin_baja_completa(self):
+        liga = Liga.objects.create(nombre="Liga Platense")
+        activo = self.crear_jugador_orm()
+        parcial = self.crear_jugador_orm(categoria=activo.categoria)
+        completa = self.crear_jugador_orm(categoria=activo.categoria)
+        for jugador in (activo, parcial, completa):
+            jugador.ligas.add(liga)
+        parcial.deactivate()
+        completa.socio.deactivate()
+
+        response = self.client.get("/api/padron/liga/")
+        self.assertEqual([(liga.pk, 2, True)], [(row["liga_id"], row["cantidad_jugadores"], row["en_uso"]) for row in response.data])
+
+        response = self.client.get("/api/padron/jugador/", {"liga": liga.pk})
+        self.assertEqual({activo.pk, parcial.pk}, {row["jugador_id"] for row in response.data})
 
     def test_jugador_post_socio_inexistente(self):
         categoria = self.crear_categoria_orm()

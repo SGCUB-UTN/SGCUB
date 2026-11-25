@@ -17,7 +17,7 @@ from .search import normalize_text, normalized_field
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import serializers as drf_serializers
 
-from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
+from .models import CargoDocente, Persona, Socio, Categoria, Jugador, Docente, EstadoDeportivo, VinculoFamiliar, EstadoAdministrativo, Genero, Localidad, Barrio, DocenteCategoria, ESTADO_ADMINISTRATIVO_ACTIVO, ESTADO_DEPORTIVO_ACTIVO, Liga, ObraSocial, TalleIndumentaria, TipoRelacionFamiliar
 from .serializers import (
     CargoDocenteSerializer,
     DocenteCategoriaSerializer,
@@ -38,6 +38,7 @@ from .serializers import (
     GeneroSerializer,
     LocalidadSerializer,
     BarrioSerializer,
+    LigaSerializer,
     ObraSocialSerializer,
     TalleIndumentariaSerializer,
     TipoRelacionFamiliarSerializer,
@@ -485,11 +486,17 @@ def jugador_list_create(request):
             ).prefetch_related(
                 *persona_serializer_prefetches("vinculos_familiares__persona"),
             )
+        players = players.prefetch_related("ligas")
         category_id = request.query_params.get("categoria")
         if category_id:
             if not category_id.isdigit():
                 return Response({"categoria": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
             players = players.filter(Q(categoria_id=category_id) | Q(categoria_secundaria_id=category_id))
+        league_id = request.query_params.get("liga")
+        if league_id:
+            if not league_id.isdigit():
+                return Response({"liga": "Debe ser un número."}, status=status.HTTP_400_BAD_REQUEST)
+            players = players.filter(ligas=league_id, socio__estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO)
         if view == LIST_VIEW:
             players = list(players)
             context = {
@@ -757,6 +764,58 @@ def obra_social_detail(request, pk):
         obra.delete()
         record_change(Seccion.PERSONAS, f"Obra social {nombre}", "Existente", "Eliminado", request_user(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def leagues_with_counts():
+    return Liga.objects.annotate(
+        total_jugadores=Count("jugadores", distinct=True),
+        jugadores_visibles=Count(
+            "jugadores",
+            filter=Q(jugadores__socio__estado_administrativo__nombre=ESTADO_ADMINISTRATIVO_ACTIVO),
+            distinct=True,
+        ),
+    )
+
+
+@extend_schema(tags=["Padron / Liga"], request=LigaSerializer, responses=LigaSerializer)
+@api_view(["GET", "POST"])
+def liga_list_create(request):
+    if request.method == "GET":
+        return Response(LigaSerializer(leagues_with_counts().order_by("nombre"), many=True).data)
+
+    serializer = LigaSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    league = serializer.save()
+    record_change(Seccion.PERSONAS, f"Liga {league.nombre}", "", "Alta", request_user(request))
+    return Response(LigaSerializer(league).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Padron / Liga"], request=LigaSerializer, responses=LigaSerializer)
+@api_view(["GET", "PATCH", "DELETE"])
+def liga_detail(request, pk):
+    league = get_object_or_404(leagues_with_counts(), pk=pk)
+
+    if request.method == "GET":
+        return Response(LigaSerializer(league).data)
+
+    if request.method == "PATCH":
+        old_name = league.nombre
+        serializer = LigaSerializer(league, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        league = serializer.save()
+        if old_name != league.nombre:
+            record_change(Seccion.PERSONAS, f"Liga {old_name}", old_name, league.nombre, request_user(request))
+        return Response(LigaSerializer(league).data)
+
+    if league.jugadores.exists():
+        return Response(
+            {"detail": "No se puede eliminar la liga porque tiene jugadores registrados."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    name = league.nombre
+    league.delete()
+    record_change(Seccion.PERSONAS, f"Liga {name}", "Existente", "Eliminado", request_user(request))
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Padron / Jugador"], request=TalleIndumentariaSerializer, responses=TalleIndumentariaSerializer)

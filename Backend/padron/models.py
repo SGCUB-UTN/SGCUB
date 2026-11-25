@@ -56,6 +56,18 @@ class ObraSocial(models.Model):
         return self.nombre
 
 
+class Liga(models.Model):
+    liga_id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        db_table = "liga"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class TalleIndumentaria(models.Model):
     talle_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=20, unique=True)
@@ -414,6 +426,7 @@ class Jugador(LeaveDateMixin, models.Model):
         default=get_default_estado_deportivo,
     )
     fecha_baja = models.DateField(null=True, blank=True)
+    ligas = models.ManyToManyField(Liga, related_name="jugadores", blank=True, db_table="jugador_liga")
 
     status_field = "estado"
 
