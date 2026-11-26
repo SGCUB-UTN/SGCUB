@@ -115,7 +115,7 @@ function SocioDetail() {
     return <ErrorFile message={error || 'El socio solicitado no existe.'} backTo="/padron/socios" backText="Volver al padrón" />
   }
   if (socio.jugador_id) {
-    return <Navigate to={`/padron/jugadores/${socio.jugador_id}`} replace state={{ from: 'socios' }} />
+    return <Navigate to={{ pathname: `/padron/jugadores/${socio.jugador_id}`, search: searchParams.toString() }} replace state={{ from: 'socios' }} />
   }
 
   const activo = isActiveStatus(socio.estado_administrativo_nombre)

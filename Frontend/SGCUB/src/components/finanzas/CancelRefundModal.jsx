@@ -97,6 +97,19 @@ function CancelRefundForm({ devolucion, onCancelled, onClose }) {
   )
 }
 
+export function CancelRefundButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-2 h-10 px-4 border border-error/40 rounded-lg text-base font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer sm:mr-auto"
+    >
+      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
+      Cancelar devolución
+    </button>
+  )
+}
+
 export default function CancelRefundModal({ opened, devolucion, onClose, onCancelled }) {
   return (
     <Modal

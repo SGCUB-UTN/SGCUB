@@ -8,6 +8,7 @@ import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
+import ViewFinancesButton from './ViewFinancesButton'
 import { AuthorizerSelect, OptionCard, SUBMIT_BUTTON_CLASS } from './formParts'
 import RegisterPaymentModal from './RegisterPaymentModal'
 import { availableToRefund, reversalOf } from './refunds'
@@ -181,6 +182,7 @@ function ReversalDone({ detalle, creditNote, onClose }) {
       </div>
       <div className="pt-4 border-t border-outline-variant/20 flex flex-wrap items-center justify-end gap-3">
         <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>Cerrar</button>
+        <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
         <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} label="Recibo anulado" />
         {creditNote ? (
           <>

@@ -151,6 +151,7 @@ function Caja() {
         devolucion={devolucionSeleccionada}
         opened={Boolean(devolucionSeleccionada)}
         onClose={() => setDevolucionSeleccionada(null)}
+        onChanged={recargarTodo}
       />
 
       <OtroMovimientoModal

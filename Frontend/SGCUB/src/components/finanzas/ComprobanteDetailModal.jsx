@@ -9,6 +9,7 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
+import ViewFinancesButton from './ViewFinancesButton'
 import { availableToRefund, isCancelledRefund } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
 import ReciboComprobante from './ReciboComprobante'
@@ -204,6 +205,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               </button>
             )}
 
+            <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
             <WhatsAppComprobanteButton
               socio={detalle.socio}

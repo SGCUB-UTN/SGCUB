@@ -4,6 +4,7 @@ import { getConfiguracionGeneral } from '../../api/configuracion'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import ReciboComprobante from './ReciboComprobante'
+import ViewFinancesButton from './ViewFinancesButton'
 
 function ComprobantePago({
   socio,
@@ -16,6 +17,7 @@ function ComprobantePago({
   comprobanteId: registeredId = null,
   onRetryDetalle = null,
   onRevert = null,
+  onLeave = null,
 }) {
   const [clubConfig, setClubConfig] = useState(null)
   const [retrying, setRetrying] = useState(false)
@@ -113,6 +115,7 @@ function ComprobantePago({
             {detalle.es_ingreso ? 'Anular ingreso' : 'Revertir pago'}
           </button>
         )}
+        <ViewFinancesButton socio={socioCompleto} onNavigate={onLeave} />
         <DownloadComprobanteButton comprobanteId={comprobanteId} />
         <WhatsAppComprobanteButton
           socio={socioCompleto}

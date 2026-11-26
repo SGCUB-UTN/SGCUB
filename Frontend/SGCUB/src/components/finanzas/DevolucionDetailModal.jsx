@@ -1,18 +1,27 @@
+import { useState } from 'react'
 import { Modal } from '@mantine/core'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import ReciboDevolucion, { RefundResponsable } from './ReciboDevolucion'
+import ViewFinancesButton from './ViewFinancesButton'
+import CancelRefundModal, { CancelRefundButton } from './CancelRefundModal'
 import { receiptModalStyles } from './receiptModal'
 import { isCancelledRefund } from './refunds'
 import { formatDate } from '../personas/format'
 
 const MODAL_STYLES = receiptModalStyles()
 
-// Detail of a manual refund or a credit note: neither changes the debt nor the club's income
-function DevolucionDetailModal({ devolucion, opened, onClose }) {
-  if (!devolucion) return null
+function DevolucionDetailContent({ devolucion: initialDevolucion, opened, onClose, onChanged, readOnly }) {
+  const [devolucion, setDevolucion] = useState(initialDevolucion)
+  const [cancelling, setCancelling] = useState(false)
   const isCreditNote = devolucion.tipo === 'NotaCredito'
   const cancelled = isCancelledRefund(devolucion)
+
+  const refundCancelled = (updated) => {
+    setDevolucion(updated)
+    setCancelling(false)
+    onChanged?.()
+  }
 
   return (
     <Modal
@@ -46,20 +55,46 @@ function DevolucionDetailModal({ devolucion, opened, onClose }) {
           </p>
         </div>
 
-        {!cancelled && (
-          <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-3">
-            <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
-            <WhatsAppComprobanteButton
-              socio={devolucion.socio}
-              devolucionId={devolucion.devolucion_id}
-              comprobanteCodigo={devolucion.codigo}
-              montoTotal={devolucion.monto}
-              tipo={isCreditNote ? 'nota_credito' : 'devolucion'}
-            />
-          </div>
-        )}
+        <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-3">
+          {!readOnly && !cancelled && <CancelRefundButton onClick={() => setCancelling(true)} />}
+          <ViewFinancesButton socio={devolucion.socio} onNavigate={onClose} />
+          {!cancelled && (
+            <>
+              <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
+              <WhatsAppComprobanteButton
+                socio={devolucion.socio}
+                devolucionId={devolucion.devolucion_id}
+                comprobanteCodigo={devolucion.codigo}
+                montoTotal={devolucion.monto}
+                tipo={isCreditNote ? 'nota_credito' : 'devolucion'}
+              />
+            </>
+          )}
+        </div>
       </div>
+
+      <CancelRefundModal
+        opened={cancelling}
+        devolucion={devolucion}
+        onClose={() => setCancelling(false)}
+        onCancelled={refundCancelled}
+      />
     </Modal>
+  )
+}
+
+// Detail of a manual refund or a credit note: neither changes the debt nor the club's income
+function DevolucionDetailModal({ devolucion, opened, onClose, onChanged, readOnly = false }) {
+  if (!devolucion) return null
+  return (
+    <DevolucionDetailContent
+      key={`${devolucion.devolucion_id}-${opened}`}
+      devolucion={devolucion}
+      opened={opened}
+      onClose={onClose}
+      onChanged={onChanged}
+      readOnly={readOnly}
+    />
   )
 }
 
