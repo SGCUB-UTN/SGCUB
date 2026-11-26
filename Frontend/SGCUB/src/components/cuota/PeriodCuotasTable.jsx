@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import { Link } from 'react-router-dom'
 import { getCuota } from '../../api/cuotas'
 import CuotaDetailPanel from '../finanzas/CuotaDetailPanel'
@@ -62,7 +63,6 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'

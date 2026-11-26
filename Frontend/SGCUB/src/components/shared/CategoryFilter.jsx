@@ -11,7 +11,7 @@ import {
   selectedCategory,
 } from './categoryFilters'
 
-const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-base font-medium cursor-pointer focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const GENDER_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-9 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40 disabled:cursor-not-allowed'
 const GENDER_BUTTON_STYLES = {
   M: { idle: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100', active: 'bg-sky-600 text-white border-sky-600' },
@@ -25,7 +25,7 @@ function OptionButton({ label, selected, onSelect }) {
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container ${selected ? 'bg-primary/10 text-primary font-semibold' : 'text-on-surface hover:bg-surface-container-low'}`}
+      className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-left text-base transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container ${selected ? 'bg-primary/10 text-primary font-semibold' : 'text-on-surface hover:bg-surface-container-low'}`}
     >
       {label}
       {selected && <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">check</span>}

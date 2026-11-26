@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import { Link } from 'react-router-dom'
 import { Menu } from '@mantine/core'
 import DataTable from '../shared/DataTable'
@@ -52,7 +53,6 @@ const TABLE_ID = 'documental-padron'
 const COLUMN_COUNT = 7
 const PENDING_PREVIEW = 3
 const HEADER_CLASS = 'py-3 px-4'
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 
 const TABS = [
