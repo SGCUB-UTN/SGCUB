@@ -52,8 +52,28 @@ def serialize_categoria(categoria):
     return {"categoria_id": categoria.categoria_id, "nombre": categoria.nombre, "genero": categoria.genero}
 
 
+def family_contacts(jugador):
+    vinculos = sorted(jugador.vinculos_familiares.all(), key=lambda vinculo: (not vinculo.responsable_legal, vinculo.persona.apellido.lower()))
+    return [
+        {
+            "nombre": vinculo.persona.nombre,
+            "apellido": vinculo.persona.apellido,
+            "relacion": vinculo.relacion,
+            "telefono": vinculo.persona.telefono or "",
+            "responsable_legal": vinculo.responsable_legal,
+        }
+        for vinculo in vinculos
+    ]
+
+
+def is_minor(persona):
+    return persona.edad is not None and persona.edad < MINOR_AGE
+
+
 def active_profiles():
-    jugadores = Jugador.objects.filter(estado__nombre=ESTADO_DEPORTIVO_ACTIVO).select_related("socio__persona", "categoria")
+    jugadores = Jugador.objects.filter(estado__nombre=ESTADO_DEPORTIVO_ACTIVO).select_related(
+        "socio__persona", "categoria"
+    ).prefetch_related("vinculos_familiares__persona")
     docentes = Docente.objects.filter(estado__nombre=ESTADO_ADMINISTRATIVO_ACTIVO).select_related("persona").prefetch_related(
         "categorias_docente__categoria"
     )
@@ -65,6 +85,8 @@ def active_profiles():
             "persona": jugador.socio.persona,
             "categorias": [serialize_categoria(jugador.categoria)],
             "url_perfil": f"/padron/jugadores/{jugador.jugador_id}",
+            "menor": is_minor(jugador.socio.persona),
+            "contactos": family_contacts(jugador),
         }
         for jugador in jugadores
     ]
@@ -79,6 +101,8 @@ def active_profiles():
                 key=lambda categoria: categoria["nombre"],
             ),
             "url_perfil": f"/padron/docentes/{docente.docente_id}",
+            "menor": False,
+            "contactos": [],
         }
         for docente in docentes
     ]
@@ -158,6 +182,7 @@ def build_padron_documental():
             "apellido": persona.apellido,
             "dni": persona.dni,
             "email": persona.email or "",
+            "telefono": persona.telefono or "",
             "habilitado": not any(
                 documento["obligatorio"] and documento["estado"] in DISQUALIFYING_STATES for documento in documentos
             ),
@@ -277,15 +302,15 @@ def default_template_legend(document_name):
 def template_subject(tipo, persona):
     jugador = getattr(getattr(persona, "socio", None), "jugador", None)
     if jugador and tipo.aplica_jugador:
-        is_minor = persona.edad is not None and persona.edad < MINOR_AGE
+        minor = is_minor(persona)
         guardian = None
-        if is_minor:
+        if minor:
             guardian = jugador.vinculos_familiares.filter(responsable_legal=True).select_related("persona").first()
         return {
             "persona": persona,
             "perfil": PERFIL_JUGADOR,
             "categoria": category_model_label(jugador.categoria),
-            "menor": is_minor,
+            "menor": minor,
             "responsable": guardian,
         }
     if getattr(persona, "docente", None) and tipo.aplica_docente:

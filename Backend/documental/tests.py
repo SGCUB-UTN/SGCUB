@@ -288,6 +288,30 @@ class PadronDocumentalTests(APITestCase):
     def estados(self, persona):
         return {documento["tipo_documento"]: documento["estado"] for documento in persona["documentos"]}
 
+    def test_incluye_telefono_menoria_y_familiares_para_avisar(self):
+        menor = self.jugador("72000101")
+        menor.socio.persona.fecha_nacimiento = timezone.localdate() - timedelta(days=365 * 10)
+        menor.socio.persona.telefono = "2215550000"
+        menor.socio.persona.save()
+        tia = Persona.objects.create(nombre="Ana", apellido="Zeta", dni="72000102", telefono="2215551111")
+        madre = Persona.objects.create(nombre="Laura", apellido="Alfa", dni="72000103", telefono="2215552222")
+        VinculoFamiliar.objects.create(persona=tia, jugador=menor, relacion="Tía")
+        VinculoFamiliar.objects.create(persona=madre, jugador=menor, relacion="Madre", responsable_legal=True)
+        docente = self.docente("72000104")
+
+        data = self.padron()
+
+        jugador = self.persona(data, f"jugador-{menor.pk}")
+        self.assertTrue(jugador["menor"])
+        self.assertEqual(jugador["telefono"], "2215550000")
+        self.assertEqual(
+            [(contacto["nombre"], contacto["relacion"], contacto["telefono"], contacto["responsable_legal"]) for contacto in jugador["contactos"]],
+            [("Laura", "Madre", "2215552222", True), ("Ana", "Tía", "2215551111", False)],
+        )
+        docente_data = self.persona(data, f"docente-{docente.pk}")
+        self.assertFalse(docente_data["menor"])
+        self.assertEqual(docente_data["contactos"], [])
+
     def test_estado_documental_por_persona_toma_el_mas_grave(self):
         sin_documentos = self.jugador("72000001").socio.persona
         con_vencido = self.jugador("72000002").socio.persona
