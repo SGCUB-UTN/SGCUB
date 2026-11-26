@@ -1,5 +1,6 @@
 import unicodedata
 from collections import Counter
+from datetime import date
 
 from django.utils import timezone
 
@@ -22,8 +23,9 @@ POR_VENCER = "por_vencer"
 VENCIDO = "vencido"
 FALTANTE = "faltante"
 DISQUALIFYING_STATES = {VENCIDO, FALTANTE}
-DOCUMENT_STATES = (VIGENTE, POR_VENCER, VENCIDO, FALTANTE)
-FILTERABLE_STATES = (VENCIDO, POR_VENCER, FALTANTE, VIGENTE)
+INHABILITADA = "inhabilitada"
+AL_DIA = "al_dia"
+SITUATIONS = (INHABILITADA, POR_VENCER, AL_DIA)
 PROFILES = (PERFIL_JUGADOR, PERFIL_DOCENTE)
 
 NO_CATEGORY = "none"
@@ -203,13 +205,24 @@ def matches_search(query, fields):
     return all(term in haystack for term in normalize_text(query).split())
 
 
+def person_situation(persona):
+    if not persona["habilitado"]:
+        return INHABILITADA
+    return POR_VENCER if any(documento["estado"] != VIGENTE for documento in persona["documentos"]) else AL_DIA
+
+
+def pending_documents(persona):
+    pending = [documento for documento in persona["documentos"] if documento["estado"] != VIGENTE]
+    return sorted(pending, key=lambda documento: (STATE_SEVERITY.index(documento["estado"]), documento["fecha_vencimiento"] or date.min))
+
+
 def parse_padron_filters(params):
-    estado = params.get("estado") or None
+    situacion = params.get("situacion") or None
     perfil = params.get("perfil") or None
     tipo = params.get("tipo") or None
     categoria = params.get("categoria") or None
-    if estado and estado not in FILTERABLE_STATES:
-        raise PadronFilterError(f"El estado debe ser uno de: {', '.join(FILTERABLE_STATES)}.")
+    if situacion and situacion not in SITUATIONS:
+        raise PadronFilterError(f"La situación debe ser una de: {', '.join(SITUATIONS)}.")
     if perfil and perfil not in PROFILES:
         raise PadronFilterError(f"El perfil debe ser uno de: {', '.join(PROFILES)}.")
     if tipo and not tipo.isdigit():
@@ -220,7 +233,7 @@ def parse_padron_filters(params):
             raise PadronFilterError("El género de la categoría debe ser M o F.")
         if gender is None and not categoria.isdigit():
             raise PadronFilterError("La categoría debe ser un número, none o gender:M/F.")
-    return {"estado": estado, "perfil": perfil, "tipo": int(tipo) if tipo else None, "categoria": categoria, "q": params.get("q", "")}
+    return {"situacion": situacion, "perfil": perfil, "tipo": int(tipo) if tipo else None, "categoria": categoria, "q": params.get("q", "")}
 
 
 def category_matches(persona, categoria):
@@ -234,16 +247,15 @@ def category_matches(persona, categoria):
     return any(item["categoria_id"] == int(categoria) for item in categorias)
 
 
-def filter_document_rows(personas, estado=None, perfil=None, tipo=None, categoria=None, q=""):
+def filter_personas(personas, situacion=None, perfil=None, tipo=None, categoria=None, q=""):
     return [
-        (persona, documento)
+        persona
         for persona in personas
-        if (not perfil or persona["perfil"] == perfil)
+        if (not situacion or person_situation(persona) == situacion)
+        and (not perfil or persona["perfil"] == perfil)
+        and (not tipo or any(documento["tipo_documento"] == tipo for documento in persona["documentos"]))
         and category_matches(persona, categoria)
         and matches_search(q, [persona["apellido"], persona["nombre"], persona["dni"]])
-        for documento in persona["documentos"]
-        if (not estado or documento["estado"] == estado)
-        and (not tipo or documento["tipo_documento"] == tipo)
     ]
 
 
@@ -256,34 +268,35 @@ def most_affected_categories(personas):
     labels = {}
     counts = {}
     for persona in personas:
-        states = Counter(documento["estado"] for documento in persona["documentos"])
+        situation = person_situation(persona)
         for categoria in persona["categorias"]:
             labels[categoria["categoria_id"]] = category_label(categoria)
-            counts.setdefault(categoria["categoria_id"], Counter()).update(states)
+            counts.setdefault(categoria["categoria_id"], Counter())[situation] += 1
     affected = [
         {
             "categoria_id": categoria_id,
             "categoria": labels[categoria_id],
-            "vencidos": states[VENCIDO],
-            "faltantes": states[FALTANTE],
-            "total": sum(states.values()),
+            "inhabilitados": situations[INHABILITADA],
+            "por_vencer": situations[POR_VENCER],
+            "total": sum(situations.values()),
         }
-        for categoria_id, states in counts.items()
-        if states[VENCIDO] or states[FALTANTE]
+        for categoria_id, situations in counts.items()
+        if situations[INHABILITADA] or situations[POR_VENCER]
     ]
-    return sorted(affected, key=lambda item: (-(item["vencidos"] + item["faltantes"]), item["categoria"]))
+    return sorted(affected, key=lambda item: (-item["inhabilitados"], -item["por_vencer"], item["categoria"]))
 
 
 def padron_summary(personas):
     disabled = [persona for persona in personas if not persona["habilitado"]]
-    document_counts = Counter(documento["estado"] for persona in personas for documento in persona["documentos"])
+    situations = Counter(person_situation(persona) for persona in personas)
     return {
         "total": len(personas),
         "habilitados": len(personas) - len(disabled),
         "inhabilitados": len(disabled),
         "inhabilitados_por_perfil": {perfil: sum(persona["perfil"] == perfil for persona in disabled) for perfil in PROFILES},
         "cumplimiento": round((len(personas) - len(disabled)) * 100 / len(personas), 1) if personas else 100.0,
-        "documentos": {estado: document_counts[estado] for estado in DOCUMENT_STATES},
+        "por_vencer": situations[POR_VENCER],
+        "al_dia": situations[AL_DIA],
         "categorias_afectadas": most_affected_categories(personas),
     }
 

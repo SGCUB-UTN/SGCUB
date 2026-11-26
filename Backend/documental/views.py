@@ -328,7 +328,7 @@ def padron_documental_pdf(request):
     generated_at = timezone.localtime()
     pdf = render_padron_pdf(build_padron_documental()["personas"], filters, generated_at)
     response = HttpResponse(pdf, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{padron_filename(generated_at, filters["estado"])}"'
+    response["Content-Disposition"] = f'attachment; filename="{padron_filename(generated_at, filters["situacion"])}"'
     return response
 
 import zipfile

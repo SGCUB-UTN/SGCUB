@@ -11,39 +11,42 @@ from configuracion.services import club_name
 from finanzas.pdf_utils import table
 
 from .services import (
+    AL_DIA,
     FALTANTE,
     GENDER_PREFIX,
+    INHABILITADA,
     NO_CATEGORY,
     PERFIL_DOCENTE,
     PERFIL_JUGADOR,
     POR_VENCER,
     VENCIDO,
-    VIGENTE,
     category_label,
-    filter_document_rows,
+    filter_personas,
     padron_summary,
+    pending_documents,
+    person_situation,
 )
 
 PAGE_SIZE = landscape(A4)
 MOST_AFFECTED_LIMIT = 5
 MARGIN = 15 * mm
-COLUMN_SHARES = (0.24, 0.10, 0.10, 0.20, 0.16, 0.10, 0.10)
-HEADERS = ["Jugador activo / Docente", "DNI", "Perfil", "Categoría", "Documento requerido", "Estado", "Vencimiento"]
-STATE_LABELS = {VIGENTE: "Vigente", POR_VENCER: "Próximo a vencer", VENCIDO: "Vencido", FALTANTE: "Faltante"}
+COLUMN_SHARES = (0.22, 0.10, 0.11, 0.17, 0.11, 0.29)
+HEADERS = ["Persona", "DNI", "Perfil", "Categoría", "Situación", "Documentación pendiente"]
+PENDING_LABELS = {VENCIDO: "Vencido", FALTANTE: "Faltante", POR_VENCER: "Por vencer"}
+SITUATION_LABELS = {INHABILITADA: "Inhabilitado", POR_VENCER: "Por vencer", AL_DIA: "Al día"}
 PROFILE_LABELS = {PERFIL_JUGADOR: "Jugador activo", PERFIL_DOCENTE: "Docente"}
-FILTER_STATE_LABELS = {None: "Todos los documentos", VENCIDO: "Vencidos", POR_VENCER: "Próximos a vencer", FALTANTE: "Faltantes", VIGENTE: "Vigentes"}
+FILTER_SITUATION_LABELS = {None: "Todas las personas", INHABILITADA: "Inhabilitadas", POR_VENCER: "Por vencer", AL_DIA: "Al día"}
 FILTER_PROFILE_LABELS = {None: "Todos", PERFIL_JUGADOR: "Jugadores activos", PERFIL_DOCENTE: "Docentes"}
 FILTER_GENDER_LABELS = {"M": "Todas las masculinas", "F": "Todas las femeninas"}
-STATE_SLUGS = {
-    VENCIDO: "vencidos",
+SITUATION_SLUGS = {
+    INHABILITADA: "inhabilitados",
     POR_VENCER: "por-vencer",
-    FALTANTE: "faltantes",
-    VIGENTE: "vigentes",
+    AL_DIA: "al-dia",
 }
 
 
-def padron_filename(generated_at, estado=None):
-    slug = STATE_SLUGS.get(estado)
+def padron_filename(generated_at, situacion=None):
+    slug = SITUATION_SLUGS.get(situacion)
     prefix = f"reporte-documental-{slug}" if slug else "reporte-documental"
     return f"{prefix}-{generated_at:%Y%m%d-%H%M}.pdf"
 
@@ -54,23 +57,23 @@ def format_count(count, total):
 
 
 def affected_detail(item):
-    parts = [f"{item['vencidos']} vencidos"]
-    if item["faltantes"]:
-        parts.append(f"{item['faltantes']} faltantes")
-    return f"{', '.join(parts)} de {item['total']} documentos"
+    parts = []
+    if item["inhabilitados"]:
+        parts.append(f"{item['inhabilitados']} inhabilitados")
+    if item["por_vencer"]:
+        parts.append(f"{item['por_vencer']} por vencer")
+    return f"{' y '.join(parts)} de {item['total']} personas"
 
 
 def summary_lines(summary):
-    documents = summary["documentos"]
-    total_documents = sum(documents.values())
+    total = summary["total"]
     disabled = summary["inhabilitados_por_perfil"]
     lines = [
-        f"Cumplimiento general: {str(summary['cumplimiento']).replace('.', ',')}% · "
-        f"Habilitados: {summary['habilitados']} de {summary['total']} · Inhabilitados: {summary['inhabilitados']} "
+        f"Habilitados: {format_count(summary['habilitados'], total)} de {total} personas · "
+        f"Inhabilitados: {format_count(summary['inhabilitados'], total)} "
         f"({disabled[PERFIL_JUGADOR]} jugadores activos, {disabled[PERFIL_DOCENTE]} docentes)",
-        "Documentos: " + " · ".join(
-            f"{STATE_LABELS[estado]}: {format_count(documents[estado], total_documents)}" for estado in STATE_LABELS
-        ),
+        f"Por vencer: {format_count(summary['por_vencer'], total)} · Al día: {format_count(summary['al_dia'], total)}",
+        "Queda inhabilitado quien tiene un documento obligatorio vencido o sin presentar.",
     ]
     if summary["categorias_afectadas"]:
         lines.append("Categorías más afectadas: " + ", ".join(
@@ -95,11 +98,11 @@ def document_type_label(tipo, personas):
 
 def filter_text(filters, personas):
     parts = [
-        f"Documentos: {FILTER_STATE_LABELS[filters['estado']]}",
+        f"Situación: {FILTER_SITUATION_LABELS[filters['situacion']]}",
         f"Perfil: {FILTER_PROFILE_LABELS[filters['perfil']]}",
     ]
     if filters["tipo"]:
-        parts.append(f"Tipo: {document_type_label(filters['tipo'], personas)}")
+        parts.append(f"Documento requerido: {document_type_label(filters['tipo'], personas)}")
     if filters["categoria"]:
         parts.append(f"Categoría: {category_filter_label(filters['categoria'], personas)}")
     if filters["q"].strip():
@@ -107,11 +110,13 @@ def filter_text(filters, personas):
     return " · ".join(parts)
 
 
-def document_name(documento):
-    return documento["tipo_documento_nombre"] if documento["obligatorio"] else f"{documento['tipo_documento_nombre']} (opcional)"
+def pending_text(persona):
+    return ", ".join(
+        f"{documento['tipo_documento_nombre']} ({PENDING_LABELS[documento['estado']]})" for documento in pending_documents(persona)
+    )
 
 
-def report_rows(rows, styles):
+def report_rows(personas, styles):
     def cell(text):
         return Paragraph(escape(str(text or "—")), styles["Normal"])
 
@@ -121,16 +126,15 @@ def report_rows(rows, styles):
             persona["dni"],
             PROFILE_LABELS[persona["perfil"]],
             cell(", ".join(category_label(categoria) for categoria in persona["categorias"])),
-            cell(document_name(documento)),
-            STATE_LABELS[documento["estado"]],
-            f"{documento['fecha_vencimiento']:%d/%m/%Y}" if documento["fecha_vencimiento"] else "—",
+            SITUATION_LABELS[person_situation(persona)],
+            cell(pending_text(persona)),
         ]
-        for persona, documento in rows
+        for persona in personas
     ]
 
 
 def render_padron_pdf(personas, filters, generated_at):
-    rows = filter_document_rows(personas, **filters)
+    rows = filter_personas(personas, **filters)
     styles = getSampleStyleSheet()
     title = ParagraphStyle("Titulo", parent=styles["Title"], alignment=0, spaceAfter=2)
     subtitle = ParagraphStyle("Subtitulo", parent=styles["Normal"], textColor=colors.HexColor("#5f6368"))
@@ -148,7 +152,7 @@ def render_padron_pdf(personas, filters, generated_at):
     if rows:
         story.append(table([HEADERS] + report_rows(rows, styles), [width * share for share in COLUMN_SHARES]))
     else:
-        story.append(Paragraph("No hay documentos para los filtros seleccionados.", styles["Normal"]))
+        story.append(Paragraph("No hay personas para los filtros seleccionados.", styles["Normal"]))
 
     buffer = BytesIO()
     SimpleDocTemplate(

@@ -87,7 +87,8 @@ export const filterRows = (rows, filters) => rows.filter((row) => (
   matchesFilters(row, filters) && (filters.situacion === ALL || row.situacion === filters.situacion)
 ))
 
-export const reportParams = ({ perfil, tipo, categoria, search }) => ({
+export const reportParams = ({ situacion, perfil, tipo, categoria, search }) => ({
+  situacion: situacion === ALL ? undefined : situacion,
   perfil: perfil === ALL ? undefined : perfil,
   tipo: tipo === ALL ? undefined : tipo,
   categoria: categoria === ALL_CATEGORIES ? undefined : categoria,
