@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Menu } from '@mantine/core'
 import { createDocumento, downloadPadronDocumentalPdf, updateDocumento } from '../api/documentacion'
 import useDocumentacionPadron from '../hooks/useDocumentacionPadron'
@@ -11,7 +11,7 @@ import PadronComplianceChart from '../components/documental/PadronComplianceChar
 import { appliesToProfile } from '../components/documental/missingDocuments'
 import { downloadDocumentalCsv } from '../components/documental/documentalCsv'
 import { bulkDocumentNotice, selectionNotice } from '../components/documental/documentNotices'
-import { INITIAL_FILTERS, PROFILES, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
+import { INITIAL_FILTERS, PROFILES, affectedCategories, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
@@ -21,7 +21,7 @@ const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-v
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 const TABLE_TITLE_ID = 'documental-table-title'
-const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0'
+const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:gap-0 lg:divide-x lg:[&>*]:px-8 lg:[&>*:first-child]:pl-0 lg:[&>*:last-child]:pr-0'
 
 const withChangeNotice = (request) => async (...args) => {
   const result = await request(...args)
@@ -56,9 +56,9 @@ function DashboardSkeleton() {
     <SkeletonStatus label="Cargando control documental..." className="flex flex-col gap-5">
       <div className={PANEL_CLASS}>
         <HeadingSkeleton />
-        <div className={`${SECTION_CLASS} grid grid-cols-1 sm:grid-cols-2 gap-6`}>
+        <div className={`${SECTION_CLASS} grid grid-cols-1 lg:grid-cols-2 gap-6`}>
           <div className="flex items-center gap-4">
-            <RingSkeleton size={120} stroke={16} />
+            <RingSkeleton size={112} stroke={14} />
             <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
           </div>
           <div className="flex flex-col gap-4">
@@ -99,6 +99,8 @@ export default function DocumentacionDashboard() {
   }
 
   const exportableRows = filterRows(rows, filters)
+  const categories = useMemo(() => affectedCategories(rows), [rows])
+  const withoutDocuments = rows.length > 0 && rows.every((row) => row.documentos.length === 0)
   const disabledPlayers = personas.filter((persona) => !persona.habilitado && persona.perfil === PROFILES.JUGADOR)
 
   const notifyPersonas = (selected) => navigate('/comunicaciones', { state: { debtNotice: selectionNotice(selected) } })
@@ -178,10 +180,19 @@ export default function DocumentacionDashboard() {
           <section className={PANEL_CLASS} aria-labelledby="documental-summary-title">
             <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={HEADING_CLASS} />
             <div className={SECTION_CLASS}>
-              <div className={SUMMARY_GRID_CLASS}>
-                <PadronComplianceChart resumen={resumen} onSelect={selectSituation} />
-                <DocumentAffectedCategories categories={resumen.categorias_afectadas} onSelect={selectCategory} />
-              </div>
+              {withoutDocuments ? (
+                <div className="flex flex-col items-start gap-2 text-base text-on-surface-variant">
+                  <p>No hay documentación obligatoria configurada para jugadores activos ni docentes, así que todavía no hay nada que controlar.</p>
+                  <Link to="/configuracion?tab=documentacion" className="font-semibold text-primary hover:underline">
+                    Configurar documentos obligatorios
+                  </Link>
+                </div>
+              ) : (
+                <div className={SUMMARY_GRID_CLASS}>
+                  <PadronComplianceChart rows={rows} onSelect={selectSituation} />
+                  <DocumentAffectedCategories categories={categories} onSelect={selectCategory} />
+                </div>
+              )}
             </div>
           </section>
 

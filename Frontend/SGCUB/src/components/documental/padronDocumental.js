@@ -121,3 +121,29 @@ export const daysFromToday = (date) => {
 }
 
 export const formatDate = (date) => date.split('-').reverse().join('/')
+
+export const affectedCategories = (rows) => {
+  const categories = new Map()
+  rows.forEach((row) => row.categorias.forEach((categoria) => {
+    const current = categories.get(categoria.categoria_id) ?? {
+      categoria_id: categoria.categoria_id,
+      categoria: categoryLabel(categoria),
+      inhabilitadas: 0,
+      porVencer: 0,
+      total: 0,
+    }
+    current.total += 1
+    if (row.situacion === SITUATIONS.INHABILITADA) current.inhabilitadas += 1
+    if (row.situacion === SITUATIONS.POR_VENCER) current.porVencer += 1
+    categories.set(categoria.categoria_id, current)
+  }))
+  return [...categories.values()]
+    .filter((category) => category.inhabilitadas > 0 || category.porVencer > 0)
+    .sort((a, b) => (
+      b.inhabilitadas - a.inhabilitadas
+      || b.porVencer - a.porVencer
+      || a.categoria.localeCompare(b.categoria, 'es', { numeric: true })
+    ))
+}
+
+export const countBySituation = (rows, situacion) => rows.filter((row) => row.situacion === situacion).length
