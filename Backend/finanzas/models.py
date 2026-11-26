@@ -84,6 +84,11 @@ class EstadoBecaChoices(models.TextChoices):
     CANCELADA = "Cancelada", "Cancelada"
 
 
+class EstadoDevolucionChoices(models.TextChoices):
+    VIGENTE = "Vigente", "Vigente"
+    CANCELADA = "Cancelada", "Cancelada"
+
+
 class EstadoCuentaCorrienteChoices(models.TextChoices):
     ACTIVO = "Activo", "Activo"
     INACTIVO = "Inactivo", "Inactivo"
@@ -385,6 +390,11 @@ class MovimientoCuenta(models.Model):
         return f"{self.tipo_movimiento} - {self.monto}"
 
 
+class DevolucionQuerySet(models.QuerySet):
+    def vigentes(self):
+        return self.filter(estado=EstadoDevolucionChoices.VIGENTE)
+
+
 class Devolucion(models.Model):
     """Money given back to a socio. A manual refund returns money that was never registered as income
     (an overpaid transfer, for instance); a credit note returns money of an annulled receipt. Neither
@@ -418,6 +428,23 @@ class Devolucion(models.Model):
         null=True,
         blank=True,
     )
+    estado = models.CharField(
+        max_length=20,
+        choices=EstadoDevolucionChoices.choices,
+        default=EstadoDevolucionChoices.VIGENTE,
+    )
+    fecha_cancelacion = models.DateTimeField(null=True, blank=True)
+    motivo_cancelacion = models.CharField(max_length=200, blank=True)
+    cancelado_por = models.CharField(max_length=120, blank=True)
+    usuario_cancelacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="devoluciones_canceladas",
+        null=True,
+        blank=True,
+    )
+
+    objects = DevolucionQuerySet.as_manager()
 
     class Meta:
         db_table = "devolucion"
@@ -700,6 +727,7 @@ class AccionAuditoriaChoices(models.TextChoices):
     INGRESO_ANULADO = "IngresoAnulado", "Ingreso anulado"
     NOTA_CREDITO_EMITIDA = "NotaCreditoEmitida", "Nota de crédito emitida"
     DEVOLUCION_REGISTRADA = "DevolucionRegistrada", "Devolución manual registrada"
+    DEVOLUCION_CANCELADA = "DevolucionCancelada", "Devolución cancelada"
 
 
 class RegistroAuditoria(models.Model):

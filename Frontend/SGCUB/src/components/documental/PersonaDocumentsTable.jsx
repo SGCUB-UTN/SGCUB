@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import { INSET_PADDING_X_CLASS } from '../shared/flushTable'
@@ -27,7 +28,6 @@ const COLUMN_COUNT = 5
 
 const ALL = 'all'
 const HEADER_CLASS = 'py-3 px-4'
-const SELECT_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const PRIMARY_ACTION_CLASS = 'text-primary hover:bg-primary-fixed/30'
 const DANGER_ACTION_CLASS = 'text-error hover:bg-error-container/60'
 const compareText = new Intl.Collator('es', { sensitivity: 'base' }).compare
@@ -94,7 +94,7 @@ export default function PersonaDocumentsTable({ documents, getTypeName, onEdit, 
             placeholder="Filtrar por tipo de documento..."
             label="Filtrar documentos"
           />
-          <FilterSelect className={SELECT_CLASS} value={docType} onChange={e => setDocType(e.target.value)} aria-label="Filtrar por tipo de documento">
+          <FilterSelect className={FILTER_CLASS} value={docType} onChange={e => setDocType(e.target.value)} aria-label="Filtrar por tipo de documento">
             <option value={ALL}>Tipo: Todos</option>
             {typeOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </FilterSelect>

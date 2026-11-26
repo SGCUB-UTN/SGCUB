@@ -1,4 +1,5 @@
 import { conceptGroup } from './conceptOrigins'
+import { isCancelledRefund } from './refunds'
 
 const ANNULLED = 'Anulado'
 
@@ -27,14 +28,15 @@ export default function cashSummary(comprobantes, devoluciones) {
   const inForce = comprobantes.filter((comprobante) => comprobante.estado !== ANNULLED)
   const annulled = comprobantes.filter((comprobante) => comprobante.estado === ANNULLED)
   const incomeReceipts = inForce.filter((comprobante) => comprobante.es_ingreso)
+  const refunds = devoluciones.filter((devolucion) => !isCancelledRefund(devolucion))
 
   return {
     income: totalOf(inForce, receiptAmount),
     cuotas: totalOf(inForce.filter((comprobante) => !comprobante.es_ingreso), receiptAmount),
     otherIncome: totalOf(incomeReceipts, receiptAmount),
     concepts: groupByConcept(incomeReceipts),
-    creditNotes: totalOf(devoluciones.filter((devolucion) => devolucion.tipo === 'NotaCredito'), refundAmount),
-    manualRefunds: totalOf(devoluciones.filter((devolucion) => devolucion.tipo === 'Manual'), refundAmount),
+    creditNotes: totalOf(refunds.filter((devolucion) => devolucion.tipo === 'NotaCredito'), refundAmount),
+    manualRefunds: totalOf(refunds.filter((devolucion) => devolucion.tipo === 'Manual'), refundAmount),
     annulled: totalOf(annulled, receiptAmount),
   }
 }

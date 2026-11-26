@@ -1,7 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import { Link } from 'react-router-dom'
 import { getCuota } from '../../api/cuotas'
 import CuotaDetailPanel from '../finanzas/CuotaDetailPanel'
+import ExportMenu from '../shared/ExportMenu'
+import SelectionBar from '../shared/SelectionBar'
+import { formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SortableHeader from '../shared/SortableHeader'
@@ -24,6 +28,7 @@ import {
   CUOTA_TYPES,
   cuotaTypeBadgeClass,
   cuotaTypeLabel,
+  CUOTAS_EXPORT_COLUMNS,
   downloadCuotasCsv,
   formatCount,
   formatMoney,
@@ -58,10 +63,8 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600/60'
 const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
@@ -111,33 +114,6 @@ function SelectAllCheckbox({ rows, selectedIds, onChange }) {
       onChange={() => onChange(!allSelected)}
       aria-label={allSelected ? 'Quitar la selección de todas las cuotas filtradas' : 'Seleccionar todas las cuotas filtradas'}
     />
-  )
-}
-
-function BulkActionsBar({ rows, onExport, onClear }) {
-  return (
-    <div
-      role="region"
-      aria-label="Acciones sobre la selección"
-      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-sky-100 border-b border-sky-300 border-l-4 border-l-sky-600"
-    >
-      <p className="flex items-center gap-2 text-sm text-sky-900 pl-1">
-        <span>
-          <strong className="font-bold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'cuota seleccionada' : 'cuotas seleccionadas'}
-          <span className="text-sky-800"> · Saldo <strong className="font-semibold">{formatMoney(sumBy(rows, 'pending'))}</strong></span>
-        </span>
-      </p>
-      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-        <button type="button" onClick={onExport} className={`${TOOL_BUTTON_CLASS} bg-surface-container-lowest border-sky-300 text-sky-900 hover:bg-sky-50`}>
-          <Icon name="download" />
-          Exportar CSV
-        </button>
-        <button type="button" onClick={onClear} className={`${TOOL_BUTTON_CLASS} border-transparent text-sky-800 hover:bg-sky-200/60`}>
-          <Icon name="close" />
-          Quitar selección
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -327,11 +303,20 @@ export default function PeriodCuotasTable({
       />
 
       {selectedRows.length > 0 && (
-        <BulkActionsBar
-          rows={selectedRows}
-          onExport={() => downloadCuotasCsv(selectedRows, period)}
+        <SelectionBar
+          count={selectedRows.length}
+          singular="cuota seleccionada"
+          plural="cuotas seleccionadas"
+          detail={<>Saldo <strong className="font-semibold text-on-surface tabular-nums">{formatMoney(sumBy(selectedRows, 'pending'))}</strong></>}
           onClear={() => setSelectedIds(new Set())}
-        />
+        >
+          <ExportMenu
+            title={`Cuotas de ${formatPeriod(period)}: selección`}
+            filename={`cuotas-${period}-seleccion`}
+            columns={CUOTAS_EXPORT_COLUMNS}
+            items={selectedRows}
+          />
+        </SelectionBar>
       )}
 
       <div id={tabPanelId(TABLE_ID)} role="tabpanel" aria-label={`Cuotas: ${activeTab.label}`}>

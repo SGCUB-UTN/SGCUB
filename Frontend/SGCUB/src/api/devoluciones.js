@@ -14,6 +14,11 @@ export const registrarDevolucionManual = async (devolucion) => {
   return response.data
 }
 
+export const cancelarDevolucion = async (devolucionId, { motivo, responsable }) => {
+  const response = await api.post(`${devolucionesEndpoint}${devolucionId}/cancelar/`, { motivo, responsable })
+  return response.data
+}
+
 export const descargarDevolucionPdf = async (devolucionId) => {
   const response = await api.get(`${devolucionesEndpoint}${devolucionId}/pdf/`, { responseType: 'blob' })
   savePdfResponse(response, `devolucion-${devolucionId}.pdf`)

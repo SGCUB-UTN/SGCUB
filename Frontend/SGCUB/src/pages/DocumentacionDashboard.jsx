@@ -1,28 +1,25 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Menu } from '@mantine/core'
 import { createDocumento, downloadPadronDocumentalPdf, updateDocumento } from '../api/documentacion'
 import useDocumentacionPadron from '../hooks/useDocumentacionPadron'
 import useDocumentUploadForm from '../hooks/useDocumentUploadForm'
 import DocumentAffectedCategories from '../components/documental/DocumentAffectedCategories'
 import DocumentPadronTable from '../components/documental/DocumentPadronTable'
-import DocumentStatusChart from '../components/documental/DocumentStatusChart'
 import DocumentacionUploadModal from '../components/documental/DocumentacionUploadModal'
 import PadronComplianceChart from '../components/documental/PadronComplianceChart'
 import { appliesToProfile } from '../components/documental/missingDocuments'
 import { downloadDocumentalCsv } from '../components/documental/documentalCsv'
 import { bulkDocumentNotice, selectionNotice } from '../components/documental/documentNotices'
-import { INITIAL_FILTERS, PROFILES, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
+import { INITIAL_FILTERS, PROFILES, affectedCategories, filterRows, personaName, reportParams } from '../components/documental/padronDocumental'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
+import { PANEL_BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS } from '../components/shared/panel'
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../components/shared/Skeleton'
 
-const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
-const HEADING_CLASS = 'px-4 sm:px-5 border-b'
-const SECTION_CLASS = 'p-4 sm:p-5'
 const TABLE_TITLE_ID = 'documental-table-title'
-const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0'
+const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:gap-0 lg:divide-x lg:[&>*]:px-8 lg:[&>*:first-child]:pl-0 lg:[&>*:last-child]:pr-0'
 
 const withChangeNotice = (request) => async (...args) => {
   const result = await request(...args)
@@ -35,12 +32,19 @@ const saveEdit = withChangeNotice(updateDocumento)
 
 const MenuIcon = ({ name }) => <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">{name}</span>
 
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
 function ExportMenu({ disabled, isExporting, onCsv, onPdf }) {
   return (
     <Menu position="bottom-end" shadow="md" width={260} disabled={disabled || isExporting}>
       <Menu.Target>
-        <SecondaryButton icon={isExporting ? 'progress_activity' : 'file_download'} disabled={disabled || isExporting}>
-          {isExporting ? 'Generando PDF...' : 'Exportar reporte'}
+        <SecondaryButton icon={isExporting ? undefined : 'file_download'} disabled={disabled || isExporting} aria-busy={isExporting || undefined}>
+          {isExporting ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] animate-spin motion-reduce:animate-none" aria-hidden="true">progress_activity</span>
+              Generando PDF...
+            </span>
+          ) : 'Exportar reporte'}
         </SecondaryButton>
       </Menu.Target>
       <Menu.Dropdown>
@@ -57,13 +61,11 @@ function DashboardSkeleton() {
     <SkeletonStatus label="Cargando control documental..." className="flex flex-col gap-5">
       <div className={PANEL_CLASS}>
         <HeadingSkeleton />
-        <div className={`${SECTION_CLASS} grid grid-cols-1 sm:grid-cols-3 gap-6`}>
-          {[0, 1].map((index) => (
-            <div key={index} className="flex items-center gap-4">
-              <RingSkeleton size={120} stroke={16} />
-              <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
-            </div>
-          ))}
+        <div className={`${PANEL_BODY_CLASS} grid grid-cols-1 lg:grid-cols-2 gap-6`}>
+          <div className="flex items-center gap-4">
+            <RingSkeleton size={112} stroke={14} />
+            <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
+          </div>
           <div className="flex flex-col gap-4">
             <SkeletonBlock soft className="h-3.5 w-40" />
             <LineSkeletons count={3} className="flex flex-col gap-4" />
@@ -74,7 +76,7 @@ function DashboardSkeleton() {
         <HeadingSkeleton />
         <table className="w-full">
           <tbody>
-            <TableSkeletonRows colSpan={6} animated={false} />
+            <TableSkeletonRows colSpan={7} animated={false} />
           </tbody>
         </table>
       </div>
@@ -84,7 +86,7 @@ function DashboardSkeleton() {
 
 export default function DocumentacionDashboard() {
   const navigate = useNavigate()
-  const { isLoading, error, personas, rows, tipos, resumen } = useDocumentacionPadron()
+  const { isLoading, error, personas, rows, tipos, resumen, reload } = useDocumentacionPadron()
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
   const [filters, setFilters] = useState(INITIAL_FILTERS)
@@ -101,11 +103,13 @@ export default function DocumentacionDashboard() {
     upload.openNew(row.persona_id, row.tipo_documento)
   }
 
+  const exportableRows = filterRows(rows, filters)
+  const categories = useMemo(() => affectedCategories(rows), [rows])
+  const withoutDocuments = rows.length > 0 && rows.every((row) => row.documentos.length === 0)
   const disabledPlayers = personas.filter((persona) => !persona.habilitado && persona.perfil === PROFILES.JUGADOR)
 
   const notifyPersonas = (selected) => navigate('/comunicaciones', { state: { debtNotice: selectionNotice(selected) } })
 
-  const notifyRow = (row) => notifyPersonas(personas.filter((persona) => persona.clave === row.clave))
 
   const notifyDisabled = () => navigate('/comunicaciones', { state: { debtNotice: bulkDocumentNotice(disabledPlayers) } })
 
@@ -115,7 +119,7 @@ export default function DocumentacionDashboard() {
     try {
       await downloadPadronDocumentalPdf(reportParams(filters))
     } catch {
-      setExportError('No se pudo generar el PDF del reporte.')
+      setExportError('No se pudo generar el PDF del reporte. Probá de nuevo.')
     } finally {
       setIsExporting(false)
     }
@@ -123,12 +127,12 @@ export default function DocumentacionDashboard() {
 
   const showTable = (nextFilters) => {
     setFilters(nextFilters)
-    document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' })
   }
 
-  const selectCategory = (categoriaId) => showTable({ ...INITIAL_FILTERS, categoria: String(categoriaId) })
+  const selectCategory = (categoriaId) => showTable({ ...filters, categoria: String(categoriaId) })
 
-  const selectState = (estado) => showTable({ ...filters, estado })
+  const selectSituation = (situacion) => showTable({ ...filters, situacion })
 
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
@@ -142,30 +146,35 @@ export default function DocumentacionDashboard() {
                 icon="notifications"
                 onClick={notifyDisabled}
                 disabled={disabledPlayers.length === 0}
-                title="Prepara un aviso para los jugadores activos inhabilitados. Los docentes no se pueden notificar."
+                title={disabledPlayers.length === 0
+                  ? 'No hay jugadores activos inhabilitados para avisar'
+                  : 'Prepara un email para los jugadores activos inhabilitados en Comunicaciones'}
               >
-                Notificar a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
+                Avisar por email a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
               </PrimaryButton>
               <ExportMenu
-                disabled={!resumen}
+                disabled={!resumen || exportableRows.length === 0}
                 isExporting={isExporting}
-                onCsv={() => downloadDocumentalCsv(filterRows(rows, filters), filters.estado)}
+                onCsv={() => downloadDocumentalCsv(exportableRows, filters.situacion)}
                 onPdf={exportPdf}
               />
             </div>
           )}
         />
-        <p className="max-w-3xl font-body-md text-body-md text-on-surface-variant">
-          Seguimiento de la documentación obligatoria de jugadores activos y docentes del club.
-        </p>
       </div>
 
-      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
+      {exportError && <p className="text-base text-error" role="alert">{exportError}</p>}
 
-      {error && !resumen && (
-        <p className="p-4 bg-error-container/40 border border-error/20 rounded-md text-sm text-on-error-container" role="alert">
-          No se pudo cargar el control documental.
-        </p>
+      {error && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-error-container/40 border border-error/20 rounded-md text-on-error-container" role="alert">
+          <span className="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">cloud_off</span>
+          <p className="flex-1 text-base">
+            {resumen
+              ? 'No pudimos actualizar el control documental. Estás viendo los últimos datos que se cargaron.'
+              : 'No pudimos traer el control documental. Revisá la conexión y probá de nuevo.'}
+          </p>
+          <SecondaryButton icon="refresh" onClick={reload}>Reintentar</SecondaryButton>
+        </div>
       )}
 
       {isLoading && <DashboardSkeleton />}
@@ -173,25 +182,32 @@ export default function DocumentacionDashboard() {
       {resumen && (
         <>
           <section className={PANEL_CLASS} aria-labelledby="documental-summary-title">
-            <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={HEADING_CLASS} />
-            <div className={SECTION_CLASS}>
-              <div className={SUMMARY_GRID_CLASS}>
-                <PadronComplianceChart resumen={resumen} />
-                <DocumentStatusChart counts={resumen.documentos} onSelect={selectState} />
-                <DocumentAffectedCategories categories={resumen.categorias_afectadas} onSelect={selectCategory} />
-              </div>
+            <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={PANEL_HEADING_CLASS} />
+            <div className={PANEL_BODY_CLASS}>
+              {withoutDocuments ? (
+                <div className="flex flex-col items-start gap-2 text-base text-on-surface-variant">
+                  <p>No hay documentación obligatoria configurada para jugadores activos ni docentes, así que todavía no hay nada que controlar.</p>
+                  <Link to="/configuracion?tab=documentacion" className="font-semibold text-primary hover:underline">
+                    Configurar documentos obligatorios
+                  </Link>
+                </div>
+              ) : (
+                <div className={SUMMARY_GRID_CLASS}>
+                  <PadronComplianceChart rows={rows} onSelect={selectSituation} />
+                  <DocumentAffectedCategories categories={categories} onSelect={selectCategory} />
+                </div>
+              )}
             </div>
           </section>
 
           <section className={PANEL_CLASS} aria-labelledby={TABLE_TITLE_ID}>
-            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Documentación requerida" className={`${HEADING_CLASS} scroll-mt-4`} />
+            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Personas y documentación" className={`${PANEL_HEADING_CLASS} scroll-mt-4`} />
             <DocumentPadronTable
               rows={rows}
               personas={personas}
               filters={filters}
               onFiltersChange={setFilters}
               onUpload={openUpload}
-              onNotify={notifyRow}
               onNotifyPersonas={notifyPersonas}
             />
           </section>

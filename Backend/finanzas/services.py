@@ -25,6 +25,7 @@ from .models import (
     EstadoBecaChoices,
     EstadoComprobanteChoices,
     EstadoCuotaChoices,
+    EstadoDevolucionChoices,
     EstadoItemCuotaChoices,
     EstadoPagoChoices,
     ExclusionBeca,
@@ -1389,7 +1390,7 @@ def latest_payment_cuota_ids(payment):
 
 
 def refunded_amount(receipt):
-    return receipt.notas_credito.aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
+    return receipt.notas_credito.vigentes().aggregate(total=Sum("monto"))["total"] or Decimal("0.00")
 
 
 def create_refund(kind, account, concept, amount, payment_method, responsable, user, cancelled_receipt=None):
@@ -1446,6 +1447,39 @@ def create_manual_refund(socio_id, concept, amount, payment_method, responsable,
     """Records money given back that was never registered as income, such as an overpaid transfer."""
     account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
     return create_refund(TipoDevolucionChoices.MANUAL, account, concept, amount, payment_method, responsable, user)
+
+
+@transaction.atomic
+def cancel_refund(refund_id, reason, responsable, user=None):
+    """Cancels a refund registered by mistake. It is kept with its number, stops counting as money given
+    back and, for a credit note, frees that amount to be refunded again from the annulled receipt."""
+    refund = Devolucion.objects.select_for_update(of=("self",)).select_related(
+        "cuenta_corriente__socio", "comprobante_anulado",
+    ).get(pk=refund_id)
+    if refund.estado == EstadoDevolucionChoices.CANCELADA:
+        raise DevolucionInvalidaError("La devolución ya está cancelada.")
+    refund.estado = EstadoDevolucionChoices.CANCELADA
+    refund.fecha_cancelacion = timezone.now()
+    refund.motivo_cancelacion = reason[:200]
+    refund.cancelado_por = responsable[:120]
+    refund.usuario_cancelacion = user
+    refund.save(update_fields=[
+        "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion",
+    ])
+    record_transaction(
+        Accion.DEVOLUCION_CANCELADA,
+        f"{refund.get_tipo_display()} cancelada: {reason}",
+        user,
+        responsable,
+        socio=refund.cuenta_corriente.socio,
+        amount=refund.monto,
+        reference=refund_code(refund),
+        detail={
+            "devolucion_id": refund.pk,
+            "comprobante_anulado": receipt_code(refund.comprobante_anulado) if refund.comprobante_anulado_id else None,
+        },
+    )
+    return refund
 
 
 BENEFIT_SCHOLARSHIP = "Beca"

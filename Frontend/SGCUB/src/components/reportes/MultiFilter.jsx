@@ -3,7 +3,7 @@ import { Popover } from '@mantine/core'
 import { matchesSearch } from '../shared/search'
 import { selectionSummary, toggled } from './reportFilters'
 
-const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full min-w-0 pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-sm font-medium cursor-pointer focus:outline-none focus:border-primary'
+const TRIGGER_CLASS = 'inline-flex items-center gap-2 h-10 w-full min-w-0 pl-3 pr-2.5 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface text-base font-medium cursor-pointer focus:outline-none focus:border-primary'
 const SEARCH_THRESHOLD = 8
 const ICON_STYLE = { fontSize: 18 }
 
@@ -36,7 +36,7 @@ export function CheckOption({ label, checked, onToggle, single = false }) {
       role={single ? 'menuitemradio' : 'menuitemcheckbox'}
       aria-checked={checked}
       onClick={onToggle}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container ${checked ? 'text-primary font-semibold' : 'text-on-surface hover:bg-surface-container-low'}`}
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-base transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-surface-container ${checked ? 'text-primary font-semibold' : 'text-on-surface hover:bg-surface-container-low'}`}
     >
       <span className={`material-symbols-outlined ${checked ? 'text-primary' : 'text-outline'}`} style={ICON_STYLE} aria-hidden="true">
         {checked ? icons.on : icons.off}

@@ -4,7 +4,7 @@ const STATUS_BADGES = {
   vigente: { label: 'Vigente', tono: 'ok' },
   por_vencer: { label: 'Por vencer', tono: 'alerta' },
   vencido: { label: 'Vencido', tono: 'error' },
-  faltante: { label: 'Faltante', tono: 'neutro' },
+  faltante: { label: 'Faltante', tono: 'error' },
 }
 
 export default function DocumentStatusBadge({ status }) {

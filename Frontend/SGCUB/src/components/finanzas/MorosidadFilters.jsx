@@ -13,7 +13,7 @@ import {
   yearOptions,
 } from './delinquencyFilters'
 
-const FILTER_CLASS = 'bg-surface-container-lowest border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
+const FILTER_CLASS = 'bg-surface-container-lowest border border-outline-variant/40 rounded text-on-surface font-body-sm text-base font-medium focus:outline-none focus:border-primary cursor-pointer'
 const GROUP_CLASS = 'flex flex-wrap items-center gap-2 sm:pl-4 sm:border-l sm:border-outline-variant/40 sm:first:pl-0 sm:first:border-l-0'
 
 function MorosidadFilters({ filters, onChange, categorias }) {

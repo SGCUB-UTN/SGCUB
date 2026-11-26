@@ -34,6 +34,9 @@ const STATE_TONES = {
 
 function CuotaStateBadge({ cuota }) {
   const state = cuotaState(cuota)
+  if (state === CUOTA_STATES.EN_FECHA && String(cuota.periodo) > currentPeriod()) {
+    return <StatusBadge size="md" badge={{ label: 'Próxima', tono: 'neutro' }} />
+  }
   return <StatusBadge size="md" badge={{ label: cuotaStateLabel(state), tono: STATE_TONES[state] ?? 'neutro' }} />
 }
 

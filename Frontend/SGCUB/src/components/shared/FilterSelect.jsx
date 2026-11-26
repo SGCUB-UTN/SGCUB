@@ -8,7 +8,7 @@ export default function FilterSelect({ etiqueta, className = '', width, children
   return (
     <div className={`flex items-center gap-2 w-full min-w-0 max-w-full ${width ?? 'sm:w-auto'}`}>
       {etiqueta && (
-        <label htmlFor={id} className="text-sm font-medium text-on-surface-variant whitespace-nowrap">
+        <label htmlFor={id} className="text-base font-medium text-on-surface-variant whitespace-nowrap">
           {etiqueta}
         </label>
       )}
