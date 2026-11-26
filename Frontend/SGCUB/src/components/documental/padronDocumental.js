@@ -15,13 +15,6 @@ export const PROFILES = {
 
 export const PROFILE_LABELS = { [PROFILES.JUGADOR]: 'Jugador activo', [PROFILES.DOCENTE]: 'Docente' }
 
-export const STATE_LABELS = {
-  [DOCUMENT_STATES.VIGENTE]: 'Vigente',
-  [DOCUMENT_STATES.POR_VENCER]: 'Próximo a vencer',
-  [DOCUMENT_STATES.VENCIDO]: 'Vencido',
-  [DOCUMENT_STATES.FALTANTE]: 'Faltante',
-}
-
 export const categoryLabel = (categoria) => {
   const gender = findGender(categoria.genero)
   return gender ? `${categoria.nombre} (${gender.shortLabel})` : categoria.nombre

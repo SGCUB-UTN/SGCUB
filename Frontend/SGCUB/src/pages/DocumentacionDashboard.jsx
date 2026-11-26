@@ -141,9 +141,11 @@ export default function DocumentacionDashboard() {
                 icon="notifications"
                 onClick={notifyDisabled}
                 disabled={disabledPlayers.length === 0}
-                title="Prepara un aviso para los jugadores activos inhabilitados. Los docentes no se pueden notificar."
+                title={disabledPlayers.length === 0
+                  ? 'No hay jugadores activos inhabilitados para avisar'
+                  : 'Prepara un email para los jugadores activos inhabilitados en Comunicaciones'}
               >
-                Notificar a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
+                Avisar por email a inhabilitados{disabledPlayers.length > 0 && ` (${disabledPlayers.length})`}
               </PrimaryButton>
               <ExportMenu
                 disabled={!resumen || exportableRows.length === 0}
@@ -154,9 +156,6 @@ export default function DocumentacionDashboard() {
             </div>
           )}
         />
-        <p className="max-w-3xl font-body-md text-body-md text-on-surface-variant">
-          Seguimiento de la documentación obligatoria de jugadores activos y docentes del club.
-        </p>
       </div>
 
       {exportError && <p className="text-base text-error" role="alert">{exportError}</p>}
@@ -197,7 +196,7 @@ export default function DocumentacionDashboard() {
           </section>
 
           <section className={PANEL_CLASS} aria-labelledby={TABLE_TITLE_ID}>
-            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Documentación requerida" className={`${HEADING_CLASS} scroll-mt-4`} />
+            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Personas y documentación" className={`${HEADING_CLASS} scroll-mt-4`} />
             <DocumentPadronTable
               rows={rows}
               personas={personas}

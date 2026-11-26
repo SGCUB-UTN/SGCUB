@@ -301,6 +301,7 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
 
   const selectedRows = useMemo(() => sorted.filter((row) => selectedKeys.has(row.key)), [sorted, selectedKeys])
   const notifiable = useMemo(() => notifiablePersonas(selectedRows), [selectedRows])
+  const excludedFromEmail = selectedRows.length - notifiable.length
 
   const toggleRow = (key) => setSelectedKeys((current) => {
     const next = new Set(current)
@@ -367,6 +368,9 @@ export default function DocumentPadronTable({ rows, personas, filters, onFilters
           count={selectedRows.length}
           singular="persona seleccionada"
           plural="personas seleccionadas"
+          detail={excludedFromEmail > 0 && (excludedFromEmail === 1
+            ? '1 queda afuera del email por ser docente o estar al día'
+            : `${formatCount(excludedFromEmail)} quedan afuera del email por ser docentes o estar al día`)}
           onClear={() => setSelectedKeys(new Set())}
         >
           <PrimaryButton
