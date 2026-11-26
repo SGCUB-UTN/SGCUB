@@ -21,6 +21,7 @@ import RowIconButton from '../shared/RowIconButton'
 import { WhatsAppIcon } from '../finanzas/WhatsAppComprobanteButton'
 import { openWhatsAppChat } from '../../utils/whatsapp'
 import { NO_CATEGORY } from '../shared/categoryFilters'
+import { TONOS_BADGE } from '../shared/statusTones'
 import { formatCount } from '../cuota/cuotaPeriod'
 import { formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
@@ -56,8 +57,8 @@ const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 
 const TABS = [
   { value: ALL, label: 'Todas las personas', emptyText: 'No hay jugadores activos ni docentes con documentación obligatoria.' },
-  { value: SITUATIONS.INHABILITADA, label: 'Inhabilitadas', emptyText: 'No hay personas inhabilitadas.', badgeClass: 'bg-error-container text-on-error-container' },
-  { value: SITUATIONS.POR_VENCER, label: 'Por vencer', emptyText: 'No hay personas con documentos por vencer.', badgeClass: 'bg-amber-100 text-amber-800' },
+  { value: SITUATIONS.INHABILITADA, label: 'Inhabilitadas', emptyText: 'No hay personas inhabilitadas.', badgeClass: TONOS_BADGE.error },
+  { value: SITUATIONS.POR_VENCER, label: 'Por vencer', emptyText: 'No hay personas con documentos por vencer.', badgeClass: TONOS_BADGE.alerta },
   { value: SITUATIONS.AL_DIA, label: 'Al día', emptyText: 'No hay personas con toda la documentación al día.' },
 ]
 
@@ -86,12 +87,12 @@ const stopPropagation = (event) => event.stopPropagation()
 
 const PENDING_TONES = {
   [DOCUMENT_STATES.VENCIDO]: 'text-error',
-  [DOCUMENT_STATES.FALTANTE]: 'text-on-surface-variant',
+  [DOCUMENT_STATES.FALTANTE]: 'text-error',
   [DOCUMENT_STATES.POR_VENCER]: 'text-amber-700',
 }
 
 const pendingDetail = (documento) => {
-  if (documento.estado === DOCUMENT_STATES.FALTANTE) return { text: 'falta presentar', tone: 'text-on-surface-variant' }
+  if (documento.estado === DOCUMENT_STATES.FALTANTE) return { text: 'falta presentar', tone: 'text-error' }
   const days = documento.fecha_vencimiento ? daysFromToday(documento.fecha_vencimiento) : null
   if (documento.estado === DOCUMENT_STATES.VENCIDO) {
     return { text: days === null ? 'vencido' : `venció hace ${plural(-days, 'día', 'días')}`, tone: 'text-error' }

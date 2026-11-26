@@ -7,7 +7,7 @@ import { PROFILES, SITUATIONS, countBySituation } from './padronDocumental'
 
 const SEGMENTS = [
   { key: SITUATIONS.INHABILITADA, label: 'Inhabilitados', fill: 'bg-error', stroke: 'stroke-error', title: 'Ver las personas inhabilitadas en la tabla' },
-  { key: SITUATIONS.POR_VENCER, label: 'Por vencer', fill: 'bg-amber-500', stroke: 'stroke-amber-500', title: 'Ver las personas con documentos por vencer en la tabla' },
+  { key: SITUATIONS.POR_VENCER, label: 'Por vencer', fill: 'bg-amber-600', stroke: 'stroke-amber-600', title: 'Ver las personas con documentos por vencer en la tabla' },
   { key: SITUATIONS.AL_DIA, label: 'Al día', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600', title: 'Ver las personas al día en la tabla' },
 ]
 

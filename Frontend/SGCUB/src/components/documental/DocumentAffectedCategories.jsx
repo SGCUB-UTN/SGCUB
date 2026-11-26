@@ -9,7 +9,7 @@ const PREVIEW_COUNT = 3
 
 const SEGMENTS = [
   { key: 'inhabilitadas', label: 'Inhabilitados', fill: 'bg-error', text: 'text-error' },
-  { key: 'porVencer', label: 'Por vencer', fill: 'bg-amber-500', text: 'text-amber-700' },
+  { key: 'porVencer', label: 'Por vencer', fill: 'bg-amber-600', text: 'text-amber-700' },
 ]
 
 const LEGEND = [...SEGMENTS, { key: 'alDia', label: 'Al día', fill: 'bg-emerald-600' }]

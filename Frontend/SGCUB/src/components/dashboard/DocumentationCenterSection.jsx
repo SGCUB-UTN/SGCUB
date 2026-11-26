@@ -12,7 +12,7 @@ import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const SEGMENTS = [
   { key: 'valid', label: 'Vigentes', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600' },
-  { key: 'expiring', label: 'Próximos a vencer', fill: 'bg-amber-600', stroke: 'stroke-amber-600' },
+  { key: 'expiring', label: 'Por vencer', fill: 'bg-amber-600', stroke: 'stroke-amber-600' },
   { key: 'expired', label: 'Vencidos', fill: 'bg-error', stroke: 'stroke-error' },
   { key: 'missing', label: 'Faltantes', fill: 'bg-outline', stroke: 'stroke-outline' },
 ]

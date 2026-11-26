@@ -15,11 +15,9 @@ import { INITIAL_FILTERS, PROFILES, affectedCategories, filterRows, personaName,
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import PageHeader from '../components/shared/PageHeader'
 import SectionHeading from '../components/shared/SectionHeading'
+import { PANEL_BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS } from '../components/shared/panel'
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus, TableSkeletonRows } from '../components/shared/Skeleton'
 
-const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
-const HEADING_CLASS = 'px-4 sm:px-5 border-b'
-const SECTION_CLASS = 'p-4 sm:p-5'
 const TABLE_TITLE_ID = 'documental-table-title'
 const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:gap-0 lg:divide-x lg:[&>*]:px-8 lg:[&>*:first-child]:pl-0 lg:[&>*:last-child]:pr-0'
 
@@ -34,12 +32,19 @@ const saveEdit = withChangeNotice(updateDocumento)
 
 const MenuIcon = ({ name }) => <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">{name}</span>
 
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
 function ExportMenu({ disabled, isExporting, onCsv, onPdf }) {
   return (
     <Menu position="bottom-end" shadow="md" width={260} disabled={disabled || isExporting}>
       <Menu.Target>
-        <SecondaryButton icon={isExporting ? 'progress_activity' : 'file_download'} disabled={disabled || isExporting}>
-          {isExporting ? 'Generando PDF...' : 'Exportar reporte'}
+        <SecondaryButton icon={isExporting ? undefined : 'file_download'} disabled={disabled || isExporting} aria-busy={isExporting || undefined}>
+          {isExporting ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] animate-spin motion-reduce:animate-none" aria-hidden="true">progress_activity</span>
+              Generando PDF...
+            </span>
+          ) : 'Exportar reporte'}
         </SecondaryButton>
       </Menu.Target>
       <Menu.Dropdown>
@@ -56,7 +61,7 @@ function DashboardSkeleton() {
     <SkeletonStatus label="Cargando control documental..." className="flex flex-col gap-5">
       <div className={PANEL_CLASS}>
         <HeadingSkeleton />
-        <div className={`${SECTION_CLASS} grid grid-cols-1 lg:grid-cols-2 gap-6`}>
+        <div className={`${PANEL_BODY_CLASS} grid grid-cols-1 lg:grid-cols-2 gap-6`}>
           <div className="flex items-center gap-4">
             <RingSkeleton size={112} stroke={14} />
             <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
@@ -122,7 +127,7 @@ export default function DocumentacionDashboard() {
 
   const showTable = (nextFilters) => {
     setFilters(nextFilters)
-    document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById(TABLE_TITLE_ID)?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' })
   }
 
   const selectCategory = (categoriaId) => showTable({ ...filters, categoria: String(categoriaId) })
@@ -177,8 +182,8 @@ export default function DocumentacionDashboard() {
       {resumen && (
         <>
           <section className={PANEL_CLASS} aria-labelledby="documental-summary-title">
-            <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={HEADING_CLASS} />
-            <div className={SECTION_CLASS}>
+            <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={PANEL_HEADING_CLASS} />
+            <div className={PANEL_BODY_CLASS}>
               {withoutDocuments ? (
                 <div className="flex flex-col items-start gap-2 text-base text-on-surface-variant">
                   <p>No hay documentación obligatoria configurada para jugadores activos ni docentes, así que todavía no hay nada que controlar.</p>
@@ -196,7 +201,7 @@ export default function DocumentacionDashboard() {
           </section>
 
           <section className={PANEL_CLASS} aria-labelledby={TABLE_TITLE_ID}>
-            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Personas y documentación" className={`${HEADING_CLASS} scroll-mt-4`} />
+            <SectionHeading id={TABLE_TITLE_ID} icon="fact_check" title="Personas y documentación" className={`${PANEL_HEADING_CLASS} scroll-mt-4`} />
             <DocumentPadronTable
               rows={rows}
               personas={personas}
