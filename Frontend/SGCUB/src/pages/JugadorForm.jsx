@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getJugador, patchJugador, postJugador } from '../api/jugadores'
+import { getLigas } from '../api/ligas'
 import { getObrasSociales, getTallesIndumentaria, postObraSocial } from '../api/personasConfig'
 import { compareObrasSociales, compareTalles } from '../components/configuracion/personasSettingsSort'
 import { putSocio } from '../api/socios'
 import { categoriaAdmiteEdad } from '../components/categorias/categoriaFormat'
 import ContactModal from '../components/jugadores/ContactModal'
 import FilaContacto from '../components/jugadores/FilaContacto'
+import LigasField from '../components/jugadores/LigasField'
 import { CAMPOS_CONTACTO, CAMPOS_DOMICILIO_CONTACTO, contactoAFila, filaAContacto, idCampoContacto, validarContactos } from '../components/jugadores/contacts'
 import { BotonCambiarPersona, ListaSugerenciasPersona } from '../components/shared/PersonaSearchDNI'
 import { formatDni, formatNumber, getErrorMessage } from '../components/personas/format'
@@ -26,6 +28,7 @@ import { uploadPersonaFoto, deletePersonaFoto } from '../api/personaFoto'
 const DEPORTIVO_INICIAL = {
   categoria: '',
   categoria_secundaria: '',
+  ligas: [],
   estado: '',
   obra_social: '',
   tallaIndumentaria: '',
@@ -64,6 +67,7 @@ const jugadorAFormulario = (jugador) => ({
   nivel_educacion: jugador.nivel_educacion ?? null,
   categoria: String(jugador.categoria?.categoria_id ?? ''),
   categoria_secundaria: String(jugador.categoria_secundaria?.categoria_id ?? ''),
+  ligas: (jugador.ligas ?? []).map((liga) => String(liga.liga_id)),
   estado: String(jugador.estado?.estado_id ?? ''),
   obra_social: jugador.obra_social ?? '',
   tallaIndumentaria: jugador.tallaIndumentaria ?? '',
@@ -137,6 +141,7 @@ function JugadorForm() {
   const [personaEncontrada, setPersonaEncontrada] = useState(null)
   const [obrasSocialesLista, setObrasSocialesLista] = useState(OBRAS_SOCIALES)
   const [tallesLista, setTallesLista] = useState(TALLES)
+  const [ligas, setLigas] = useState([])
   const [foto, setFoto] = useState(null)
   const [eliminarFoto, setEliminarFoto] = useState(false)
   const busqueda = usePersonaSearchDNI({ habilitada: !editando })
@@ -159,6 +164,8 @@ function JugadorForm() {
         }
       })
       .catch(() => {})
+
+    getLigas().then(setLigas).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -390,6 +397,7 @@ function JugadorForm() {
     const {
       categoria,
       categoria_secundaria,
+      ligas: ligasSeleccionadas,
       estado,
       obra_social,
       tallaIndumentaria,
@@ -403,6 +411,7 @@ function JugadorForm() {
     const datosJugador = {
       categoria,
       categoria_secundaria: categoria_secundaria || null,
+      ligas: ligasSeleccionadas.map(Number),
       ...(editando ? { estado } : {}),
       obra_social,
       esquema_vacunacion,
@@ -772,6 +781,11 @@ function JugadorForm() {
                     ))}
                   </SelectConFlecha>
                 </Campo>
+                <LigasField
+                  ligas={ligas}
+                  value={formulario.ligas ?? []}
+                  onChange={(valor) => actualizarCampo('ligas', valor)}
+                />
                 {editando ? 
                   <Campo id="estado" label="Estado deportivo" requerido error={errores.estado}>
                     <SelectConFlecha {...bindInput('estado')} conError={Boolean(errores.estado)}>

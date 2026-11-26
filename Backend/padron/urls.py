@@ -30,6 +30,8 @@ from .views import (
     tipo_relacion_familiar_detail,
     obra_social_list_create,
     obra_social_detail,
+    liga_list_create,
+    liga_detail,
     talle_indumentaria_list_create,
     talle_indumentaria_detail,
 )
@@ -64,6 +66,8 @@ urlpatterns = [
     path("tipo-relacion-familiar/<int:pk>/", tipo_relacion_familiar_detail, name="tipo-relacion-familiar-detail"),
     path("obra-social/", obra_social_list_create, name="obra-social-list"),
     path("obra-social/<int:pk>/", obra_social_detail, name="obra-social-detail"),
+    path("liga/", liga_list_create, name="liga-list"),
+    path("liga/<int:pk>/", liga_detail, name="liga-detail"),
     path("talle-indumentaria/", talle_indumentaria_list_create, name="talle-indumentaria-list"),
     path("talle-indumentaria/<int:pk>/", talle_indumentaria_detail, name="talle-indumentaria-detail"),
     path("docente-categoria/", docente_categoria_list, name="docente-categoria-list"),

@@ -166,7 +166,6 @@ function DocenteDetail() {
 
   const persona = docente.persona_detalle ?? {}
   const contactos = docente.vinculos_familiares ?? []
-  const nombresCargos = (docente.asignaciones ?? []).map((asignacion) => asignacion.cargo_nombre).filter(Boolean).join(', ')
   const activo = isActiveStatus(docente.estado_nombre)
 
   const handleDownloadPhoto = async () => {
@@ -268,7 +267,6 @@ function DocenteDetail() {
           { label: 'Legajo', value: formatNumber(docente.legajo), highlighted: true },
           { label: 'Alta', value: formatDate(docente.fecha_ingreso) },
           { label: 'Antigüedad', value: yearsText(yearsSince(docente.fecha_ingreso)) },
-          ...(nombresCargos ? [{ label: 'Cargos', value: nombresCargos }] : []),
         ]}
         statusAction={activo && (
           <DeactivateButton

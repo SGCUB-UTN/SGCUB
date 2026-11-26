@@ -24,6 +24,8 @@ import Morosidad from './pages/Morosidad'
 import ReportesPadron from './pages/ReportesPadron'
 
 import CategoriaDetail from './pages/CategoriaDetail'
+import Ligas from './pages/Ligas'
+import LigaDetail from './pages/LigaDetail'
 
 import Usuarios from './pages/Usuarios'
 import ChangePassword from './pages/ChangePassword'
@@ -118,6 +120,14 @@ export const router = createBrowserRouter([
               {
                 path: 'categorias/:id',
                 element: <CategoriaDetail />,
+              },
+              {
+                path: 'ligas',
+                element: <Ligas />,
+              },
+              {
+                path: 'ligas/:id',
+                element: <LigaDetail />,
               },
               {
                 path: 'reportes',
