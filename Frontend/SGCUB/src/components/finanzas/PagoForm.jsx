@@ -12,6 +12,7 @@ import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue 
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
 import useMediosPago from '../../hooks/useMediosPago'
+import useRevertPayment from '../../hooks/useRevertPayment'
 
 const COLUMN_COUNT = 3
 
@@ -192,8 +193,6 @@ function CuotasTable({
   lines,
   debtTotal,
   period,
-  showFuture,
-  onToggleFuture,
   expandedIds,
   onToggleExpand,
   onRemoveItem,
@@ -209,13 +208,13 @@ function CuotasTable({
 
   const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
   const futureLines = lines.filter((line) => isFuture(line.cuota, period))
-  const coveredFuture = futureLines.filter((line) => line.applied > 0)
-  const otherFuture = futureLines.filter((line) => line.applied <= 0)
-  const futureToggleLabel = coveredFuture.length > 0 ? 'Ver más cuotas futuras' : 'Ver cuotas futuras'
+  const coveredCount = futureLines.filter((line) => line.applied > 0).length
+  const visibleFuture = futureLines.slice(0, Math.max(1, coveredCount))
   const renderLine = (line) => (
     <CuotaLine
       key={line.cuota.cuota_id}
       line={line}
+      upcoming={isFuture(line.cuota, period)}
       expandedIds={expandedIds}
       onToggleExpand={onToggleExpand}
       onRemoveItem={onRemoveItem}
@@ -250,29 +249,14 @@ function CuotasTable({
         </tr>
       )}
       {dueLines.map(renderLine)}
-      {coveredFuture.map(renderLine)}
-      {otherFuture.length > 0 && (
-        <tr>
-          <td colSpan={COLUMN_COUNT} className="py-1 px-3">
-            <button
-              type="button"
-              onClick={onToggleFuture}
-              aria-expanded={showFuture}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[18px] transition-transform ${showFuture ? 'rotate-180' : ''}`} aria-hidden="true">expand_more</span>
-              {showFuture ? 'Ocultar cuotas futuras' : `${futureToggleLabel} (${otherFuture.length})`}
-            </button>
-          </td>
-        </tr>
-      )}
-      {showFuture && otherFuture.map(renderLine)}
+      {visibleFuture.map(renderLine)}
     </DataTable>
   )
 }
 
 function CuotaLine({
   line,
+  upcoming = false,
   expandedIds,
   onToggleExpand,
   onRemoveItem,
@@ -298,6 +282,7 @@ function CuotaLine({
         </td>
         <td className="py-1.5 px-3">
           <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
               <span
                 className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
@@ -306,7 +291,11 @@ function CuotaLine({
                 {cuotaStateShortLabel(cuota.estado_cuota)}
               </span>
             )}
-            <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
+            {upcoming && (
+              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
+                Próxima
+              </span>
+            )}
           </div>
         </td>
         <td className="py-1.5 px-3 text-right">
@@ -514,19 +503,20 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onCancel, onSuccess, onAssignBenefit, onAccountChanged }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted }) {
+  const { openReversal } = useRevertPayment()
   const period = currentPeriod()
   const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
+  const paymentLimit = cuenta?.periodo_limite_pago ?? (debtOnly ? period : null)
   const pendingCuotas = useMemo(
     () => (cuenta?.cuotas ?? [])
       .filter((cuota) => Number(cuota.saldo_pendiente ?? 0) > 0)
-      .filter((cuota) => !debtOnly || !isFuture(cuota, period))
+      .filter((cuota) => !paymentLimit || !isFuture(cuota, paymentLimit))
       .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)) || a.cuota_id - b.cuota_id),
-    [cuenta, debtOnly, period],
+    [cuenta, paymentLimit],
   )
   const dueCount = pendingCuotas.filter((cuota) => !isFuture(cuota, period)).length
   const [suggestedCount] = useState(() => initialCount(pendingCuotas, initialCuotaIds, period))
-  const [showFuture, setShowFuture] = useState(() => suggestedCount > dueCount)
   const [expandedIds, setExpandedIds] = useState([])
   const [removal, setRemoval] = useState(null)
   const paymentCuotas = pendingCuotas
@@ -655,8 +645,13 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     setReceipt((current) => ({ ...current, detalle }))
   }
 
+  const revertPayment = () => {
+    onRevertStart?.()
+    openReversal({ comprobanteId: receipt.comprobanteId, onChanged: onReverted })
+  }
+
   if (receipt) {
-    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onBack={onCancel} />
+    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onRevert={revertPayment} />
   }
 
   const noDebt = !paymentCuotas.some((cuota) => cuotaDue(cuota) > 0)
@@ -665,8 +660,8 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     if (saving) return 'Registrando...'
     if (exceedsDebt) return `Excede las cuotas pendientes en ${formatAmount(roundCents(enteredTotal - pendingTotal))}`
     if (!(enteredTotal > 0)) return 'Ingresá el monto del pago'
-    if (excess > 0) return `Confirmar pago y nota de crédito • ${formatAmount(enteredTotal)}`
-    return `Confirmar pago • ${formatAmount(enteredTotal)}`
+    if (excess > 0) return 'Confirmar pago y nota de crédito'
+    return 'Confirmar pago'
   }
 
   return (
@@ -685,8 +680,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                 lines={lines}
                 debtTotal={debtTotal}
                 period={period}
-                showFuture={showFuture}
-                onToggleFuture={() => setShowFuture((current) => !current)}
                 expandedIds={expandedIds}
                 onToggleExpand={toggleExpand}
                 onRemoveItem={onAccountChanged ? (cuota, item) => setRemoval({ cuota, item }) : undefined}

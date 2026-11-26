@@ -15,7 +15,7 @@ from documental.models import TipoDocumento
 from finanzas.delinquency import delinquency_report
 from finanzas.delinquency_pdf import render_delinquency_pdf
 from finanzas.models import ConfiguracionFinanciera, CuentaCorriente, Cuota, EstadoCuotaChoices, ItemCuota, MedioPago, MovimientoCuenta
-from finanzas.services import create_or_update_player_current_cuota
+from finanzas.services import CUOTA_WINDOW_MONTHS, create_or_update_player_current_cuota
 from padron.models import Categoria, Jugador, Localidad, Persona, Socio
 
 from .models import ConfiguracionGeneral, HistorialConfiguracion
@@ -202,12 +202,12 @@ class CategoriasExentasTests(APITestCase):
 
     def test_marcar_categoria_exenta_anula_cuotas_desde_el_mes_actual_y_registra_historial(self):
         create_or_update_player_current_cuota(self.socio.pk)
-        self.assertEqual(len(self.periodos()), 3)
+        self.assertEqual(len(self.periodos()), CUOTA_WINDOW_MONTHS)
 
         response = self.guardar({str(self.categoria.pk): True})
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["cuotas_anuladas"], 3)
+        self.assertEqual(response.data["cuotas_anuladas"], CUOTA_WINDOW_MONTHS)
         self.categoria.refresh_from_db()
         self.assertTrue(self.categoria.exenta_cuota)
         self.assertEqual(self.periodos(), [])
@@ -223,7 +223,7 @@ class CategoriasExentasTests(APITestCase):
         response = self.guardar({str(self.categoria.pk): False})
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(len(self.periodos()), 3)
+        self.assertEqual(len(self.periodos()), CUOTA_WINDOW_MONTHS)
 
     def test_sin_cambios_reales_no_guarda(self):
         response = self.guardar({str(self.categoria.pk): False})

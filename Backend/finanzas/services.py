@@ -100,7 +100,7 @@ def due_date(first_day, day):
     return first_day.replace(day=min(day, monthrange(first_day.year, first_day.month)[1]))
 
 
-CUOTA_WINDOW_MONTHS = 3
+CUOTA_WINDOW_MONTHS = 12
 
 
 def generation_periods(base_date=None, months=CUOTA_WINDOW_MONTHS):
@@ -298,22 +298,81 @@ def schedule_exemption_sync(socio_id, previous_category, category):
         transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))
 
 
-@transaction.atomic
-def annul_exempt_cuotas(socio_ids, today=None, user=None):
-    current_period = (today or timezone.localdate()).strftime(PERIOD_FORMAT)
-    cuotas = (
-        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=current_period)
+def unpaid_cuotas_from(socio_ids, from_period):
+    return (
+        Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=from_period)
         .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .select_related("movimiento")
         .order_by("periodo", "pk")
     )
+
+
+@transaction.atomic
+def annul_unpaid_cuotas(socio_ids, from_period, user=None):
     annulled = 0
-    for cuota in cuotas:
+    for cuota in unpaid_cuotas_from(socio_ids, from_period):
         if is_locked(cuota):
             continue
         delete_cuota(cuota, user)
         annulled += 1
     return annulled
+
+
+def annul_exempt_cuotas(socio_ids, today=None, user=None):
+    return annul_unpaid_cuotas(socio_ids, (today or timezone.localdate()).strftime(PERIOD_FORMAT), user)
+
+
+def following_period(period):
+    return generation_periods(parse_period(period), months=2)[1]
+
+
+def annul_cuotas_after_leave(socio, user=None):
+    limit = payment_period_limit(socio)
+    return annul_unpaid_cuotas([socio.pk], following_period(limit), user) if limit else 0
+
+
+def sync_cuotas_with_member_state(socio_id, user=None):
+    socio = Socio.objects.get(pk=socio_id)
+    if socio.is_inactive:
+        return annul_cuotas_after_leave(socio, user)
+    return create_or_update_player_current_cuota(socio_id)
+
+
+SPORTS_LEAVE_REASON = "Baja deportiva"
+SPORTS_LEAVE_START = {"actual": 0, "siguiente": 1}
+
+
+def sports_leave_period(option, today=None):
+    if option not in SPORTS_LEAVE_START:
+        raise ValueError("Indicá desde qué mes se cobra solo la cuota social: 'actual' o 'siguiente'.")
+    return generation_periods(today or timezone.localdate(), months=2)[SPORTS_LEAVE_START[option]]
+
+
+@transaction.atomic
+def stop_sports_charge(socio_id, from_period, user=None):
+    updated = 0
+    for cuota_id in unpaid_cuotas_from([socio_id], from_period).values_list("pk", flat=True):
+        cuota = lock_cuota(cuota_id)
+        if is_locked(cuota):
+            continue
+        items = list(cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA))
+        if not items:
+            continue
+        for item in items:
+            annul_item(item, SPORTS_LEAVE_REASON, user=user)
+        sync_cuota_charge(cuota)
+        refresh_cuota_scholarships(cuota, socio_id, "Beca recalculada por la baja deportiva", user=user)
+        record_transaction(
+            Accion.ITEM_ANULADO,
+            f"Cuota deportiva quitada de la cuota {cuota.periodo}: {SPORTS_LEAVE_REASON.lower()}",
+            user,
+            socio=cuota.movimiento.cuenta_corriente.socio,
+            amount=sum((item.monto for item in items), Decimal("0.00")),
+            reference=f"Cuota {cuota.periodo}",
+            detail={"cuota_id": cuota.pk, "item_cuota_ids": [item.pk for item in items]},
+        )
+        updated += 1
+    return updated
 
 
 def active_imputations():
@@ -1035,6 +1094,18 @@ def create_payment(account, payment_methods, total, note, user, concept, movemen
     return payment, receipt, movement
 
 
+def payment_period_limit(socio, today=None):
+    if not socio.is_inactive:
+        return None
+    return (socio.fecha_baja or today or timezone.localdate()).strftime(PERIOD_FORMAT)
+
+
+def validate_leave_period(socio, cuotas):
+    limit = payment_period_limit(socio)
+    if limit and any(str(cuota.periodo) > limit for cuota in cuotas):
+        raise PagoInvalidoError("El socio está dado de baja: no se pueden pagar cuotas de períodos posteriores a su baja.")
+
+
 def by_period(cuotas):
     return sorted(cuotas, key=lambda cuota: (cuota.periodo, cuota.pk))
 
@@ -1154,6 +1225,7 @@ def register_payment(
     The reverted payment may belong to another socio (it was registered on the wrong one)."""
     account = CuentaCorriente.objects.select_for_update().select_related("socio").get(socio_id=socio_id)
     cuotas = lock_account_cuotas(account, cuota_ids)
+    validate_leave_period(account.socio, cuotas)
     validate_payment_order(account, cuotas)
     if late_fee_waiver:
         waived = [cuota for cuota in cuotas if cuota.pk in set(late_fee_waiver["cuota_ids"])]

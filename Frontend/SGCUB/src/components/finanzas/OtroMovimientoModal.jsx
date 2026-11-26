@@ -17,6 +17,8 @@ import { registrarIngreso } from '../../api/pagos'
 import { registrarDevolucionManual } from '../../api/devoluciones'
 import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import useMediosPago from '../../hooks/useMediosPago'
+import useToast from '../../hooks/useToast'
+import AnnulIncomeModal from './AnnulIncomeModal'
 import { AmountInput, AuthorizerSelect, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 
 const OPERATIONS = [
@@ -88,6 +90,8 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [result, setResult] = useState(null)
+  const [annulling, setAnnulling] = useState(false)
+  const { showToast } = useToast()
 
   const operation = OPERATIONS.find((option) => option.value === operationValue) ?? OPERATIONS[0]
   const isIncome = operationValue === INCOME
@@ -159,18 +163,37 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     else registerRefund()
   }
 
+  const incomeAnnulled = (_, { refunded }) => {
+    setAnnulling(false)
+    onSuccess?.(INCOME)
+    onCancel()
+    showToast({
+      title: refunded ? 'Ingreso anulado y devuelto' : 'Ingreso anulado',
+      description: refunded
+        ? 'Se emitió la nota de crédito por el total.'
+        : 'Si le devolvés el dinero al socio, emití una nota de crédito.',
+    })
+  }
+
   if (result?.kind === INCOME) {
     return (
-      <ComprobantePago
-        socio={socio}
-        detalle={result.comprobante}
-        medios={activeRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) }))}
-        montoTotal={total}
-        numero={result.comprobante.numero}
-        fecha={result.comprobante.fecha_emision}
-        onBack={onCancel}
-        backLabel="Volver"
-      />
+      <>
+        <ComprobantePago
+          socio={socio}
+          detalle={result.comprobante}
+          medios={activeRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) }))}
+          montoTotal={total}
+          numero={result.comprobante.numero}
+          fecha={result.comprobante.fecha_emision}
+          onRevert={() => setAnnulling(true)}
+        />
+        <AnnulIncomeModal
+          opened={annulling}
+          comprobante={result.comprobante}
+          onClose={() => setAnnulling(false)}
+          onAnnulled={incomeAnnulled}
+        />
+      </>
     )
   }
   if (result?.kind === MANUAL_REFUND) {
@@ -180,7 +203,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
   const confirmLabel = () => {
     if (saving) return 'Registrando...'
     if (!(total > 0)) return 'Ingresá el monto'
-    return `${isIncome ? 'Confirmar ingreso' : 'Confirmar devolución'} • ${formatAmount(total)}`
+    return isIncome ? 'Confirmar ingreso' : 'Confirmar devolución'
   }
 
   return (

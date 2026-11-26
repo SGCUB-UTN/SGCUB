@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { activateJugador, deactivateJugador, getJugador, patchJugador } from '../api/jugadores'
 import { activateSocio } from '../api/socios'
 import PersonStatusModal from '../components/personas/PersonStatusModal'
+import ProfileScopeOptions from '../components/personas/ProfileScopeOptions'
 import PersonHeader, { ActivateButton, DeactivateButton, HeaderNotice, LockedProfileNotice, PayButton } from '../components/personas/HeaderPersona'
 import PersonTabs from '../components/personas/TabsNavPersonas'
 import PersonalDataTab from '../components/personas/tabs/PersonalDataTab'
@@ -21,6 +22,7 @@ import { buildDocumentBadges } from '../components/documental/documentBadges'
 import { findMissingDocumentTypes } from '../components/documental/missingDocuments'
 import { buildCuotaBadges } from '../components/finanzas/cuotaBadges'
 import { hasPendingDebt, pendingDebt } from '../components/finanzas/accountStatement'
+import { currentPeriod, formatPeriod, nextPeriod } from '../components/shared/periodFormat'
 import { formatMoney } from '../components/cuota/cuotaPeriod'
 import useSocioFinances from '../hooks/useSocioFinances'
 import useToast from '../hooks/useToast'
@@ -32,6 +34,14 @@ import { uploadPersonaFoto } from '../api/personaFoto'
 
 const READ_ONLY = 'La ficha queda en solo lectura.'
 const EDITABLE = 'La ficha vuelve a ser editable.'
+
+const socialOnlyOptions = () => {
+  const actual = currentPeriod()
+  return [
+    { value: 'actual', label: `Desde ${formatPeriod(actual)}`, description: 'La cuota del mes en curso deja de cobrar la cuota deportiva.' },
+    { value: 'siguiente', label: `Desde ${formatPeriod(nextPeriod(actual))}`, description: 'La cuota del mes en curso conserva la cuota deportiva.' },
+  ]
+}
 
 const DEACTIVATION_TYPES = [
   { value: 'completa', label: 'Baja completa', description: 'Da de baja al jugador y al socio. Deja de abonar la cuota.' },
@@ -116,6 +126,7 @@ function JugadorDetail() {
   const [modalBajaCompletaAbierto, setModalBajaCompletaAbierto] = useState(false)
   const [dandoDeBaja, setDandoDeBaja] = useState(false)
   const [errorBaja, setErrorBaja] = useState('')
+  const [cobroSocialDesde, setCobroSocialDesde] = useState(null)
   const [modalAltaAbierto, setModalAltaAbierto] = useState(false)
   const [dandoDeAlta, setDandoDeAlta] = useState(false)
   const [errorAlta, setErrorAlta] = useState('')
@@ -182,7 +193,7 @@ function JugadorDetail() {
     setDandoDeBaja(true)
     setErrorBaja('')
     try {
-      await deactivateJugador(jugador.jugador_id, { completa })
+      await deactivateJugador(jugador.jugador_id, { completa, cobroSocialDesde })
       setJugador(await getJugador(jugador.jugador_id))
       refreshFinances()
       setModalBajaAbierto(false)
@@ -243,7 +254,7 @@ function JugadorDetail() {
   const mostrarResponsableLegal = edadJugador === null || edadJugador < 18
   const categoriaExenta = exemptCategory(jugador)
   const altaConEleccion = jugador.tipo_baja === 'completa'
-  const deuda = pendingDebt(finances.account)
+  const deuda = pendingDebt(finances.account, currentPeriod())
   const avisoDeuda = deuda > 0 && `Tiene un saldo adeudado de ${formatMoney(deuda)}: la deuda se conserva y se puede seguir pagando.`
 
   const handleDownloadPhoto = async () => {
@@ -352,7 +363,14 @@ function JugadorDetail() {
             value: [jugador.categoria?.nombre || 'Sin categoría', jugador.categoria_secundaria?.nombre].filter(Boolean).join(', '),
           },
         ]}
-        statusAction={activo && <DeactivateButton onClick={() => openModal(setErrorBaja, setModalBajaAbierto)} />}
+        statusAction={activo && (
+          <DeactivateButton
+            onClick={() => {
+              setCobroSocialDesde(null)
+              openModal(setErrorBaja, setModalBajaAbierto)
+            }}
+          />
+        )}
         actions={(
           <PayButton
             onClick={() => openPayment({ socioId: socio.socio_id, onSuccess: refreshFinances })}
@@ -421,11 +439,26 @@ function JugadorDetail() {
         personName={nombreJugador}
         options={DEACTIVATION_TYPES}
         consequences={[avisoDeuda, READ_ONLY]}
+        validate={(tipo) => (tipo === 'parcial' && !cobroSocialDesde ? 'Elegí desde qué mes se cobra solo la cuota social.' : '')}
         onClose={() => setModalBajaAbierto(false)}
         onConfirm={(tipo) => confirmarBaja(tipo === 'completa')}
         loading={dandoDeBaja}
         error={errorBaja}
-      />
+      >
+        {(tipo) => tipo === 'parcial' && (
+          <div className="mt-5">
+            <p className="text-base font-semibold text-on-surface">¿Desde qué mes se cobra solo la cuota social?</p>
+            <ProfileScopeOptions
+              name="cobro-social-desde"
+              label="Mes desde el que se cobra solo la cuota social"
+              options={socialOnlyOptions()}
+              value={cobroSocialDesde}
+              disabled={dandoDeBaja}
+              onChange={setCobroSocialDesde}
+            />
+          </div>
+        )}
+      </PersonStatusModal>
     </div>
   )
 }

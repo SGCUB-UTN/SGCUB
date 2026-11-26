@@ -930,10 +930,15 @@ class JugadorSerializer(serializers.ModelSerializer):
 
         contacts_data = validated_data.pop("vinculos_familiares", None)
         previous_category = instance.categoria
+        was_active = instance.is_active
         player = super().update(instance, validated_data)
         schedule_exemption_sync(player.socio_id, previous_category, player.categoria)
         if "estado" in validated_data:
             player.activate_member_if_inactive()
+            if player.is_active and not was_active:
+                transaction.on_commit(
+                    lambda socio_id=player.socio_id: create_or_update_player_current_cuota(socio_id)
+                )
         if contacts_data is not None:
             contact_ids = set()
             for contact_data in contacts_data:

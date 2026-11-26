@@ -42,6 +42,7 @@ from .services import (
     discountable_pending,
     net_amount,
     parse_period,
+    payment_period_limit,
     pending_amounts,
     latest_cuota_payment,
     latest_payment_cuota_ids,
@@ -554,6 +555,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
     comprobante_revertible_id = serializers.SerializerMethodField()
     cuotas_revertibles = serializers.SerializerMethodField()
     saldo_beneficio_revertible = serializers.SerializerMethodField()
+    periodo_limite_pago = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCorriente
@@ -561,6 +563,7 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
             "cuenta_corriente_id",
             "socio",
             "estado_cuenta_corriente",
+            "periodo_limite_pago",
             "comprobante_revertible_id",
             "cuotas_revertibles",
             "saldo_beneficio_revertible",
@@ -593,6 +596,9 @@ class CuentaCorrienteEstadoSerializer(serializers.ModelSerializer):
 
     def get_socio(self, obj):
         return socio_data(obj.socio)
+
+    def get_periodo_limite_pago(self, obj):
+        return payment_period_limit(obj.socio)
 
     def _latest_payment(self, obj):
         cache = self.__dict__.setdefault("_latest_payment_cache", {})

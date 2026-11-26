@@ -25,6 +25,11 @@ export const periodOptions = (rows, getPeriod) =>
 
 export const currentPeriod = (today = new Date()) => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
 
+export const nextPeriod = (period) => {
+  const [year, month] = period.split('-').map(Number)
+  return currentPeriod(new Date(year, month, 1))
+}
+
 export const periodStartDate = (period) => `${period}-01`
 
 export const periodEndDate = (period) => {

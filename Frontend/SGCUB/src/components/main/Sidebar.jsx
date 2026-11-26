@@ -117,7 +117,7 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
       onBlur={handleBlur}
     >
       <div className="app-sidebar-content">
-        <div className="app-sidebar-scroll">
+        <div className="app-sidebar-scroll thin-scroll">
           <nav
             className="app-sidebar-nav"
             aria-label="Navegación principal"
@@ -230,10 +230,10 @@ export default function Sidebar({ collapsed, onToggle, mobile = false, mobileOpe
                   </span>
                   <span className="contents" aria-hidden="true">
                   {alertas.vencidos > 0 && (
-                    <StatusBadge badge={{ label: alertas.vencidos, tono: 'error', icon: 'error', title: 'Vencidos' }} />
+                    <StatusBadge badge={{ tono: 'error', icon: 'error', title: 'Vencidos' }} />
                   )}
                   {alertas.proximos > 0 && (
-                    <StatusBadge badge={{ label: alertas.proximos, tono: 'alerta', icon: 'schedule', title: 'Por vencer' }} />
+                    <StatusBadge badge={{ tono: 'alerta', icon: 'schedule', title: 'Por vencer' }} />
                   )}
                   </span>
                 </span>

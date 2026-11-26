@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, inline_serializer
 from configuracion.services import Seccion, record_change
 from documental.services import PERFIL_DOCENTE, PERFIL_JUGADOR, documentation_statuses
-from finanzas.services import account_debt_summaries
+from finanzas.services import account_debt_summaries, sports_leave_period, stop_sports_charge
 from .list_export import ListExportSerializer, list_filename, render_list_pdf
 from .report_export import render_report_csv, render_report_pdf, report_filename
 from .reports import ReportFilterError, build_report, parse_report_filters
@@ -536,7 +536,13 @@ def jugador_detail(request, pk):
         player.socio.deactivate()
         player.refresh_from_db()
     else:
-        player.deactivate()
+        try:
+            social_only_from = sports_leave_period(request.query_params.get("cobro_social_desde"))
+        except ValueError as error:
+            return Response({"cobro_social_desde": [str(error)]}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            player.deactivate()
+            stop_sports_charge(player.socio_id, social_only_from, request.user)
     return Response(JugadorSerializerDetail(player, context={"request": request}).data)
 
 

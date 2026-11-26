@@ -62,6 +62,7 @@ from .period_summary import period_summary
 from .receipts import render_receipt_pdf
 from .serializers import CuentaCorrienteEstadoSerializer, ItemCuotaSerializer, MedioPagoSerializer
 from .services import (
+	CUOTA_WINDOW_MONTHS,
 	CategoriaExentaError,
 	account_debt_summaries,
 	annul_exempt_cuotas,
@@ -76,12 +77,14 @@ from .services import (
 	finish_expired_scholarships,
 	generar_cuotas_mensuales,
 	grant_scholarship,
+	net_amount,
 	next_receipt_number,
 	pending_amounts,
 	register_payment,
 	revert_payment,
 	schedule_exemption_sync,
 	sync_cuota_charge,
+	sync_cuotas_with_member_state,
 	update_scholarship,
 )
 from .tasks import apply_scheduled_surcharges, generate_scheduled_cuotas, run_cuota_generation, run_manual_surcharges
@@ -329,30 +332,28 @@ class GeneracionProgramadaTests(TestCase):
 
 		resultado = generate_scheduled_cuotas(today=date(2026, 10, 5))
 
-		self.assertEqual(resultado["cuotas_creadas"], 3)
+		self.assertEqual(resultado["cuotas_creadas"], 12)
 		self.assertEqual(
 			list(Cuota.objects.order_by("periodo").values_list("periodo", flat=True)),
-			["2026-10", "2026-11", "2026-12"],
+			["2026-10", "2026-11", "2026-12"] + [f"2027-{mes:02d}" for mes in range(1, 10)],
 		)
 
 	def test_usa_el_dia_de_la_version_vigente_para_el_mes(self):
 		ConfiguracionFinanciera.objects.create(periodo_vigencia="2026-11", dia_generacion=3)
 
 		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 5))["cuotas_creadas"], 0)
-		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 3))["cuotas_creadas"], 3)
+		self.assertEqual(generate_scheduled_cuotas(today=date(2026, 11, 3))["cuotas_creadas"], 12)
 
-	def test_al_mes_siguiente_solo_genera_la_cuota_del_segundo_mes_proximo(self):
+	def test_al_mes_siguiente_solo_genera_la_cuota_del_ultimo_mes_de_la_ventana(self):
 		primero = generate_scheduled_cuotas(today=date(2026, 10, 5))
-		self.assertEqual(primero["cuotas_creadas"], 3)
+		self.assertEqual(primero["cuotas_creadas"], 12)
 
 		segundo = generate_scheduled_cuotas(today=date(2026, 11, 5))
 
 		self.assertEqual(segundo["cuotas_creadas"], 1)
-		self.assertEqual(segundo["cuotas_existentes"], 2)
-		self.assertEqual(
-			list(Cuota.objects.order_by("periodo").values_list("periodo", flat=True)),
-			["2026-10", "2026-11", "2026-12", "2027-01"],
-		)
+		self.assertEqual(segundo["cuotas_existentes"], 11)
+		periodos = list(Cuota.objects.order_by("periodo").values_list("periodo", flat=True))
+		self.assertEqual((len(periodos), periodos[0], periodos[-1]), (13, "2026-10", "2027-10"))
 
 	def test_valida_el_dia_de_generacion(self):
 		self.client.force_login(get_user_model().objects.create_user(username="tesorero"))
@@ -506,7 +507,7 @@ class ActualizacionCuotasPorConfiguracionTests(APITestCase):
 		)
 
 		self.assertEqual(response.status_code, 200, response.data)
-		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 3)
+		self.assertEqual(response.data["financiera"]["cuotas_actualizadas"], 2 * (CUOTA_WINDOW_MONTHS - 1) - 1)
 		cuota_futura_paga.refresh_from_db()
 		self.assertEqual(cuota_futura_paga.estado_cuota, EstadoCuotaChoices.PAGA)
 		self.assertEqual(cuota_futura_paga.movimiento.monto, Decimal("2500.00"))
@@ -937,10 +938,10 @@ class GeneracionCuotasMensualesTests(TestCase):
 
 		resultado = generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
 
-		self.assertEqual(resultado["periodos"], ["2026-10", "2026-11", "2026-12"])
-		self.assertEqual(resultado["cuotas_creadas"], 9)
-		self.assertEqual(resultado["items_sociales"], 9)
-		self.assertEqual(resultado["items_deportivos"], 3)
+		self.assertEqual(resultado["periodos"], ["2026-10", "2026-11", "2026-12"] + [f"2027-{mes:02d}" for mes in range(1, 10)])
+		self.assertEqual(resultado["cuotas_creadas"], 36)
+		self.assertEqual(resultado["items_sociales"], 36)
+		self.assertEqual(resultado["items_deportivos"], 12)
 		esperados = {
 			socio_activo: ["CuotaSocial"],
 			jugador_de_baja: ["CuotaSocial"],
@@ -960,11 +961,11 @@ class GeneracionCuotasMensualesTests(TestCase):
 
 		cuenta = CuentaCorriente.objects.get(socio=socio)
 		cuota = Cuota.objects.get(movimiento__cuenta_corriente=cuenta, periodo="2026-10")
-		self.assertEqual(primer_resultado["cuotas_creadas"], 3)
-		self.assertEqual(primer_resultado["items_deportivos"], 3)
+		self.assertEqual(primer_resultado["cuotas_creadas"], CUOTA_WINDOW_MONTHS)
+		self.assertEqual(primer_resultado["items_deportivos"], CUOTA_WINDOW_MONTHS)
 		self.assertEqual(segundo_resultado["cuotas_creadas"], 0)
-		self.assertEqual(segundo_resultado["cuotas_existentes"], 3)
-		self.assertEqual(cuenta.cuotas.count(), 3)
+		self.assertEqual(segundo_resultado["cuotas_existentes"], CUOTA_WINDOW_MONTHS)
+		self.assertEqual(cuenta.cuotas.count(), CUOTA_WINDOW_MONTHS)
 		self.assertEqual(cuota.items.count(), 2)
 		self.assertEqual(cuota.movimiento.tipo_movimiento, "Cargo")
 		self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
@@ -1007,8 +1008,8 @@ class GeneracionCuotasMensualesTests(TestCase):
 		response = self.client.post(reverse("generar-cuotas-mensuales"))
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data["cuotas_creadas"], 3)
-		self.assertEqual(response.data["items_sociales"], 3)
+		self.assertEqual(response.data["cuotas_creadas"], CUOTA_WINDOW_MONTHS)
+		self.assertEqual(response.data["items_sociales"], CUOTA_WINDOW_MONTHS)
 
 
 def eximir_categoria(socio, exenta=True):
@@ -1024,6 +1025,87 @@ def periodos_de(socio):
 	)
 
 
+def conceptos_por_periodo(socio):
+	return {
+		cuota.periodo: set(cuota.items.values_list("concepto", flat=True))
+		for cuota in Cuota.objects.filter(movimiento__cuenta_corriente__socio=socio)
+	}
+
+
+class CuotasPorAltaYBajaTests(APITestCase):
+	def setUp(self):
+		self.client.force_authenticate(user=get_user_model().objects.create_user(username="tesorero"))
+		self.hoy = timezone.localdate()
+		self.actual = self.hoy.strftime("%Y-%m")
+		self.siguiente = next_period_start(1).strftime("%Y-%m")
+		self.socio = crear_socio("72000001", con_jugador=True)
+		generar_cuotas_mensuales(self.hoy, today=self.hoy)
+
+	def test_la_baja_del_socio_elimina_las_cuotas_impagas_posteriores_al_mes_de_baja(self):
+		paga = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=next_period_start(3).strftime("%Y-%m"))
+		Cuota.objects.filter(pk=paga.pk).update(estado_cuota=EstadoCuotaChoices.PAGA)
+
+		with self.captureOnCommitCallbacks(execute=True):
+			self.socio.deactivate()
+
+		self.assertEqual(periodos_de(self.socio), [self.actual, paga.periodo])
+
+	def test_el_alta_genera_las_cuotas_desde_el_mes_en_curso_sin_las_del_periodo_de_baja(self):
+		hace_tres_meses = (self.hoy.replace(day=1) - timedelta(days=80)).replace(day=1)
+		viejo = crear_socio("72000002")
+		generar_cuotas_mensuales(hace_tres_meses, today=hace_tres_meses)
+		viejo.deactivate()
+		Socio.objects.filter(pk=viejo.pk).update(fecha_baja=hace_tres_meses)
+		sync_cuotas_with_member_state(viejo.pk)
+		self.assertEqual(periodos_de(viejo), [hace_tres_meses.strftime("%Y-%m")])
+
+		viejo.refresh_from_db()
+		with self.captureOnCommitCallbacks(execute=True):
+			viejo.activate()
+
+		ventana = [next_period_start(meses).strftime("%Y-%m") for meses in range(CUOTA_WINDOW_MONTHS)]
+		self.assertEqual(periodos_de(viejo), [hace_tres_meses.strftime("%Y-%m"), *ventana])
+
+	def dar_de_baja_parcial(self, desde):
+		query = f"?cobro_social_desde={desde}" if desde else ""
+		return self.client.delete(f"/api/padron/jugador/{self.socio.jugador.jugador_id}/{query}")
+
+	def test_baja_parcial_desde_el_mes_actual_quita_la_cuota_deportiva_de_todas_las_cuotas(self):
+		response = self.dar_de_baja_parcial("actual")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertTrue(all("CuotaDeportiva" not in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
+		self.assertTrue(all("CuotaSocial" in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
+
+	def test_baja_parcial_desde_el_mes_siguiente_conserva_la_cuota_deportiva_del_mes_actual(self):
+		response = self.dar_de_baja_parcial("siguiente")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		conceptos = conceptos_por_periodo(self.socio)
+		self.assertIn("CuotaDeportiva", conceptos.pop(self.actual))
+		self.assertTrue(all("CuotaDeportiva" not in conceptos_mes for conceptos_mes in conceptos.values()))
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		self.assertEqual(cuota.movimiento.monto, net_amount(cuota.items.all()))
+
+	def test_baja_parcial_sin_elegir_el_mes_no_da_de_baja(self):
+		response = self.dar_de_baja_parcial(None)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("cobro_social_desde", response.data)
+		self.socio.jugador.refresh_from_db()
+		self.assertTrue(self.socio.jugador.is_active)
+
+	def test_el_alta_del_jugador_vuelve_a_cobrar_la_cuota_deportiva(self):
+		self.dar_de_baja_parcial("actual")
+		activo = EstadoDeportivo.objects.get(nombre="Activo")
+
+		with self.captureOnCommitCallbacks(execute=True):
+			response = self.client.patch(f"/api/padron/jugador/{self.socio.jugador.jugador_id}/", {"estado": activo.pk}, format="json")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertTrue(all("CuotaDeportiva" in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
+
+
 class CategoriaExentaTests(TestCase):
 	def test_generacion_no_crea_cuotas_a_jugadores_de_categoria_exenta(self):
 		socio = crear_socio("71000001")
@@ -1032,9 +1114,9 @@ class CategoriaExentaTests(TestCase):
 
 		resultado = generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
 
-		self.assertEqual(resultado["cuotas_creadas"], 3)
-		self.assertEqual(resultado["cuotas_exentas"], 6)
-		self.assertEqual(len(periodos_de(socio)), 3)
+		self.assertEqual(resultado["cuotas_creadas"], CUOTA_WINDOW_MONTHS)
+		self.assertEqual(resultado["cuotas_exentas"], 2 * CUOTA_WINDOW_MONTHS)
+		self.assertEqual(len(periodos_de(socio)), CUOTA_WINDOW_MONTHS)
 		self.assertEqual(periodos_de(exento_activo), [])
 		self.assertEqual(periodos_de(exento_de_baja), [])
 
@@ -1071,16 +1153,16 @@ class CategoriaExentaTests(TestCase):
 	def test_anula_las_cuotas_impagas_desde_el_mes_actual(self):
 		socio = crear_socio("71000041", con_jugador=True)
 		generar_cuotas_mensuales(date(2026, 10, 5), today=date(2026, 10, 5))
-		paga = crear_cuota_con_cargo(account_for(socio), "2027-01", "1000.00", estado=EstadoCuotaChoices.PAGA)
+		paga = crear_cuota_con_cargo(account_for(socio), "2027-10", "1000.00", estado=EstadoCuotaChoices.PAGA)
 
 		anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
 
-		self.assertEqual(anuladas, 3)
-		self.assertEqual(periodos_de(socio), ["2027-01"])
+		self.assertEqual(anuladas, CUOTA_WINDOW_MONTHS)
+		self.assertEqual(periodos_de(socio), ["2027-10"])
 		self.assertTrue(Cuota.objects.filter(pk=paga.pk).exists())
 		self.assertEqual(
 			RegistroAuditoria.objects.filter(accion=AccionAuditoriaChoices.CUOTA_ELIMINADA).count(),
-			3,
+			CUOTA_WINDOW_MONTHS,
 		)
 
 	def test_anulacion_conserva_cuotas_con_pagos(self):
@@ -1091,7 +1173,7 @@ class CategoriaExentaTests(TestCase):
 		with patch("finanzas.services.has_active_payments", side_effect=lambda c: c.pk == cuota.pk):
 			anuladas = annul_exempt_cuotas([socio.pk], today=date(2026, 10, 5))
 
-		self.assertEqual(anuladas, 2)
+		self.assertEqual(anuladas, CUOTA_WINDOW_MONTHS - 1)
 		self.assertEqual(periodos_de(socio), ["2026-12"])
 
 	def test_pasar_a_categoria_exenta_anula_las_cuotas_desde_el_mes_actual(self):
@@ -1118,7 +1200,7 @@ class CategoriaExentaTests(TestCase):
 		with self.captureOnCommitCallbacks(execute=True):
 			schedule_exemption_sync(socio.pk, anterior, jugador.categoria)
 
-		self.assertEqual(len(periodos_de(socio)), 3)
+		self.assertEqual(len(periodos_de(socio)), CUOTA_WINDOW_MONTHS)
 
 	def test_cambio_entre_categorias_no_exentas_no_toca_cuotas(self):
 		socio = crear_socio("71000081", con_jugador=True)
@@ -1592,6 +1674,39 @@ class ResumenDeudaPorSocioTests(PagoTestBase):
 
 		self.assertEqual(4, len(resumen))
 		self.assertEqual(len(uno.captured_queries), len(varios.captured_queries))
+
+
+class PagoSocioDeBajaTests(PagoTestBase):
+	def setUp(self):
+		super().setUp()
+		self.octubre = crear_cuota_con_cargo(self.cuenta, "2026-10", "1000.00")
+		self.socio.deactivate()
+		Socio.objects.filter(pk=self.socio.pk).update(fecha_baja=date(2026, 9, 15))
+
+	def test_paga_las_cuotas_hasta_el_periodo_de_la_baja(self):
+		response = self.pagar([self.agosto, self.septiembre], "2000.00")
+
+		self.assertEqual(response.status_code, 201, response.data)
+
+	def test_no_paga_cuotas_de_periodos_posteriores_a_la_baja(self):
+		response = self.pagar([self.agosto, self.septiembre, self.octubre], "3000.00")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("posteriores a su baja", str(response.data))
+		self.assertEqual(self.aplicado(self.agosto), Decimal("0.00"))
+
+	def test_el_estado_de_cuenta_informa_el_periodo_limite_de_pago(self):
+		response = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["periodo_limite_pago"], "2026-09")
+
+	def test_un_socio_activo_no_tiene_periodo_limite_de_pago(self):
+		self.socio.activate()
+
+		response = self.client.get(reverse("estado-cuenta-socio", args=[self.socio.pk]))
+
+		self.assertIsNone(response.data["periodo_limite_pago"])
 
 
 class ReversionPagoTests(PagoTestBase):
@@ -3813,7 +3928,7 @@ class TareasProgramadasTests(TestCase):
 				resultado = fetch(id_tarea)
 				self.assertTrue(resultado.success, resultado.result)
 
-		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente__socio__persona__dni="90000001").count(), 3)
+		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente__socio__persona__dni="90000001").count(), CUOTA_WINDOW_MONTHS)
 
 	def test_proxima_generacion_mensual(self):
 		casos = [
@@ -4130,18 +4245,14 @@ class CurrentAccountOpeningTests(APITestCase):
 		cuotas = list(Cuota.objects.filter(movimiento__cuenta_corriente=account).order_by("periodo"))
 		self.assertEqual(
 			[cuota.periodo for cuota in cuotas],
-			[
-				timezone.localdate().strftime("%Y-%m"),
-				next_period_start(1).strftime("%Y-%m"),
-				next_period_start(2).strftime("%Y-%m"),
-			],
+			[next_period_start(meses).strftime("%Y-%m") for meses in range(CUOTA_WINDOW_MONTHS)],
 		)
 		self.assertEqual(account.estado_cuenta_corriente, "Activo")
 
 		status_response = self.client.get(reverse("estado-cuenta-socio", args=[response.data["socio_id"]]))
 
 		self.assertEqual(status_response.status_code, 200)
-		self.assertEqual(status_response.data["cuotas_generadas"], 3)
+		self.assertEqual(status_response.data["cuotas_generadas"], CUOTA_WINDOW_MONTHS)
 		self.assertEqual(status_response.data["cuotas_impagas"], 1)
 		self.assertEqual(status_response.data["total_adeudado"], cuotas[0].movimiento.monto)
 
@@ -4166,7 +4277,7 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		account = CuentaCorriente.objects.get(socio__persona__dni="40111223")
 		cuotas = list(Cuota.objects.filter(movimiento__cuenta_corriente=account).order_by("periodo"))
-		self.assertEqual(len(cuotas), 3)
+		self.assertEqual(len(cuotas), CUOTA_WINDOW_MONTHS)
 		for cuota in cuotas[1:]:
 			conceptos = set(cuota.items.values_list("concepto", flat=True))
 			self.assertEqual(conceptos, {"CuotaSocial", "CuotaDeportiva"})
@@ -4213,7 +4324,7 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		account = CuentaCorriente.objects.get(socio=socio)
 		cuotas = list(Cuota.objects.filter(movimiento__cuenta_corriente=account).order_by("periodo"))
-		self.assertEqual(len(cuotas), 3)
+		self.assertEqual(len(cuotas), CUOTA_WINDOW_MONTHS)
 		for cuota in cuotas:
 			self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
 			self.assertEqual(cuota.movimiento.monto, Decimal("2500.00"))
@@ -4236,7 +4347,7 @@ class CurrentAccountOpeningTests(APITestCase):
 		self.assertEqual(response.status_code, 201, response.data)
 		cuota.refresh_from_db()
 		account = CuentaCorriente.objects.get(socio=socio)
-		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), 3)
+		self.assertEqual(Cuota.objects.filter(movimiento__cuenta_corriente=account).count(), CUOTA_WINDOW_MONTHS)
 		self.assertEqual(cuota.items.filter(concepto="CuotaDeportiva").count(), 1)
 		registration = cuota.items.get(concepto="Otro")
 		self.assertEqual((registration.motivo, registration.monto), ("Inscripción", Decimal("5000.00")))
@@ -4955,7 +5066,7 @@ class EjecucionTareasCuotaTests(APITestCase):
 			ejecucion.resumen,
 			"En el sistema existen 1 socio, 1 jugador y 1 jugador de baja parcial. Todos con la cuota correctamente generada.",
 		)
-		self.assertEqual(ejecucion.metricas["cuotas_creadas"], 9)
+		self.assertEqual(ejecucion.metricas["cuotas_creadas"], 3 * CUOTA_WINDOW_MONTHS)
 		self.assertIn("Período 2026-10: 3 cuotas creadas.", ejecucion.registro)
 		self.assertIn("Resultado: todos los socios activos tienen la cuota del período.", ejecucion.registro)
 		self.assertIsNotNone(ejecucion.fecha_fin)
