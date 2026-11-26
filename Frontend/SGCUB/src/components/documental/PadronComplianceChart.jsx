@@ -3,19 +3,25 @@ import { formatCount, formatPercentage } from '../cuota/cuotaPeriod'
 import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
 import { shareOf } from '../finanzas/cashFormat'
-import { PROFILES } from './padronDocumental'
+import { PROFILES, SITUATIONS } from './padronDocumental'
 
 const SEGMENTS = [
   { key: 'habilitados', label: 'Habilitados', fill: 'bg-emerald-600', stroke: 'stroke-emerald-600' },
-  { key: 'inhabilitados', label: 'Inhabilitados', fill: 'bg-error', stroke: 'stroke-error' },
+  { key: 'inhabilitados', label: 'Inhabilitados', fill: 'bg-error', stroke: 'stroke-error', situation: SITUATIONS.INHABILITADA },
 ]
+
+const selectOnKey = (event, onSelect) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  onSelect()
+}
 
 const BREAKDOWN = [
   { key: PROFILES.JUGADOR, label: 'Jugadores activos' },
   { key: PROFILES.DOCENTE, label: 'Docentes' },
 ]
 
-export default function PadronComplianceChart({ resumen }) {
+export default function PadronComplianceChart({ resumen, onSelect }) {
   const [activeKey, setActiveKey] = useState(null)
   const segments = SEGMENTS.map((segment) => ({
     key: segment.key,
@@ -45,8 +51,18 @@ export default function PadronComplianceChart({ resumen }) {
         <ul className="flex flex-col gap-1 min-w-0 text-sm">
           {SEGMENTS.map((segment) => {
             const interaction = legendItemProps(segment.key, activeKey, setActiveKey)
+            const selectable = Boolean(segment.situation && onSelect)
+            const select = () => onSelect(segment.situation)
+            const selection = selectable
+              ? { role: 'button', title: 'Ver las personas inhabilitadas en la tabla', onClick: select, onKeyDown: (event) => selectOnKey(event, select) }
+              : {}
             return (
-              <li key={segment.key} {...interaction} className={`${interaction.className} flex items-center gap-2 min-w-0`}>
+              <li
+                key={segment.key}
+                {...interaction}
+                {...selection}
+                className={`${interaction.className} ${selectable ? '!cursor-pointer' : ''} flex items-center gap-2 min-w-0`}
+              >
                 <span className={`w-2.5 h-2.5 shrink-0 rounded-sm ${segment.fill}`} aria-hidden="true" />
                 <span className="text-on-surface-variant">{segment.label}</span>
                 <span className="font-semibold tabular-nums text-on-surface">{formatCount(resumen[segment.key])}</span>

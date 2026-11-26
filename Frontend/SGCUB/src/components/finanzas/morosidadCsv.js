@@ -19,6 +19,8 @@ const CSV_COLUMNS = [
   ['Días de mora', (row) => row.dias_mora ?? 0],
 ]
 
+export const MOROSIDAD_EXPORT_COLUMNS = CSV_COLUMNS.map(([header, value]) => ({ header, value }))
+
 export function downloadMorosidadCsv(rows, filename = 'reporte-morosidad.csv') {
   const lines = [
     CSV_COLUMNS.map(([header]) => csvCell(header)).join(';'),

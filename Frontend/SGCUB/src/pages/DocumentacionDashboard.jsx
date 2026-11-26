@@ -6,7 +6,6 @@ import useDocumentacionPadron from '../hooks/useDocumentacionPadron'
 import useDocumentUploadForm from '../hooks/useDocumentUploadForm'
 import DocumentAffectedCategories from '../components/documental/DocumentAffectedCategories'
 import DocumentPadronTable from '../components/documental/DocumentPadronTable'
-import DocumentStatusChart from '../components/documental/DocumentStatusChart'
 import DocumentacionUploadModal from '../components/documental/DocumentacionUploadModal'
 import PadronComplianceChart from '../components/documental/PadronComplianceChart'
 import { appliesToProfile } from '../components/documental/missingDocuments'
@@ -22,7 +21,7 @@ const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-v
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
 const SECTION_CLASS = 'p-4 sm:p-5'
 const TABLE_TITLE_ID = 'documental-table-title'
-const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0'
+const SUMMARY_GRID_CLASS = 'grid grid-cols-1 gap-6 divide-outline-variant/40 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] sm:gap-0 sm:divide-x sm:[&>*]:px-6 sm:[&>*:first-child]:pl-0 sm:[&>*:last-child]:pr-0'
 
 const withChangeNotice = (request) => async (...args) => {
   const result = await request(...args)
@@ -57,13 +56,11 @@ function DashboardSkeleton() {
     <SkeletonStatus label="Cargando control documental..." className="flex flex-col gap-5">
       <div className={PANEL_CLASS}>
         <HeadingSkeleton />
-        <div className={`${SECTION_CLASS} grid grid-cols-1 sm:grid-cols-3 gap-6`}>
-          {[0, 1].map((index) => (
-            <div key={index} className="flex items-center gap-4">
-              <RingSkeleton size={120} stroke={16} />
-              <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
-            </div>
-          ))}
+        <div className={`${SECTION_CLASS} grid grid-cols-1 sm:grid-cols-2 gap-6`}>
+          <div className="flex items-center gap-4">
+            <RingSkeleton size={120} stroke={16} />
+            <LineSkeletons count={3} className="flex-1 flex flex-col gap-3" />
+          </div>
           <div className="flex flex-col gap-4">
             <SkeletonBlock soft className="h-3.5 w-40" />
             <LineSkeletons count={3} className="flex flex-col gap-4" />
@@ -74,7 +71,7 @@ function DashboardSkeleton() {
         <HeadingSkeleton />
         <table className="w-full">
           <tbody>
-            <TableSkeletonRows colSpan={6} animated={false} />
+            <TableSkeletonRows colSpan={7} animated={false} />
           </tbody>
         </table>
       </div>
@@ -106,7 +103,6 @@ export default function DocumentacionDashboard() {
 
   const notifyPersonas = (selected) => navigate('/comunicaciones', { state: { debtNotice: selectionNotice(selected) } })
 
-  const notifyRow = (row) => notifyPersonas(personas.filter((persona) => persona.clave === row.clave))
 
   const notifyDisabled = () => navigate('/comunicaciones', { state: { debtNotice: bulkDocumentNotice(disabledPlayers) } })
 
@@ -129,7 +125,7 @@ export default function DocumentacionDashboard() {
 
   const selectCategory = (categoriaId) => showTable({ ...filters, categoria: String(categoriaId) })
 
-  const selectState = (estado) => showTable({ ...filters, estado })
+  const selectSituation = (situacion) => showTable({ ...filters, situacion })
 
   return (
     <div className="w-full flex flex-col gap-5 pb-8">
@@ -150,7 +146,7 @@ export default function DocumentacionDashboard() {
               <ExportMenu
                 disabled={!resumen || exportableRows.length === 0}
                 isExporting={isExporting}
-                onCsv={() => downloadDocumentalCsv(exportableRows, filters.estado)}
+                onCsv={() => downloadDocumentalCsv(exportableRows, filters.situacion)}
                 onPdf={exportPdf}
               />
             </div>
@@ -183,8 +179,7 @@ export default function DocumentacionDashboard() {
             <SectionHeading id="documental-summary-title" icon="monitoring" title="Estado documental" className={HEADING_CLASS} />
             <div className={SECTION_CLASS}>
               <div className={SUMMARY_GRID_CLASS}>
-                <PadronComplianceChart resumen={resumen} />
-                <DocumentStatusChart counts={resumen.documentos} onSelect={selectState} />
+                <PadronComplianceChart resumen={resumen} onSelect={selectSituation} />
                 <DocumentAffectedCategories categories={resumen.categorias_afectadas} onSelect={selectCategory} />
               </div>
             </div>
@@ -198,7 +193,6 @@ export default function DocumentacionDashboard() {
               filters={filters}
               onFiltersChange={setFilters}
               onUpload={openUpload}
-              onNotify={notifyRow}
               onNotifyPersonas={notifyPersonas}
             />
           </section>
