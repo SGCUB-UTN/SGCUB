@@ -10,7 +10,6 @@ export default function SelectionBar({ count, singular, plural, detail, onClear,
     >
       <p className="flex flex-wrap items-baseline gap-x-2 text-base text-on-surface" aria-live="polite">
         <span className="inline-flex items-center gap-2">
-          <span className="material-symbols-outlined text-[20px] text-primary" aria-hidden="true">check_box</span>
           <span>
             <strong className="font-semibold tabular-nums">{formatCount(count)}</strong> {count === 1 ? singular : plural}
           </span>
