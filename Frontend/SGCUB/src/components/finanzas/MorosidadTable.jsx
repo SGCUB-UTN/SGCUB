@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import { useNavigate } from 'react-router-dom'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
@@ -14,12 +15,12 @@ import { ALL_CATEGORIES, categoryMatches, categoryOptions } from '../shared/cate
 import { formatAmount, formatDni } from '../personas/format'
 import { formatCount } from '../cuota/cuotaPeriod'
 import { profilePath } from './delinquencyFilters'
-import { downloadMorosidadCsv } from './morosidadCsv'
+import { MOROSIDAD_EXPORT_COLUMNS, downloadMorosidadCsv } from './morosidadCsv'
+import ExportMenu from '../shared/ExportMenu'
+import SelectionBar from '../shared/SelectionBar'
 
 const HEADER_CLASS = 'px-4 py-3 normal-case tracking-normal font-semibold'
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-const TOOL_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-9 px-3 rounded border text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600/60'
 const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 
@@ -65,41 +66,6 @@ function SelectAllCheckbox({ rows, selectedIds, onChange }) {
       onChange={() => onChange(!allSelected, rows)}
       aria-label={allSelected ? 'Quitar la selección de todos los socios' : 'Seleccionar todos los socios'}
     />
-  )
-}
-
-function BulkActionsBar({ rows, onExport, onClear }) {
-  return (
-    <div
-      role="region"
-      aria-label="Acciones sobre la selección"
-      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-2.5 bg-sky-100 border-b border-sky-300 border-l-4 border-l-sky-600"
-    >
-      <p className="flex items-center gap-2 text-sm text-sky-900 pl-1">
-        <span>
-          <strong className="font-bold">{formatCount(rows.length)}</strong> {rows.length === 1 ? 'socio seleccionado' : 'socios seleccionados'}
-          <span className="text-sky-800"> · Deuda total <strong className="font-semibold">{formatAmount(sumDebt(rows))}</strong></span>
-        </span>
-      </p>
-      <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-        <button
-          type="button"
-          onClick={onExport}
-          className={`${TOOL_BUTTON_CLASS} bg-surface-container-lowest border-sky-300 text-sky-900 hover:bg-sky-50`}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">download</span>
-          Exportar CSV
-        </button>
-        <button
-          type="button"
-          onClick={onClear}
-          className={`${TOOL_BUTTON_CLASS} border-transparent text-sky-800 hover:bg-sky-200/60`}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">close</span>
-          Quitar selección
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -198,11 +164,20 @@ function MorosidadTable({
       </div>
 
       {selectedRows.length > 0 && (
-        <BulkActionsBar
-          rows={selectedRows}
-          onExport={() => downloadMorosidadCsv(selectedRows, 'morosos-seleccionados.csv')}
+        <SelectionBar
+          count={selectedRows.length}
+          singular="socio seleccionado"
+          plural="socios seleccionados"
+          detail={<>Deuda total <strong className="font-semibold text-on-surface tabular-nums">{formatAmount(sumDebt(selectedRows))}</strong></>}
           onClear={onClearSelection}
-        />
+        >
+          <ExportMenu
+            title="Morosidad: socios seleccionados"
+            filename="morosos-seleccionados"
+            columns={MOROSIDAD_EXPORT_COLUMNS}
+            items={selectedRows}
+          />
+        </SelectionBar>
       )}
 
       <DataTable

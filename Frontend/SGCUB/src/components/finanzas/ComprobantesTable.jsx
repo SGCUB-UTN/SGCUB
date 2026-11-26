@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FILTER_CLASS } from '../shared/listFilters'
 import DataTable from '../shared/DataTable'
 import FilterSelect from '../shared/FilterSelect'
 import SectionHeading from '../shared/SectionHeading'
@@ -24,7 +25,6 @@ import { CANCELLED_REFUND_BLOCKER, REFUND_CANCELLED, isCancelledRefund } from '.
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
-const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
 const HEADER_CLASS = 'py-3 px-4'
 const CELL_CLASS = 'py-3 px-4'
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'

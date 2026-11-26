@@ -96,6 +96,11 @@ const csvCell = (value) => {
   return /[";\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
+export const CUOTAS_EXPORT_COLUMNS = [
+  { header: 'Apellido y nombre', value: (row) => memberName(row) },
+  ...CSV_COLUMNS.filter(([header]) => header !== 'Apellido' && header !== 'Nombre').map(([header, value]) => ({ header, value })),
+]
+
 export function downloadCuotasCsv(rows, period) {
   const lines = [
     CSV_COLUMNS.map(([header]) => csvCell(header)).join(';'),

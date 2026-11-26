@@ -1,6 +1,6 @@
 import { accountDebt } from '../finanzas/accountDebt'
 
-export const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-sm font-medium focus:outline-none focus:border-primary cursor-pointer'
+export const FILTER_CLASS = 'bg-surface-container-low border border-outline-variant/40 rounded text-on-surface font-body-sm text-base font-medium focus:outline-none focus:border-primary cursor-pointer'
 
 export const ALL = 'todos'
 

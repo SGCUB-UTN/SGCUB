@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getPadronDocumental, getTiposDocumento } from '../api/documentacion'
-import { documentRows } from '../components/documental/padronDocumental'
+import { personRows } from '../components/documental/padronDocumental'
 
 const EMPTY_PERSONAS = []
 const EMPTY_TIPOS = []
@@ -26,7 +26,10 @@ export default function useDocumentacionPadron() {
     return () => { active = false }
   }, [])
 
-  const reload = useCallback(() => setVersion((current) => current + 1), [])
+  const reload = useCallback(() => {
+    setLoad((current) => ({ ...current, error: null }))
+    setVersion((current) => current + 1)
+  }, [])
 
   useEffect(() => {
     window.addEventListener('documentacionCambiada', reload)
@@ -34,7 +37,7 @@ export default function useDocumentacionPadron() {
   }, [reload])
 
   const personas = load.data?.personas ?? EMPTY_PERSONAS
-  const rows = useMemo(() => documentRows(personas), [personas])
+  const rows = useMemo(() => personRows(personas), [personas])
 
   return {
     isLoading: load.data === null && load.error === null,

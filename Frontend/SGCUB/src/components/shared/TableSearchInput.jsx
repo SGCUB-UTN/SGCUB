@@ -6,7 +6,7 @@ export default function TableSearchInput({ value, onChange, placeholder, label, 
         search
       </span>
       <input
-        className="w-full h-10 pl-11 pr-4 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline font-body-sm text-sm focus:outline-none focus:border-primary focus:bg-surface-container-lowest transition-colors"
+        className="w-full h-10 pl-11 pr-4 bg-surface-container-low border border-outline-variant/40 rounded text-on-surface placeholder:text-outline font-body-sm text-base focus:outline-none focus:border-primary focus:bg-surface-container-lowest transition-colors"
         placeholder={placeholder}
         type="text"
         value={value}

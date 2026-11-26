@@ -288,6 +288,30 @@ class PadronDocumentalTests(APITestCase):
     def estados(self, persona):
         return {documento["tipo_documento"]: documento["estado"] for documento in persona["documentos"]}
 
+    def test_incluye_telefono_menoria_y_familiares_para_avisar(self):
+        menor = self.jugador("72000101")
+        menor.socio.persona.fecha_nacimiento = timezone.localdate() - timedelta(days=365 * 10)
+        menor.socio.persona.telefono = "2215550000"
+        menor.socio.persona.save()
+        tia = Persona.objects.create(nombre="Ana", apellido="Zeta", dni="72000102", telefono="2215551111")
+        madre = Persona.objects.create(nombre="Laura", apellido="Alfa", dni="72000103", telefono="2215552222")
+        VinculoFamiliar.objects.create(persona=tia, jugador=menor, relacion="Tía")
+        VinculoFamiliar.objects.create(persona=madre, jugador=menor, relacion="Madre", responsable_legal=True)
+        docente = self.docente("72000104")
+
+        data = self.padron()
+
+        jugador = self.persona(data, f"jugador-{menor.pk}")
+        self.assertTrue(jugador["menor"])
+        self.assertEqual(jugador["telefono"], "2215550000")
+        self.assertEqual(
+            [(contacto["nombre"], contacto["relacion"], contacto["telefono"], contacto["responsable_legal"]) for contacto in jugador["contactos"]],
+            [("Laura", "Madre", "2215552222", True), ("Ana", "Tía", "2215551111", False)],
+        )
+        docente_data = self.persona(data, f"docente-{docente.pk}")
+        self.assertFalse(docente_data["menor"])
+        self.assertEqual(docente_data["contactos"], [])
+
     def test_estado_documental_por_persona_toma_el_mas_grave(self):
         sin_documentos = self.jugador("72000001").socio.persona
         con_vencido = self.jugador("72000002").socio.persona
@@ -437,35 +461,37 @@ class PadronDocumentalTests(APITestCase):
     def reporte(self, **params):
         return self.client.get(reverse("padron_documental_pdf"), params)
 
-    def test_el_reporte_incluye_resumen_y_documentos_filtrados(self):
-        vencido = self.jugador("71000061")
-        faltante = self.jugador("71000062")
-        self.documento(vencido.socio.persona, self.apto, dias=-2)
-        self.documento(faltante.socio.persona, self.apto)
+    def test_el_reporte_lista_personas_filtradas_por_situacion(self):
+        inhabilitado = self.jugador("71000061")
+        al_dia = self.jugador("71000062")
+        self.documento(inhabilitado.socio.persona, self.apto, dias=-2)
+        for tipo in (self.apto, self.seguro):
+            self.documento(al_dia.socio.persona, tipo)
 
-        response = self.reporte(estado="vencido", perfil="jugador", tipo=str(self.apto.pk), q="71000061")
+        response = self.reporte(situacion="inhabilitada", perfil="jugador", tipo=str(self.apto.pk), q="7100006")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertIn("reporte-documental-vencidos-", response["Content-Disposition"])
-        self.assertIn(b"Cumplimiento general", response.content)
+        self.assertIn("reporte-documental-inhabilitados-", response["Content-Disposition"])
+        self.assertIn(b"Habilitados", response.content)
         self.assertIn(b"71000061", response.content)
+        self.assertIn(b"Vencido", response.content)
         self.assertNotIn(b"71000062", response.content)
 
-    def test_el_nombre_del_reporte_refleja_el_estado(self):
-        self.assertIn("reporte-documental-vencidos-", self.reporte(estado="vencido")["Content-Disposition"])
-        self.assertIn("reporte-documental-por-vencer-", self.reporte(estado="por_vencer")["Content-Disposition"])
-        self.assertIn("reporte-documental-faltantes-", self.reporte(estado="faltante")["Content-Disposition"])
-        self.assertIn("reporte-documental-vigentes-", self.reporte(estado="vigente")["Content-Disposition"])
+    def test_el_nombre_del_reporte_refleja_la_situacion(self):
+        self.assertIn("reporte-documental-inhabilitados-", self.reporte(situacion="inhabilitada")["Content-Disposition"])
+        self.assertIn("reporte-documental-por-vencer-", self.reporte(situacion="por_vencer")["Content-Disposition"])
+        self.assertIn("reporte-documental-al-dia-", self.reporte(situacion="al_dia")["Content-Disposition"])
         self.assertIn("reporte-documental-2", self.reporte()["Content-Disposition"])
 
-    def test_el_reporte_filtra_por_tipo_de_documento(self):
+    def test_el_reporte_filtra_personas_por_documento_requerido(self):
         self.jugador("71000101")
+        self.docente("71000102")
 
         response = self.reporte(tipo=str(self.apto.pk))
 
-        self.assertIn(b"Apto test", response.content)
-        self.assertNotIn(b"Seguro test", response.content)
+        self.assertIn(b"71000101", response.content)
+        self.assertNotIn(b"71000102", response.content)
 
     def test_el_reporte_filtra_por_categoria_del_docente(self):
         self.docente("71000071", categorias=(self.sub14,))
@@ -477,24 +503,26 @@ class PadronDocumentalTests(APITestCase):
         self.assertNotIn(b"71000072", response.content)
 
     def test_el_reporte_rechaza_filtros_invalidos(self):
-        for params in ({"estado": "aprobado"}, {"perfil": "socio"}, {"tipo": "apto"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
+        for params in ({"situacion": "vencido"}, {"perfil": "socio"}, {"tipo": "apto"}, {"categoria": "abc"}, {"categoria": "gender:X"}):
             with self.subTest(params=params):
                 self.assertEqual(self.reporte(**params).status_code, 400)
 
-    def test_sin_obligatorios_las_categorias_afectadas_cuentan_solo_vencidos(self):
+    def test_las_categorias_afectadas_cuentan_personas(self):
         TipoDocumento.objects.update(obligatorio=False)
-        persona = self.jugador("71000121").socio.persona
-        self.documento(persona, self.apto, dias=-3)
-        self.documento(persona, self.seguro, dias=90)
+        con_vencido = self.jugador("71000121").socio.persona
+        self.documento(con_vencido, self.apto, dias=-3)
+        por_vencer = self.jugador("71000122").socio.persona
+        self.documento(por_vencer, self.apto, dias=1)
+        self.jugador("71000123")
 
         afectadas = self.padron()["resumen"]["categorias_afectadas"]
 
         self.assertEqual(
-            [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in afectadas],
-            [("Sub 12", 1, 0, 2)],
+            [(item["categoria"], item["inhabilitados"], item["por_vencer"], item["total"]) for item in afectadas],
+            [("Sub 12", 0, 2, 3)],
         )
 
-    def test_resume_el_cumplimiento_y_las_categorias_afectadas(self):
+    def test_resume_el_padron_y_las_categorias_afectadas_por_persona(self):
         habilitado = self.jugador("71000081")
         self.jugador("71000082")
         docente = self.docente("71000083", categorias=(self.sub12, self.sub14))
@@ -506,11 +534,11 @@ class PadronDocumentalTests(APITestCase):
 
         self.assertEqual((resumen["total"], resumen["habilitados"], resumen["inhabilitados"]), (3, 1, 2))
         self.assertEqual(resumen["inhabilitados_por_perfil"], {"jugador": 1, "docente": 1})
+        self.assertEqual((resumen["por_vencer"], resumen["al_dia"]), (0, 1))
         self.assertEqual(resumen["cumplimiento"], 33.3)
-        self.assertEqual(resumen["documentos"], {"vigente": 2, "por_vencer": 0, "vencido": 1, "faltante": 3})
         self.assertEqual(
-            [(item["categoria"], item["vencidos"], item["faltantes"], item["total"]) for item in resumen["categorias_afectadas"]],
-            [("Sub 12", 1, 3, 6), ("Sub 14", 1, 1, 2)],
+            [(item["categoria"], item["inhabilitados"], item["por_vencer"], item["total"]) for item in resumen["categorias_afectadas"]],
+            [("Sub 12", 2, 0, 3), ("Sub 14", 1, 0, 1)],
         )
 
 
