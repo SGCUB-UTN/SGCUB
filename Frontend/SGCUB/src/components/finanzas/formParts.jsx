@@ -187,7 +187,7 @@ export function FormPanel({ id, icon, title, description, actions, disabled = fa
 }
 
 // Selectable card of a mutually exclusive choice (what to do with an excess, how to settle a reversal)
-export function OptionCard({ icon, title, description, selected, disabled = false, onSelect }) {
+export function OptionCard({ icon, title, description = '', selected, disabled = false, onSelect }) {
   return (
     <button
       type="button"
@@ -200,7 +200,7 @@ export function OptionCard({ icon, title, description, selected, disabled = fals
       <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{icon}</span>
       <span className="flex flex-col min-w-0">
         <span className="text-base font-semibold text-on-surface">{title}</span>
-        <span className="text-sm text-on-surface-variant">{description}</span>
+        {description && <span className="text-sm text-on-surface-variant">{description}</span>}
       </span>
     </button>
   )

@@ -4,6 +4,20 @@ import { formatPeriod } from '../shared/periodFormat'
 import AuthorizationModal from './AuthorizationModal'
 import { SCHOLARSHIP_CONCEPT, isLateFee, isRegistration, itemLabel } from './cuotaItems'
 
+const LATE_FEE_REASONS = [
+  {
+    motivo: 'El socio pagó antes del vencimiento',
+    title: 'Pagó antes del vencimiento',
+    icon: 'event_available',
+  },
+]
+
+const LATE_FEE_REMOVAL = {
+  authorizerLabel: 'Responsable',
+  authorizerError: 'Elegí el responsable.',
+  presetReasons: LATE_FEE_REASONS,
+}
+
 export function RemoveItemButton({ label, blocker = '', onClick }) {
   return (
     <button
@@ -57,6 +71,7 @@ function RemoveCuotaItemModal({ cuota, item, onClose, onRemoved }) {
       description={cuota && item ? removalDescription(cuota, item) : null}
       confirmLabel="Eliminar"
       confirmIcon={null}
+      {...(item && isLateFee(item) ? LATE_FEE_REMOVAL : {})}
       errorMessage="No se pudo eliminar el concepto de la cuota."
       onConfirm={confirm}
       onClose={onClose}
