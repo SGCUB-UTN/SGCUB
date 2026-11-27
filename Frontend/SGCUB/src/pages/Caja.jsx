@@ -84,7 +84,6 @@ function Caja() {
             isLoading={movimientos.isLoading}
             onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
             onSelectDevolucion={setDevolucionSeleccionada}
-            onChanged={recargarCaja}
           />
         </>
       )}

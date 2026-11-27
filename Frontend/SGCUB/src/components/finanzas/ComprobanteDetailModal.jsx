@@ -186,6 +186,9 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
+            {!readOnly && !anulado && !isIncome && !detalle.revertible && (
+              <p className="w-full sm:w-auto sm:mr-auto text-base text-on-surface-variant">Solo se puede revertir el último pago del socio.</p>
+            )}
             <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             {!readOnly && detalle.revertible && (
               <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>

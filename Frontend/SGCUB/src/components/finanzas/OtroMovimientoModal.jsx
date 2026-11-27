@@ -225,6 +225,13 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
 
   return (
     <form onSubmit={submit} className="flex flex-col" noValidate>
+      <div className="mb-5 flex items-start gap-3">
+        <span className="material-symbols-outlined text-primary mt-0.5" style={{ fontSize: 24 }} aria-hidden="true">{operation.icon}</span>
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold text-on-surface">{OPERATION_TITLES[operation.value]}</h2>
+          <p className="text-base text-on-surface-variant">{operation.description}</p>
+        </div>
+      </div>
       <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
           <FormSection icon="receipt_long" title="Concepto" disabled={!socio}>
@@ -244,7 +251,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
             />
           </FormSection>
 
-          <FormSection icon="payments" title={isIncome ? 'Formas de cobro' : 'Forma de devolución'} disabled={!socio}>
+          <FormSection icon="payments" title={isIncome ? 'Medios de pago' : 'Medio de devolución'} disabled={!socio}>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3 text-base font-semibold text-on-surface">
                 <span className="flex-1" aria-hidden="true">{isIncome ? 'Medio de pago' : 'Medio de devolución'} <span className="text-error font-bold">*</span></span>

@@ -23,15 +23,13 @@ import usePagination from '../../hooks/usePagination'
 import { matchesSearch } from '../shared/search'
 import { CASH_EXPORT_COLUMNS, cashExportFilename } from './cashMovementsExport'
 import { KIND_BADGES } from './movementBadges'
-import { conceptGroup } from './conceptOrigins'
+import { INCOME, MANUAL_REFUND, conceptGroup, isOtherConcept } from './conceptOrigins'
+import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import { descargarComprobantePdf } from '../../api/comprobantes'
 import { descargarDevolucionPdf } from '../../api/devoluciones'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
-import AnnulIncomeModal from './AnnulIncomeModal'
-import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, REFUND_CANCELLED, isCancelledRefund } from './refunds'
 import { cancellationSummary } from './cancellations'
-import useRevertPayment from '../../hooks/useRevertPayment'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
@@ -70,14 +68,15 @@ const TYPES = {
   Manual: { label: 'Devolución manual', kind: 'Devolución', group: 'devoluciones', badge: KIND_BADGES.Manual },
 }
 
-const ACTIVE = 'activo'
-const INACTIVE = 'inactivo'
-const STATUS_OPTIONS = [{ value: ACTIVE, label: 'Activo' }, { value: INACTIVE, label: 'Inactivo' }]
+const ACTIVE = 'vigente'
+const INACTIVE = 'anulado'
+const RECEIPT_STATUS_OPTIONS = [{ value: ACTIVE, label: 'Vigente' }, { value: INACTIVE, label: 'Anulado' }]
+const ALL_STATUS_OPTIONS = [{ value: ACTIVE, label: 'Vigente' }, { value: INACTIVE, label: 'Anulado o cancelado' }]
 
 const SCOPE_FILTERS = {
-  todos: { label: 'Estado', field: 'status', options: STATUS_OPTIONS },
-  cuotas: { label: 'Estado', field: 'status', options: [{ value: ACTIVE, label: 'Activo' }, { value: INACTIVE, label: 'Anulado' }] },
-  ingresos: { label: 'Estado', field: 'status', options: STATUS_OPTIONS, conceptLabel: 'Concepto' },
+  todos: { label: 'Estado', field: 'status', options: ALL_STATUS_OPTIONS },
+  cuotas: { label: 'Estado', field: 'status', options: RECEIPT_STATUS_OPTIONS },
+  ingresos: { label: 'Estado', field: 'status', options: RECEIPT_STATUS_OPTIONS, conceptLabel: 'Concepto', conceptOrigin: INCOME },
   devoluciones: {
     label: 'Tipo',
     field: 'refundFilter',
@@ -87,13 +86,11 @@ const SCOPE_FILTERS = {
       { value: REFUND_CANCELLED, label: 'Cancelada' },
     ],
     conceptLabel: 'Motivo',
+    conceptOrigin: MANUAL_REFUND,
   },
 }
 
-const groupFields = (concept) => {
-  const group = conceptGroup(concept)
-  return { conceptGroup: group, conceptKey: group.toLocaleLowerCase('es') }
-}
+const groupFields = (concept) => ({ conceptKey: conceptGroup(concept).toLocaleLowerCase('es') })
 
 const receiptType = (comprobante) => {
   const annulled = comprobante.estado === 'Anulado'
@@ -140,7 +137,6 @@ function ComprobantesTable({
   isLoading,
   onSelect,
   onSelectDevolucion,
-  onChanged,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedScope = searchParams.get(PARAMS.scope)
@@ -152,10 +148,8 @@ function ComprobantesTable({
   const requestedConcept = searchParams.get(PARAMS.concept) ?? ALL
   const [downloadingKey, setDownloadingKey] = useState(null)
   const [sharingWhatsAppKey, setSharingWhatsAppKey] = useState(null)
-  const [cancellingRefund, setCancellingRefund] = useState(null)
-  const [annullingIncome, setAnnullingIncome] = useState(null)
-  const { openReversal } = useRevertPayment()
   const { showToast } = useToast()
+  const { concepts: configuredConcepts } = useConceptosMovimiento()
 
   const updateParams = (changes) => setSearchParams((current) => {
     const next = new URLSearchParams(current)
@@ -238,17 +232,12 @@ function ComprobantesTable({
   }, [unifiedItems, isLoading])
 
   const conceptOptions = useMemo(() => {
-    if (!filters.conceptLabel) return []
-    const groups = new Map()
-    unifiedItems.forEach((item) => {
-      if (item.conceptKey && TYPES[item.filterCode]?.group === scope && !groups.has(item.conceptKey)) {
-        groups.set(item.conceptKey, item.conceptGroup)
-      }
-    })
-    return [...groups]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  }, [unifiedItems, scope, filters])
+    if (!filters.conceptOrigin) return []
+    return configuredConcepts
+      .filter((concept) => concept.origen === filters.conceptOrigin)
+      .sort((a, b) => (isOtherConcept(a.nombre) - isOtherConcept(b.nombre)) || a.nombre.localeCompare(b.nombre, 'es'))
+      .map((concept) => ({ value: concept.nombre.toLocaleLowerCase('es'), label: concept.nombre }))
+  }, [configuredConcepts, filters])
   const conceptFilter = conceptOptions.some((option) => option.value === requestedConcept) ? requestedConcept : ALL
 
   const filtered = useMemo(() => {
@@ -321,11 +310,6 @@ function ComprobantesTable({
     return `Enviar ${item.refCode} por WhatsApp a ${recipient} (${socio.telefono})`
   }
 
-  const annulBlocker = (item) => {
-    if (!item.isAnulado) return ''
-    return item.raw.es_ingreso ? 'El ingreso ya está anulado' : 'El pago ya está revertido'
-  }
-
   const handleSendWhatsApp = async (item) => {
     const socio = item.socio
     const phone = socio?.telefono
@@ -352,31 +336,6 @@ function ComprobantesTable({
     } finally {
       setSharingWhatsAppKey(null)
     }
-  }
-
-  const openCancelRefund = (item) => setCancellingRefund(item.raw)
-
-  const refundCancelled = (updated) => {
-    setCancellingRefund(null)
-    onChanged?.()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
-  }
-
-  const openAnnulOrRevert = (item) => {
-    if (item.raw.es_ingreso) {
-      setAnnullingIncome(item.raw)
-    } else {
-      openReversal({ comprobanteId: item.raw.comprobante_id, onChanged })
-    }
-  }
-
-  const incomeAnnulled = (_updated, { refunded, amount }) => {
-    const codigo = annullingIncome.codigo
-    setAnnullingIncome(null)
-    onChanged?.()
-    showToast(refunded
-      ? { title: 'Ingreso anulado y devuelto', description: `${codigo} quedó anulado y se emitió una nota de crédito por ${formatAmount(amount)}.` }
-      : { title: 'Ingreso anulado', description: `${codigo} quedó anulado. Si corresponde devolver dinero, emití una nota de crédito desde el comprobante.` })
   }
 
   const handleDownload = async (item) => {
@@ -560,25 +519,13 @@ function ComprobantesTable({
                   >
                     <RowIcon name="download" />
                   </RowIconButton>
-                  {item.kind === 'devolucion' ? (
-                    <RowIconButton
-                      tone="danger"
-                      label={`Cancelar devolución ${item.refCode}`}
-                      disabledReason={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : ''}
-                      onClick={() => openCancelRefund(item)}
-                    >
-                      <RowIcon name="close" />
-                    </RowIconButton>
-                  ) : (
-                    <RowIconButton
-                      tone="danger"
-                      label={item.raw.es_ingreso ? `Anular ingreso ${item.refCode}` : `Revertir pago ${item.refCode}`}
-                      disabledReason={annulBlocker(item)}
-                      onClick={() => openAnnulOrRevert(item)}
-                    >
-                      <RowIcon name="undo" />
-                    </RowIconButton>
-                  )}
+                  <RowIconButton
+                    tone="neutral"
+                    label={`Ver ${item.typeLabel.toLocaleLowerCase('es')} ${item.refCode}`}
+                    onClick={() => handleRowAction(item)}
+                  >
+                    <RowIcon name="receipt_long" />
+                  </RowIconButton>
                 </div>
               </td>
             </tr>
@@ -587,20 +534,6 @@ function ComprobantesTable({
 
         <TablePagination id="comprobantes-rows-per-page" {...paginationProps} />
       </div>
-
-      <CancelRefundModal
-        opened={Boolean(cancellingRefund)}
-        devolucion={cancellingRefund}
-        onClose={() => setCancellingRefund(null)}
-        onCancelled={refundCancelled}
-      />
-
-      <AnnulIncomeModal
-        opened={Boolean(annullingIncome)}
-        comprobante={annullingIncome}
-        onClose={() => setAnnullingIncome(null)}
-        onAnnulled={incomeAnnulled}
-      />
     </section>
   )
 }
