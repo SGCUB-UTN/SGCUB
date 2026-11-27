@@ -1156,6 +1156,91 @@ class CuotasPorAltaYBajaTests(APITestCase):
 		self.assertEqual(response.status_code, 200, response.data)
 		self.assertTrue(all("CuotaDeportiva" in conceptos for conceptos in conceptos_por_periodo(self.socio).values()))
 
+	def test_baja_parcial_con_beca_porcentual_recalcula_sin_emitir_comprobante_fantasma(self):
+		grant_scholarship(self.socio.pk, "Porcentaje", Decimal("50"), self.hoy.replace(day=1), "Hermanos", "Comisión")
+
+		response = self.dar_de_baja_parcial("siguiente")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.assertFalse(Comprobante.objects.exists())
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		social = cuota.items.get(concepto="CuotaSocial").monto
+		beca = cuota.items.get(concepto="Beca").monto
+		esperado = (social * Decimal("0.50")).quantize(Decimal("0.01"))
+		self.assertEqual(beca, esperado)
+		self.assertEqual(cuota.movimiento.monto, social - esperado)
+		self.assertEqual(pending_amounts([cuota])[cuota.pk], social - esperado)
+		self.assertNotEqual(cuota.estado_cuota, EstadoCuotaChoices.PAGA)
+
+	def test_baja_parcial_con_beca_cien_por_ciento_cubre_solo_cuota_social(self):
+		beca, _ = grant_scholarship(self.socio.pk, "Porcentaje", Decimal("100"), self.hoy.replace(day=1), "Total", "Comisión")
+
+		response = self.dar_de_baja_parcial("siguiente")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		cuota = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		social = cuota.items.get(concepto="CuotaSocial").monto
+		self.assertFalse(cuota.items.filter(concepto="CuotaDeportiva").exists())
+		self.assertEqual(cuota.items.get(concepto="Beca").monto, social)
+		self.assertEqual(cuota.estado_cuota, EstadoCuotaChoices.PAGA)
+		vigente = Comprobante.objects.get(
+			estado="Vigente",
+			pago__movimiento__imputaciones_origen__movimiento_destino__cuota=cuota,
+		)
+		detail = self.client.get(reverse("comprobante-detail", args=[vigente.pk])).data
+		self.assertNotIn("CuotaDeportiva", {line["concepto"] for line in detail["desglose"]})
+
+		cancel_scholarship(beca.pk, "Fin de beca", "Comisión")
+		cuota.refresh_from_db()
+		self.assertEqual(pending_amounts([cuota])[cuota.pk], social)
+
+	def test_baja_completa_elimina_cuotas_futuras_con_comprobante_anulado_o_saldadas_sin_dinero(self):
+		futura = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		total_futura = pending_amounts([futura])[futura.pk]
+		pago_actual = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.actual)
+		total_actual = pending_amounts([pago_actual])[pago_actual.pk]
+		_, receipt = register_payment(
+			self.socio.pk,
+			[pago_actual.pk, futura.pk],
+			[{"medio_de_pago": "Efectivo", "monto": total_actual + total_futura}],
+			total_actual + total_futura,
+		)
+		revert_payment(receipt.pago_id, "Error", "Comisión")
+
+		otra_futura = Cuota.objects.get(
+			movimiento__cuenta_corriente__socio=self.socio,
+			periodo=next_period_start(2).strftime("%Y-%m"),
+		)
+		assign_benefit(otra_futura.pk, "Descuento", "Porcentaje", Decimal("100"), self.hoy, "Bonificación", authorized_by="Comisión")
+
+		with self.captureOnCommitCallbacks(execute=True):
+			self.socio.deactivate()
+
+		self.assertEqual(periodos_de(self.socio), [self.actual])
+		detail = self.client.get(reverse("comprobante-detail", args=[receipt.pk]))
+		self.assertEqual(detail.status_code, 200, detail.data)
+		self.assertEqual([p["periodo"] for p in detail.data["periodos"]], [self.actual, self.siguiente])
+
+	def test_baja_completa_cancela_becas_vigentes_y_respeta_cuotas_anteriores(self):
+		beca, _ = grant_scholarship(self.socio.pk, "Porcentaje", Decimal("50"), self.hoy.replace(day=1), "Hermanos", "Comisión")
+
+		with self.captureOnCommitCallbacks(execute=True):
+			self.socio.deactivate()
+
+		beca.refresh_from_db()
+		self.assertEqual(beca.estado, EstadoBecaChoices.CANCELADA)
+		self.assertEqual(beca.motivo_cancelacion, "Baja del socio")
+		self.assertEqual(periodos_de(self.socio), [self.actual])
+		actual = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.actual)
+		self.assertTrue(actual.items.filter(concepto="Beca").exists())
+
+		self.socio.refresh_from_db()
+		with self.captureOnCommitCallbacks(execute=True):
+			self.socio.activate()
+
+		futura = Cuota.objects.get(movimiento__cuenta_corriente__socio=self.socio, periodo=self.siguiente)
+		self.assertFalse(futura.items.filter(concepto="Beca").exists())
+
 
 class CategoriaExentaTests(TestCase):
 	def test_generacion_no_crea_cuotas_a_jugadores_de_categoria_exenta(self):

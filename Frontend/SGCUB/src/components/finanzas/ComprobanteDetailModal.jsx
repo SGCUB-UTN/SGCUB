@@ -27,15 +27,6 @@ const paymentMethodsOf = (pago, methodLabel) => {
   return items.length ? items : [NO_PAYMENT_METHOD]
 }
 
-function InfoRow({ label, children }) {
-  return (
-    <div className="flex justify-between gap-3 text-sm">
-      <span className="text-on-surface-variant">{label}</span>
-      <span className="text-right text-on-surface font-medium break-words">{children}</span>
-    </div>
-  )
-}
-
 function CreditNotes({ detalle, methodLabel }) {
   const notes = detalle.notas_credito ?? []
   if (!notes.length) return null

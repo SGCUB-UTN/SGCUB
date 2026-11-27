@@ -242,7 +242,7 @@ def _ensure_player_cuota_for_period(socio, period, today):
             return None
 
     cuota = lock_cuota(cuota.pk)
-    if is_locked(cuota):
+    if has_active_payments(cuota) or is_paid_with_money(cuota):
         return cuota
 
     period_start = parse_period(period)
@@ -266,8 +266,7 @@ def _ensure_player_cuota_for_period(socio, period, today):
     ).exists():
         registration_item.cuota = cuota
         registration_item.save()
-    sync_cuota_charge(cuota)
-    refresh_cuota_scholarships(cuota, socio.pk, "Beca recalculada por el alta de la cuota deportiva")
+    _refresh_cuota_after_items_change(cuota, socio.pk, "Beca recalculada por el alta de la cuota deportiva")
     return cuota
 
 
@@ -299,13 +298,16 @@ def schedule_exemption_sync(socio_id, previous_category, category):
         transaction.on_commit(lambda: create_or_update_player_current_cuota(socio_id))
 
 
-def unpaid_cuotas_from(socio_ids, from_period):
+def cuotas_from(socio_ids, from_period):
     return (
         Cuota.objects.filter(movimiento__cuenta_corriente__socio_id__in=socio_ids, periodo__gte=from_period)
-        .exclude(estado_cuota=EstadoCuotaChoices.PAGA)
         .select_related("movimiento")
         .order_by("periodo", "pk")
     )
+
+
+def unpaid_cuotas_from(socio_ids, from_period):
+    return cuotas_from(socio_ids, from_period).exclude(estado_cuota=EstadoCuotaChoices.PAGA)
 
 
 @transaction.atomic
@@ -327,9 +329,46 @@ def following_period(period):
     return generation_periods(parse_period(period), months=2)[1]
 
 
+@transaction.atomic
+def cancel_scholarships_on_leave(socio, user=None):
+    active = list(
+        Beca.objects.select_for_update().filter(socio=socio, estado=EstadoBecaChoices.APLICADA)
+    )
+    if not active:
+        return 0
+    now = timezone.now()
+    actor = user_name(user)
+    for scholarship in active:
+        scholarship.estado = EstadoBecaChoices.CANCELADA
+        scholarship.fecha_cancelacion = now
+        scholarship.motivo_cancelacion = "Baja del socio"
+        scholarship.cancelado_por = actor
+        scholarship.usuario_cancelacion = user
+        scholarship.save(update_fields=[
+            "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion",
+        ])
+        record_scholarship(Accion.BECA_CANCELADA, scholarship, "Baja del socio", actor, user, socio)
+    return len(active)
+
+
+@transaction.atomic
 def annul_cuotas_after_leave(socio, user=None):
+    cancel_scholarships_on_leave(socio, user)
     limit = payment_period_limit(socio)
-    return annul_unpaid_cuotas([socio.pk], following_period(limit), user) if limit else 0
+    if not limit:
+        return 0
+    annulled = 0
+    for cuota_id in cuotas_from([socio.pk], following_period(limit)).values_list("pk", flat=True):
+        cuota = lock_cuota(cuota_id)
+        if has_active_payments(cuota) or is_paid_with_money(cuota):
+            continue
+        if cuota.estado_cuota == EstadoCuotaChoices.PAGA:
+            annul_settlement_receipts(cuota)
+            cuota.estado_cuota = EstadoCuotaChoices.EN_FECHA
+            cuota.save(update_fields=["estado_cuota"])
+        delete_cuota(cuota, user)
+        annulled += 1
+    return annulled
 
 
 def sync_cuotas_with_member_state(socio_id, user=None):
@@ -349,20 +388,28 @@ def sports_leave_period(option, today=None):
     return generation_periods(today or timezone.localdate(), months=2)[SPORTS_LEAVE_START[option]]
 
 
+def _refresh_cuota_after_items_change(cuota, socio_id, reason, user=None):
+    was_settled = cuota.estado_cuota == EstadoCuotaChoices.PAGA and settlement_imputations(cuota).exists()
+    refresh_cuota_scholarships(cuota, socio_id, reason, user=user)
+    sync_cuota_charge(cuota)
+    if was_settled and cuota.estado_cuota == EstadoCuotaChoices.PAGA:
+        annul_settlement_receipts(cuota)
+        issue_settlement_receipt(cuota, user)
+
+
 @transaction.atomic
 def stop_sports_charge(socio_id, from_period, user=None):
     updated = 0
-    for cuota_id in unpaid_cuotas_from([socio_id], from_period).values_list("pk", flat=True):
+    for cuota_id in cuotas_from([socio_id], from_period).values_list("pk", flat=True):
         cuota = lock_cuota(cuota_id)
-        if is_locked(cuota):
+        if has_active_payments(cuota) or is_paid_with_money(cuota):
             continue
         items = list(cuota.items.filter(concepto=ConceptoItemChoices.CUOTA_DEPORTIVA))
         if not items:
             continue
         for item in items:
             annul_item(item, SPORTS_LEAVE_REASON, user=user)
-        sync_cuota_charge(cuota)
-        refresh_cuota_scholarships(cuota, socio_id, "Beca recalculada por la baja deportiva", user=user)
+        _refresh_cuota_after_items_change(cuota, socio_id, "Beca recalculada por la baja deportiva", user=user)
         record_transaction(
             Accion.ITEM_ANULADO,
             f"Cuota deportiva quitada de la cuota {cuota.periodo}: {SPORTS_LEAVE_REASON.lower()}",
@@ -385,7 +432,10 @@ def has_imputations(cuota):
     movement = getattr(cuota, "movimiento", None)
     if not movement:
         return False
-    return movement.imputaciones_destino.exists() or movement.imputaciones_origen.exists()
+    return (
+        active_imputations().filter(movimiento_destino=movement).exists()
+        or active_imputations().filter(movimiento_origen=movement).exists()
+    )
 
 
 def is_locked(cuota):
@@ -440,6 +490,7 @@ def issue_settlement_receipt(cuota, user=None):
     imputation = Imputacion.objects.create(
         movimiento_origen=movement,
         movimiento_destino=cuota.movimiento,
+        periodo=cuota.periodo,
         fecha=timezone.now(),
         monto_aplicado=Decimal("0.00"),
         saldo_pendiente=Decimal("0.00"),
@@ -483,6 +534,7 @@ def delete_cuota(cuota, user=None):
         reference=f"Cuota {cuota.periodo}",
         detail={"cuota_id": cuota.pk},
     )
+    Imputacion.objects.filter(movimiento_destino=movement).update(periodo=cuota.periodo, movimiento_destino=None)
     cuota.delete()
 
 
@@ -850,6 +902,7 @@ def apply_payment(payment_movement, cuotas, amount):
             imputation = Imputacion.objects.create(
                 movimiento_origen=payment_movement,
                 movimiento_destino=cuota.movimiento,
+                periodo=cuota.periodo,
                 fecha=timezone.now(),
                 monto_aplicado=applied,
                 saldo_pendiente=pending[cuota.pk] - applied,
@@ -979,8 +1032,14 @@ def receipt_detail(receipt):
         Imputacion.objects.filter(movimiento_origen=movement)
         .select_related("movimiento_destino__cuota")
         .prefetch_related("detalles")
-        .order_by("movimiento_destino__cuota__periodo", "pk")
         if movement and not income else []
+    )
+    imputations = sorted(
+        imputations,
+        key=lambda item: (
+            item.movimiento_destino.cuota.periodo if item.movimiento_destino and item.movimiento_destino.cuota else item.periodo,
+            item.pk,
+        ),
     )
 
     periods, breakdown = [], {}
@@ -989,13 +1048,13 @@ def receipt_detail(receipt):
         for detail in imputation.detalles.all():
             totals[detail.concepto] = totals.get(detail.concepto, Decimal("0.00")) + detail.monto
             breakdown[detail.concepto] = breakdown.get(detail.concepto, Decimal("0.00")) + detail.monto
-        cuota = imputation.movimiento_destino.cuota
+        cuota = imputation.movimiento_destino.cuota if imputation.movimiento_destino else None
         balance = imputation.saldo_pendiente or Decimal("0.00")
         partial = balance > 0
         lines = detail_lines(totals)
         periods.append({
-            "cuota_id": cuota.pk,
-            "periodo": cuota.periodo,
+            "cuota_id": cuota.pk if cuota else None,
+            "periodo": cuota.periodo if cuota else imputation.periodo,
             "monto_aplicado": imputation.monto_aplicado,
             "es_parcial": partial,
             "saldo_pendiente": balance,
@@ -1341,7 +1400,11 @@ def revert_payment(payment_id, reason, responsable, user=None, today=None, outco
     if not income and latest_cuota_payment(account).pk != payment.pk:
         raise PagoInvalidoError("Solo se puede revertir el último pago de cuotas del socio.")
 
-    cuota_ids = list(Imputacion.objects.filter(movimiento_origen=movement).values_list("movimiento_destino__cuota", flat=True))
+    cuota_ids = list(
+        Imputacion.objects.filter(movimiento_origen=movement)
+        .exclude(movimiento_destino__cuota__isnull=True)
+        .values_list("movimiento_destino__cuota", flat=True)
+    )
     cuotas = by_period(
         Cuota.objects.select_for_update(of=("self",)).filter(pk__in=cuota_ids).select_related("movimiento")
     )
@@ -1384,6 +1447,7 @@ def latest_payment_cuota_ids(payment):
         return []
     return list(
         Imputacion.objects.filter(movimiento_origen__pago=payment)
+        .exclude(movimiento_destino__cuota_id__isnull=True)
         .order_by("movimiento_destino__cuota_id")
         .values_list("movimiento_destino__cuota_id", flat=True)
     )

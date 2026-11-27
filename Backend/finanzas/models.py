@@ -474,9 +474,12 @@ class Imputacion(models.Model):
     )
     movimiento_destino = models.ForeignKey(
         MovimientoCuenta,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="imputaciones_destino",
+        null=True,
+        blank=True,
     )
+    periodo = models.CharField(max_length=20, blank=True)
     fecha = models.DateTimeField()
     monto_aplicado = models.DecimalField(max_digits=10, decimal_places=2)
     saldo_pendiente = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
