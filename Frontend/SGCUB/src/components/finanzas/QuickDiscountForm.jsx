@@ -69,10 +69,10 @@ function QuickDiscountForm({ cuota, onSuccess }) {
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5 p-3 rounded-lg border border-slate-200 bg-slate-50">
+      <div className="flex flex-col gap-1.5 p-3 rounded-lg border border-outline-variant/40 bg-surface-container-low">
         <SummaryLine label="Resta pagar" value={formatAmount(pending)} />
         <SummaryLine label="Descuento" value={`− ${formatAmount(discount)}`} valueClassName="text-emerald-700" />
-        <div className="pt-1.5 mt-0.5 border-t border-dashed border-slate-300">
+        <div className="pt-1.5 mt-0.5 border-t border-dashed border-outline-variant">
           <SummaryLine label="Nuevo total" value={formatAmount(roundCents(pending - discount))} isTotal />
         </div>
       </div>

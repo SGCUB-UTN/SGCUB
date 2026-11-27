@@ -80,7 +80,6 @@ function DevolucionDetailContent({ devolucion: initialDevolucion, opened, onClos
   )
 }
 
-// Detail of a manual refund or a credit note: neither changes the debt nor the club's income
 function DevolucionDetailModal({ devolucion, opened, onClose, onChanged, readOnly = false }) {
   if (!devolucion) return null
   return (

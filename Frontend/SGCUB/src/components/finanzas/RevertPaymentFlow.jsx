@@ -17,7 +17,6 @@ import ReceiptSkeleton from './ReceiptSkeleton'
 
 const REASON_MAX_LENGTH = 180
 
-// Revert asks who and why and reverts; settle (once reverted) only lets choose again what to do with the money
 const REVERT = 'revert'
 const SETTLE = 'settle'
 const PAYMENT = 'payment'
@@ -208,8 +207,6 @@ function ReversalDone({ detalle, creditNote, onClose }) {
   )
 }
 
-// Reverts the latest payment of cuotas and doesn't let go until it's decided what happens with the money:
-// once reverted the modal can't be closed, only another option chosen, until the money is settled.
 function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
   const [load, setLoad] = useState({ loading: true, error: '', detalle: null })
   const [stage, setStage] = useState(REVERT)
@@ -246,7 +243,6 @@ function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
     settle(chosen)
   }
 
-  // Already reverted: the responsable and reason of the reversal also sign the credit note
   const resettle = async ({ outcome: chosen, refundMethod }) => {
     if (chosen === FULL_CREDIT_NOTE) {
       const note = await emitirNotaCredito(detalle.comprobante_id, {

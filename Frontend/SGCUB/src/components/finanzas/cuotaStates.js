@@ -23,6 +23,13 @@ const CUOTA_STATE_SHORT_LABELS = {
   [CUOTA_STATES.PAGA]: 'Paga',
 }
 
+export const CUOTA_STATE_TONES = {
+  [CUOTA_STATES.EN_FECHA]: 'info',
+  [CUOTA_STATES.VENCIDA_1]: 'alerta',
+  [CUOTA_STATES.VENCIDA_2]: 'error',
+  [CUOTA_STATES.PAGA]: 'ok',
+}
+
 const CUOTA_STATE_BADGE_CLASSES = {
   [CUOTA_STATES.EN_FECHA]: 'bg-sky-50 text-sky-700 border-sky-200',
   [CUOTA_STATES.VENCIDA_1]: 'bg-amber-50 text-amber-800 border-amber-200',

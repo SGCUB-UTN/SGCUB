@@ -125,7 +125,6 @@ function NotaCreditoForm({ comprobante, onIssued, onCancel }) {
   )
 }
 
-// Issues a credit note over an annulled receipt, asking for the responsable before confirming
 function NotaCreditoModal({ opened, comprobante, onClose, onIssued }) {
   return (
     <Modal

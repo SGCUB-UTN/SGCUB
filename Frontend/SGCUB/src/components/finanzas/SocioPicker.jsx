@@ -38,9 +38,6 @@ function ResultsList({ results, onSelect, className = '' }) {
   )
 }
 
-// `compact` drops the heading, uses the full width and floats the results over the content
-// below (used as the header of the empty payment form).
-// `excludedId` leaves a socio out of the results (e.g. the one a payment was wrongly registered to)
 function SocioPicker({
   onSelect,
   compact = false,

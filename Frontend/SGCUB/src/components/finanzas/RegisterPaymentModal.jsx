@@ -31,11 +31,6 @@ function HeaderMessage({ icon, tone = 'text-on-surface-variant', children }) {
   )
 }
 
-// Always shows the payment form layout. Until a valid socio is loaded the form is empty and the
-// modal header holds the socio search (or the loading / error state); then the sections fill in.
-// Without `initialSocioId` the modal starts with the search.
-// With `onChangeOption` it settles a payment just reverted: it can't be closed until the payment is
-// registered, only left to choose another option. `excludedSocioId` can't be picked (the wrong socio).
 function RegisterPaymentModal({
   opened,
   initialSocioId = null,
@@ -151,7 +146,6 @@ function RegisterPaymentModal({
       padding="lg"
     >
       {ready ? (
-        // Keyed by socio so the selection state starts fresh for each one
         <PagoForm
           key={load.socio.socio_id}
           socio={load.socio}

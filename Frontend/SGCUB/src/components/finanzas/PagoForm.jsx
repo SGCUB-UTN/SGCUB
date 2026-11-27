@@ -8,7 +8,8 @@ import ComprobantePago from './ComprobantePago'
 import RemoveCuotaItemModal, { RemoveItemButton } from './CuotaItemRemoval'
 import { AmountInput, AuthorizerSelect, FormPanel, OptionCard, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS } from './formParts'
 import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } from './cuotaItems'
-import { cuotaStateLabel, cuotaStateShortLabel, cuotaStateBadgeClass, isOverdue } from './cuotaStates'
+import { CUOTA_STATE_TONES, cuotaStateLabel, cuotaStateShortLabel, isOverdue } from './cuotaStates'
+import StatusBadge from '../shared/StatusBadge'
 import { registrarPago } from '../../api/pagos'
 import { getComprobante } from '../../api/comprobantes'
 import useMediosPago from '../../hooks/useMediosPago'
@@ -36,7 +37,6 @@ const allocate = (cuotas, amount) => {
   })
 }
 
-// The methods of the reverted payment fitted to `total`, taking the difference off the last ones
 const fitMethods = (medios, total) => {
   let remaining = roundCents(total)
   return medios
@@ -66,7 +66,6 @@ const EXCESS_OPTIONS = [
   },
 ]
 
-// Default observation of a payment that settles a reverted one
 const excessReason = (reversal) => {
   if (!reversal) return ''
   const period = reversal.lastPeriod ? formatPeriod(reversal.lastPeriod).replace(' de ', ' ') : ''
@@ -186,9 +185,9 @@ function CuotaBreakdownRow({
                   <button
                     type="button"
                     onClick={() => onAssignBenefit(cuota.cuota_id)}
-                    className="h-6 shrink-0 inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                    className="min-h-10 -my-2 -mr-2 px-2 shrink-0 inline-flex items-center gap-1.5 whitespace-nowrap rounded-md text-base font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                   >
-                    <span className="w-6 inline-flex justify-center material-symbols-outlined text-[18px]!" aria-hidden="true">sell</span>
+                    <span className="material-symbols-outlined text-[20px]" aria-hidden="true">sell</span>
                     Agregar descuento
                   </button>
                 )}
@@ -296,17 +295,17 @@ function CuotaLine({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
-              <span
-                className={`inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
-                title={cuotaStateLabel(cuota.estado_cuota)}
-              >
-                {cuotaStateShortLabel(cuota.estado_cuota)}
-              </span>
+              <StatusBadge
+                size="md"
+                badge={{
+                  label: cuotaStateShortLabel(cuota.estado_cuota),
+                  title: cuotaStateLabel(cuota.estado_cuota),
+                  tono: CUOTA_STATE_TONES[cuota.estado_cuota] ?? 'neutro',
+                }}
+              />
             )}
             {upcoming && (
-              <span className="inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
-                Próxima
-              </span>
+              <StatusBadge size="md" badge={{ label: 'Próxima', tono: 'neutro' }} />
             )}
           </div>
         </td>
@@ -388,7 +387,7 @@ function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows
         ? <p className="text-base text-on-surface-variant">Elegí un socio con deuda para armar el cobro.</p>
         : <SettlementStatus settledLines={settledLines} partialLines={partialLines} />}
 
-      <div className="flex flex-col gap-1.5 pt-4 border-t border-dashed border-slate-300">
+      <div className="flex flex-col gap-1.5 pt-4 border-t border-dashed border-outline-variant">
         {completeRows.map((row) => (
           <SummaryLine key={row.medio} label={methodLabel(row.medio)} value={formatAmount(Number(row.monto))} />
         ))}
@@ -397,7 +396,7 @@ function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 pt-4 border-t border-dashed border-slate-300">
+      <div className="flex items-center justify-between gap-3 pt-4 border-t border-dashed border-outline-variant">
         <span className="text-base font-bold text-on-surface">Queda por pagar</span>
         <RemainingValue remaining={remaining} empty={empty} />
       </div>
@@ -510,11 +509,6 @@ const initialCount = (cuotas, ids, period) => {
 
 const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => current !== id) : [...ids, id])
 
-// Without `socio`, renders the empty layout (disabled sections, empty summary)
-// so the payment modal keeps its shape while a socio is chosen.
-// With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
-// right one): the money already received is imputed in full (the excess pays the next cuota partially)
-// or the excess is refunded with a credit note.
 function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted, onLeave }) {
   const { openReversal } = useRevertPayment()
   const period = currentPeriod()
@@ -532,7 +526,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   const [expandedIds, setExpandedIds] = useState([])
   const [removal, setRemoval] = useState(null)
   const paymentCuotas = pendingCuotas
-  // When the money received is more than all the socio owes, it can only be partly refunded
   const [excessMode, setExcessMode] = useState(() => (
     reversal && reversal.total > firstCuotasTotal(pendingCuotas, pendingCuotas.length) ? EXCESS_CREDIT_NOTE : EXCESS_PARTIAL
   ))
@@ -625,7 +618,6 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
       const response = await registrarPago({
         socio_id: socio.socio_id,
         cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
-        item_cuota_ids_descuento: [],
         monto_total: enteredTotal,
         medios: allRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
         observacion: observacion || reversalNote(reversal),

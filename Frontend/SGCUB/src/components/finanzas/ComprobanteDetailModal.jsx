@@ -110,7 +110,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
   const isIncome = Boolean(detalle?.es_ingreso)
   const available = detalle ? availableToRefund(detalle) : 0
 
-  // A payment of cuotas is reverted in its own flow, which stays open until the money is settled
   const startReversal = () => {
     if (isIncome) {
       setAction('revert')
@@ -236,7 +235,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
   )
 }
 
-// Detail of a receipt with its actions: revert it (or annul an income), charge it again and refund it
 function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged, readOnly = false }) {
   if (!comprobanteId) return null
   return (

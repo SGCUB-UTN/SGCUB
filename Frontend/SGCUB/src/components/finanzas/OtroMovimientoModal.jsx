@@ -20,7 +20,7 @@ import useConceptosMovimiento from '../../hooks/useConceptosMovimiento'
 import useMediosPago from '../../hooks/useMediosPago'
 import useToast from '../../hooks/useToast'
 import AnnulIncomeModal from './AnnulIncomeModal'
-import { AmountInput, AuthorizerSelect, FormSection, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
+import { AmountInput, AuthorizerSelect, FormPanel, SUBMIT_BUTTON_CLASS, SummaryLine, TICKET_CLASS, TicketSection } from './formParts'
 
 const OPERATIONS = [
   {
@@ -109,7 +109,6 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     .sort((a, b) => isOtherConcept(a.nombre) - isOtherConcept(b.nombre))
   const concept = selectedConcept || conceptOptions[0]?.nombre || ''
   const needsDetail = isOtherConcept(concept)
-  // A manual refund goes back through a single method
   const activeRows = isIncome ? rows : rows.slice(0, 1)
   const total = roundCents(activeRows.reduce((sum, row) => sum + Number(row.monto || 0), 0))
 
@@ -233,7 +232,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
       </div>
       <div className={`grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-stretch ${socio ? '' : 'grayscale'}`}>
         <div className="flex flex-col gap-5 min-w-0">
-          <FormSection icon="receipt_long" title="Concepto" disabled={!socio}>
+          <FormPanel id="movement-concept-title" icon="receipt_long" title="Concepto" disabled={!socio}>
             <SelectConAlta
               key={operationValue}
               id="concepto-movimiento"
@@ -248,9 +247,9 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
               placeholderNuevo={isIncome ? 'Ej: Rifa anual' : 'Ej: Transferencia duplicada'}
               onCrear={async (nombre) => (await createConcept(nombre, operationValue)).nombre}
             />
-          </FormSection>
+          </FormPanel>
 
-          <FormSection icon="payments" title={isIncome ? 'Medios de pago' : 'Medio de devolución'} disabled={!socio}>
+          <FormPanel id="movement-methods-title" icon="payments" title={isIncome ? 'Medios de pago' : 'Medio de devolución'} disabled={!socio}>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3 text-base font-semibold text-on-surface">
                 <span className="flex-1" aria-hidden="true">{isIncome ? 'Medio de pago' : 'Medio de devolución'} <span className="text-error font-bold">*</span></span>
@@ -308,9 +307,9 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
               )}
             </div>
             {showErrors && errors.rows && <p className="text-sm text-error font-medium" role="alert">{errors.rows}</p>}
-          </FormSection>
+          </FormPanel>
 
-          <FormSection icon="notes" title="Observaciones" disabled={!socio}>
+          <FormPanel id="movement-notes-title" icon="notes" title="Observaciones" disabled={!socio}>
             <input
               type="text"
               value={detail}
@@ -322,10 +321,10 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
               className={claseInput(showErrors && Boolean(errors.detail))}
             />
             {showErrors && errors.detail && <p className="text-sm text-error font-medium" role="alert">{errors.detail}</p>}
-          </FormSection>
+          </FormPanel>
 
           {!isIncome && (
-            <FormSection icon="verified_user" title="Responsable" disabled={!socio}>
+            <FormPanel id="movement-responsable-title" icon="verified_user" title="Responsable" disabled={!socio}>
               <Campo id="refund-responsable" label="Responsable de la devolución" requerido error={showErrors ? errors.responsable : ''}>
                 <AuthorizerSelect
                   id="refund-responsable"
@@ -334,7 +333,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
                   invalid={showErrors && Boolean(errors.responsable)}
                 />
               </Campo>
-            </FormSection>
+            </FormPanel>
           )}
         </div>
 
@@ -446,7 +445,6 @@ function OtroMovimientoModalContent({ opened, onClose, onSuccess, initialSocio =
   )
 }
 
-// Incomes other than cuotas and manual refunds of a socio
 function OtroMovimientoModal(props) {
   return <OtroMovimientoModalContent key={props.opened ? 'open' : 'closed'} {...props} />
 }
