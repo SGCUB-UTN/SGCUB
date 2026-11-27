@@ -19,6 +19,7 @@ import {
   initialCount,
   isFuture,
   isRowComplete,
+  mergeMethods,
   reversalNote,
   roundCents,
   toggleId,
@@ -104,7 +105,7 @@ export default function usePagoForm({ socio = null, cuenta = null, initialCuotaI
 
   const addRow = () => setPaymentRows((rows) => [...rows, emptyPaymentRow(amountInput(debtTotal - enteredTotal))])
 
-  const canAddRow = !hasExcess && allRows.length < paymentMethods.length
+  const canAddRow = !hasExcess && paymentRows.length < paymentMethods.length
   const addsInRow = reversalRows.length === 0 && paymentRows.length === 1
   const showActionSlot = Boolean(reversal) || canAddRow || paymentRows.length > 1
 
@@ -119,6 +120,7 @@ export default function usePagoForm({ socio = null, cuenta = null, initialCuotaI
   const isValid = !Object.values(formErrors).some(Boolean) && coveredLines.length > 0
 
   const submitPayment = async () => {
+    const mergedMethods = mergeMethods(allRows)
     setSaving(true)
     setSubmitError('')
     try {
@@ -126,7 +128,7 @@ export default function usePagoForm({ socio = null, cuenta = null, initialCuotaI
         socio_id: socio.socio_id,
         cuota_ids: coveredLines.map((line) => line.cuota.cuota_id),
         monto_total: enteredTotal,
-        medios: allRows.map((row) => ({ medio_de_pago: row.medio, monto: Number(row.monto) })),
+        medios: mergedMethods.map((row) => ({ medio_de_pago: row.medio, monto: row.monto })),
         observacion: observacion || reversalNote(reversal),
         nota_credito: excess > 0
           ? { comprobante_id: reversal.comprobanteId, monto: excess, medio_de_pago: refundMethod, motivo: refundReason.trim(), responsable: refundResponsable }
@@ -137,7 +139,7 @@ export default function usePagoForm({ socio = null, cuenta = null, initialCuotaI
       setReceipt({
         comprobanteId,
         detalle,
-        medios: allRows.map((row) => ({ medio: methodLabel(row.medio), monto: Number(row.monto) })),
+        medios: mergedMethods.map((row) => ({ medio: methodLabel(row.medio), monto: row.monto })),
         montoTotal: enteredTotal,
         observacion,
         numero: response.comprobante?.numero,

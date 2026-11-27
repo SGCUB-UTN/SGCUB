@@ -13,6 +13,12 @@ export const emptyPaymentRow = (monto = '') => ({ medio: '', monto, edited: fals
 
 export const isRowComplete = (row) => Boolean(row.medio) && Number(row.monto) > 0
 
+export const mergeMethods = (rows) => {
+  const totals = new Map()
+  rows.forEach((row) => totals.set(row.medio, roundCents((totals.get(row.medio) ?? 0) + Number(row.monto || 0))))
+  return [...totals].map(([medio, monto]) => ({ medio, monto }))
+}
+
 export const cuotaDue = (cuota) => roundCents(Number(cuota.saldo_pendiente || 0))
 
 export const isFuture = (cuota, period) => String(cuota.periodo) > period

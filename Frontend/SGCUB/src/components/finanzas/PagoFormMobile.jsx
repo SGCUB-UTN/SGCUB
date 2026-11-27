@@ -122,7 +122,7 @@ function MethodsStep({ form }) {
         onRetry={retryMethods}
       />
       {paymentRows.map((row, index) => {
-        const taken = allRows.filter((other) => other !== row).map((other) => other.medio).filter(Boolean)
+        const taken = paymentRows.filter((other) => other !== row).map((other) => other.medio).filter(Boolean)
         const number = paymentRows.length > 1 ? ` ${index + 1}` : ''
         return (
           <fieldset key={index} className="flex flex-col gap-2 p-3 rounded-lg border border-outline-variant/40">

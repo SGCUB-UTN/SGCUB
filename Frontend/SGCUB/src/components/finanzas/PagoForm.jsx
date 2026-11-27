@@ -655,7 +655,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
                   row={row}
                   index={reversalRows.length + index}
                   paymentMethods={paymentMethods}
-                  takenMethods={allRows.filter((other) => other !== row).map((other) => other.medio).filter(Boolean)}
+                  takenMethods={paymentRows.filter((other) => other !== row).map((other) => other.medio).filter(Boolean)}
                   canRemove={allRows.length > 1}
                   showActionSlot={showActionSlot}
                   showErrors={showErrors}
