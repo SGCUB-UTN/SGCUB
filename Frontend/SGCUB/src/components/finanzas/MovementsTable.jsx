@@ -35,6 +35,7 @@ const incomeMovement = (comprobante, refunds) => {
     badge: anulado ? KIND_BADGES.Anulado : null,
     codigo: comprobante.codigo,
     fecha: comprobante.fecha_emision,
+    sortFecha: comprobante.fecha_hora || comprobante.fecha_emision,
     concepto: comprobante.concepto,
     monto: comprobante.monto_total,
     refunds,
@@ -50,6 +51,7 @@ const refundMovement = (devolucion, income) => ({
   badge: isCancelledRefund(devolucion) ? KIND_BADGES.Cancelada : KIND_BADGES[devolucion.tipo] ?? KIND_BADGES.Manual,
   codigo: devolucion.codigo,
   fecha: devolucion.fecha,
+  sortFecha: devolucion.fecha,
   concepto: devolucion.concepto,
   monto: devolucion.monto,
   income,
@@ -63,7 +65,7 @@ const otherMovements = (movimientos) => {
   return [
     ...ingresos.map((comprobante) => incomeMovement(comprobante, refundsOf(comprobante.comprobante_id))),
     ...devoluciones.map((devolucion) => refundMovement(devolucion, incomeById.get(devolucion.comprobante_anulado) ?? null)),
-  ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
+  ].sort((a, b) => (Date.parse(b.sortFecha) || 0) - (Date.parse(a.sortFecha) || 0))
 }
 
 const refundReason = (devolucion) => devolucion.concepto || 'Sin motivo registrado'

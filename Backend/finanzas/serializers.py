@@ -417,6 +417,7 @@ def annulment_data(payment):
 
 class ComprobanteListSerializer(ComprobanteSerializer):
     codigo = serializers.SerializerMethodField()
+    fecha_hora = serializers.DateTimeField(source="pago.fecha", read_only=True)
     socio = serializers.SerializerMethodField()
     es_ingreso = serializers.SerializerMethodField()
     concepto = serializers.SerializerMethodField()
@@ -426,7 +427,7 @@ class ComprobanteListSerializer(ComprobanteSerializer):
 
     class Meta(ComprobanteSerializer.Meta):
         fields = [
-            "comprobante_id", "pago", "codigo", "fecha_emision", "numero", "monto_total", "estado",
+            "comprobante_id", "pago", "codigo", "fecha_emision", "fecha_hora", "numero", "monto_total", "estado",
             "socio", "es_ingreso", "concepto", "monto_devuelto", "motivo_anulacion", "medios_de_pago",
         ]
 
