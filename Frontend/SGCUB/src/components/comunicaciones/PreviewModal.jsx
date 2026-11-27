@@ -23,6 +23,10 @@ export default function PreviewModal({
   const clubNombre = remitente?.club_nombre || 'Club Universitario de Berisso'
   const nombreRemitente = remitente?.nombre_remitente || clubNombre
   const emailRemitente = remitente?.email_remitente || 'Sin correo configurado en .env'
+  const firma = (remitente?.firma || '').trim() || nombreRemitente
+  const clubWhatsappUrl = remitente?.club_whatsapp_url || ''
+  const clubWhatsappDisplay = remitente?.club_whatsapp_display || ''
+  const clubEmail = remitente?.club_email || ''
 
   return (
     <div
@@ -101,7 +105,7 @@ export default function PreviewModal({
                   className="w-11 h-11 object-contain shrink-0"
                 />
                 <div>
-                  <p className="text-base font-bold text-white leading-snug">{clubNombre}</p>
+                  <p className="text-base font-bold text-white leading-snug">{nombreRemitente}</p>
                   <p className="text-xs text-slate-400">Comunicado institucional</p>
                 </div>
               </div>
@@ -115,13 +119,27 @@ export default function PreviewModal({
                 </div>
                 <div className="pt-3.5 mt-4 border-t border-outline-variant/40 text-xs text-on-surface-variant">
                   <p>Atentamente,</p>
-                  <p className="text-xs font-bold text-on-surface mt-0.5">
-                    Secretaría y Comisión Directiva
+                  <p className="text-xs font-bold text-on-surface mt-0.5 whitespace-pre-wrap">
+                    {firma}
                   </p>
                 </div>
               </div>
 
-              <div className="px-6 py-3 bg-surface-container-low border-t border-outline-variant/30 text-center text-[11px] text-on-surface-variant">
+              <div className="px-6 py-3 bg-surface-container-low border-t border-outline-variant/30 text-center text-[11px] text-on-surface-variant space-y-0.5">
+                {(clubWhatsappUrl || clubEmail) && (
+                  <p>
+                    {clubWhatsappUrl && (
+                      <>
+                        WhatsApp:{' '}
+                        <a href={clubWhatsappUrl} target="_blank" rel="noreferrer" className="text-primary underline">
+                          {clubWhatsappDisplay}
+                        </a>
+                      </>
+                    )}
+                    {clubWhatsappUrl && clubEmail && ' · '}
+                    {clubEmail}
+                  </p>
+                )}
                 <p>Por consultas, comuníquese con secretaría.</p>
               </div>
             </div>
@@ -134,7 +152,7 @@ export default function PreviewModal({
                   className="w-8 h-8 object-contain shrink-0"
                 />
                 <div>
-                  <p className="text-sm font-semibold leading-tight">{clubNombre}</p>
+                  <p className="text-sm font-semibold leading-tight">{nombreRemitente}</p>
                   <p className="text-[11px] text-slate-300">Secretaría</p>
                 </div>
               </div>
@@ -144,8 +162,8 @@ export default function PreviewModal({
                   <p className="whitespace-pre-wrap leading-relaxed">
                     {cuerpo || '(El cuerpo del mensaje está vacío)'}
                   </p>
-                  <p className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-500">
-                    — Secretaría y Comisión Directiva
+                  <p className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-500 whitespace-pre-wrap">
+                    — {firma}
                   </p>
                 </div>
               </div>
