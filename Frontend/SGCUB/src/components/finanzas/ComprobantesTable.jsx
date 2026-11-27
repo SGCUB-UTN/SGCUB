@@ -119,6 +119,13 @@ const refundDetail = (devolucion) => {
     : `Responsable: ${devolucion.responsable}`
 }
 
+const shortDate = (date) => formatDate(date).slice(0, 5)
+
+const amountTone = (item) => {
+  if (item.isAnulado) return 'text-outline line-through'
+  return item.isPositive ? 'text-emerald-700' : 'text-error'
+}
+
 const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?? ''}`.replace(/^, |, $/g, '') : '')
 
 const SORT_VALUES = {
@@ -419,15 +426,15 @@ function ComprobantesTable({
 
       <div id={tabPanelId(TABS_ID)} role="tabpanel" aria-labelledby={tabId(TABS_ID, scope)}>
         <DataTable
-          tableClassName="min-w-[820px]"
+          tableClassName="sm:min-w-[820px]"
           headers={(
             <>
-              <SortableHeader className={`${HEADER_CLASS} sm:pl-5`} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
-              <SortableHeader className={HEADER_CLASS} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={`${HEADER_CLASS} sm:pl-5 max-sm:hidden`} etiqueta="Comprobante" columna="number" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={`${HEADER_CLASS} max-sm:hidden`} etiqueta="Fecha" columna="date" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Socio" columna="socio" orden={sort} onOrdenar={sortAndReset} />
-              <th className={HEADER_CLASS} scope="col">Concepto</th>
-              <SortableHeader className={HEADER_CLASS} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
-              <th className={`${HEADER_CLASS} sm:pr-5 text-right`} scope="col">Acciones</th>
+              <th className={`${HEADER_CLASS} max-sm:hidden`} scope="col">Concepto</th>
+              <SortableHeader className={`${HEADER_CLASS} max-sm:text-right`} etiqueta="Monto" columna="amount" orden={sort} onOrdenar={sortAndReset} />
+              <th className={`${HEADER_CLASS} sm:pr-5 text-right max-sm:hidden`} scope="col">Acciones</th>
             </>
           )}
         >
@@ -450,7 +457,7 @@ function ComprobantesTable({
               onClick={() => handleRowAction(item)}
               className="hover:bg-surface-container-low/80 transition-colors cursor-pointer"
             >
-              <td className={`${CELL_CLASS} sm:pl-5 whitespace-nowrap`}>
+              <td className={`${CELL_CLASS} sm:pl-5 whitespace-nowrap max-sm:hidden`}>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -468,18 +475,22 @@ function ComprobantesTable({
                   {item.badge && <StatusBadge size="md" badge={item.badge} />}
                 </span>
               </td>
-              <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap`}>{formatDate(item.date)}</td>
-              <td className={CELL_CLASS}>
+              <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap max-sm:hidden`}>{formatDate(item.date)}</td>
+              <td className={`${CELL_CLASS} max-sm:pl-4`}>
                 {item.socio ? (
                   <>
                     <span className="block text-on-surface">{item.socioLabel}</span>
-                    <span className="block text-sm text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
+                    <div className="max-sm:hidden text-sm text-on-surface-variant">DNI {formatDni(item.socio.dni)}</div>
                   </>
                 ) : (
-                  <span className="text-on-surface-variant">—</span>
+                  <span className="block text-on-surface-variant">—</span>
                 )}
+                <div className="sm:hidden mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="min-w-0 break-words text-sm text-on-surface-variant">{item.concept} · {shortDate(item.date)}</span>
+                  {item.badge && <StatusBadge size="md" badge={item.badge} />}
+                </div>
               </td>
-              <td className={`${CELL_CLASS} max-w-xs`}>
+              <td className={`${CELL_CLASS} max-w-xs max-sm:hidden`}>
                 <span className="block text-on-surface truncate" title={item.concept}>
                   {item.concept}
                 </span>
@@ -487,19 +498,27 @@ function ComprobantesTable({
                   {item.subConcept}
                 </span>
               </td>
-              <td
-                className={`${CELL_CLASS} font-semibold tabular-nums whitespace-nowrap ${
-                  item.isAnulado
-                    ? 'text-outline line-through'
-                    : item.isPositive
-                      ? 'text-emerald-700'
-                      : 'text-error'
-                }`}
-              >
-                {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
-                {formatAmount(item.amount)}
+              <td className={`${CELL_CLASS} whitespace-nowrap max-sm:align-top max-sm:text-right max-sm:pr-4`}>
+                <span className={`font-semibold tabular-nums ${amountTone(item)}`}>
+                  {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
+                  {formatAmount(item.amount)}
+                </span>
+                <div className="sm:hidden mt-0.5">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      stopRowClick(event)
+                      handleRowAction(item)
+                    }}
+                    aria-haspopup="dialog"
+                    aria-label={`Ver ${item.typeLabel.toLocaleLowerCase('es')} ${item.refCode}`}
+                    className={`text-sm text-primary cursor-pointer ${ROW_LINK_CLASS}`}
+                  >
+                    {item.refCode}
+                  </button>
+                </div>
               </td>
-              <td className="py-2 px-4 sm:pr-5 text-right">
+              <td className="py-2 px-4 sm:pr-5 text-right max-sm:hidden">
                 <div className="flex items-center justify-end gap-1.5">
                   <RowIconButton
                     tone="whatsapp"
