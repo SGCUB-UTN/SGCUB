@@ -7,7 +7,7 @@ import ViewFinancesButton from './ViewFinancesButton'
 import CancelRefundModal, { CancelRefundButton } from './CancelRefundModal'
 import { receiptModalStyles } from './receiptModal'
 import { isCancelledRefund } from './refunds'
-import { formatDate } from '../personas/format'
+import { CancellationNotice } from './formParts'
 
 const MODAL_STYLES = receiptModalStyles()
 
@@ -35,16 +35,13 @@ function DevolucionDetailContent({ devolucion: initialDevolucion, opened, onClos
       <div className="flex flex-col gap-4 flex-1 min-h-0">
         <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges] [&>*]:shrink-0">
           {cancelled && (
-            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-error-container/50 border border-error/30 text-on-error-container" role="status">
-              <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">cancel</span>
-              <div className="flex flex-col gap-0.5 text-sm">
-                <p className="font-semibold">
-                  Cancelada el {formatDate(devolucion.fecha_cancelacion)} por {devolucion.cancelado_por || '—'}
-                </p>
-                <p className="break-words">Motivo: {devolucion.motivo_cancelacion || 'Sin motivo registrado'}</p>
-                <p>Ya no cuenta como dinero devuelto y su comprobante no se puede descargar ni enviar.</p>
-              </div>
-            </div>
+            <CancellationNotice
+              action={isCreditNote ? 'Nota de crédito cancelada' : 'Devolución cancelada'}
+              date={devolucion.fecha_cancelacion}
+              authorizedBy={devolucion.cancelado_por}
+              reason={devolucion.motivo_cancelacion}
+              consequence="Ya no cuenta como dinero devuelto y su comprobante no se puede descargar ni enviar."
+            />
           )}
           <ReciboDevolucion devolucion={devolucion} />
           <RefundResponsable responsable={devolucion.responsable} />

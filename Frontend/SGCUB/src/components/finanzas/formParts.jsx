@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getAutorizantes } from '../../api/usuarios'
 import SectionHeading from '../shared/SectionHeading'
 import { formatAmount } from '../personas/format'
+import { cancellationSentence } from './cancellations'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
@@ -206,7 +207,22 @@ export function OptionCard({ icon, title, description = '', selected, disabled =
   )
 }
 
-export const TICKET_CLASS = 'h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
+export function CancellationNotice({ action, date, authorizedBy, reason, consequence, icon = 'cancel' }) {
+  return (
+    <div className="flex items-start gap-2.5 p-3 rounded-lg bg-error-container/50 border border-error/30 text-on-error-container" role="status">
+      <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">{icon}</span>
+      <div className="flex min-w-0 flex-col gap-1 text-sm">
+        <p className="font-semibold">{cancellationSentence({ action, date, authorizedBy })}</p>
+        {reason
+          ? <p className="break-words">Motivo: "{reason}"</p>
+          : <p className="text-on-error-container/70">No se registró motivo.</p>}
+        {consequence && <p>{consequence}</p>}
+      </div>
+    </div>
+  )
+}
+
+export const TICKET_CLASS ='h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
 
 export const SUBMIT_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-primary hover:bg-primary/90 text-surface-container-lowest shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 

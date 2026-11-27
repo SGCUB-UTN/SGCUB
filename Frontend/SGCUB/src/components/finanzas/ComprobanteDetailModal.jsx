@@ -14,6 +14,7 @@ import { availableToRefund, isCancelledRefund } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
 import ReciboComprobante from './ReciboComprobante'
 import { receiptModalStyles } from './receiptModal'
+import { CancellationNotice } from './formParts'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
@@ -142,15 +143,12 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges] [&>*]:shrink-0">
             {detalle.anulacion && (
-              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-error-container/50 border border-error/30 text-on-error-container" role="status">
-                <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">cancel</span>
-                <div className="flex flex-col gap-0.5 text-sm">
-                  <p className="font-semibold">
-                    Anulado el {detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'} por {detalle.anulacion.responsable || '—'}
-                  </p>
-                  <p className="break-words">Motivo: {detalle.anulacion.motivo || 'Sin motivo registrado'}</p>
-                </div>
-              </div>
+              <CancellationNotice
+                action={isIncome ? 'Ingreso anulado' : 'Pago anulado'}
+                date={detalle.anulacion.fecha}
+                authorizedBy={detalle.anulacion.responsable}
+                reason={detalle.anulacion.motivo}
+              />
             )}
 
             {justReverted && (
