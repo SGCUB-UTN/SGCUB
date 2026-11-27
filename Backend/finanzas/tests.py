@@ -2179,7 +2179,7 @@ class NotaCreditoTests(PagoTestBase):
 		self.assertEqual(self.aplicado(self.septiembre), Decimal("200.00"))
 		self.assertFalse(Devolucion.objects.exists())
 
-	def test_el_pago_registrado_en_otro_socio_puede_devolver_el_excedente(self):
+	def test_el_excedente_del_pago_registrado_en_otro_socio_se_devuelve_al_socio_correcto(self):
 		self.revertir()
 		otro = crear_socio("56789098")
 		cuota_otro = crear_cuota_con_cargo(account_for(otro), "2026-08", "700.00")
@@ -2197,7 +2197,8 @@ class NotaCreditoTests(PagoTestBase):
 
 		self.assertEqual(response.status_code, 201, response.data)
 		nota = Devolucion.objects.get()
-		self.assertEqual(nota.cuenta_corriente.socio_id, self.socio.pk)
+		self.assertEqual(nota.cuenta_corriente.socio_id, otro.pk)
+		self.assertEqual(nota.comprobante_anulado_id, self.comprobante_id)
 		self.assertEqual(nota.monto, Decimal("300.00"))
 
 	def test_una_nota_de_credito_invalida_cancela_tambien_el_nuevo_pago(self):

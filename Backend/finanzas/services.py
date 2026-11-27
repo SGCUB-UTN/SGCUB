@@ -1331,6 +1331,7 @@ def register_payment(
             credit_note["motivo"],
             credit_note["responsable"],
             user,
+            account=account,
         )
     try:
         from configuracion.models import ConfiguracionGeneral
@@ -1487,13 +1488,14 @@ def create_refund(kind, account, concept, amount, payment_method, responsable, u
 
 
 @transaction.atomic
-def create_credit_note(receipt_id, amount, payment_method, reason, responsable, user=None):
+def create_credit_note(receipt_id, amount, payment_method, reason, responsable, user=None, account=None):
     """Gives back money of an annulled receipt (all of it or the excess left after charging again).
-    The note belongs to the account of the receipt, the one the money came in through."""
+    The note belongs to the account of the receipt, unless `account` names the socio the money is
+    given back to (the right one, when the payment had been registered on another socio)."""
     receipt = Comprobante.objects.select_for_update(of=("self",)).select_related(
         "pago__movimiento__cuenta_corriente__socio",
     ).get(pk=receipt_id)
-    receipt_account = receipt.pago.movimiento.cuenta_corriente
+    receipt_account = account or receipt.pago.movimiento.cuenta_corriente
     if receipt.estado != EstadoComprobanteChoices.ANULADO:
         raise DevolucionInvalidaError("Solo se puede emitir una nota de crédito sobre un comprobante anulado.")
     available = receipt.monto_total - refunded_amount(receipt)

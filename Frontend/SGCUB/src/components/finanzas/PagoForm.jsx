@@ -69,8 +69,14 @@ const EXCESS_OPTIONS = [
 // Default observation of a payment that settles a reverted one
 const excessReason = (reversal) => {
   if (!reversal) return ''
-  if (!reversal.lastPeriod) return `Sobrante del pago anulado ${reversal.codigo}`
-  return `Sobrante del pago anulado de ${formatPeriod(reversal.lastPeriod).replace(' de ', ' ')}.`
+  const period = reversal.lastPeriod ? formatPeriod(reversal.lastPeriod).replace(' de ', ' ') : ''
+  if (reversal.otherSocio) {
+    const paid = period ? `el pago de ${period}` : `el pago ${reversal.codigo}`
+    const wrongSocio = reversal.socioName ? ` a ${reversal.socioName}` : ' a otro socio'
+    return `Sobrante: ${paid} se registró por error${wrongSocio}.`
+  }
+  if (!period) return `Sobrante del pago anulado ${reversal.codigo}`
+  return `Sobrante del pago anulado de ${period}.`
 }
 
 const reversalNote = (reversal) => {
