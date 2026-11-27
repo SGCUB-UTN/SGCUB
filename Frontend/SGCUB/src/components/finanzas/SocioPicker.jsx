@@ -3,6 +3,7 @@ import useSocio from '../../hooks/useSocio'
 import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { matchesSearch } from '../shared/search'
 import { ListSkeleton } from '../shared/Skeleton'
+import ProfileBadge from '../shared/ProfileBadge'
 import StatusBadge from '../shared/StatusBadge'
 
 const MAX_RESULTS = 8
@@ -24,9 +25,7 @@ function ResultsList({ results, onSelect, className = '' }) {
                   <StatusBadge badge={{ label: 'De baja · solo deuda', tono: 'alerta', title: 'Socio dado de baja: solo puede pagar la deuda pendiente' }} />
                 )}
                 {socio.es_jugador && (
-                  <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                    Jugador
-                  </span>
+                  <ProfileBadge>Jugador</ProfileBadge>
                 )}
               </span>
               <span className="text-sm text-on-surface-variant">DNI {formatDni(socio.dni)} · Socio {formatNumber(socio.numero_socio)}</span>

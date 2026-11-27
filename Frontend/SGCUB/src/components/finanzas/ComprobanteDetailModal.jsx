@@ -41,7 +41,7 @@ function CreditNotes({ detalle, methodLabel }) {
           <div key={note.devolucion_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0">
               <p className="font-semibold text-on-surface">
-                {note.codigo} · <span className={isCancelledRefund(note) ? 'line-through text-outline' : ''}>{formatAmount(note.monto)}</span>
+                {note.codigo} · <span className={`tabular-nums ${isCancelledRefund(note) ? 'line-through text-outline' : ''}`}>{formatAmount(note.monto)}</span>
                 {isCancelledRefund(note) && <span className="ml-2 text-sm font-semibold text-error">Cancelada</span>}
               </p>
               <p className="text-sm text-on-surface-variant break-words">
@@ -68,7 +68,6 @@ function CreditNotes({ detalle, methodLabel }) {
                   montoTotal={note.monto}
                   tipo="nota_credito"
                   label="WhatsApp"
-                  className="h-9 px-3 text-xs min-w-0"
                 />
               </div>
             )}
@@ -78,7 +77,7 @@ function CreditNotes({ detalle, methodLabel }) {
       {available > 0 && (
         <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
           <span className="text-on-surface-variant">Disponible para devolver</span>
-          <strong>{formatAmount(available)}</strong>
+          <strong className="tabular-nums">{formatAmount(available)}</strong>
         </div>
       )}
     </section>

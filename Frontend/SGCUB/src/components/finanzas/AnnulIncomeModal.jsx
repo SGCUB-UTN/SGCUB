@@ -6,7 +6,7 @@ import ProfileScopeOptions from '../personas/ProfileScopeOptions'
 import { formatAmount, getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import { AuthorizerSelect } from './formParts'
+import { AuthorizerSelect, DANGER_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from './formParts'
 import { availableToRefund } from './refunds'
 
 const MODAL_Z_INDEX = 300
@@ -15,7 +15,6 @@ const REFUND = 'devolver'
 const KEEP = 'no_devolver'
 const FULL_CREDIT_NOTE = 'NotaCreditoTotal'
 
-const DANGER_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-error hover:bg-error/90 text-on-error shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 
 const moneyOptions = (total) => [
   {
@@ -140,7 +139,7 @@ function AnnulIncomeForm({ comprobante, onAnnulled, onCancel }) {
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer"
+          className={SECONDARY_BUTTON_CLASS}
         >
           Volver
         </button>

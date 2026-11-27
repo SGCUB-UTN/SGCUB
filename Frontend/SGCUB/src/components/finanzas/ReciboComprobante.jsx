@@ -36,7 +36,7 @@ export function ReceiptTotal({ label, amount, tone = 'text-primary' }) {
   return (
     <div className="flex justify-between items-center gap-4 px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low/70">
       <strong className="text-on-surface font-semibold">{label}</strong>
-      <strong className={`text-xl font-bold ${tone}`}>{formatAmount(amount)}</strong>
+      <strong className={`text-xl font-bold tabular-nums ${tone}`}>{formatAmount(amount)}</strong>
     </div>
   )
 }
@@ -187,7 +187,7 @@ function ReciboComprobante({
           {medios.map((medio, index) => (
             <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-5 py-2.5 text-sm">
               <span className="text-on-surface-variant">{medio.medio}</span>
-              <strong className="text-on-surface">{formatAmount(medio.monto)}</strong>
+              <strong className="text-on-surface tabular-nums">{formatAmount(medio.monto)}</strong>
             </div>
           ))}
         </div>

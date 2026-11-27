@@ -240,9 +240,9 @@ function CuotasTable({
       tableClassName="min-w-[560px]"
       headers={(
         <>
-          <th className="py-1.5 pl-3 pr-0 w-8 text-xs" scope="col"><span className="sr-only">Desglose</span></th>
-          <th className="py-1.5 px-3 text-xs" scope="col">Período</th>
-          <th className="py-1.5 px-3 text-xs text-right" scope="col">Total</th>
+          <th className="py-1.5 pl-3 pr-0 w-8" scope="col"><span className="sr-only">Desglose</span></th>
+          <th className="py-1.5 px-3" scope="col">Período</th>
+          <th className="py-1.5 px-3 text-right" scope="col">Total</th>
         </>
       )}
       footer={(
@@ -297,14 +297,14 @@ function CuotaLine({
             <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
             {isOverdue(cuota) && (
               <span
-                className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
+                className={`inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap ${cuotaStateBadgeClass(cuota.estado_cuota)}`}
                 title={cuotaStateLabel(cuota.estado_cuota)}
               >
                 {cuotaStateShortLabel(cuota.estado_cuota)}
               </span>
             )}
             {upcoming && (
-              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
+              <span className="inline-flex px-2.5 py-0.5 rounded-full text-sm font-semibold border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
                 Próxima
               </span>
             )}
@@ -316,12 +316,12 @@ function CuotaLine({
             {formatAmount(due)}
           </span>
           {settled && (
-            <span className="block text-xs text-emerald-700">
+            <span className="block text-sm text-emerald-700">
               {due <= 0 ? 'Se cubre con descuento' : 'Se pagará completa'}
             </span>
           )}
           {partial && (
-            <span className="block text-xs text-amber-700">
+            <span className="block text-sm text-amber-700">
               Pago parcial: {formatAmount(applied)} · faltarán {formatAmount(roundCents(due - applied))}
             </span>
           )}

@@ -5,7 +5,7 @@ import useMediosPago from '../../hooks/useMediosPago'
 import { formatAmount, getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
-import { AmountInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS } from './formParts'
+import { AmountInput, AuthorizerSelect, SUBMIT_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from './formParts'
 import { availableToRefund } from './refunds'
 
 const MODAL_Z_INDEX = 300
@@ -112,7 +112,7 @@ function NotaCreditoForm({ comprobante, onIssued, onCancel }) {
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer"
+          className={SECONDARY_BUTTON_CLASS}
         >
           Volver
         </button>

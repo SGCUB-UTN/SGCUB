@@ -230,7 +230,11 @@ export function CancellationNotice({ action, date, authorizedBy, reason, consequ
 
 export const TICKET_CLASS ='h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
 
-export const SUBMIT_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-primary hover:bg-primary/90 text-surface-container-lowest shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
+export const SUBMIT_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-primary hover:bg-primary/90 text-on-primary shadow-sm focus-visible:ring-primary/60 focus-visible:ring-offset-2'
+
+export const DANGER_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-error hover:bg-error/90 text-on-error shadow-sm focus-visible:ring-error/60 focus-visible:ring-offset-2'
+
+export const SECONDARY_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-surface-container-low hover:bg-surface-container text-on-surface border border-outline-variant/40 shadow-sm focus-visible:ring-primary/60'
 
 export function TicketSection({ title, spread = true, children }) {
   return (

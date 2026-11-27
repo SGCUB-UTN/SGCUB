@@ -10,7 +10,7 @@ function AmountLine({ label, amount, strong = false }) {
   return (
     <div className="flex justify-between gap-4 px-5 py-2.5 text-sm">
       <span className={strong ? 'font-semibold text-on-surface break-words' : 'text-on-surface-variant break-words'}>{label}</span>
-      <strong className="text-on-surface shrink-0">{formatAmount(amount)}</strong>
+      <strong className="text-on-surface shrink-0 tabular-nums">{formatAmount(amount)}</strong>
     </div>
   )
 }

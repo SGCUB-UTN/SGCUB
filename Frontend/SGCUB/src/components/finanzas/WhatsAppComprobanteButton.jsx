@@ -56,7 +56,7 @@ function WhatsAppComprobanteButton({
     ? `Enviar comprobante al socio por WhatsApp (${phone})`
     : 'El socio no tiene un teléfono registrado'
 
-  const baseClass = 'inline-flex items-center justify-center gap-2 px-4 h-10 min-w-[125px] rounded-md font-semibold text-sm transition-colors whitespace-nowrap shrink-0'
+  const baseClass = 'inline-flex items-center justify-center gap-2 px-4 h-10 min-w-[125px] rounded-md font-semibold text-base transition-colors whitespace-nowrap shrink-0'
   const primaryClass = hasPhone
     ? 'bg-[#25D366] hover:bg-[#20ba5a] text-[#063a1c] shadow-sm cursor-pointer'
     : 'bg-[#25D366]/40 text-[#063a1c]/80 cursor-not-allowed opacity-60'
