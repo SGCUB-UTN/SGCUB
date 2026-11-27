@@ -94,7 +94,7 @@ function KpiSkeleton() {
 export default function PeriodKpis({ summary, rows, isLoading, error }) {
   if (!summary || !rows) {
     if (isLoading) return <KpiSkeleton />
-    return <p className="text-sm text-error">{error ? 'No se pudieron cargar los indicadores del período.' : 'Sin datos para el período.'}</p>
+    return <p className="text-base text-on-surface-variant">{error ? 'Los indicadores no están disponibles por ahora.' : 'Sin datos para el período.'}</p>
   }
 
   const { totals } = summary

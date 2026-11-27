@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { getCuota } from '../../api/cuotas'
 import CuotaDetailPanel from '../finanzas/CuotaDetailPanel'
 import ExportMenu from '../shared/ExportMenu'
+import ClearFiltersButton from '../shared/ClearFiltersButton'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import SelectionBar from '../shared/SelectionBar'
 import { formatPeriod } from '../shared/periodFormat'
 import DataTable from '../shared/DataTable'
@@ -83,7 +85,9 @@ const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
-const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
+const CHECKBOX_CLASS = 'size-5 accent-primary cursor-pointer'
+const CHECKBOX_LABEL_CLASS = 'flex items-center py-3 pl-4 sm:pl-5 pr-2 min-h-12 cursor-pointer'
+const EXPAND_BUTTON_CLASS = 'inline-flex items-center justify-center size-10 rounded-md text-outline hover:bg-surface-container hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 const TABLE_ID = 'period-cuotas'
 
 const Icon = ({ name, size = 18 }) => (
@@ -141,6 +145,7 @@ function SelectAllCheckbox({ rows, selectedIds, onChange }) {
 
 function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onDelete, onChanged }) {
   const [detail, setDetail] = useState({ loading: true, error: false, cuota: null })
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -148,15 +153,23 @@ function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onD
       .then((cuota) => active && setDetail({ loading: false, error: false, cuota }))
       .catch(() => active && setDetail({ loading: false, error: true, cuota: null }))
     return () => { active = false }
-  }, [row.cuota_id])
+  }, [row.cuota_id, attempt])
+
+  const retry = () => {
+    setDetail({ loading: true, error: false, cuota: null })
+    setAttempt((current) => current + 1)
+  }
 
   if (!detail.cuota) {
     return (
       <tr className="bg-surface-container-low/60">
-        <td colSpan={COLUMN_COUNT} className="py-4 px-4 sm:px-5 text-sm">
-          {detail.error
-            ? <p className="text-error" role="alert">No se pudo cargar el detalle de la cuota.</p>
-            : <TextSkeleton label="Cargando detalle..." lines={4} />}
+        <td colSpan={COLUMN_COUNT} className="py-4 px-4 sm:px-5">
+          {detail.error ? (
+            <div className="flex flex-wrap items-center gap-3" role="alert">
+              <p className="text-base text-on-surface-variant">No se pudo cargar el detalle de la cuota.</p>
+              <SecondaryButton icon="refresh" onClick={retry}>Reintentar</SecondaryButton>
+            </div>
+          ) : <TextSkeleton label="Cargando detalle..." lines={4} />}
         </td>
       </tr>
     )
@@ -228,8 +241,15 @@ export default function PeriodCuotasTable({
   const filtered = useMemo(() => matching.filter(activeTab.matches), [matching, activeTab])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const hasFilters = search.trim() !== '' || type !== ALL || category !== ALL_CATEGORIES
+  const clearFilters = () => {
+    setSearch('')
+    setType(ALL)
+    setCategory(ALL_CATEGORIES)
+    resetPage()
+  }
 
   const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row.cuota_id)), [filtered, selectedIds])
   const overdueRows = useMemo(() => matching.filter(isOverdueRow), [matching])
@@ -248,14 +268,6 @@ export default function PeriodCuotasTable({
   })
 
   const toggleExpanded = (cuotaId) => setExpandedId((current) => (current === cuotaId ? null : cuotaId))
-
-  const handleRowKeyDown = (event, cuotaId) => {
-    if (event.target !== event.currentTarget) return
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      toggleExpanded(cuotaId)
-    }
-  }
 
   const emptyText = matching.length === rows.length
     ? activeTab.emptyText
@@ -291,6 +303,7 @@ export default function PeriodCuotasTable({
             disabled={categoryLocked}
             disabledReason="Los socios no tienen categoría"
           />
+          <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
           <PrimaryButton
@@ -355,10 +368,12 @@ export default function PeriodCuotasTable({
         <DataTable
           headers={(
             <>
-              <th className="py-3 pl-4 sm:pl-5 pr-2 w-10" scope="col">
-                <SelectAllCheckbox rows={filtered} selectedIds={selectedIds} onChange={toggleFiltered} />
+              <th className="p-0 w-12" scope="col">
+                <label className={CHECKBOX_LABEL_CLASS}>
+                  <SelectAllCheckbox rows={filtered} selectedIds={selectedIds} onChange={toggleFiltered} />
+                </label>
               </th>
-              <th className="py-3 px-0 w-8" scope="col"><span className="sr-only">Detalle</span></th>
+              <th className="py-3 px-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
               <SortableHeader className={HEADER_CLASS} etiqueta="Socio / Jugador" columna="name" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={HEADER_CLASS} etiqueta="Categoría" columna="category" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={`${HEADER_CLASS} sm:pr-5 text-right`} etiqueta="Saldo" columna="pending" orden={sort} onOrdenar={sortAndReset} />
@@ -373,6 +388,7 @@ export default function PeriodCuotasTable({
             loadingText="Cargando cuotas..."
             errorText="No se pudieron cargar las cuotas."
             emptyText={emptyText}
+            onClearFilters={hasFilters ? clearFilters : undefined}
           />
 
           {visibleRows.map((row) => {
@@ -382,29 +398,39 @@ export default function PeriodCuotasTable({
             return (
               <Fragment key={row.cuota_id}>
                 <tr
-                  tabIndex={0}
-                  aria-expanded={expanded}
                   onClick={() => toggleExpanded(row.cuota_id)}
-                  onKeyDown={(event) => handleRowKeyDown(event, row.cuota_id)}
-                  className={`cursor-pointer transition-colors focus:outline-none focus-visible:bg-surface-container-low ${selected || expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low/80'}`}
+                  className={`cursor-pointer transition-colors ${selected || expanded ? 'bg-primary/5' : 'hover:bg-surface-container-low/80'}`}
                 >
-                  <td className="py-3 pl-4 sm:pl-5 pr-2" onClick={stopRowToggle}>
-                    <input
-                      type="checkbox"
-                      className={CHECKBOX_CLASS}
-                      checked={selected}
-                      onChange={() => toggleRow(row.cuota_id)}
-                      aria-label={`Seleccionar la cuota de ${name}`}
-                    />
+                  <td className="p-0" onClick={stopRowToggle}>
+                    <label className={CHECKBOX_LABEL_CLASS}>
+                      <input
+                        type="checkbox"
+                        className={CHECKBOX_CLASS}
+                        checked={selected}
+                        onChange={() => toggleRow(row.cuota_id)}
+                        aria-label={`Seleccionar la cuota de ${name}`}
+                      />
+                    </label>
                   </td>
-                  <td className="py-3 px-0 text-outline">
-                    <span className={`material-symbols-outlined block transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} style={{ fontSize: 22 }} aria-hidden="true">
-                      expand_more
-                    </span>
+                  <td className="py-1 px-0">
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? 'Ocultar' : 'Ver'} el detalle de la cuota de ${name}`}
+                      onClick={(event) => {
+                        stopRowClick(event)
+                        toggleExpanded(row.cuota_id)
+                      }}
+                      className={EXPAND_BUTTON_CLASS}
+                    >
+                      <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180 text-primary' : ''}`} style={{ fontSize: 22 }} aria-hidden="true">
+                        expand_more
+                      </span>
+                    </button>
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Link to={detailPath(row)} onClick={stopRowToggle} className="font-medium text-on-surface hover:text-primary hover:underline">
+                      <Link to={detailPath(row)} onClick={stopRowClick} className={`font-medium text-on-surface hover:text-primary ${ROW_LINK_CLASS}`}>
                         {name}
                       </Link>
                       <span className={`${BADGE_CLASS} ${cuotaTypeBadgeClass(row.type)}`}>{cuotaTypeLabel(row.type)}</span>

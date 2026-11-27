@@ -40,7 +40,7 @@ export default function TaskRunList({ runs, isLoading, error, onOpenLog }) {
         </SkeletonStatus>
       )
     }
-    return <p className="text-sm text-error">{error ? 'No se pudo cargar el historial de automatizaciones.' : ''}</p>
+    return <p className="text-base text-on-surface-variant">{error ? 'El historial no está disponible por ahora.' : ''}</p>
   }
 
   if (runs.length === 0) {

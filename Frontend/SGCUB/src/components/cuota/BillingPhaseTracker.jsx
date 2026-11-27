@@ -124,7 +124,7 @@ export default function BillingPhaseTracker({ phases, isLoading, error }) {
       
       {isLoading && steps.length === 0 && <PhaseSkeleton />}
       {!isLoading && error && steps.length === 0 && (
-        <p className="text-sm text-error">No se pudo cargar la fase del período.</p>
+        <p className="text-base text-on-surface-variant">La etapa del mes no está disponible por ahora.</p>
       )}
       {steps.length > 0 && <PhaseSteps steps={steps} />}
     </div>

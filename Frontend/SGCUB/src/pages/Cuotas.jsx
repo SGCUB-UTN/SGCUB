@@ -17,6 +17,7 @@ import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import SectionDivider from '../components/shared/SectionDivider'
+import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
 const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
 const HEADING_CLASS = 'px-4 sm:px-5 border-b'
@@ -38,6 +39,15 @@ function Cuotas() {
   const [generateOpen, setGenerateOpen] = useState(false)
 
   const changePeriod = (value) => setSearchParams({ periodo: value })
+
+  const resources = [summary, cuotas, runs]
+  const failed = resources.filter((resource) => resource.error)
+  const nothingLoaded = failed.length > 0 && resources.every((resource) => !resource.data)
+  const errorMessage = () => {
+    if (nothingLoaded) return `No pudimos traer los datos de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`
+    if (failed.every((resource) => resource.data)) return 'No pudimos actualizar los datos. Estás viendo los últimos que se cargaron.'
+    return `No pudimos traer parte de los datos de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`
+  }
 
   const abrirEliminar = (row) => {
     setCuotaSeleccionada(row)
@@ -83,41 +93,46 @@ function Cuotas() {
       <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>
         Resumen mensual
       </SectionDivider>
-      <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">
-        <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" className={HEADING_CLASS} />
-        <div className="px-4 sm:px-5 py-3">
-          <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
-        </div>
-        <AutomationStatus runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
-      </section>
+      {failed.length > 0 && <LoadErrorBanner message={errorMessage()} onRetry={reload} />}
+      {!nothingLoaded && (
+        <>
+          <section className={PANEL_CLASS} aria-labelledby="billing-phase-title">
+            <SectionHeading id="billing-phase-title" icon="checklist_rtl" title="Etapa del mes" className={HEADING_CLASS} />
+            <div className="px-4 sm:px-5 py-3">
+              <BillingPhaseTracker phases={summary.data?.phases} isLoading={summary.isLoading} error={summary.error} />
+            </div>
+            <AutomationStatus runs={runs.data} isLoading={runs.isLoading} error={runs.error} onOpenLog={setLogRun} />
+          </section>
 
-      <section className={PANEL_CLASS} aria-labelledby="period-kpis-title">
-        <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" className={HEADING_CLASS} />
-        <div className={SECTION_CLASS}>
-          <PeriodKpis
-            summary={summary.data}
-            rows={cuotas.data}
-            isLoading={summary.isLoading || cuotas.isLoading}
-            error={summary.error || cuotas.error}
-          />
-        </div>
-      </section>
+          <section className={PANEL_CLASS} aria-labelledby="period-kpis-title">
+            <SectionHeading id="period-kpis-title" icon="monitoring" title="Indicadores del período" className={HEADING_CLASS} />
+            <div className={SECTION_CLASS}>
+              <PeriodKpis
+                summary={summary.data}
+                rows={cuotas.data}
+                isLoading={summary.isLoading || cuotas.isLoading}
+                error={summary.error || cuotas.error}
+              />
+            </div>
+          </section>
 
-      <section className={PANEL_CLASS} aria-labelledby="period-cuotas-title">
-        <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
-        <PeriodCuotasTable
-          key={period}
-          rows={cuotas.data ?? []}
-          isLoading={cuotas.isLoading}
-          error={cuotas.error}
-          period={period}
-          onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
-          onAssignDiscount={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
-          onAssignScholarship={(row) => openBenefit({ socioId: row.socio_id, onSuccess: reload })}
-          onDelete={abrirEliminar}
-          onChanged={reload}
-        />
-      </section>
+          <section className={PANEL_CLASS} aria-labelledby="period-cuotas-title">
+            <SectionHeading id="period-cuotas-title" icon="receipt_long" title={`Cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
+            <PeriodCuotasTable
+              key={period}
+              rows={cuotas.data ?? []}
+              isLoading={cuotas.isLoading}
+              error={cuotas.error}
+              period={period}
+              onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
+              onAssignDiscount={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
+              onAssignScholarship={(row) => openBenefit({ socioId: row.socio_id, onSuccess: reload })}
+              onDelete={abrirEliminar}
+              onChanged={reload}
+            />
+          </section>
+        </>
+      )}
 
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 

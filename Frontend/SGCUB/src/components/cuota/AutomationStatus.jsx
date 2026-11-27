@@ -11,7 +11,7 @@ const latestRun = (runs) => runs.reduce((latest, run) => (run.fecha_inicio > lat
 function runsStatus(runs, isLoading, error) {
   if (!runs) {
     if (isLoading) return { icon: 'progress_activity', iconClass: 'text-outline animate-spin', text: 'Cargando…' }
-    return { icon: 'error', iconClass: 'text-error', text: error ? 'No se pudo cargar el estado.' : '' }
+    return { icon: 'cloud_off', iconClass: 'text-on-surface-variant', text: error ? 'Estado no disponible por ahora.' : '' }
   }
   if (runs.length === 0) {
     return { icon: 'schedule', iconClass: 'text-outline', text: 'Todavía no hay ejecuciones en este período' }
