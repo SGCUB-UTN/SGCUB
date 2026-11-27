@@ -188,7 +188,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
   const refundCancelled = (updated) => {
     onSuccess?.(MANUAL_REFUND)
     onCancel()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
   }
 
   if (result?.kind === INCOME) {

@@ -43,7 +43,7 @@ const incomeMovement = (comprobante, refunds) => {
   }
 }
 
-const refundMovement = (devolucion, income) => ({
+const refundMovement = (devolucion) => ({
   key: `devolucion-${devolucion.devolucion_id}`,
   raw: devolucion,
   isRefund: true,
@@ -55,18 +55,26 @@ const refundMovement = (devolucion, income) => ({
   sortFecha: devolucion.fecha,
   concepto: devolucion.concepto,
   monto: devolucion.monto,
-  income,
 })
 
 const otherMovements = (movimientos) => {
   const ingresos = movimientos?.ingresos ?? []
   const devoluciones = movimientos?.devoluciones ?? []
-  const incomeById = new Map(ingresos.map((comprobante) => [comprobante.comprobante_id, comprobante]))
   const refundsOf = (comprobanteId) => devoluciones.filter((devolucion) => devolucion.comprobante_anulado === comprobanteId)
   return [
     ...ingresos.map((comprobante) => incomeMovement(comprobante, refundsOf(comprobante.comprobante_id))),
-    ...devoluciones.map((devolucion) => refundMovement(devolucion, incomeById.get(devolucion.comprobante_anulado) ?? null)),
+    ...devoluciones.map(refundMovement),
   ].sort((a, b) => (Date.parse(b.sortFecha) || 0) - (Date.parse(a.sortFecha) || 0))
+}
+
+const sourceReceiptSentence = (devolucion) => {
+  const refunded = Number(devolucion.monto ?? 0)
+  const charged = Number(devolucion.comprobante_anulado_monto ?? 0)
+  const date = devolucion.comprobante_anulado_fecha ? ` el ${formatDate(devolucion.comprobante_anulado_fecha)}` : ''
+  const receipt = `cobrados con el recibo ${devolucion.comprobante_anulado_codigo}${date}`
+  return refunded < charged
+    ? `Devuelve ${formatAmount(refunded)} de los ${formatAmount(charged)} ${receipt}.`
+    : `Devuelve los ${formatAmount(charged)} ${receipt}.`
 }
 
 function RefundList({ refunds }) {
@@ -102,9 +110,6 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
           date={comprobante.fecha_anulacion}
           authorizedBy={comprobante.responsable_anulacion}
           reason={comprobante.motivo_anulacion}
-          consequence={refunds.every(isCancelledRefund)
-            ? 'Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.'
-            : ''}
         />
       )}
       {anulado && refunds.length > 0 && (
@@ -116,7 +121,7 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
   )
 }
 
-function RefundDetail({ devolucion, income }) {
+function RefundDetail({ devolucion }) {
   return (
     <div className="flex flex-col gap-4">
       <DetailList
@@ -135,19 +140,11 @@ function RefundDetail({ devolucion, income }) {
           date={devolucion.fecha_cancelacion}
           authorizedBy={devolucion.cancelado_por}
           reason={devolucion.motivo_cancelacion}
-          consequence="Ya no cuenta como dinero devuelto."
         />
       )}
       {devolucion.comprobante_anulado_codigo && (
-        <DetailSection title="Ingreso que se devuelve">
-          <DetailList
-            items={[
-              { label: 'Comprobante', value: devolucion.comprobante_anulado_codigo },
-              { label: 'Medio de pago del ingreso', value: income?.medios_de_pago || '—' },
-              { label: 'Fecha', value: formatDate(devolucion.comprobante_anulado_fecha) },
-              { label: 'Monto', value: formatAmount(devolucion.comprobante_anulado_monto ?? 0) },
-            ]}
-          />
+        <DetailSection title="Comprobante de origen">
+          <p className="text-base text-on-surface">{sourceReceiptSentence(devolucion)}</p>
         </DetailSection>
       )}
     </div>
@@ -235,7 +232,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
   const refundCancelled = (updated) => {
     setCancellingRefund(null)
     onChanged?.()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
   }
 
   if (movimientos === null) {
@@ -267,7 +264,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
             label={`${movement.kind} ${movement.codigo}, ${movement.concepto || 'sin concepto'}`}
             colSpan={COLUMN_COUNT}
             detail={movement.isRefund
-              ? <RefundDetail devolucion={movement.raw} income={movement.income} />
+              ? <RefundDetail devolucion={movement.raw} />
               : <IncomeDetail comprobante={movement.raw} anulado={movement.anulado} refunds={movement.refunds} />}
           >
             <td className="py-3 px-4">

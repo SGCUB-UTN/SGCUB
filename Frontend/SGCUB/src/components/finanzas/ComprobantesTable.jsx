@@ -327,7 +327,7 @@ function ComprobantesTable({
   const refundCancelled = (updated) => {
     setCancellingRefund(null)
     onChanged?.()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
   }
 
   const openAnnulOrRevert = (event, item) => {
