@@ -69,8 +69,6 @@ const otherMovements = (movimientos) => {
   ].sort((a, b) => (Date.parse(b.sortFecha) || 0) - (Date.parse(a.sortFecha) || 0))
 }
 
-const refundReason = (devolucion) => devolucion.concepto || 'Sin motivo registrado'
-
 function RefundList({ refunds }) {
   return (
     <ul className="flex flex-col gap-2">
@@ -101,6 +99,8 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
       {anulado && (
         <CancellationNotice
           action="Ingreso anulado"
+          date={comprobante.fecha_anulacion}
+          authorizedBy={comprobante.responsable_anulacion}
           reason={comprobante.motivo_anulacion}
           consequence={refunds.every(isCancelledRefund)
             ? 'Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.'
@@ -126,7 +126,7 @@ function RefundDetail({ devolucion, income }) {
           { label: 'Medio de devolución', value: devolucion.medio_de_pago_nombre || '—' },
           { label: 'Fecha', value: formatDate(devolucion.fecha) },
           { label: 'Responsable', value: devolucion.responsable },
-          { label: 'Motivo', value: refundReason(devolucion), wide: true },
+          { label: 'Concepto', value: devolucion.concepto || '—', wide: true },
         ]}
       />
       {isCancelledRefund(devolucion) && (
