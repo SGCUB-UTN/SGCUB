@@ -207,15 +207,21 @@ export function OptionCard({ icon, title, description = '', selected, disabled =
   )
 }
 
-export function CancellationNotice({ action, date, authorizedBy, reason, consequence, icon = 'cancel' }) {
+const NOTICE_TONES = {
+  error: { box: 'bg-error-container/50 border-error/30 text-on-error-container', icon: 'text-error', muted: 'text-on-error-container/70' },
+  neutral: { box: 'bg-surface-container-low border-outline-variant/40 text-on-surface-variant', icon: 'text-outline', muted: 'text-on-surface-variant/70' },
+}
+
+export function CancellationNotice({ action, date, authorizedBy, reason, consequence, showReason = true, tone = 'error', icon = 'cancel' }) {
+  const styles = NOTICE_TONES[tone] ?? NOTICE_TONES.error
   return (
-    <div className="flex items-start gap-2.5 p-3 rounded-lg bg-error-container/50 border border-error/30 text-on-error-container" role="status">
-      <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">{icon}</span>
+    <div className={`flex items-start gap-2.5 p-3 rounded-lg border ${styles.box}`} role="status">
+      <span className={`material-symbols-outlined text-[20px] shrink-0 ${styles.icon}`} aria-hidden="true">{icon}</span>
       <div className="flex min-w-0 flex-col gap-1 text-sm">
         <p className="font-semibold">{cancellationSentence({ action, date, authorizedBy })}</p>
-        {reason
+        {showReason && (reason
           ? <p className="break-words">Motivo: "{reason}"</p>
-          : <p className="text-on-error-container/70">No se registró motivo.</p>}
+          : <p className={styles.muted}>No se registró motivo.</p>)}
         {consequence && <p>{consequence}</p>}
       </div>
     </div>

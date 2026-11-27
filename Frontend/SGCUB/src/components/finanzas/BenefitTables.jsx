@@ -26,6 +26,9 @@ const SCHOLARSHIP_STATE_KEYS = {
 
 const ANNULLED_ITEM = 'Anulado'
 
+const MEMBER_LEAVE_REASON = 'Baja del socio'
+const DISCOUNT_EDITED_REASON = 'Descuento modificado'
+
 const TYPES = {
   beca: { label: 'Beca', tono: 'info' },
   descuento: { label: 'Descuento', tono: 'neutro' },
@@ -37,9 +40,11 @@ const LATE_FEE_TARGET = 'recargo'
 const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
 
-const typeBadge = (row) => (row.state === 'cancelled'
-  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
-  : row.type)
+const typeBadge = (row) => {
+  if (row.state === 'replaced') return { label: 'Descuento reemplazado', tono: 'neutro' }
+  if (row.state === 'cancelled') return { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
+  return row.type
+}
 
 const monthYear = (date) => formatPeriod(periodOf(date))
 
@@ -70,7 +75,7 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
 })
 
 const discountState = ({ item, cuota }) => {
-  if (item.estado === ANNULLED_ITEM) return 'cancelled'
+  if (item.estado === ANNULLED_ITEM) return item.motivo_anulacion === DISCOUNT_EDITED_REASON ? 'replaced' : 'cancelled'
   return isPaid(cuota) ? 'finished' : 'applied'
 }
 
@@ -88,7 +93,7 @@ const discountRows = (cuotas) => cuotaDiscounts(cuotas).map((discount) => {
     blocker: state === 'applied' ? removalBlocker(discount.cuota, discount.item) : NOT_APPLIED_HINT,
     target: { kind: DISCOUNT_TARGET, ...discount },
     granted: { date: discount.item.fecha_creacion ?? discount.item.fecha_aplicacion, by: discount.item.autorizado_por },
-    cancellation: state === 'cancelled'
+    cancellation: state === 'cancelled' || state === 'replaced'
       ? { date: discount.item.fecha_anulacion, by: discount.item.anulado_por, reason: discount.item.motivo_anulacion }
       : null,
   }
@@ -128,6 +133,38 @@ const GRANTED_LABELS = {
   [LATE_FEE_TARGET]: 'Quitado',
 }
 
+function CancellationDetail({ row }) {
+  const { date, by, reason } = row.cancellation
+  if (row.state === 'replaced') {
+    return (
+      <CancellationNotice
+        action="Reemplazado por un descuento nuevo"
+        date={date}
+        authorizedBy={by}
+        showReason={false}
+        tone="neutral"
+        icon="swap_horiz"
+      />
+    )
+  }
+  if (row.target.kind !== SCHOLARSHIP_TARGET) {
+    return <CancellationNotice action="Descuento anulado" date={date} authorizedBy={by} reason={reason} />
+  }
+  const consequence = 'Se quitó de las cuotas impagas sin pagos registrados.'
+  if (reason === MEMBER_LEAVE_REASON) {
+    return (
+      <CancellationNotice
+        action="Beca anulada automáticamente"
+        date={date}
+        authorizedBy="la baja del socio"
+        showReason={false}
+        consequence={consequence}
+      />
+    )
+  }
+  return <CancellationNotice action="Beca anulada" date={date} authorizedBy={by} reason={reason} consequence={consequence} />
+}
+
 function BenefitDetail({ row }) {
   const isScholarship = row.target.kind === SCHOLARSHIP_TARGET
   const isLateFeeRow = row.target.kind === LATE_FEE_TARGET
@@ -153,15 +190,7 @@ function BenefitDetail({ row }) {
           </ul>
         </DetailSection>
       )}
-      {row.cancellation && (
-        <CancellationNotice
-          action={isScholarship ? `Beca de ${row.value} anulada` : 'Descuento anulado'}
-          date={row.cancellation.date}
-          authorizedBy={row.cancellation.by}
-          reason={row.cancellation.reason}
-          consequence={isScholarship ? 'Se quitó de las cuotas impagas sin pagos registrados.' : ''}
-        />
-      )}
+      {row.cancellation && <CancellationDetail row={row} />}
     </div>
   )
 }
@@ -251,7 +280,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
               </td>
               <td className="py-3 px-4 break-words">
                 <span className="text-on-surface-variant">{row.reason || '—'}</span>
-                {row.cancellation?.reason && (
+                {row.state === 'cancelled' && row.cancellation?.reason && (
                   <span className="block text-sm text-error">
                     {row.target.kind === SCHOLARSHIP_TARGET ? 'Anulada' : 'Anulado'}: {row.cancellation.reason}
                   </span>
