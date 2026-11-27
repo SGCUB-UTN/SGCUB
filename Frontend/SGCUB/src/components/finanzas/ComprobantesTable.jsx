@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { FILTER_CLASS, FILTER_WIDTH, SEARCH_WIDTH, filterLabel } from '../shared/listFilters'
 import ClearFiltersButton from '../shared/ClearFiltersButton'
 import DataTable from '../shared/DataTable'
@@ -38,6 +39,7 @@ const HEADER_CLASS = 'py-3 px-4'
 const CELL_CLASS = 'py-3 px-4'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
+const PARAMS = { scope: 'tipo', search: 'buscar', filter: 'filtro', concept: 'concepto' }
 const TABS_ID = 'comprobantes-scope'
 
 const SCOPES = [
@@ -136,22 +138,33 @@ function ComprobantesTable({
   comprobantes = [],
   devoluciones = [],
   isLoading,
-  error,
   onSelect,
   onSelectDevolucion,
   onChanged,
 }) {
-  const [scope, setScope] = useState('todos')
-  const [search, setSearch] = useState('')
-  const [mainFilter, setMainFilter] = useState(ALL)
-  const [conceptFilter, setConceptFilter] = useState(ALL)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedScope = searchParams.get(PARAMS.scope)
+  const scope = SCOPES.some((option) => option.value === requestedScope) ? requestedScope : ALL
+  const filters = SCOPE_FILTERS[scope]
+  const search = searchParams.get(PARAMS.search) ?? ''
+  const requestedFilter = searchParams.get(PARAMS.filter)
+  const mainFilter = filters.options.some((option) => option.value === requestedFilter) ? requestedFilter : ALL
+  const requestedConcept = searchParams.get(PARAMS.concept) ?? ALL
   const [downloadingKey, setDownloadingKey] = useState(null)
   const [sharingWhatsAppKey, setSharingWhatsAppKey] = useState(null)
   const [cancellingRefund, setCancellingRefund] = useState(null)
   const [annullingIncome, setAnnullingIncome] = useState(null)
   const { openReversal } = useRevertPayment()
   const { showToast } = useToast()
-  const filters = SCOPE_FILTERS[scope]
+
+  const updateParams = (changes) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (!value || value === ALL) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }, { replace: true })
 
   const unifiedItems = useMemo(() => {
     const receiptItems = comprobantes.map((comprobante) => {
@@ -217,12 +230,12 @@ function ComprobantesTable({
   }, [comprobantes, devoluciones])
 
   const scopeOptions = useMemo(() => {
-    if (isLoading || error) return SCOPES
+    if (isLoading) return SCOPES
     return SCOPES.map((option) => ({
       ...option,
       count: unifiedItems.filter((item) => option.value === 'todos' || TYPES[item.filterCode]?.group === option.value).length,
     }))
-  }, [unifiedItems, isLoading, error])
+  }, [unifiedItems, isLoading])
 
   const conceptOptions = useMemo(() => {
     if (!filters.conceptLabel) return []
@@ -236,6 +249,7 @@ function ComprobantesTable({
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label, 'es'))
   }, [unifiedItems, scope, filters])
+  const conceptFilter = conceptOptions.some((option) => option.value === requestedConcept) ? requestedConcept : ALL
 
   const filtered = useMemo(() => {
     const text = search.trim()
@@ -267,11 +281,12 @@ function ComprobantesTable({
   const sortAndReset = withPageReset(sortBy)
   const hasFilters = search.trim() !== '' || mainFilter !== ALL || conceptFilter !== ALL
   const clearFilters = () => {
-    setSearch('')
-    setMainFilter(ALL)
-    setConceptFilter(ALL)
+    updateParams({ [PARAMS.search]: '', [PARAMS.filter]: ALL, [PARAMS.concept]: ALL })
     resetPage()
   }
+  const setSearch = (value) => updateParams({ [PARAMS.search]: value })
+  const setMainFilter = (value) => updateParams({ [PARAMS.filter]: value })
+  const setConceptFilter = (value) => updateParams({ [PARAMS.concept]: value })
   const exportFilters = [
     `Período: ${formatPeriod(period)}`,
     SCOPES.find((option) => option.value === scope)?.label,
@@ -281,11 +296,7 @@ function ComprobantesTable({
   ]
 
   const changeScope = (nextScope) => {
-    withPageReset(() => {
-      setScope(nextScope)
-      setMainFilter(ALL)
-      setConceptFilter(ALL)
-    })()
+    withPageReset(() => updateParams({ [PARAMS.scope]: nextScope, [PARAMS.filter]: ALL, [PARAMS.concept]: ALL }))()
   }
 
   const handleRowAction = (item) => {
@@ -378,7 +389,7 @@ function ComprobantesTable({
         await descargarDevolucionPdf(item.raw.devolucion_id)
       }
     } catch {
-      // noop
+      showToast({ tone: 'error', title: 'No se pudo descargar el PDF', description: `${item.refCode}: probá de nuevo en unos minutos.` })
     } finally {
       setDownloadingKey(null)
     }
@@ -434,7 +445,7 @@ function ComprobantesTable({
           title={`Movimientos de caja de ${formatPeriod(period)}`}
           filename={cashExportFilename(scope, period)}
           columns={CASH_EXPORT_COLUMNS}
-          items={isLoading || error ? [] : sorted}
+          items={isLoading ? [] : sorted}
           filters={exportFilters}
         />
       </div>
@@ -464,10 +475,8 @@ function ComprobantesTable({
           <TableMessageRow
             colSpan={COLUMN_COUNT}
             isLoading={isLoading}
-            isEmpty={Boolean(error) || visibleRows.length === 0}
-            error={error}
+            isEmpty={visibleRows.length === 0}
             loadingText="Cargando movimientos y comprobantes..."
-            errorText="No se pudieron cargar los movimientos de caja."
             emptyText={
               unifiedItems.length === 0
                 ? `No hay movimientos ni comprobantes registrados en ${formatPeriod(period)}.`
@@ -476,7 +485,7 @@ function ComprobantesTable({
             onClearFilters={hasFilters ? clearFilters : undefined}
           />
 
-          {!isLoading && !error && visibleRows.map((item) => (
+          {!isLoading && visibleRows.map((item) => (
             <tr
               key={item.key}
               onClick={() => handleRowAction(item)}

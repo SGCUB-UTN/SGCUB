@@ -13,7 +13,8 @@ import OtroMovimientoModal from '../components/finanzas/OtroMovimientoModal'
 import PageHeader from '../components/shared/PageHeader'
 import { PrimaryButton, SecondaryButton } from '../components/personas/tabs/parts'
 import SectionDivider from '../components/shared/SectionDivider'
-import { currentPeriod } from '../components/shared/periodFormat'
+import LoadErrorBanner from '../components/shared/LoadErrorBanner'
+import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 
 import useMovimientosCaja from '../hooks/useMovimientosCaja'
 import useRegisterPayment from '../hooks/useRegisterPayment'
@@ -40,6 +41,7 @@ function Caja() {
   const [paymentFormKey, setPaymentFormKey] = useState(0)
 
   const recargarCaja = movimientos.reload
+  const sinMovimientos = Boolean(movimientos.error) && !movimientos.hasData
 
   const recargarCuenta = useCallback(() => {
     if (!socioId) return
@@ -121,24 +123,35 @@ function Caja() {
         Resumen mensual
       </SectionDivider>
 
-      <CashKpis
-        period={period}
-        comprobantes={movimientos.comprobantes}
-        devoluciones={movimientos.devoluciones}
-        isLoading={movimientos.isLoading}
-        error={movimientos.error}
-      />
+      {movimientos.error && (
+        <LoadErrorBanner
+          message={sinMovimientos
+            ? `No pudimos traer los movimientos de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`
+            : 'No pudimos actualizar los movimientos. Estás viendo los últimos datos que se cargaron.'}
+          onRetry={recargarCaja}
+        />
+      )}
 
-      <ComprobantesTable
-        period={period}
-        comprobantes={movimientos.comprobantes}
-        devoluciones={movimientos.devoluciones}
-        isLoading={movimientos.isLoading}
-        error={movimientos.error}
-        onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
-        onSelectDevolucion={setDevolucionSeleccionada}
-        onChanged={recargarTodo}
-      />
+      {!sinMovimientos && (
+        <>
+          <CashKpis
+            period={period}
+            comprobantes={movimientos.comprobantes}
+            devoluciones={movimientos.devoluciones}
+            isLoading={movimientos.isLoading}
+          />
+
+          <ComprobantesTable
+            period={period}
+            comprobantes={movimientos.comprobantes}
+            devoluciones={movimientos.devoluciones}
+            isLoading={movimientos.isLoading}
+            onSelect={(comprobante) => setComprobanteId(comprobante.comprobante_id)}
+            onSelectDevolucion={setDevolucionSeleccionada}
+            onChanged={recargarTodo}
+          />
+        </>
+      )}
 
       <ComprobanteDetailModal
         comprobanteId={comprobanteId}

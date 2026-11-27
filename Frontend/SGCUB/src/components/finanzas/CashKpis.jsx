@@ -49,10 +49,8 @@ function CorrectionsSkeleton() {
   )
 }
 
-function CardBody({ isLoading, error, skeleton, children }) {
-  if (isLoading) return skeleton
-  if (error) return <p className="text-sm text-error" role="alert">No se pudieron cargar los movimientos de caja.</p>
-  return children
+function CardBody({ isLoading, skeleton, children }) {
+  return isLoading ? skeleton : children
 }
 
 function KpiCard({ id, icon, title, className = PANEL_CLASS, contained = false, children }) {
@@ -181,9 +179,9 @@ function Corrections({ summary }) {
   )
 }
 
-export default function CashKpis({ period, comprobantes, devoluciones, isLoading, error }) {
+export default function CashKpis({ period, comprobantes, devoluciones, isLoading }) {
   const summary = cashSummary(comprobantes, devoluciones)
-  const status = { isLoading, error }
+  const status = { isLoading }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

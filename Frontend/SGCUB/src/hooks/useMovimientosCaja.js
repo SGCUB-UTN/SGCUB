@@ -6,7 +6,7 @@ import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 const EMPTY = { comprobantes: [], devoluciones: [] }
 
 export default function useMovimientosCaja(period) {
-  const [load, setLoad] = useState({ period: null, data: EMPTY, error: null })
+  const [load, setLoad] = useState({ period: null, data: null, error: null })
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -14,7 +14,11 @@ export default function useMovimientosCaja(period) {
     const params = { periodo: period }
     Promise.all([getComprobantes(params), getDevoluciones(params)])
       .then(([comprobantes, devoluciones]) => active && setLoad({ period, data: { comprobantes, devoluciones }, error: null }))
-      .catch((error) => active && setLoad({ period, data: EMPTY, error }))
+      .catch((error) => active && setLoad((current) => ({
+        period,
+        data: current.period === period ? current.data : null,
+        error,
+      })))
     return () => { active = false }
   }, [period, version])
 
@@ -26,9 +30,11 @@ export default function useMovimientosCaja(period) {
   }, [reload])
 
   const loaded = load.period === period
+  const data = loaded ? load.data : null
   return {
     isLoading: !loaded,
-    ...(loaded ? load.data : EMPTY),
+    ...(data ?? EMPTY),
+    hasData: Boolean(data),
     error: loaded ? load.error : null,
     reload,
   }

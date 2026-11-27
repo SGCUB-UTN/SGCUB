@@ -4,7 +4,7 @@ import CuotaStatusSection from '../components/dashboard/CuotaStatusSection'
 import DocumentationCenterSection from '../components/dashboard/DocumentationCenterSection'
 import MemberCountsSection from '../components/dashboard/MemberCountsSection'
 import PageHeader from '../components/shared/PageHeader'
-import { SecondaryButton } from '../components/personas/tabs/parts'
+import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
 export default function Principal() {
   const { isLoading, data, error, reload } = useDashboard()
@@ -18,15 +18,12 @@ export default function Principal() {
       />
 
       {error && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-error-container/40 border border-error/20 rounded-md text-on-error-container" role="alert">
-          <span className="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">cloud_off</span>
-          <p className="flex-1 text-base">
-            {sinDatos
-              ? 'No pudimos traer el resumen. Revisá la conexión y probá de nuevo.'
-              : 'No pudimos actualizar el resumen. Estás viendo los últimos datos que se cargaron.'}
-          </p>
-          <SecondaryButton icon="refresh" onClick={reload}>Reintentar</SecondaryButton>
-        </div>
+        <LoadErrorBanner
+          message={sinDatos
+            ? 'No pudimos traer el resumen. Revisá la conexión y probá de nuevo.'
+            : 'No pudimos actualizar el resumen. Estás viendo los últimos datos que se cargaron.'}
+          onRetry={reload}
+        />
       )}
 
       {!sinDatos && (
