@@ -84,4 +84,11 @@ export const initialCount = (cuotas, ids, period) => {
   return lastIndex >= 0 ? lastIndex + 1 : cuotas.filter((cuota) => !isFuture(cuota, period)).length
 }
 
+export const visibleCuotaLines = (lines, period) => {
+  const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
+  const futureLines = lines.filter((line) => isFuture(line.cuota, period))
+  const coveredCount = futureLines.filter((line) => line.applied > 0).length
+  return { dueLines, visibleFuture: futureLines.slice(0, Math.max(1, coveredCount)) }
+}
+
 export const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => current !== id) : [...ids, id])

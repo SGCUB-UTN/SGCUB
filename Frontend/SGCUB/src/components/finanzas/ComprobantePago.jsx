@@ -101,7 +101,7 @@ function ComprobantePago({
         />
       </div>
 
-      <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+      <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2 max-sm:[&_button]:w-full max-sm:[&_button]:justify-center">
         <ViewFinancesButton socio={socioCompleto} onNavigate={onLeave} />
         {onRevert && detalle?.revertible && (
           <button

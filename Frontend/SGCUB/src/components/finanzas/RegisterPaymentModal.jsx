@@ -8,6 +8,7 @@ import { formatDni, formatNumber, isActiveStatus } from '../personas/format'
 import { BenefitButton } from '../personas/HeaderPersona'
 import { hasPendingDebt } from './accountStatement'
 import PagoForm from './PagoForm'
+import PagoFormMobile from './PagoFormMobile'
 import { receiptModalStyles } from './receiptModal'
 import SocioPicker from './SocioPicker'
 import { TitleSkeleton } from '../shared/Skeleton'
@@ -17,8 +18,8 @@ const EMPTY_LOAD = { socioId: null, socio: null, cuenta: null, error: '' }
 
 const FORM_HEIGHT = 'min(820px, 90dvh)'
 
-const modalLayout = (paid, isMobile) => {
-  if (paid) return receiptModalStyles(isMobile)
+const modalLayout = (paid, isMobile, stepped) => {
+  if (paid || stepped) return receiptModalStyles(isMobile)
   return isMobile ? {} : receiptModalStyles(false, FORM_HEIGHT)
 }
 
@@ -48,6 +49,7 @@ function RegisterPaymentModal({
   const locked = Boolean(onChangeOption) && !paid
   const canChangeSocio = !reversal || reversal.otherSocio
   const { openBenefit } = useAssignBenefit()
+  const stepped = isMobile && !reversal
 
   useEffect(() => {
     if (!opened || !socioId) return undefined
@@ -111,7 +113,7 @@ function RegisterPaymentModal({
       closeOnClickOutside={!locked}
       aria-label="Registrar pago"
       title={(
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 min-w-0">
           {locked && (
             <>
               <button
@@ -122,7 +124,7 @@ function RegisterPaymentModal({
                 <span className="material-symbols-outlined text-[18px]" aria-hidden="true">swap_horiz</span>
                 Cambiar opción
               </button>
-              <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
+              <span className="max-sm:hidden h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
             </>
           )}
           <button
@@ -134,18 +136,33 @@ function RegisterPaymentModal({
             <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_back</span>
             Elegir otro socio
           </button>
-          <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
-          <div className="flex-1 min-w-0">{socioSummary()}</div>
-          {!paid && <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />}
+          <span className="max-sm:hidden h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
+          <div className="flex-1 min-w-0 max-sm:basis-full">{socioSummary()}</div>
+          {!paid && !stepped && <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />}
         </div>
       )}
-      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...modalLayout(paid, isMobile) }}
+      styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...modalLayout(paid, isMobile, stepped) }}
       size="min(1240px, 95vw)"
       fullScreen={isMobile}
       centered
       padding="lg"
     >
-      {ready ? (
+      {ready && stepped && (
+        <PagoFormMobile
+          key={load.socio.socio_id}
+          socio={load.socio}
+          cuenta={load.cuenta}
+          initialCuotaIds={initialCuotaIds}
+          onSuccess={handleSuccess}
+          onRevertStart={onClose}
+          onReverted={() => onSuccess?.()}
+          onAssignBenefit={socioActive ? assignBenefit : undefined}
+          onAccountChanged={refreshAccount}
+          onLeave={onClose}
+        />
+      )}
+      {!ready && stepped && <PagoFormMobile key="empty" />}
+      {ready && !stepped && (
         <PagoForm
           key={load.socio.socio_id}
           socio={load.socio}
@@ -159,9 +176,8 @@ function RegisterPaymentModal({
           onAccountChanged={refreshAccount}
           onLeave={onClose}
         />
-      ) : (
-        <PagoForm key="empty" />
       )}
+      {!ready && !stepped && <PagoForm key="empty" />}
     </Modal>
   )
 }

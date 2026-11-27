@@ -11,7 +11,7 @@ import { isAdjustment, isRegistration, itemLabel, itemTone, removalBlocker } fro
 import { CUOTA_STATE_TONES, cuotaStateLabel, cuotaStateShortLabel, isOverdue } from './cuotaStates'
 import StatusBadge from '../shared/StatusBadge'
 import usePagoForm from '../../hooks/usePagoForm'
-import { EXCESS_CREDIT_NOTE, EXCESS_PARTIAL, NO_CUOTAS, isFuture, isRowComplete, periodsText, roundCents } from './pagoFormMath'
+import { EXCESS_CREDIT_NOTE, EXCESS_PARTIAL, NO_CUOTAS, isFuture, isRowComplete, periodsText, roundCents, visibleCuotaLines } from './pagoFormMath'
 
 const COLUMN_COUNT = 3
 
@@ -45,7 +45,7 @@ function BreakdownLine({ label, detail = '', value, tone = 'text-on-surface-vari
   )
 }
 
-function CuotaBreakdownRow({
+export function CuotaBreakdown({
   line,
   onRemoveItem,
   onAssignBenefit,
@@ -55,8 +55,6 @@ function CuotaBreakdownRow({
   const paid = Number(cuota.monto_pagado || 0)
 
   return (
-    <tr className="bg-surface-container-low/40">
-      <td colSpan={COLUMN_COUNT} className="px-4 py-3 sm:pl-12">
         <div className="flex flex-col gap-2.5 max-w-xl">
           <div className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/30">
             {items.filter((item) => !isAdjustment(item)).map((item) => {
@@ -118,8 +116,73 @@ function CuotaBreakdownRow({
             </div>
           </div>
         </div>
+  )
+}
+
+function CuotaBreakdownRow(props) {
+  return (
+    <tr className="bg-surface-container-low/40">
+      <td colSpan={COLUMN_COUNT} className="px-4 py-3 sm:pl-12">
+        <CuotaBreakdown {...props} />
       </td>
     </tr>
+  )
+}
+
+export function CuotaBadges({ cuota, upcoming }) {
+  return (
+    <>
+      {isOverdue(cuota) && (
+        <StatusBadge
+          size="md"
+          badge={{
+            label: cuotaStateShortLabel(cuota.estado_cuota),
+            title: cuotaStateLabel(cuota.estado_cuota),
+            tono: CUOTA_STATE_TONES[cuota.estado_cuota] ?? 'neutro',
+          }}
+        />
+      )}
+      {upcoming && (
+        <StatusBadge size="md" badge={{ label: 'Próxima', tono: 'neutro' }} />
+      )}
+    </>
+  )
+}
+
+export function CuotaAmount({ line }) {
+  const { due, applied } = line
+  const partial = applied > 0 && applied < due
+  const settled = due <= 0 || (applied > 0 && applied >= due)
+  return (
+    <>
+      <span className="inline-flex items-center gap-1 font-semibold text-on-surface text-base">
+        {settled && <span className="material-symbols-outlined text-[16px] text-emerald-600" aria-hidden="true">check_circle</span>}
+        {formatAmount(due)}
+      </span>
+      {settled && (
+        <span className="block text-sm text-emerald-700">
+          {due <= 0 ? 'Se cubre con descuento' : 'Se pagará completa'}
+        </span>
+      )}
+      {partial && (
+        <span className="block text-sm text-amber-700">
+          Pago parcial: {formatAmount(applied)} · faltarán {formatAmount(roundCents(due - applied))}
+        </span>
+      )}
+    </>
+  )
+}
+
+export function PaymentSubmitError({ message }) {
+  if (!message) return null
+  return (
+    <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
+      <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>
+      <div>
+        <p className="text-base font-bold">No se pudo registrar el pago</p>
+        <p className="text-sm text-on-error-container/80 mt-0.5 break-words">{message}</p>
+      </div>
+    </div>
   )
 }
 
@@ -140,10 +203,7 @@ function CuotasTable({
     }
   }
 
-  const dueLines = lines.filter((line) => !isFuture(line.cuota, period))
-  const futureLines = lines.filter((line) => isFuture(line.cuota, period))
-  const coveredCount = futureLines.filter((line) => line.applied > 0).length
-  const visibleFuture = futureLines.slice(0, Math.max(1, coveredCount))
+  const { dueLines, visibleFuture } = visibleCuotaLines(lines, period)
   const renderLine = (line) => (
     <CuotaLine
       key={line.cuota.cuota_id}
@@ -197,11 +257,9 @@ function CuotaLine({
   onAssignBenefit,
   onKeyDown,
 }) {
-  const { cuota, due, applied } = line
+  const { cuota } = line
   const cuotaId = cuota.cuota_id
   const expanded = expandedIds.includes(cuotaId)
-  const partial = applied > 0 && applied < due
-  const settled = due <= 0 || (applied > 0 && applied >= due)
   return (
     <Fragment>
       <tr
@@ -217,36 +275,11 @@ function CuotaLine({
         <td className="py-1.5 px-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-on-surface text-base">{formatPeriod(cuota.periodo)}</span>
-            {isOverdue(cuota) && (
-              <StatusBadge
-                size="md"
-                badge={{
-                  label: cuotaStateShortLabel(cuota.estado_cuota),
-                  title: cuotaStateLabel(cuota.estado_cuota),
-                  tono: CUOTA_STATE_TONES[cuota.estado_cuota] ?? 'neutro',
-                }}
-              />
-            )}
-            {upcoming && (
-              <StatusBadge size="md" badge={{ label: 'Próxima', tono: 'neutro' }} />
-            )}
+            <CuotaBadges cuota={cuota} upcoming={upcoming} />
           </div>
         </td>
         <td className="py-1.5 px-3 text-right">
-          <span className="inline-flex items-center gap-1 font-semibold text-on-surface text-base">
-            {settled && <span className="material-symbols-outlined text-[16px] text-emerald-600" aria-hidden="true">check_circle</span>}
-            {formatAmount(due)}
-          </span>
-          {settled && (
-            <span className="block text-sm text-emerald-700">
-              {due <= 0 ? 'Se cubre con descuento' : 'Se pagará completa'}
-            </span>
-          )}
-          {partial && (
-            <span className="block text-sm text-amber-700">
-              Pago parcial: {formatAmount(applied)} · faltarán {formatAmount(roundCents(due - applied))}
-            </span>
-          )}
+          <CuotaAmount line={line} />
         </td>
       </tr>
       {expanded && (
@@ -260,7 +293,7 @@ function CuotaLine({
   )
 }
 
-function SettlementStatus({ settledLines, partialLines }) {
+export function SettlementStatus({ settledLines, partialLines }) {
   if (settledLines.length === 0 && partialLines.length === 0) {
     return <p className="text-base text-on-surface-variant">Ingresá el monto para ver qué cuotas se saldan.</p>
   }
@@ -296,7 +329,7 @@ function RemainingValue({ remaining, empty }) {
   )
 }
 
-function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows, methodLabel, remaining, empty }) {
+export function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows, methodLabel, remaining, empty }) {
   return (
     <div className="flex flex-col gap-5">
       <h3 id="payment-summary-title" className="text-lg font-bold text-on-surface">Resumen del cobro</h3>
@@ -327,7 +360,7 @@ function PaymentSummary({ enteredTotal, settledLines, partialLines, completeRows
   )
 }
 
-function PaymentMethodsNotice({ error, empty, onRetry }) {
+export function PaymentMethodsNotice({ error, empty, onRetry }) {
   if (!error && !empty) return null
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-error/30 bg-error-container text-on-error-container" role="alert">
@@ -661,15 +694,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
           />
 
           <div className="mt-auto flex flex-col gap-3">
-            {submitError && (
-              <div className="bg-error-container text-on-error-container p-3 rounded-lg border border-error/30 flex items-start gap-2.5" role="alert">
-                <span className="material-symbols-outlined text-base text-error shrink-0" aria-hidden="true">error</span>
-                <div>
-                  <p className="text-base font-bold">No se pudo registrar el pago</p>
-                  <p className="text-sm text-on-error-container/80 mt-0.5 break-words">{submitError}</p>
-                </div>
-              </div>
-            )}
+            <PaymentSubmitError message={submitError} />
             <button
               type="submit"
               disabled={!canSubmit}
