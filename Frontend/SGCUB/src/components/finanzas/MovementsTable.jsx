@@ -13,6 +13,7 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, isCancelledRefund } from './refunds'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import { CancellationNotice } from './formParts'
 
 const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
@@ -98,17 +99,17 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
         ]}
       />
       {anulado && (
-        <DetailSection title="Anulación y devolución" tone="error">
-          <DetailList items={[{ label: 'Motivo', value: comprobante.motivo_anulacion || 'Sin motivo registrado', wide: true }]} />
-          {refunds.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-on-surface-variant">Dinero devuelto</p>
-              <RefundList refunds={refunds} />
-            </div>
-          )}
-          {refunds.every(isCancelledRefund) && (
-            <p className="text-base text-on-surface">Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.</p>
-          )}
+        <CancellationNotice
+          action="Ingreso anulado"
+          reason={comprobante.motivo_anulacion}
+          consequence={refunds.every(isCancelledRefund)
+            ? 'Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.'
+            : ''}
+        />
+      )}
+      {anulado && refunds.length > 0 && (
+        <DetailSection title="Dinero devuelto">
+          <RefundList refunds={refunds} />
         </DetailSection>
       )}
     </div>
@@ -129,15 +130,13 @@ function RefundDetail({ devolucion, income }) {
         ]}
       />
       {isCancelledRefund(devolucion) && (
-        <DetailSection title="Cancelación" tone="error">
-          <DetailList
-            items={[
-              { label: 'Fecha', value: formatDate(devolucion.fecha_cancelacion) },
-              { label: 'Responsable', value: devolucion.cancelado_por || '—' },
-              { label: 'Motivo', value: devolucion.motivo_cancelacion || 'Sin motivo registrado', wide: true },
-            ]}
-          />
-        </DetailSection>
+        <CancellationNotice
+          action={devolucion.tipo === 'NotaCredito' ? 'Nota de crédito cancelada' : 'Devolución cancelada'}
+          date={devolucion.fecha_cancelacion}
+          authorizedBy={devolucion.cancelado_por}
+          reason={devolucion.motivo_cancelacion}
+          consequence="Ya no cuenta como dinero devuelto."
+        />
       )}
       {devolucion.comprobante_anulado_codigo && (
         <DetailSection title="Ingreso que se devuelve">

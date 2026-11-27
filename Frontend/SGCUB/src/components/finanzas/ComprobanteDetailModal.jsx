@@ -15,6 +15,7 @@ import ReceiptSkeleton from './ReceiptSkeleton'
 import ReciboComprobante from './ReciboComprobante'
 import { receiptModalStyles } from './receiptModal'
 import { CancellationNotice } from './formParts'
+import { cancellationSummary } from './cancellations'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
@@ -48,7 +49,12 @@ function CreditNotes({ detalle, methodLabel }) {
               </p>
               {isCancelledRefund(note) && (
                 <p className="text-sm text-on-surface-variant break-words">
-                  Cancelada por {note.cancelado_por || '—'}: {note.motivo_cancelacion || 'sin motivo registrado'}
+                  {cancellationSummary({
+                    action: 'Cancelada',
+                    date: note.fecha_cancelacion,
+                    authorizedBy: note.cancelado_por,
+                    reason: note.motivo_cancelacion,
+                  })}
                 </p>
               )}
             </div>

@@ -15,6 +15,7 @@ import { DISCOUNT_TARGET, SCHOLARSHIP_TARGET } from './benefitMath'
 import RemoveCuotaItemModal from './CuotaItemRemoval'
 import { LATE_FEE_WAIVER_CONCEPT, isLateFee, removalBlocker } from './cuotaItems'
 import EditBenefitModal from './EditBenefitModal'
+import { CancellationNotice } from './formParts'
 
 
 const SCHOLARSHIP_STATE_KEYS = {
@@ -153,15 +154,13 @@ function BenefitDetail({ row }) {
         </DetailSection>
       )}
       {row.cancellation && (
-        <DetailSection title="Anulación" tone="error">
-          <DetailList
-            items={[
-              { label: 'Fecha', value: formatDate(row.cancellation.date) },
-              { label: 'Autorizó', value: row.cancellation.by || 'Sin registrar' },
-              { label: 'Motivo', value: row.cancellation.reason || 'Sin motivo registrado', wide: true },
-            ]}
-          />
-        </DetailSection>
+        <CancellationNotice
+          action={isScholarship ? `Beca de ${row.value} anulada` : 'Descuento anulado'}
+          date={row.cancellation.date}
+          authorizedBy={row.cancellation.by}
+          reason={row.cancellation.reason}
+          consequence={isScholarship ? 'Se quitó de las cuotas impagas sin pagos registrados.' : ''}
+        />
       )}
     </div>
   )

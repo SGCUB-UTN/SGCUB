@@ -23,6 +23,7 @@ import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 import AnnulIncomeModal from './AnnulIncomeModal'
 import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, REFUND_CANCELLED, isCancelledRefund } from './refunds'
+import { cancellationSummary } from './cancellations'
 import useRevertPayment from '../../hooks/useRevertPayment'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
@@ -109,7 +110,12 @@ const receiptDetail = (comprobante, refunded) => {
 
 const refundDetail = (devolucion) => {
   if (isCancelledRefund(devolucion)) {
-    return `Cancelada por ${devolucion.cancelado_por || '—'}: ${devolucion.motivo_cancelacion || 'sin motivo registrado'}`
+    return cancellationSummary({
+      action: 'Cancelada',
+      date: devolucion.fecha_cancelacion,
+      authorizedBy: devolucion.cancelado_por,
+      reason: devolucion.motivo_cancelacion,
+    })
   }
   return devolucion.comprobante_anulado_codigo
     ? `Sobre el comprobante anulado ${devolucion.comprobante_anulado_codigo} · Responsable: ${devolucion.responsable}`
