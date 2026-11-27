@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getAutorizantes } from '../../api/usuarios'
 import SectionHeading from '../shared/SectionHeading'
 import { formatAmount } from '../personas/format'
+import { cancellationSentence } from './cancellations'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
@@ -187,7 +188,7 @@ export function FormPanel({ id, icon, title, description, actions, disabled = fa
 }
 
 // Selectable card of a mutually exclusive choice (what to do with an excess, how to settle a reversal)
-export function OptionCard({ icon, title, description, selected, disabled = false, onSelect }) {
+export function OptionCard({ icon, title, description = '', selected, disabled = false, onSelect }) {
   return (
     <button
       type="button"
@@ -200,13 +201,34 @@ export function OptionCard({ icon, title, description, selected, disabled = fals
       <span className={`material-symbols-outlined text-[22px] ${selected ? 'text-primary' : 'text-outline'}`} aria-hidden="true">{icon}</span>
       <span className="flex flex-col min-w-0">
         <span className="text-base font-semibold text-on-surface">{title}</span>
-        <span className="text-sm text-on-surface-variant">{description}</span>
+        {description && <span className="text-sm text-on-surface-variant">{description}</span>}
       </span>
     </button>
   )
 }
 
-export const TICKET_CLASS = 'h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
+const NOTICE_TONES = {
+  error: { box: 'bg-error-container/50 border-error/30 text-on-error-container', icon: 'text-error', muted: 'text-on-error-container/70' },
+  neutral: { box: 'bg-surface-container-low border-outline-variant/40 text-on-surface-variant', icon: 'text-outline', muted: 'text-on-surface-variant/70' },
+}
+
+export function CancellationNotice({ action, date, authorizedBy, reason, consequence, showReason = true, tone = 'error', icon = 'cancel' }) {
+  const styles = NOTICE_TONES[tone] ?? NOTICE_TONES.error
+  return (
+    <div className={`flex items-start gap-2.5 p-3 rounded-lg border ${styles.box}`} role="status">
+      <span className={`material-symbols-outlined text-[20px] shrink-0 ${styles.icon}`} aria-hidden="true">{icon}</span>
+      <div className="flex min-w-0 flex-col gap-1 text-sm">
+        <p className="font-semibold">{cancellationSentence({ action, date, authorizedBy })}</p>
+        {showReason && (reason
+          ? <p className="break-words">Motivo: "{reason}"</p>
+          : <p className={styles.muted}>No se registró motivo.</p>)}
+        {consequence && <p>{consequence}</p>}
+      </div>
+    </div>
+  )
+}
+
+export const TICKET_CLASS ='h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
 
 export const SUBMIT_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-primary hover:bg-primary/90 text-surface-container-lowest shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 

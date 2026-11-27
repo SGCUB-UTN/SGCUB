@@ -141,7 +141,7 @@ function RegisterPaymentModal({
           </button>
           <span className="h-6 w-px bg-outline-variant/40 shrink-0" aria-hidden="true" />
           <div className="flex-1 min-w-0">{socioSummary()}</div>
-          <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />
+          {!paid && <BenefitButton onClick={() => assignBenefit()} disabled={!socioActive} />}
         </div>
       )}
       styles={{ header: { gap: 16 }, title: { flex: 1, minWidth: 0 }, ...modalLayout(paid, isMobile) }}
@@ -163,6 +163,7 @@ function RegisterPaymentModal({
           onReverted={() => onSuccess?.()}
           onAssignBenefit={socioActive ? assignBenefit : undefined}
           onAccountChanged={refreshAccount}
+          onLeave={onClose}
         />
       ) : (
         <PagoForm key="empty" />

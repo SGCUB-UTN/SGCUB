@@ -1850,7 +1850,7 @@ class RecategorizationServiceTests(TestCase):
                 genero="M", anio_vigente=self.CURRENT_YEAR,
             )
             for name, min_age, max_age, tipo in [
-                ("2016", 0, 10, Tipo.JUVENIL), ("2015", 0, 11, Tipo.JUVENIL), ("PRE 9NA", 0, 12, Tipo.JUVENIL),
+                ("2016", 0, 10, Tipo.INFANTIL), ("2015", 0, 11, Tipo.INFANTIL), ("PRE 9NA", 0, 12, Tipo.JUVENIL),
                 ("9NA", 0, 13, Tipo.JUVENIL), ("5TA", 0, 17, Tipo.JUVENIL), ("4TA", 0, 19, Tipo.JUVENIL),
                 ("3RA", 0, 99, Tipo.MAYOR), ("1RA", 0, 99, Tipo.MAYOR), ("SENIOR", 35, 99, Tipo.MAYOR),
             ]
@@ -1892,6 +1892,12 @@ class RecategorizationServiceTests(TestCase):
 
         self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
         self.assertEqual(self.categories["2015"], result.categoria_nueva)
+
+    def test_new_year_run_moves_player_from_last_infantil_to_first_juvenil(self):
+        result = self.classify(self.create_player(2014, self.categories["2015"]), last_run_year=2025)
+
+        self.assertEqual(RecategorizacionResultado.TipoChoices.EXITO, result.tipo)
+        self.assertEqual(self.categories["PRE 9NA"], result.categoria_nueva)
 
     def test_new_year_run_keeps_player_in_multi_year_category(self):
         result = self.classify(self.create_player(2010, self.categories["5TA"]), last_run_year=2025)

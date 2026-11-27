@@ -22,12 +22,12 @@ export default function SegmentedCategoriesSelector({
   )
 
   const countsByType = useMemo(() => {
-    const juveniles = validCategorias.filter((c) => (c.tipo || '').toLowerCase() === 'juvenil').length
-    const mayores = validCategorias.filter((c) => (c.tipo || '').toLowerCase() === 'mayor').length
+    const countOf = (tipo) => validCategorias.filter((c) => (c.tipo || '').toLowerCase() === tipo).length
     return {
       todas: validCategorias.length,
-      juvenil: juveniles,
-      mayor: mayores,
+      mayor: countOf('mayor'),
+      juvenil: countOf('juvenil'),
+      infantil: countOf('infantil'),
     }
   }, [validCategorias])
 
@@ -74,8 +74,9 @@ export default function SegmentedCategoriesSelector({
         label="Filtrar categorías por tipo"
         options={[
           { value: 'todas', label: 'Todas', count: countsByType.todas },
-          { value: 'juvenil', label: 'Juveniles', count: countsByType.juvenil },
           { value: 'mayor', label: 'Mayores', count: countsByType.mayor },
+          { value: 'juvenil', label: 'Juveniles', count: countsByType.juvenil },
+          { value: 'infantil', label: 'Infantiles', count: countsByType.infantil },
         ]}
         value={filterTab}
         onChange={setFilterTab}

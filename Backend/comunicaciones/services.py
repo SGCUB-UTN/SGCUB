@@ -1,5 +1,6 @@
 import logging
-from email.utils import formataddr
+import re
+from email.utils import formataddr, parseaddr
 from pathlib import Path
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -7,6 +8,7 @@ from django.template import Context, Template
 from django.utils.html import strip_tags
 
 from configuracion.models import ConfiguracionGeneral
+from finanzas.pdf_utils import format_phone
 
 from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion, OrigenNotificacion
 
@@ -99,6 +101,7 @@ HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
       color: #0f172a;
       font-size: 13px;
       margin-top: 2px;
+      white-space: pre-wrap;
     }
     .footer {
       background: #f8fafc;
@@ -128,7 +131,13 @@ HTML_EMAIL_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
     <div class="footer">
-      {% if contacto_club %}<p>{{ contacto_club }}</p>{% endif %}
+      {% if club_whatsapp_url or club_email %}
+      <p>
+        {% if club_whatsapp_url %}WhatsApp: <a href="{{ club_whatsapp_url }}" style="color: #006493; text-decoration: underline;">{{ club_whatsapp_display }}</a>{% endif %}
+        {% if club_whatsapp_url and club_email %} · {% endif %}
+        {% if club_email %}{{ club_email }}{% endif %}
+      </p>
+      {% endif %}
       <p>Por consultas, comuníquese con secretaría.</p>
     </div>
   </div>
@@ -194,6 +203,51 @@ def obtener_contacto_socio(socio):
     return None, nombre_socio, "El socio no tiene una dirección de correo electrónico válida"
 
 
+def _clean_local_15(num):
+    if len(num) == 12:
+        if num.startswith("1115"):
+            return f"11{num[4:]}"
+        if num[3:5] == "15":
+            return f"{num[:3]}{num[5:]}"
+        if num[4:6] == "15":
+            return f"{num[:4]}{num[6:]}"
+    if len(num) == 10 and num.startswith("15"):
+        return num[2:]
+    return num
+
+
+def whatsapp_phone_digits(phone):
+    digits = re.sub(r"\D", "", str(phone or ""))
+    if not digits:
+        return None
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("54"):
+        rest = digits[2:]
+        if rest.startswith("9"):
+            rest = rest[1:]
+        if rest.startswith("0"):
+            rest = rest[1:]
+        return f"549{_clean_local_15(rest)}"
+    if digits.startswith("0"):
+        digits = digits[1:]
+    digits = _clean_local_15(digits)
+    if len(digits) == 10:
+        return f"549{digits}"
+    if len(digits) == 7:
+        return f"549221{digits}"
+    if len(digits) == 8:
+        return f"54911{digits}"
+    if len(digits) == 11 and digits.startswith("9"):
+        return f"54{digits}"
+    return digits
+
+
+def whatsapp_url(phone):
+    digits = whatsapp_phone_digits(phone)
+    return f"https://wa.me/{digits}" if digits else ""
+
+
 def enviar_email_individual(
     destinatario: str,
     asunto: str,
@@ -209,31 +263,34 @@ def enviar_email_individual(
     configuracion = ConfiguracionGeneral.load()
     club_nombre = configuracion.club_nombre or "Club Universitario de Berisso"
     asunto_completo = f"[C.U.B.] {asunto}" if asunto else "[C.U.B.] Comunicado institucional"
-    remitente = getattr(settings, "DEFAULT_FROM_EMAIL", "sgcub.notificaciones@gmail.com")
-    if configuracion.email_nombre_remitente:
-        remitente = formataddr((configuracion.email_nombre_remitente, remitente))
+    default_from = getattr(settings, "DEFAULT_FROM_EMAIL", "sgcub.notificaciones@gmail.com")
+    _, email_address = parseaddr(default_from)
+    email_address = email_address or default_from
+    nombre_remitente = (configuracion.email_nombre_remitente or "").strip() or club_nombre
+    remitente = formataddr((nombre_remitente, email_address))
 
-    firma_raw = (configuracion.email_firma or "").strip()
-    firma_linea = (
-        firma_raw
-        if firma_raw and firma_raw.lower() not in (club_nombre.lower(), "club social y deportivo - sgcub")
-        else "Secretaría y Comisión Directiva"
+    firma_linea = (configuracion.email_firma or "").strip() or nombre_remitente
+
+    club_whatsapp_url = whatsapp_url(configuracion.club_telefono)
+    club_whatsapp_display = format_phone(configuracion.club_telefono) if club_whatsapp_url else ""
+    club_email = (configuracion.club_email or "").strip()
+    contacto_texto = " · ".join(
+        item for item in (
+            f"WhatsApp: {club_whatsapp_display} ({club_whatsapp_url})" if club_whatsapp_url else "",
+            club_email,
+        ) if item
     )
-
-    datos_contacto = [
-        f"Tel. {configuracion.club_telefono}" if configuracion.club_telefono else "",
-        configuracion.club_email or "",
-    ]
-    contacto_club = " · ".join([d for d in datos_contacto if d])
 
     try:
         template = Template(HTML_EMAIL_TEMPLATE)
         context = Context({
             "asunto": asunto,
-            "club": club_nombre,
+            "club": nombre_remitente,
             "contenido": contenido,
             "firma_linea": firma_linea,
-            "contacto_club": contacto_club,
+            "club_whatsapp_url": club_whatsapp_url,
+            "club_whatsapp_display": club_whatsapp_display,
+            "club_email": club_email,
         })
         html_content = template.render(context)
         text_content = (
@@ -242,6 +299,7 @@ def enviar_email_individual(
             f"--\n"
             f"Atentamente,\n"
             f"{firma_linea}"
+            + (f"\n\n{contacto_texto}" if contacto_texto else "")
         )
 
         msg = EmailMultiAlternatives(

@@ -4,6 +4,7 @@ import { getConfiguracionGeneral } from '../../api/configuracion'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import ReciboComprobante from './ReciboComprobante'
+import ViewFinancesButton from './ViewFinancesButton'
 
 function ComprobantePago({
   socio,
@@ -16,6 +17,7 @@ function ComprobantePago({
   comprobanteId: registeredId = null,
   onRetryDetalle = null,
   onRevert = null,
+  onLeave = null,
 }) {
   const [clubConfig, setClubConfig] = useState(null)
   const [retrying, setRetrying] = useState(false)
@@ -103,11 +105,12 @@ function ComprobantePago({
 
       {/* Acciones */}
       <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+        <ViewFinancesButton socio={socioCompleto} onNavigate={onLeave} />
         {onRevert && detalle?.revertible && (
           <button
             type="button"
             onClick={onRevert}
-            className="inline-flex items-center justify-center gap-2 h-10 px-4 border border-error/40 rounded-lg text-base font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer sm:mr-auto"
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 border border-error/40 rounded-lg text-base font-semibold text-error hover:bg-error-container/40 transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">undo</span>
             {detalle.es_ingreso ? 'Anular ingreso' : 'Revertir pago'}

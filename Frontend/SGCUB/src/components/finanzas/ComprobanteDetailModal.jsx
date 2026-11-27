@@ -9,10 +9,13 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import NotaCreditoModal from './NotaCreditoModal'
+import ViewFinancesButton from './ViewFinancesButton'
 import { availableToRefund, isCancelledRefund } from './refunds'
 import ReceiptSkeleton from './ReceiptSkeleton'
 import ReciboComprobante from './ReciboComprobante'
 import { receiptModalStyles } from './receiptModal'
+import { CancellationNotice } from './formParts'
+import { cancellationSummary } from './cancellations'
 
 const ACTION_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border rounded-md font-semibold transition-colors cursor-pointer'
 
@@ -24,15 +27,6 @@ const NO_PAYMENT_METHOD = { medio: '-', monto: 0 }
 const paymentMethodsOf = (pago, methodLabel) => {
   const items = (pago?.items_pago ?? []).map((item) => ({ medio: methodLabel(item.medio_de_pago), monto: item.monto }))
   return items.length ? items : [NO_PAYMENT_METHOD]
-}
-
-function InfoRow({ label, children }) {
-  return (
-    <div className="flex justify-between gap-3 text-sm">
-      <span className="text-on-surface-variant">{label}</span>
-      <span className="text-right text-on-surface font-medium break-words">{children}</span>
-    </div>
-  )
 }
 
 function CreditNotes({ detalle, methodLabel }) {
@@ -55,12 +49,18 @@ function CreditNotes({ detalle, methodLabel }) {
               </p>
               {isCancelledRefund(note) && (
                 <p className="text-sm text-on-surface-variant break-words">
-                  Cancelada por {note.cancelado_por || '—'}: {note.motivo_cancelacion || 'sin motivo registrado'}
+                  {cancellationSummary({
+                    action: 'Cancelada',
+                    date: note.fecha_cancelacion,
+                    authorizedBy: note.cancelado_por,
+                    reason: note.motivo_cancelacion,
+                  })}
                 </p>
               )}
             </div>
             {!isCancelledRefund(note) && (
               <div className="flex items-center gap-2 shrink-0">
+                <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
                 <WhatsAppComprobanteButton
                   socio={detalle.socio}
                   devolucionId={note.devolucion_id}
@@ -70,7 +70,6 @@ function CreditNotes({ detalle, methodLabel }) {
                   label="WhatsApp"
                   className="h-9 px-3 text-xs min-w-0"
                 />
-                <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
               </div>
             )}
           </div>
@@ -149,6 +148,28 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
       {detalle && (
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges] [&>*]:shrink-0">
+            {detalle.anulacion && (
+              <CancellationNotice
+                action={isIncome ? 'Ingreso anulado' : 'Pago anulado'}
+                date={detalle.anulacion.fecha}
+                authorizedBy={detalle.anulacion.responsable}
+                reason={detalle.anulacion.motivo}
+              />
+            )}
+
+            {justReverted && (
+              <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
+                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
+                <p className="text-sm text-on-surface-variant">
+                  {justReverted === 'refunded'
+                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
+                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
+                </p>
+              </div>
+            )}
+
+            <CreditNotes detalle={detalle} methodLabel={methodLabel} />
+
             <ReciboComprobante
               ref={comprobanteRef}
               clubConfig={clubConfig}
@@ -162,33 +183,12 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               anulado={anulado}
               anulacion={detalle.anulacion}
             />
-
-            {detalle.anulacion && (
-              <section className="flex flex-col gap-1.5 p-3 rounded-lg border border-error/20 bg-error-container/30">
-                <h3 className="font-semibold text-error">Anulado</h3>
-                <InfoRow label="Fecha">{detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'}</InfoRow>
-                <InfoRow label="Motivo">{detalle.anulacion.motivo || '—'}</InfoRow>
-                <InfoRow label="Responsable">{detalle.anulacion.responsable || '—'}</InfoRow>
-              </section>
-            )}
-
-            <CreditNotes detalle={detalle} methodLabel={methodLabel} />
-
-            {justReverted && (
-              <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
-                <p className="text-sm text-on-surface-variant">
-                  {justReverted === 'refunded'
-                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
-                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
-                </p>
-              </div>
-            )}
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
+            <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             {!readOnly && detalle.revertible && (
-              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40 mr-auto`}>
+              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
@@ -197,7 +197,7 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               <button
                 type="button"
                 onClick={() => setAction('creditNote')}
-                className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low mr-auto`}
+                className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low`}
               >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">currency_exchange</span>
                 Emitir nota de crédito

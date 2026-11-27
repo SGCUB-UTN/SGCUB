@@ -308,12 +308,21 @@ class AplicacionDeLaConfiguracionTests(APITestCase):
 
     def test_los_emails_usan_remitente_y_firma_configurados(self):
         self.configuracion.email_nombre_remitente = "Tesoreria CUB"
-        self.configuracion.email_firma = "Comisión Directiva"
+        self.configuracion.email_firma = "Club Social y Deportivo - SGCUB"
+        self.configuracion.club_telefono = "221 675-5822"
+        self.configuracion.club_email = "info@cub.org.ar"
         self.configuracion.save()
 
         enviar_email_individual("socio@example.com", "Aviso", "Hola")
 
         mensaje = mail.outbox[0]
-        self.assertTrue(mensaje.from_email.startswith("Tesorería CUB <") or "Tesorer" in mensaje.from_email)
-        self.assertIn("Comisión Directiva", mensaje.body)
-        self.assertNotIn("SGCUB\n", mensaje.body[-10:])
+        self.assertTrue(mensaje.from_email.startswith("Tesoreria CUB <"))
+        self.assertIn("Club Social y Deportivo - SGCUB", mensaje.body)
+        self.assertIn("WhatsApp: +54 2216 75-5822 (https://wa.me/5492216755822)", mensaje.body)
+        self.assertNotIn("Tel.", mensaje.body)
+        html_body = mensaje.alternatives[0][0]
+        self.assertIn("Tesoreria CUB", html_body)
+        self.assertIn("Club Social y Deportivo - SGCUB", html_body)
+        self.assertIn('href="https://wa.me/5492216755822"', html_body)
+        self.assertIn("WhatsApp:", html_body)
+        self.assertNotIn("Tel.", html_body)

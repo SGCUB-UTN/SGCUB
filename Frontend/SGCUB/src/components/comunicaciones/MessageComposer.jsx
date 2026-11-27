@@ -48,6 +48,8 @@ export default function MessageComposer({
   onOpenConfirm,
 }) {
   const clubNombre = remitente?.club_nombre || 'Club Universitario de Berisso'
+  const nombreRemitente = remitente?.nombre_remitente || clubNombre
+  const firma = (remitente?.firma || '').trim() || nombreRemitente
   const emailSecretaria = remitente?.email_secretaria || remitente?.email_remitente || ''
 
   const aplicarPlantilla = (plantilla) => {
@@ -115,7 +117,7 @@ export default function MessageComposer({
               className="w-7 h-7 object-contain shrink-0"
             />
             <div className="min-w-0">
-              <p className="text-xs font-bold text-white leading-tight truncate">{clubNombre}</p>
+              <p className="text-xs font-bold text-white leading-tight truncate">{nombreRemitente}</p>
               <p className="text-[11px] text-slate-400 leading-tight">Comunicado institucional</p>
             </div>
           </div>
@@ -131,7 +133,7 @@ export default function MessageComposer({
 
           <div className="px-4 py-2 bg-surface-container-low/70 border-t border-outline-variant/30 text-xs text-on-surface-variant flex items-center justify-between gap-2">
             <span>
-              Firma al pie: <strong className="text-on-surface font-medium">Atentamente, Secretaría y Comisión Directiva</strong>
+              Firma al pie: <strong className="text-on-surface font-medium whitespace-pre-wrap">Atentamente, {firma}</strong>
             </span>
           </div>
         </div>

@@ -184,7 +184,7 @@ def classify_player(player, ladders, current_year, last_run_year):
         return _error(Motivo.CATEGORIA_INCOMPATIBLE, "La categoría principal no está asignada o es de otro género.")
 
     expected = None
-    youth_ladder = [category for category in ladder if category.tipo == TipoCategoria.JUVENIL]
+    youth_ladder = [category for category in ladder if category.tipo != TipoCategoria.MAYOR]
     if principal.tipo == TipoCategoria.MAYOR:
         result = _classify_senior_category(principal, age)
     elif principal == youth_ladder[-1]:

@@ -417,17 +417,21 @@ def annulment_data(payment):
 
 class ComprobanteListSerializer(ComprobanteSerializer):
     codigo = serializers.SerializerMethodField()
+    fecha_hora = serializers.DateTimeField(source="pago.fecha", read_only=True)
     socio = serializers.SerializerMethodField()
     es_ingreso = serializers.SerializerMethodField()
     concepto = serializers.SerializerMethodField()
     monto_devuelto = serializers.SerializerMethodField()
     motivo_anulacion = serializers.CharField(source="pago.motivo_anulacion", read_only=True)
+    fecha_anulacion = serializers.DateTimeField(source="pago.fecha_anulacion", read_only=True)
+    responsable_anulacion = serializers.CharField(source="pago.responsable_anulacion", read_only=True)
     medios_de_pago = serializers.SerializerMethodField()
 
     class Meta(ComprobanteSerializer.Meta):
         fields = [
-            "comprobante_id", "pago", "codigo", "fecha_emision", "numero", "monto_total", "estado",
-            "socio", "es_ingreso", "concepto", "monto_devuelto", "motivo_anulacion", "medios_de_pago",
+            "comprobante_id", "pago", "codigo", "fecha_emision", "fecha_hora", "numero", "monto_total", "estado",
+            "socio", "es_ingreso", "concepto", "monto_devuelto", "motivo_anulacion", "fecha_anulacion",
+            "responsable_anulacion", "medios_de_pago",
         ]
 
     def get_codigo(self, obj):

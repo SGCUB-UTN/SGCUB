@@ -67,6 +67,18 @@ const EXCESS_OPTIONS = [
 ]
 
 // Default observation of a payment that settles a reverted one
+const excessReason = (reversal) => {
+  if (!reversal) return ''
+  const period = reversal.lastPeriod ? formatPeriod(reversal.lastPeriod).replace(' de ', ' ') : ''
+  if (reversal.otherSocio) {
+    const paid = period ? `el pago de ${period}` : `el pago ${reversal.codigo}`
+    const wrongSocio = reversal.socioName ? ` a ${reversal.socioName}` : ' a otro socio'
+    return `Sobrante: ${paid} se registró por error${wrongSocio}.`
+  }
+  if (!period) return `Sobrante del pago anulado ${reversal.codigo}`
+  return `Sobrante del pago anulado de ${period}.`
+}
+
 const reversalNote = (reversal) => {
   if (!reversal) return ''
   return reversal.otherSocio
@@ -503,7 +515,7 @@ const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((current) => curren
 // With `reversal` it charges again a reverted payment (to the same socio or, with `otherSocio`, to the
 // right one): the money already received is imputed in full (the excess pays the next cuota partially)
 // or the excess is refunded with a credit note.
-function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted }) {
+function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, reversal = null, onSuccess, onAssignBenefit, onAccountChanged, onRevertStart, onReverted, onLeave }) {
   const { openReversal } = useRevertPayment()
   const period = currentPeriod()
   const debtOnly = Boolean(socio) && !isActiveStatus(socio.estado_administrativo_nombre)
@@ -528,7 +540,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     reversal ? [] : [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))]
   ))
   const [refundMethod, setRefundMethod] = useState('')
-  const [refundReason, setRefundReason] = useState(() => (reversal ? `Sobrante del pago anulado ${reversal.codigo}` : ''))
+  const [refundReason, setRefundReason] = useState(() => excessReason(reversal))
   const [refundResponsable, setRefundResponsable] = useState('')
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)
@@ -651,7 +663,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
   }
 
   if (receipt) {
-    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onRevert={revertPayment} />
+    return <ComprobantePago socio={socio} {...receipt} onRetryDetalle={reloadReceipt} onRevert={revertPayment} onLeave={onLeave} />
   }
 
   const noDebt = !paymentCuotas.some((cuota) => cuotaDue(cuota) > 0)

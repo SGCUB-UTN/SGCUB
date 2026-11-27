@@ -3,24 +3,38 @@ import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AuthorizerSelect } from './formParts'
+import { AuthorizerSelect, OptionCard } from './formParts'
 
 const REASON_MAX_LENGTH = 180
 
 const MODAL_Z_INDEX = 300
 
+const OTHER_REASON = 'otro'
+
+const NO_PRESETS = []
+
 const DANGER_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-error hover:bg-error/90 text-on-error shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 
-function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessage, authorizerLabel, authorizerError, withReason, onConfirm, onCancel }) {
+function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessage, authorizerLabel, authorizerError, withReason, presetReasons, onConfirm, onCancel }) {
   const [authorizer, setAuthorizer] = useState('')
   const [reason, setReason] = useState('')
+  const [reasonChoice, setReasonChoice] = useState(presetReasons.length ? '' : OTHER_REASON)
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  const preset = presetReasons.find((option) => option.motivo === reasonChoice)
+  const writesReason = withReason && reasonChoice === OTHER_REASON
+
+  const reasonError = () => {
+    if (!withReason) return ''
+    if (!reasonChoice) return 'Elegí el motivo.'
+    return writesReason && !reason.trim() ? 'Indicá el motivo.' : ''
+  }
+
   const errors = {
     authorizer: !authorizer ? authorizerError : '',
-    reason: withReason && !reason.trim() ? 'Indicá el motivo.' : '',
+    reason: reasonError(),
   }
 
   const submit = async (event) => {
@@ -31,7 +45,7 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
     setSaving(true)
     setSubmitError('')
     try {
-      await onConfirm({ motivo: reason.trim(), autorizado_por: authorizer })
+      await onConfirm({ motivo: preset ? preset.motivo : reason.trim(), autorizado_por: authorizer })
     } catch (error) {
       setSubmitError(getErrorMessage(error, errorMessage))
       setSaving(false)
@@ -46,10 +60,34 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
         <AuthorizerSelect id="authorization-authorizer" value={authorizer} onChange={setAuthorizer} invalid={showErrors && Boolean(errors.authorizer)} />
       </Campo>
 
-      {withReason && (
+      {withReason && presetReasons.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-base font-semibold text-on-surface">Motivo <span className="text-error font-bold">*</span></span>
+          <div role="radiogroup" aria-label="Motivo" className="flex flex-col gap-2">
+            {presetReasons.map((option) => (
+              <OptionCard
+                key={option.motivo}
+                icon={option.icon}
+                title={option.title}
+                selected={reasonChoice === option.motivo}
+                onSelect={() => setReasonChoice(option.motivo)}
+              />
+            ))}
+            <OptionCard
+              icon="edit_note"
+              title="Otro motivo"
+              selected={reasonChoice === OTHER_REASON}
+              onSelect={() => setReasonChoice(OTHER_REASON)}
+            />
+          </div>
+          {showErrors && !reasonChoice && <p className="text-sm text-error font-medium" role="alert">{errors.reason}</p>}
+        </div>
+      )}
+
+      {writesReason && (
         <Campo
           id="authorization-reason"
-          label="Motivo"
+          label={presetReasons.length ? 'Detalle del motivo' : 'Motivo'}
           requerido
           extra={<span className="text-sm text-outline font-normal">{reason.length}/{REASON_MAX_LENGTH}</span>}
           error={showErrors ? errors.reason : ''}
@@ -105,6 +143,7 @@ function AuthorizationModal({
   authorizerLabel = 'Autorizado por',
   authorizerError = 'Elegí quién autoriza.',
   withReason = true,
+  presetReasons = NO_PRESETS,
   onConfirm,
   onClose,
 }) {
@@ -125,6 +164,7 @@ function AuthorizationModal({
           authorizerLabel={authorizerLabel}
           authorizerError={authorizerError}
           withReason={withReason}
+          presetReasons={presetReasons}
           onConfirm={onConfirm}
           onCancel={onClose}
         />

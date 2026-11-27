@@ -12,11 +12,12 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from configuracion.models import ConfiguracionGeneral
+from finanzas.pdf_utils import format_phone
 from padron.models import ESTADO_ADMINISTRATIVO_ACTIVO, Socio
 
 from .models import CanalNotificacion, EnvioNotificacion, EstadoNotificacion, Notificacion
 from .serializers import EnvioNotificacionSerializer, NotificacionSerializer
-from .services import despachar_envios_email_notificacion, enviar_email_individual
+from .services import despachar_envios_email_notificacion, enviar_email_individual, whatsapp_url
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,9 @@ def resumen_comunicaciones(request):
                 "nombre_remitente": configuracion.email_nombre_remitente or configuracion.club_nombre,
                 "email_remitente": default_from,
                 "email_secretaria": configuracion.club_email or default_from,
+                "club_email": configuracion.club_email or "",
+                "club_whatsapp_url": whatsapp_url(configuracion.club_telefono),
+                "club_whatsapp_display": format_phone(configuracion.club_telefono) if configuracion.club_telefono else "",
                 "firma": configuracion.email_firma,
                 "smtp_host": smtp_host,
                 "smtp_configurado": bool(smtp_host and smtp_user and smtp_pass),

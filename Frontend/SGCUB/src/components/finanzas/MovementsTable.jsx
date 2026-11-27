@@ -13,6 +13,7 @@ import AnnulIncomeModal from './AnnulIncomeModal'
 import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, isCancelledRefund } from './refunds'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import { CancellationNotice } from './formParts'
 
 const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
@@ -35,13 +36,14 @@ const incomeMovement = (comprobante, refunds) => {
     badge: anulado ? KIND_BADGES.Anulado : null,
     codigo: comprobante.codigo,
     fecha: comprobante.fecha_emision,
+    sortFecha: comprobante.fecha_hora || comprobante.fecha_emision,
     concepto: comprobante.concepto,
     monto: comprobante.monto_total,
     refunds,
   }
 }
 
-const refundMovement = (devolucion, income) => ({
+const refundMovement = (devolucion) => ({
   key: `devolucion-${devolucion.devolucion_id}`,
   raw: devolucion,
   isRefund: true,
@@ -50,23 +52,30 @@ const refundMovement = (devolucion, income) => ({
   badge: isCancelledRefund(devolucion) ? KIND_BADGES.Cancelada : KIND_BADGES[devolucion.tipo] ?? KIND_BADGES.Manual,
   codigo: devolucion.codigo,
   fecha: devolucion.fecha,
+  sortFecha: devolucion.fecha,
   concepto: devolucion.concepto,
   monto: devolucion.monto,
-  income,
 })
 
 const otherMovements = (movimientos) => {
   const ingresos = movimientos?.ingresos ?? []
   const devoluciones = movimientos?.devoluciones ?? []
-  const incomeById = new Map(ingresos.map((comprobante) => [comprobante.comprobante_id, comprobante]))
   const refundsOf = (comprobanteId) => devoluciones.filter((devolucion) => devolucion.comprobante_anulado === comprobanteId)
   return [
     ...ingresos.map((comprobante) => incomeMovement(comprobante, refundsOf(comprobante.comprobante_id))),
-    ...devoluciones.map((devolucion) => refundMovement(devolucion, incomeById.get(devolucion.comprobante_anulado) ?? null)),
-  ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
+    ...devoluciones.map(refundMovement),
+  ].sort((a, b) => (Date.parse(b.sortFecha) || 0) - (Date.parse(a.sortFecha) || 0))
 }
 
-const refundReason = (devolucion) => devolucion.concepto || 'Sin motivo registrado'
+const sourceReceiptSentence = (devolucion) => {
+  const refunded = Number(devolucion.monto ?? 0)
+  const charged = Number(devolucion.comprobante_anulado_monto ?? 0)
+  const date = devolucion.comprobante_anulado_fecha ? ` el ${formatDate(devolucion.comprobante_anulado_fecha)}` : ''
+  const receipt = `cobrados con el recibo ${devolucion.comprobante_anulado_codigo}${date}`
+  return refunded < charged
+    ? `Devuelve ${formatAmount(refunded)} de los ${formatAmount(charged)} ${receipt}.`
+    : `Devuelve los ${formatAmount(charged)} ${receipt}.`
+}
 
 function RefundList({ refunds }) {
   return (
@@ -96,24 +105,23 @@ function IncomeDetail({ comprobante, anulado, refunds }) {
         ]}
       />
       {anulado && (
-        <DetailSection title="Anulación y devolución" tone="error">
-          <DetailList items={[{ label: 'Motivo', value: comprobante.motivo_anulacion || 'Sin motivo registrado', wide: true }]} />
-          {refunds.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-on-surface-variant">Dinero devuelto</p>
-              <RefundList refunds={refunds} />
-            </div>
-          )}
-          {refunds.every(isCancelledRefund) && (
-            <p className="text-base text-on-surface">Todavía no se devolvió el dinero. Si corresponde, emití una nota de crédito desde el comprobante.</p>
-          )}
+        <CancellationNotice
+          action="Ingreso anulado"
+          date={comprobante.fecha_anulacion}
+          authorizedBy={comprobante.responsable_anulacion}
+          reason={comprobante.motivo_anulacion}
+        />
+      )}
+      {anulado && refunds.length > 0 && (
+        <DetailSection title="Dinero devuelto">
+          <RefundList refunds={refunds} />
         </DetailSection>
       )}
     </div>
   )
 }
 
-function RefundDetail({ devolucion, income }) {
+function RefundDetail({ devolucion }) {
   return (
     <div className="flex flex-col gap-4">
       <DetailList
@@ -123,30 +131,20 @@ function RefundDetail({ devolucion, income }) {
           { label: 'Medio de devolución', value: devolucion.medio_de_pago_nombre || '—' },
           { label: 'Fecha', value: formatDate(devolucion.fecha) },
           { label: 'Responsable', value: devolucion.responsable },
-          { label: 'Motivo', value: refundReason(devolucion), wide: true },
+          { label: 'Concepto', value: devolucion.concepto || '—', wide: true },
         ]}
       />
       {isCancelledRefund(devolucion) && (
-        <DetailSection title="Cancelación" tone="error">
-          <DetailList
-            items={[
-              { label: 'Fecha', value: formatDate(devolucion.fecha_cancelacion) },
-              { label: 'Responsable', value: devolucion.cancelado_por || '—' },
-              { label: 'Motivo', value: devolucion.motivo_cancelacion || 'Sin motivo registrado', wide: true },
-            ]}
-          />
-        </DetailSection>
+        <CancellationNotice
+          action={devolucion.tipo === 'NotaCredito' ? 'Nota de crédito cancelada' : 'Devolución cancelada'}
+          date={devolucion.fecha_cancelacion}
+          authorizedBy={devolucion.cancelado_por}
+          reason={devolucion.motivo_cancelacion}
+        />
       )}
       {devolucion.comprobante_anulado_codigo && (
-        <DetailSection title="Ingreso que se devuelve">
-          <DetailList
-            items={[
-              { label: 'Comprobante', value: devolucion.comprobante_anulado_codigo },
-              { label: 'Medio de pago del ingreso', value: income?.medios_de_pago || '—' },
-              { label: 'Fecha', value: formatDate(devolucion.comprobante_anulado_fecha) },
-              { label: 'Monto', value: formatAmount(devolucion.comprobante_anulado_monto ?? 0) },
-            ]}
-          />
+        <DetailSection title="Comprobante de origen">
+          <p className="text-base text-on-surface">{sourceReceiptSentence(devolucion)}</p>
         </DetailSection>
       )}
     </div>
@@ -234,7 +232,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
   const refundCancelled = (updated) => {
     setCancellingRefund(null)
     onChanged?.()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
   }
 
   if (movimientos === null) {
@@ -266,7 +264,7 @@ function MovementsTable({ movimientos, socio, readOnly = false, onOpen, onChange
             label={`${movement.kind} ${movement.codigo}, ${movement.concepto || 'sin concepto'}`}
             colSpan={COLUMN_COUNT}
             detail={movement.isRefund
-              ? <RefundDetail devolucion={movement.raw} income={movement.income} />
+              ? <RefundDetail devolucion={movement.raw} />
               : <IncomeDetail comprobante={movement.raw} anulado={movement.anulado} refunds={movement.refunds} />}
           >
             <td className="py-3 px-4">

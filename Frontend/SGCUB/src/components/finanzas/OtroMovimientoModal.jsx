@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Modal } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { formatAmount, formatDni, formatNumber, getErrorMessage } from '../personas/format'
-import { SecondaryButton } from '../personas/tabs/parts'
 import { claseInput } from '../socios/socioForm'
 import { Campo, SelectConAlta, SelectConFlecha } from '../socios/SocioFormFields'
 import ComprobantePago from './ComprobantePago'
@@ -11,6 +10,8 @@ import { receiptModalStyles } from './receiptModal'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import SocioPicker from './SocioPicker'
+import ViewFinancesButton from './ViewFinancesButton'
+import CancelRefundModal, { CancelRefundButton } from './CancelRefundModal'
 import { PaymentRow } from './PagoForm'
 import { INCOME, MANUAL_REFUND, isOtherConcept } from './conceptOrigins'
 import { registrarIngreso } from '../../api/pagos'
@@ -44,7 +45,8 @@ const emptyRow = () => ({ medio: '', monto: '' })
 
 const isRowComplete = (row) => Boolean(row.medio) && Number(row.monto) > 0
 
-function DevolucionRegistrada({ devolucion, onBack }) {
+function DevolucionRegistrada({ devolucion, onLeave, onCancelled }) {
+  const [cancelling, setCancelling] = useState(false)
   return (
     <div className="flex flex-col gap-5 flex-1 min-h-0">
       <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -64,7 +66,8 @@ function DevolucionRegistrada({ devolucion, onBack }) {
       </div>
 
       <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
-        <SecondaryButton icon="arrow_back" onClick={onBack}>Volver</SecondaryButton>
+        <ViewFinancesButton socio={devolucion.socio} onNavigate={onLeave} />
+        <CancelRefundButton onClick={() => setCancelling(true)} />
         <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
         <WhatsAppComprobanteButton
           socio={devolucion.socio}
@@ -74,6 +77,13 @@ function DevolucionRegistrada({ devolucion, onBack }) {
           tipo="devolucion"
         />
       </div>
+
+      <CancelRefundModal
+        opened={cancelling}
+        devolucion={devolucion}
+        onClose={() => setCancelling(false)}
+        onCancelled={onCancelled}
+      />
     </div>
   )
 }
@@ -175,6 +185,12 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     })
   }
 
+  const refundCancelled = (updated) => {
+    onSuccess?.(MANUAL_REFUND)
+    onCancel()
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
+  }
+
   if (result?.kind === INCOME) {
     return (
       <>
@@ -186,6 +202,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
           numero={result.comprobante.numero}
           fecha={result.comprobante.fecha_emision}
           onRevert={() => setAnnulling(true)}
+          onLeave={onCancel}
         />
         <AnnulIncomeModal
           opened={annulling}
@@ -197,7 +214,7 @@ function OtroMovimientoForm({ socio = null, initialOperation = INCOME, onCancel,
     )
   }
   if (result?.kind === MANUAL_REFUND) {
-    return <DevolucionRegistrada devolucion={result.devolucion} onBack={onCancel} />
+    return <DevolucionRegistrada devolucion={result.devolucion} onLeave={onCancel} onCancelled={refundCancelled} />
   }
 
   const confirmLabel = () => {

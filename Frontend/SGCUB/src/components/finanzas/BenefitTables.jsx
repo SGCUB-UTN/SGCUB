@@ -13,8 +13,9 @@ import { SCHOLARSHIP_STATES, cuotaDiscounts, isPaid, scholarshipState, todayIso 
 import AuthorizationModal from './AuthorizationModal'
 import { DISCOUNT_TARGET, SCHOLARSHIP_TARGET } from './benefitMath'
 import RemoveCuotaItemModal from './CuotaItemRemoval'
-import { removalBlocker } from './cuotaItems'
+import { LATE_FEE_WAIVER_CONCEPT, isLateFee, removalBlocker } from './cuotaItems'
 import EditBenefitModal from './EditBenefitModal'
+import { CancellationNotice } from './formParts'
 
 
 const SCHOLARSHIP_STATE_KEYS = {
@@ -25,17 +26,26 @@ const SCHOLARSHIP_STATE_KEYS = {
 
 const ANNULLED_ITEM = 'Anulado'
 
+const MEMBER_LEAVE_REASON = 'Baja del socio'
+const DISCOUNT_EDITED_REASON = 'Descuento modificado'
+const SCHOLARSHIP_EDITED_REASON = 'Beca modificada'
+
 const TYPES = {
   beca: { label: 'Beca', tono: 'info' },
   descuento: { label: 'Descuento', tono: 'neutro' },
+  recargo: { label: 'Recargo quitado', tono: 'alerta' },
 }
+
+const LATE_FEE_TARGET = 'recargo'
 
 const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
 
-const typeBadge = (row) => (row.state === 'cancelled'
-  ? { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
-  : row.type)
+const typeBadge = (row) => {
+  if (row.state === 'replaced') return { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca reemplazada' : 'Descuento reemplazado', tono: 'neutro' }
+  if (row.state === 'cancelled') return { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
+  return row.type
+}
 
 const monthYear = (date) => formatPeriod(periodOf(date))
 
@@ -46,7 +56,8 @@ const scholarshipValue = (beca) => (beca.porcentaje != null
 const NOT_APPLIED_HINT = 'Solo se pueden modificar beneficios aplicados'
 
 const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
-  const state = SCHOLARSHIP_STATE_KEYS[scholarshipState(beca, today)] ?? 'applied'
+  const baseState = SCHOLARSHIP_STATE_KEYS[scholarshipState(beca, today)] ?? 'applied'
+  const state = baseState === 'cancelled' && beca.motivo_cancelacion === SCHOLARSHIP_EDITED_REASON ? 'replaced' : baseState
   return {
     key: `beca-${beca.beca_id}`,
     type: TYPES.beca,
@@ -59,14 +70,14 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
     blocker: state === 'applied' ? '' : NOT_APPLIED_HINT,
     target: { kind: SCHOLARSHIP_TARGET, beca },
     granted: { date: beca.fecha_creacion ?? beca.fecha_aplicacion, by: beca.autorizado_por },
-    cancellation: state === 'cancelled'
+    cancellation: state === 'cancelled' || state === 'replaced'
       ? { date: beca.fecha_cancelacion, by: beca.cancelado_por, reason: beca.motivo_cancelacion }
       : null,
   }
 })
 
 const discountState = ({ item, cuota }) => {
-  if (item.estado === ANNULLED_ITEM) return 'cancelled'
+  if (item.estado === ANNULLED_ITEM) return item.motivo_anulacion === DISCOUNT_EDITED_REASON ? 'replaced' : 'cancelled'
   return isPaid(cuota) ? 'finished' : 'applied'
 }
 
@@ -84,20 +95,87 @@ const discountRows = (cuotas) => cuotaDiscounts(cuotas).map((discount) => {
     blocker: state === 'applied' ? removalBlocker(discount.cuota, discount.item) : NOT_APPLIED_HINT,
     target: { kind: DISCOUNT_TARGET, ...discount },
     granted: { date: discount.item.fecha_creacion ?? discount.item.fecha_aplicacion, by: discount.item.autorizado_por },
-    cancellation: state === 'cancelled'
+    cancellation: state === 'cancelled' || state === 'replaced'
       ? { date: discount.item.fecha_anulacion, by: discount.item.anulado_por, reason: discount.item.motivo_anulacion }
       : null,
   }
 })
 
+const removedLateFee = (item, cuota) => {
+  if (isLateFee(item) && item.estado === ANNULLED_ITEM) {
+    return { item, cuota, date: item.fecha_anulacion, by: item.anulado_por, reason: item.motivo_anulacion }
+  }
+  if (item.concepto === LATE_FEE_WAIVER_CONCEPT && item.estado !== ANNULLED_ITEM) {
+    return { item, cuota, date: item.fecha_creacion ?? item.fecha_aplicacion, by: item.autorizado_por, reason: item.motivo }
+  }
+  return null
+}
+
+const lateFeeRows = (cuotas) => cuotas
+  .flatMap((cuota) => [...(cuota.items ?? []), ...(cuota.items_anulados ?? [])].map((item) => removedLateFee(item, cuota)))
+  .filter(Boolean)
+  .map((removal) => ({
+    key: `recargo-${removal.item.item_cuota_id}`,
+    type: TYPES.recargo,
+    sortDate: removal.date ?? `${removal.cuota.periodo}-01`,
+    validity: formatPeriod(removal.cuota.periodo),
+    exclusions: [],
+    reason: removal.reason,
+    value: formatAmount(removal.item.monto),
+    state: 'finished',
+    blocker: '',
+    target: { kind: LATE_FEE_TARGET },
+    granted: { date: removal.date, by: removal.by },
+    cancellation: null,
+  }))
+
+const GRANTED_LABELS = {
+  [SCHOLARSHIP_TARGET]: 'Otorgada',
+  [DISCOUNT_TARGET]: 'Otorgado',
+  [LATE_FEE_TARGET]: 'Quitado',
+}
+
+function CancellationDetail({ row }) {
+  const { date, by, reason } = row.cancellation
+  if (row.state === 'replaced') {
+    return (
+      <CancellationNotice
+        action={row.target.kind === SCHOLARSHIP_TARGET ? 'Reemplazada por una beca nueva' : 'Reemplazado por un descuento nuevo'}
+        date={date}
+        authorizedBy={by}
+        showReason={false}
+        tone="neutral"
+        icon="swap_horiz"
+      />
+    )
+  }
+  if (row.target.kind !== SCHOLARSHIP_TARGET) {
+    return <CancellationNotice action="Descuento anulado" date={date} authorizedBy={by} reason={reason} />
+  }
+  const consequence = 'Se quitó de las cuotas impagas sin pagos registrados.'
+  if (reason === MEMBER_LEAVE_REASON) {
+    return (
+      <CancellationNotice
+        action="Beca anulada automáticamente"
+        date={date}
+        authorizedBy="la baja del socio"
+        showReason={false}
+        consequence={consequence}
+      />
+    )
+  }
+  return <CancellationNotice action="Beca anulada" date={date} authorizedBy={by} reason={reason} consequence={consequence} />
+}
+
 function BenefitDetail({ row }) {
   const isScholarship = row.target.kind === SCHOLARSHIP_TARGET
+  const isLateFeeRow = row.target.kind === LATE_FEE_TARGET
   return (
     <div className="flex flex-col gap-4">
       <DetailList
         items={[
-          { label: isScholarship ? 'Otorgada' : 'Otorgado', value: formatDate(row.granted.date) },
-          { label: 'Autorizó', value: row.granted.by || 'Sin registrar' },
+          { label: GRANTED_LABELS[row.target.kind], value: formatDate(row.granted.date) },
+          { label: isLateFeeRow ? 'Responsable' : 'Autorizó', value: row.granted.by || 'Sin registrar' },
           { label: isScholarship ? 'Vigencia' : 'Cuota', value: row.validity },
           { label: 'Motivo', value: row.reason || '—', wide: true },
         ]}
@@ -114,22 +192,13 @@ function BenefitDetail({ row }) {
           </ul>
         </DetailSection>
       )}
-      {row.cancellation && (
-        <DetailSection title="Anulación" tone="error">
-          <DetailList
-            items={[
-              { label: 'Fecha', value: formatDate(row.cancellation.date) },
-              { label: 'Autorizó', value: row.cancellation.by || 'Sin registrar' },
-              { label: 'Motivo', value: row.cancellation.reason || 'Sin motivo registrado', wide: true },
-            ]}
-          />
-        </DetailSection>
-      )}
+      {row.cancellation && <CancellationDetail row={row} />}
     </div>
   )
 }
 
 function RowActions({ row, readOnly, onEdit, onCancel }) {
+  if (row.target.kind === LATE_FEE_TARGET) return null
   const blocker = readOnly ? 'La ficha está en solo lectura' : row.blocker
   const name = `${row.type.label.toLowerCase()} ${row.validity}`
   return (
@@ -174,7 +243,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
   const [editing, setEditing] = useState(null)
   const [cancelling, setCancelling] = useState(null)
   const [expandedKey, setExpandedKey] = useState(null)
-  const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas)]
+  const rows = [...scholarshipRows(becas, todayIso()), ...discountRows(cuotas), ...lateFeeRows(cuotas)]
     .sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)))
   const { visibleRows, paginationProps } = usePagination(rows, ROWS_PER_PAGE)
 
@@ -213,7 +282,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
               </td>
               <td className="py-3 px-4 break-words">
                 <span className="text-on-surface-variant">{row.reason || '—'}</span>
-                {row.cancellation?.reason && (
+                {row.state === 'cancelled' && row.cancellation?.reason && (
                   <span className="block text-sm text-error">
                     {row.target.kind === SCHOLARSHIP_TARGET ? 'Anulada' : 'Anulado'}: {row.cancellation.reason}
                   </span>
@@ -227,7 +296,7 @@ export function BenefitsTable({ becas, cuotas, onChanged, readOnly = false }) {
           ))}
         </DataTable>
       ) : (
-        becas !== null && <SectionEmpty>Sin becas ni descuentos.</SectionEmpty>
+        becas !== null && <SectionEmpty>Sin becas, descuentos ni recargos quitados.</SectionEmpty>
       )}
       {rows.length > ROWS_PER_PAGE && (
         <TablePagination id="benefits-rows-per-page" rowsPerPageOptions={[15, 30, 60]} {...paginationProps} />

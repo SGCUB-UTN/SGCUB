@@ -278,8 +278,9 @@ class Categoria(models.Model):
     ]
 
     class TipoChoices(models.TextChoices):
-        JUVENIL = "juvenil", "Juvenil"
         MAYOR = "mayor", "Mayor"
+        JUVENIL = "juvenil", "Juvenil"
+        INFANTIL = "infantil", "Infantil"
 
     categoria_id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=50)

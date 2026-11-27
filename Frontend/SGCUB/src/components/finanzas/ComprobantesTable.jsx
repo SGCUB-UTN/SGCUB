@@ -20,8 +20,11 @@ import { conceptGroup } from './conceptOrigins'
 import { descargarComprobantePdf } from '../../api/comprobantes'
 import { descargarDevolucionPdf } from '../../api/devoluciones'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
+import AnnulIncomeModal from './AnnulIncomeModal'
 import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, REFUND_CANCELLED, isCancelledRefund } from './refunds'
+import { cancellationSummary } from './cancellations'
+import useRevertPayment from '../../hooks/useRevertPayment'
 import useToast from '../../hooks/useToast'
 import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
@@ -107,7 +110,12 @@ const receiptDetail = (comprobante, refunded) => {
 
 const refundDetail = (devolucion) => {
   if (isCancelledRefund(devolucion)) {
-    return `Cancelada por ${devolucion.cancelado_por || '—'}: ${devolucion.motivo_cancelacion || 'sin motivo registrado'}`
+    return cancellationSummary({
+      action: 'Cancelada',
+      date: devolucion.fecha_cancelacion,
+      authorizedBy: devolucion.cancelado_por,
+      reason: devolucion.motivo_cancelacion,
+    })
   }
   return devolucion.comprobante_anulado_codigo
     ? `Sobre el comprobante anulado ${devolucion.comprobante_anulado_codigo} · Responsable: ${devolucion.responsable}`
@@ -118,7 +126,7 @@ const socioName = (socio) => (socio ? `${socio.apellido ?? ''}, ${socio.nombre ?
 
 const SORT_VALUES = {
   number: (item) => Number(item.sortNumber ?? 0),
-  date: (item) => item.sortDate || '',
+  date: (item) => item.sortTimestamp ?? 0,
   socio: (item) => item.socioLabel || null,
   amount: (item) => Number(item.amount ?? 0),
 }
@@ -142,6 +150,8 @@ function ComprobantesTable({
   const [downloadingKey, setDownloadingKey] = useState(null)
   const [sharingWhatsAppKey, setSharingWhatsAppKey] = useState(null)
   const [cancellingRefund, setCancellingRefund] = useState(null)
+  const [annullingIncome, setAnnullingIncome] = useState(null)
+  const { openReversal } = useRevertPayment()
   const { showToast } = useToast()
   const filters = SCOPE_FILTERS[scope]
 
@@ -159,7 +169,7 @@ function ComprobantesTable({
         badgeLabel: TYPES[type].badgeLabel ?? TYPES[type].label,
         badgeClass: TYPES[type].badge,
         date: comprobante.fecha_emision,
-        sortDate: `${comprobante.fecha_emision || ''}-R${String(comprobante.numero).padStart(8, '0')}`,
+        sortTimestamp: Date.parse(comprobante.fecha_hora || comprobante.fecha_emision || '') || 0,
         sortNumber: comprobante.numero,
         socio: comprobante.socio,
         socioLabel: socioName(comprobante.socio),
@@ -188,7 +198,7 @@ function ComprobantesTable({
         badgeLabel: cancelled ? 'Cancelada' : typeLabel,
         badgeClass: cancelled ? ANNULLED_BADGE : TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
         date: devolucion.fecha,
-        sortDate: `${String(devolucion.fecha ?? '').slice(0, 10)}-D${String(devolucion.numero).padStart(8, '0')}`,
+        sortTimestamp: Date.parse(devolucion.fecha || '') || 0,
         sortNumber: devolucion.numero,
         socio: devolucion.socio,
         socioLabel: socioName(devolucion.socio),
@@ -317,7 +327,25 @@ function ComprobantesTable({
   const refundCancelled = (updated) => {
     setCancellingRefund(null)
     onChanged?.()
-    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada y ya no cuenta como dinero devuelto.` })
+    showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
+  }
+
+  const openAnnulOrRevert = (event, item) => {
+    event.stopPropagation()
+    if (item.raw.es_ingreso) {
+      setAnnullingIncome(item.raw)
+    } else {
+      openReversal({ comprobanteId: item.raw.comprobante_id, onChanged })
+    }
+  }
+
+  const incomeAnnulled = (_updated, { refunded, amount }) => {
+    const codigo = annullingIncome.codigo
+    setAnnullingIncome(null)
+    onChanged?.()
+    showToast(refunded
+      ? { title: 'Ingreso anulado y devuelto', description: `${codigo} quedó anulado y se emitió una nota de crédito por ${formatAmount(amount)}.` }
+      : { title: 'Ingreso anulado', description: `${codigo} quedó anulado. Si corresponde devolver dinero, emití una nota de crédito desde el comprobante.` })
   }
 
   const handleDownload = async (event, item) => {
@@ -511,7 +539,7 @@ function ComprobantesTable({
                       {downloadingKey === item.key ? 'progress_activity' : 'download'}
                     </span>
                   </button>
-                  {item.kind === 'devolucion' && (
+                  {item.kind === 'devolucion' ? (
                     <button
                       type="button"
                       onClick={(event) => openCancelRefund(event, item)}
@@ -522,6 +550,24 @@ function ComprobantesTable({
                       className={CANCEL_ICON_BUTTON_CLASS}
                     >
                       <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(event) => openAnnulOrRevert(event, item)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      disabled={item.isAnulado}
+                      title={
+                        item.isAnulado
+                          ? (item.raw.es_ingreso ? 'El ingreso ya está anulado' : 'El pago ya está revertido')
+                          : item.raw.es_ingreso
+                            ? `Anular ingreso (${item.refCode})`
+                            : `Revertir pago (${item.refCode})`
+                      }
+                      aria-label={item.raw.es_ingreso ? `Anular ingreso ${item.refCode}` : `Revertir pago ${item.refCode}`}
+                      className={CANCEL_ICON_BUTTON_CLASS}
+                    >
+                      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">undo</span>
                     </button>
                   )}
                 </div>
@@ -538,6 +584,13 @@ function ComprobantesTable({
         devolucion={cancellingRefund}
         onClose={() => setCancellingRefund(null)}
         onCancelled={refundCancelled}
+      />
+
+      <AnnulIncomeModal
+        opened={Boolean(annullingIncome)}
+        comprobante={annullingIncome}
+        onClose={() => setAnnullingIncome(null)}
+        onAnnulled={incomeAnnulled}
       />
     </section>
   )

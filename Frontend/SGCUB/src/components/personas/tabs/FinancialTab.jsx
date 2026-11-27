@@ -14,6 +14,7 @@ import { KpiColumn, KpiGrid } from '../../shared/Kpi'
 import { formatCount, formatMoney } from '../../cuota/cuotaPeriod'
 import { SecondaryButton, SegmentedTabs, TAB_PANEL_CLASS, TabHeader } from './parts'
 import { INCOME, MANUAL_REFUND } from '../../finanzas/conceptOrigins'
+import { useShowsFinances } from '../../finanzas/visibleFinances'
 import useAssignBenefit from '../../../hooks/useAssignBenefit'
 import useRegisterPayment from '../../../hooks/useRegisterPayment'
 import useRevertPayment from '../../../hooks/useRevertPayment'
@@ -60,6 +61,7 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
   const { openBenefit } = useAssignBenefit()
   const { openReversal } = useRevertPayment()
   const socioId = socio.socio_id
+  useShowsFinances(socioId)
   const { loading, error, account, becas, movimientos, reload: reloadFinances } = finances
   const cuotas = useMemo(() => account?.cuotas ?? [], [account])
   const [comprobanteId, setComprobanteId] = useState(null)
@@ -210,6 +212,8 @@ export function FinancialStatement({ socio, finances, exemptCategory = null, rea
         devolucion={devolucionSeleccionada}
         opened={Boolean(devolucionSeleccionada)}
         onClose={() => setDevolucionSeleccionada(null)}
+        onChanged={reloadFinances}
+        readOnly={readOnly}
       />
 
       <OtroMovimientoModal
