@@ -90,15 +90,10 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 
-const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'size-5 accent-primary cursor-pointer'
 const CHECKBOX_LABEL_CLASS = 'flex items-center py-3 pl-4 sm:pl-5 pr-2 min-h-12 cursor-pointer'
 const EXPAND_BUTTON_CLASS = 'inline-flex items-center justify-center size-10 rounded-md text-outline hover:bg-surface-container hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 const TABLE_ID = 'period-cuotas'
-
-const Icon = ({ name, size = 18 }) => (
-  <span className="material-symbols-outlined" style={{ fontSize: size }} aria-hidden="true">{name}</span>
-)
 
 const detailPath = (row) => (row.jugador_id ? `/padron/jugadores/${row.jugador_id}` : `/padron/socios/${row.socio_id}`)
 
@@ -155,7 +150,7 @@ function SelectAllCheckbox({ rows, selectedIds, onChange }) {
   )
 }
 
-function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onDelete, onChanged }) {
+function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onChanged }) {
   const [detail, setDetail] = useState({ loading: true, error: false, cuota: null })
   const [attempt, setAttempt] = useState(0)
 
@@ -195,12 +190,6 @@ function CuotaDetailRow({ row, onPay, onAssignDiscount, onAssignScholarship, onD
       onAssignBenefit={() => onAssignDiscount(row)}
       onAssignScholarship={() => onAssignScholarship(row)}
       onChanged={onChanged}
-      extraActions={!row.paid && (
-        <button type="button" onClick={() => onDelete(row)} className={DELETE_BUTTON_CLASS}>
-          <Icon name="delete" size={20} />
-          Eliminar cuota
-        </button>
-      )}
       flat
     />
   )
@@ -214,7 +203,6 @@ export default function PeriodCuotasTable({
   onPay,
   onAssignDiscount,
   onAssignScholarship,
-  onDelete,
   onChanged,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -489,7 +477,6 @@ export default function PeriodCuotasTable({
                     onPay={onPay}
                     onAssignDiscount={onAssignDiscount}
                     onAssignScholarship={onAssignScholarship}
-                    onDelete={onDelete}
                     onChanged={onChanged}
                   />
                 )}

@@ -33,7 +33,7 @@ function CollectionMeter({ total, collected, pending, rate, collectedCaption, pe
   return (
     <div className="min-w-0 h-full flex flex-col sm:col-span-2">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Total a cobrar</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Total a cobrar <span className="normal-case tracking-normal font-normal">(cuotas + recargos)</span></h3>
         <p className="text-sm text-on-surface-variant">
           <span className="font-bold text-on-surface">{rateLabel}</span> cobrado
         </p>
@@ -109,12 +109,12 @@ export default function PeriodKpis({ summary, rows, isLoading, error }) {
   return (
     <KpiGrid columns={4}>
       <AmountKpi
-        label="Monto facturado"
+        label="Cuotas del mes"
         value={total - surcharges}
-        caption={plural(totals.generated, 'cuota emitida', 'cuotas emitidas')}
+        caption={`${plural(totals.generated, 'cuota emitida', 'cuotas emitidas')}, sin recargos`}
       />
       <AmountKpi
-        label="Recargos aplicados"
+        label="Recargos por mora"
         value={surcharges}
         tone={surcharges > 0 ? 'text-error' : 'text-on-surface'}
         caption={plural(surchargedCount, 'cuota con recargo', 'cuotas con recargo')}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Group, Modal, Text, TextInput, Textarea } from '@mantine/core'
+import { Modal, TextInput, Textarea } from '@mantine/core'
+import { SECONDARY_BUTTON_CLASS, SUBMIT_BUTTON_CLASS } from '../finanzas/formParts'
 import { postEnviarNotificacion } from '../../api/comunicaciones'
 import { getErrorMessage } from '../personas/format'
 import { formatPeriod } from '../shared/periodFormat'
@@ -84,17 +85,17 @@ function validate(subject, message) {
 function SentResult({ count, onClose }) {
   return (
     <>
-      <p className="flex items-start gap-2 text-sm text-on-surface">
-        <span className="material-symbols-outlined text-emerald-600 shrink-0" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
+      <p className="flex items-start gap-2 text-base text-on-surface">
+        <span className="material-symbols-outlined text-emerald-700 shrink-0" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
         <span>
           Se envió la notificación a <strong>{plural(count, 'socio', 'socios')}</strong>.
           Podés seguir el estado de cada envío en el{' '}
           <Link to="/comunicaciones/historial" className="font-semibold text-primary hover:underline">historial de comunicaciones</Link>.
         </span>
       </p>
-      <Group position="right" mt="xl">
-        <Button onClick={onClose}>Cerrar</Button>
-      </Group>
+      <div className="flex justify-end pt-6">
+        <button type="button" onClick={onClose} className={`${SUBMIT_BUTTON_CLASS} justify-center max-sm:w-full`}>Cerrar</button>
+      </div>
     </>
   )
 }
@@ -157,7 +158,7 @@ function NotifyCuotasModal({ opened, rows, period, onClose, onSent }) {
                   showEmail
                 />
               ) : (
-                <Text size="sm" c="dimmed">{unpaidRows.length === 0 ? 'No hay cuotas impagas para notificar.' : 'Ninguno de los socios tiene email cargado.'}</Text>
+                <p className="text-base text-on-surface-variant">{unpaidRows.length === 0 ? 'No hay cuotas impagas para notificar.' : 'Ninguno de los socios tiene email cargado.'}</p>
               )}
               {paidCount > 0 && (
                 <p className="flex items-start gap-2 px-3 py-2.5 rounded border border-outline-variant/30 text-sm text-on-surface-variant">
@@ -200,17 +201,18 @@ function NotifyCuotasModal({ opened, rows, period, onClose, onSent }) {
               disabled={sending}
             />
 
-            {requestError && <Text c="red" size="sm" role="alert">{requestError}</Text>}
+            {requestError && <p className="text-base text-error" role="alert">{requestError}</p>}
           </div>
 
-          <Group position="right" mt="xl">
-            <Button variant="default" onClick={close} disabled={sending}>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-6">
+            <button type="button" onClick={close} disabled={sending} className={`${SECONDARY_BUTTON_CLASS} justify-center`}>
               Cancelar
-            </Button>
-            <Button type="submit" loading={sending} disabled={reachable.length === 0}>
-              {`Enviar a ${plural(reachable.length, 'socio', 'socios')}`}
-            </Button>
-          </Group>
+            </button>
+            <button type="submit" disabled={sending || reachable.length === 0} className={`${SUBMIT_BUTTON_CLASS} justify-center`}>
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">send</span>
+              {sending ? 'Enviando...' : `Enviar a ${plural(reachable.length, 'socio', 'socios')}`}
+            </button>
+          </div>
         </form>
       )}
     </Modal>

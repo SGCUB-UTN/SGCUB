@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { deleteCuota } from '../api/cuotas'
 import AutomationStatus from '../components/cuota/AutomationStatus'
 import BillingPhaseTracker from '../components/cuota/BillingPhaseTracker'
-import DeleteCuotaModal from '../components/cuota/DeleteCuotaModal'
 import GenerateCuotasModal from '../components/cuota/GenerateCuotasModal'
 import PeriodKpis from '../components/cuota/PeriodKpis'
 import PeriodSelector from '../components/cuota/PeriodSelector'
@@ -21,7 +19,6 @@ import { PANEL_BODY_CLASS as SECTION_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as 
 import { SecondaryButton } from '../components/personas/tabs/parts'
 import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
-
 function Cuotas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
@@ -29,10 +26,6 @@ function Cuotas() {
   const { summary, cuotas, runs, reload } = useCuotaPeriod(period)
   const { openPayment } = useRegisterPayment()
   const { openBenefit } = useAssignBenefit()
-  const [modalEliminar, setModalEliminar] = useState(false)
-  const [cuotaSeleccionada, setCuotaSeleccionada] = useState(null)
-  const [guardando, setGuardando] = useState(false)
-  const [errorFormulario, setErrorFormulario] = useState('')
   const [logRun, setLogRun] = useState(null)
   const [generateOpen, setGenerateOpen] = useState(false)
 
@@ -49,35 +42,6 @@ function Cuotas() {
     if (nothingLoaded) return `No pudimos traer los datos de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`
     if (failed.every((resource) => resource.data)) return 'No pudimos actualizar los datos. Estás viendo los últimos que se cargaron.'
     return `No pudimos traer parte de los datos de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`
-  }
-
-  const abrirEliminar = (row) => {
-    setCuotaSeleccionada(row)
-    setErrorFormulario('')
-    setModalEliminar(true)
-  }
-
-  const cerrarModal = () => {
-    setModalEliminar(false)
-    setCuotaSeleccionada(null)
-    setErrorFormulario('')
-  }
-
-  const eliminarCuota = async () => {
-    if (!cuotaSeleccionada) return
-
-    setGuardando(true)
-    setErrorFormulario('')
-
-    try {
-      await deleteCuota(cuotaSeleccionada.cuota_id)
-      cerrarModal()
-      reload()
-    } catch (requestError) {
-      setErrorFormulario(requestError.response?.data?.detail || 'No se pudo eliminar la cuota.')
-    } finally {
-      setGuardando(false)
-    }
   }
 
   return (
@@ -128,7 +92,6 @@ function Cuotas() {
               onPay={(row) => openPayment({ socioId: row.socio_id, cuotaIds: [row.cuota_id], onSuccess: reload })}
               onAssignDiscount={(row) => openBenefit({ socioId: row.socio_id, cuotaId: row.cuota_id, onSuccess: reload })}
               onAssignScholarship={(row) => openBenefit({ socioId: row.socio_id, onSuccess: reload })}
-              onDelete={abrirEliminar}
               onChanged={reload}
             />
           </section>
@@ -138,15 +101,6 @@ function Cuotas() {
       <TaskRunLogModal run={logRun} onClose={() => setLogRun(null)} />
 
       <GenerateCuotasModal opened={generateOpen} onClose={() => setGenerateOpen(false)} onGenerated={reload} />
-
-      <DeleteCuotaModal
-        opened={modalEliminar}
-        onClose={() => !guardando && cerrarModal()}
-        onConfirm={eliminarCuota}
-        cuota={cuotaSeleccionada}
-        loading={guardando}
-        error={errorFormulario}
-      />
     </div>
   )
 }

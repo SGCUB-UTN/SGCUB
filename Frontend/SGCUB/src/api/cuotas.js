@@ -47,11 +47,6 @@ export const patchCuota =async (cuotaId, cuota) => {
   return response.data
 }
 
-export const deleteCuota = async (cuotaId) => {
-  const response = await api.delete(`${cuotasEndpoint}${cuotaId}/`)
-  return response.data
-}
-
 export const postBeneficio = async (cuotaId, beneficio) => {
   const response = await api.post(`${cuotasEndpoint}${cuotaId}/beneficio/`, beneficio)
   return response.data
