@@ -312,7 +312,11 @@ function ResumenFinanciero() {
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
 
-  const changePeriod = (value) => setSearchParams({ periodo: value })
+  const changePeriod = (value) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    next.set('periodo', value)
+    return next
+  })
   const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }))
 
   const handleExport = async () => {

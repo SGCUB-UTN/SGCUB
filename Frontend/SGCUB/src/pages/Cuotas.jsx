@@ -38,7 +38,11 @@ function Cuotas() {
   const [logRun, setLogRun] = useState(null)
   const [generateOpen, setGenerateOpen] = useState(false)
 
-  const changePeriod = (value) => setSearchParams({ periodo: value })
+  const changePeriod = (value) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    next.set('periodo', value)
+    return next
+  })
 
   const resources = [summary, cuotas, runs]
   const failed = resources.filter((resource) => resource.error)

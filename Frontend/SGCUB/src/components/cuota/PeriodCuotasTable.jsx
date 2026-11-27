@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { FILTER_CLASS } from '../shared/listFilters'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getCuota } from '../../api/cuotas'
 import CuotaDetailPanel from '../finanzas/CuotaDetailPanel'
 import ExportMenu from '../shared/ExportMenu'
@@ -24,7 +24,7 @@ import { TONOS_BADGE } from '../shared/statusTones'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import CategoryFilter from '../shared/CategoryFilter'
 import NotifyCuotasModal from './NotifyCuotasModal'
-import { ALL_CATEGORIES, NO_CATEGORY, categoryMatches, categoryOptions, findGender } from '../shared/categoryFilters'
+import { ALL_CATEGORIES, GENDERS, NO_CATEGORY, NO_CATEGORY_VALUE, categoryMatches, categoryOptions, findGender, genderFilterValue } from '../shared/categoryFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { TextSkeleton } from '../shared/Skeleton'
@@ -72,6 +72,15 @@ const TYPE_FILTERS = [
   { value: CUOTA_TYPES.PLAYER, label: 'Jugadores' },
   { value: CUOTA_TYPES.PARTIAL_LEAVE, label: 'Baja parcial' },
 ]
+
+const PARAMS = { search: 'buscar', type: 'tipo', category: 'categoria', tab: 'estado' }
+
+const validCategory = (value, categories) => {
+  if (!value || value === ALL_CATEGORIES) return ALL_CATEGORIES
+  if (value === NO_CATEGORY_VALUE) return value
+  if (GENDERS.some((gender) => genderFilterValue(gender.value) === value)) return value
+  return categories.some((option) => option.value === value) ? value : ALL_CATEGORIES
+}
 
 const categoryOf = (row) => row.categoria ?? NO_CATEGORY
 
@@ -205,10 +214,7 @@ export default function PeriodCuotasTable({
   onDelete,
   onChanged,
 }) {
-  const [search, setSearch] = useState('')
-  const [type, setType] = useState(ALL)
-  const [category, setCategory] = useState(ALL_CATEGORIES)
-  const [tab, setTab] = useState(ALL)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [expandedId, setExpandedId] = useState(null)
   const [notifyRows, setNotifyRows] = useState(null)
@@ -216,12 +222,31 @@ export default function PeriodCuotasTable({
   const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
   const hasUncategorized = rows.some((row) => !row.categoria_id)
-  const categoryLocked = type === CUOTA_TYPES.MEMBER
 
-  const changeType = (nextType) => {
-    setType(nextType)
-    if (nextType === CUOTA_TYPES.MEMBER) setCategory(ALL_CATEGORIES)
-  }
+  const search = searchParams.get(PARAMS.search) ?? ''
+  const requestedType = searchParams.get(PARAMS.type)
+  const type = TYPE_FILTERS.some((filter) => filter.value === requestedType) ? requestedType : ALL
+  const categoryLocked = type === CUOTA_TYPES.MEMBER
+  const category = categoryLocked ? ALL_CATEGORIES : validCategory(searchParams.get(PARAMS.category), categories)
+  const requestedTab = searchParams.get(PARAMS.tab)
+  const tab = TABS.some((option) => option.value === requestedTab) ? requestedTab : ALL
+
+  const updateParams = (changes) => setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (!value || value === ALL || value === ALL_CATEGORIES) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }, { replace: true })
+
+  const setSearch = (value) => updateParams({ [PARAMS.search]: value })
+  const setCategory = (value) => updateParams({ [PARAMS.category]: value })
+  const setTab = (value) => updateParams({ [PARAMS.tab]: value })
+  const changeType = (nextType) => updateParams({
+    [PARAMS.type]: nextType,
+    ...(nextType === CUOTA_TYPES.MEMBER ? { [PARAMS.category]: ALL_CATEGORIES } : {}),
+  })
 
   const matching = useMemo(() => {
     const text = search.trim()
@@ -245,9 +270,7 @@ export default function PeriodCuotasTable({
   const sortAndReset = withPageReset(sortBy)
   const hasFilters = search.trim() !== '' || type !== ALL || category !== ALL_CATEGORIES
   const clearFilters = () => {
-    setSearch('')
-    setType(ALL)
-    setCategory(ALL_CATEGORIES)
+    updateParams({ [PARAMS.search]: '', [PARAMS.type]: ALL, [PARAMS.category]: ALL_CATEGORIES })
     resetPage()
   }
 
@@ -373,9 +396,9 @@ export default function PeriodCuotasTable({
                   <SelectAllCheckbox rows={filtered} selectedIds={selectedIds} onChange={toggleFiltered} />
                 </label>
               </th>
-              <th className="py-3 px-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
-              <SortableHeader className={HEADER_CLASS} etiqueta="Socio / Jugador" columna="name" orden={sort} onOrdenar={sortAndReset} />
-              <SortableHeader className={HEADER_CLASS} etiqueta="Categoría" columna="category" orden={sort} onOrdenar={sortAndReset} />
+              <th className="max-sm:hidden py-3 px-0 w-10" scope="col"><span className="sr-only">Detalle</span></th>
+              <SortableHeader className={`${HEADER_CLASS} max-sm:pl-1`} etiqueta="Socio / Jugador" columna="name" orden={sort} onOrdenar={sortAndReset} />
+              <SortableHeader className={`${HEADER_CLASS} max-sm:hidden`} etiqueta="Categoría" columna="category" orden={sort} onOrdenar={sortAndReset} />
               <SortableHeader className={`${HEADER_CLASS} sm:pr-5 text-right`} etiqueta="Saldo" columna="pending" orden={sort} onOrdenar={sortAndReset} />
             </>
           )}
@@ -412,7 +435,7 @@ export default function PeriodCuotasTable({
                       />
                     </label>
                   </td>
-                  <td className="py-1 px-0">
+                  <td className="max-sm:hidden py-1 px-0">
                     <button
                       type="button"
                       aria-expanded={expanded}
@@ -428,18 +451,23 @@ export default function PeriodCuotasTable({
                       </span>
                     </button>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 max-sm:pl-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Link to={detailPath(row)} onClick={stopRowClick} className={`font-medium text-on-surface hover:text-primary ${ROW_LINK_CLASS}`}>
                         {name}
                       </Link>
                       <span className={`${BADGE_CLASS} ${cuotaTypeBadgeClass(row.type)}`}>{cuotaTypeLabel(row.type)}</span>
                     </div>
-                    <div className="text-xs text-on-surface-variant">
+                    <div className="text-sm text-on-surface-variant">
                       N° {row.numero_socio ?? '—'} · DNI {formatDni(row.dni)}
                     </div>
+                    {row.categoria && (
+                      <div className="sm:hidden text-sm text-on-surface-variant">
+                        <CategoryCell row={row} />
+                      </div>
+                    )}
                   </td>
-                  <td className="py-3 px-4"><CategoryCell row={row} /></td>
+                  <td className="max-sm:hidden py-3 px-4"><CategoryCell row={row} /></td>
                   <td className="py-3 px-4 sm:pr-5 text-right whitespace-nowrap">
                     <div className="flex flex-col items-end gap-1">
                       {!row.paid && <span className="font-semibold tabular-nums text-on-surface">{formatMoney(row.pending)}</span>}
