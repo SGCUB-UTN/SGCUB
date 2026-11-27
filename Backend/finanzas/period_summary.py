@@ -37,6 +37,7 @@ def period_cuotas(period):
             "movimiento__cuenta_corriente__socio__persona",
             "movimiento__cuenta_corriente__socio__jugador__estado",
             "movimiento__cuenta_corriente__socio__jugador__categoria",
+            "movimiento__cuenta_corriente__socio__jugador__categoria_secundaria",
         )
         .prefetch_related("items")
         .order_by("pk")
@@ -218,6 +219,7 @@ def period_cuota_rows(period):
         socio = cuota_socio(cuota)
         person = socio.persona
         player = getattr(socio, "jugador", None)
+        secondary = player.categoria_secundaria if player else None
         items = list(cuota.items.all())
         surcharges = cuota_surcharges(items)
         rows.append({
@@ -237,6 +239,9 @@ def period_cuota_rows(period):
             "categoria_id": player.categoria_id if player else None,
             "categoria": player.categoria.nombre if player else None,
             "categoria_genero": player.categoria.genero if player else "",
+            "categoria_secundaria_id": secondary.pk if secondary else None,
+            "categoria_secundaria": secondary.nombre if secondary else None,
+            "categoria_secundaria_genero": secondary.genero if secondary else "",
             "cuota_amount": net_amount(items) - surcharges,
             "surcharges": surcharges,
             "pending": pending[cuota.pk],

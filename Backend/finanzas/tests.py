@@ -5405,6 +5405,23 @@ class PeriodoCuotasTests(APITestCase):
 		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("2500.00"))
 		self.assertEqual(filas[self.jugador.pk]["surcharges"], Decimal("0.00"))
 		self.assertEqual(filas[self.jugador.pk]["pending"], Decimal("2500.00"))
+		self.assertIsNone(filas[self.jugador.pk]["categoria_secundaria"])
+		self.assertIsNone(filas[self.jugador.pk]["categoria_secundaria_id"])
+		self.assertEqual(filas[self.jugador.pk]["categoria_secundaria_genero"], "")
+
+	def test_period_cuotas_list_incluye_la_categoria_secundaria(self):
+		secundaria = Categoria.objects.create(nombre="Primera", anio_vigente=2026, genero=Categoria.GENERO_FEMENINO)
+		jugador = self.jugador.jugador
+		jugador.categoria_secundaria = secundaria
+		jugador.save(update_fields=["categoria_secundaria"])
+
+		response = self.get("cuota-periodo-cuotas")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		fila = next(fila for fila in response.data["results"] if fila["socio_id"] == self.jugador.pk)
+		self.assertEqual(fila["categoria_secundaria"], "Primera")
+		self.assertEqual(fila["categoria_secundaria_id"], secundaria.pk)
+		self.assertEqual(fila["categoria_secundaria_genero"], "F")
 
 	def test_fases_segun_la_fecha_y_las_ejecuciones(self):
 		fases = {fase["key"]: fase["status"] for fase in period_summary("2026-10", today=date(2026, 10, 5))["phases"]}
