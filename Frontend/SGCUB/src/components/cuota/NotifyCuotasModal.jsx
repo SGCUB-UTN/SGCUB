@@ -12,7 +12,9 @@ const MESSAGE_MAX_LENGTH = 500
 
 const plural = (count, singular, pluralForm) => `${formatCount(count)} ${count === 1 ? singular : pluralForm}`
 
-const hasEmail = (recipient) => recipient.email.includes('@')
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const hasEmail = (recipient) => EMAIL_PATTERN.test(recipient.email)
 
 const defaultSubject = (period) => `Cuota de ${formatPeriod(period)}`
 

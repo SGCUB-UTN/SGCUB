@@ -210,7 +210,6 @@ export default function PeriodCuotasTable({
   const [expandedId, setExpandedId] = useState(null)
   const [notifyRows, setNotifyRows] = useState(null)
 
-  const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
   const hasUncategorized = rows.some((row) => !row.categoria_id)
 
@@ -239,14 +238,18 @@ export default function PeriodCuotasTable({
     ...(nextType === CUOTA_TYPES.MEMBER ? { [PARAMS.category]: ALL_CATEGORIES } : {}),
   })
 
-  const matching = useMemo(() => {
+  const searchedRows = useMemo(() => {
     const text = search.trim()
-    return rows.filter((row) => {
-      if (type !== ALL && row.type !== type) return false
-      if (!categoryMatches(row, category)) return false
-      return !text || matchesSearch(text, [row.apellido, row.nombre, row.dni, row.numero_socio, row.email])
-    })
-  }, [rows, search, type, category])
+    return rows.filter((row) => categoryMatches(row, category)
+      && (!text || matchesSearch(text, [row.apellido, row.nombre, row.dni, row.numero_socio, row.email])))
+  }, [rows, search, category])
+
+  const typeCounts = useMemo(() => ({ ...countBy(searchedRows, 'type'), [ALL]: searchedRows.length }), [searchedRows])
+
+  const matching = useMemo(
+    () => (type === ALL ? searchedRows : searchedRows.filter((row) => row.type === type)),
+    [searchedRows, type],
+  )
 
   const tabCounts = useMemo(
     () => Object.fromEntries(TABS.map((option) => [option.value, matching.filter(option.matches).length])),
@@ -294,7 +297,7 @@ export default function PeriodCuotasTable({
           <TableSearchInput
             value={search}
             onChange={withPageReset(setSearch)}
-            placeholder="Nombre, DNI o N° de socio"
+            placeholder="Nombre, DNI, N° de socio o email"
             label="Buscar cuotas"
             className={SEARCH_WIDTH}
           />
