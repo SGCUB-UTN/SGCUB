@@ -67,7 +67,7 @@ export default function TaskRunLogModal({ run, onClose }) {
           {current.error && <p className="text-base text-error" role="alert">No se pudo cargar el detalle de la tarea.</p>}
           {detail && (
             <>
-              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-outline-variant/40 bg-surface-container-low p-3 font-mono text-xs leading-relaxed text-on-surface">
+              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-outline-variant/40 bg-surface-container-low p-3 font-mono text-sm leading-relaxed text-on-surface">
                 {detail.registro || 'La tarea no dejó registro.'}
               </pre>
               {detail.registro && (

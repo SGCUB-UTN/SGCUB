@@ -9,7 +9,7 @@ const plural = (count, singular, pluralForm) => `${formatCount(count)} ${count =
 const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
 
 const COLLECTED_CLASS = 'bg-emerald-600'
-const PENDING_CLASS = 'bg-emerald-100'
+const PENDING_CLASS = 'bg-surface-container-high'
 
 function AmountKpi({ value, ...props }) {
   return <KpiColumn value={formatWholeMoney(value)} title={formatMoney(value)} {...props} />
