@@ -62,6 +62,7 @@ function CreditNotes({ detalle, methodLabel }) {
             </div>
             {!isCancelledRefund(note) && (
               <div className="flex items-center gap-2 shrink-0">
+                <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
                 <WhatsAppComprobanteButton
                   socio={detalle.socio}
                   devolucionId={note.devolucion_id}
@@ -71,7 +72,6 @@ function CreditNotes({ detalle, methodLabel }) {
                   label="WhatsApp"
                   className="h-9 px-3 text-xs min-w-0"
                 />
-                <DownloadComprobanteButton devolucionId={note.devolucion_id} label="PDF" />
               </div>
             )}
           </div>
@@ -150,6 +150,31 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
       {detalle && (
         <div className="flex flex-col gap-4 flex-1 min-h-0">
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-2 thin-scroll [scrollbar-gutter:stable_both-edges] [&>*]:shrink-0">
+            {detalle.anulacion && (
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-error-container/50 border border-error/30 text-on-error-container" role="status">
+                <span className="material-symbols-outlined text-[20px] text-error shrink-0" aria-hidden="true">cancel</span>
+                <div className="flex flex-col gap-0.5 text-sm">
+                  <p className="font-semibold">
+                    Anulado el {detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'} por {detalle.anulacion.responsable || '—'}
+                  </p>
+                  <p className="break-words">Motivo: {detalle.anulacion.motivo || 'Sin motivo registrado'}</p>
+                </div>
+              </div>
+            )}
+
+            {justReverted && (
+              <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
+                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
+                <p className="text-sm text-on-surface-variant">
+                  {justReverted === 'refunded'
+                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
+                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
+                </p>
+              </div>
+            )}
+
+            <CreditNotes detalle={detalle} methodLabel={methodLabel} />
+
             <ReciboComprobante
               ref={comprobanteRef}
               clubConfig={clubConfig}
@@ -163,28 +188,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               anulado={anulado}
               anulacion={detalle.anulacion}
             />
-
-            {detalle.anulacion && (
-              <section className="flex flex-col gap-1.5 p-3 rounded-lg border border-error/20 bg-error-container/30">
-                <h3 className="font-semibold text-error">Anulado</h3>
-                <InfoRow label="Fecha">{detalle.anulacion.fecha ? formatDate(detalle.anulacion.fecha) : '—'}</InfoRow>
-                <InfoRow label="Motivo">{detalle.anulacion.motivo || '—'}</InfoRow>
-                <InfoRow label="Responsable">{detalle.anulacion.responsable || '—'}</InfoRow>
-              </section>
-            )}
-
-            <CreditNotes detalle={detalle} methodLabel={methodLabel} />
-
-            {justReverted && (
-              <div className="p-3 rounded-lg border border-primary/30 bg-primary/5" role="status">
-                <p className="font-semibold text-on-surface">{justReverted === 'refunded' ? 'Ingreso anulado y devuelto.' : 'Ingreso anulado.'}</p>
-                <p className="text-sm text-on-surface-variant">
-                  {justReverted === 'refunded'
-                    ? 'Se emitió la nota de crédito por el total. La ves en la lista de notas de crédito.'
-                    : 'Si le devolvés el dinero al socio, emití una nota de crédito.'}
-                </p>
-              </div>
-            )}
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
