@@ -13,6 +13,8 @@ import { KpiColumn, KpiGrid } from '../components/shared/Kpi'
 import PageHeader from '../components/shared/PageHeader'
 import SectionDivider from '../components/shared/SectionDivider'
 import SectionHeading from '../components/shared/SectionHeading'
+import StackedBar from '../components/shared/StackedBar'
+import { colorSeries, segmentKeyOf, stackSegments } from '../components/shared/stackedBarSeries'
 import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../components/shared/panel'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
@@ -145,14 +147,40 @@ function PaymentMethodRows({ methods }) {
 const BREAKDOWN_CELL_Y = 'py-2.5'
 const BREAKDOWN_CELL_X = 'px-4 sm:px-5'
 
-function BreakdownRow({ label, porcentaje, monto, variant = 'row' }) {
+function RowMarker({ swatchClass, icon }) {
+  if (swatchClass) return <span className={`w-2.5 h-2.5 shrink-0 rounded-sm ${swatchClass}`} aria-hidden="true" />
+  if (icon) return <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden="true">{icon}</span>
+  return null
+}
+
+const highlightState = (segmentKey, activeKey) => {
+  if (!segmentKey || activeKey === null) return ''
+  return activeKey === segmentKey ? 'bg-surface-container-low' : 'opacity-40'
+}
+
+function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, icon, segmentKey, activeKey = null, onActiveChange }) {
   const strong = variant === 'total'
   const nested = variant === 'nested'
   const labelTone = strong ? 'font-bold text-on-surface' : nested ? 'font-normal text-on-surface-variant' : 'font-semibold text-on-surface'
+  const interaction = segmentKey && onActiveChange
+    ? {
+      tabIndex: 0,
+      onMouseEnter: () => onActiveChange(segmentKey),
+      onMouseLeave: () => onActiveChange(null),
+      onFocus: () => onActiveChange(segmentKey),
+      onBlur: () => onActiveChange(null),
+    }
+    : {}
   return (
-    <tr className={strong ? 'bg-surface-container-low' : 'border-t border-outline-variant/30'}>
+    <tr
+      {...interaction}
+      className={`${strong ? 'bg-surface-container-low' : 'border-t border-outline-variant/30'} transition-[opacity,background-color] duration-150 focus:outline-none focus-visible:bg-surface-container-low ${highlightState(segmentKey, activeKey)}`}
+    >
       <th scope="row" className={`${BREAKDOWN_CELL_Y} pr-4 sm:pr-5 ${nested ? 'pl-10 sm:pl-11' : 'pl-4 sm:pl-5'} text-left ${labelTone}`}>
-        {label}
+        <span className="flex items-center gap-2.5">
+          <RowMarker swatchClass={swatchClass} icon={icon} />
+          {label}
+        </span>
       </th>
       <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} w-28 text-right tabular-nums ${strong ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}>
         {formatPercentage(porcentaje)}
@@ -164,7 +192,7 @@ function BreakdownRow({ label, porcentaje, monto, variant = 'row' }) {
   )
 }
 
-function BreakdownTable({ label, total, rows }) {
+function BreakdownTable({ label, total, rows, activeKey, onActiveChange }) {
   return (
     <table className="w-full text-sm">
       <thead className="sr-only">
@@ -176,7 +204,7 @@ function BreakdownTable({ label, total, rows }) {
       </thead>
       <tbody>
         <BreakdownRow label={label} porcentaje={100} monto={total} variant="total" />
-        {rows.map(({ key, ...row }) => <BreakdownRow key={key} {...row} />)}
+        {rows.map(({ key, ...row }) => <BreakdownRow key={key} {...row} activeKey={activeKey} onActiveChange={onActiveChange} />)}
       </tbody>
     </table>
   )
@@ -191,10 +219,45 @@ const conceptRows = (concepts, variant, prefix = '') => concepts.map((concept) =
 }))
 
 const refundRows = (refunds) => [
-  { key: 'notas-credito', label: 'Notas de crédito', porcentaje: refunds.notas_credito.porcentaje, monto: refunds.notas_credito.monto },
-  { key: 'manuales', label: 'Devoluciones manuales', porcentaje: refunds.manuales.porcentaje, monto: refunds.manuales.monto },
+  { key: 'notas-credito', label: 'Notas de crédito', icon: 'request_quote', porcentaje: refunds.notas_credito.porcentaje, monto: refunds.notas_credito.monto },
+  { key: 'manuales', label: 'Devoluciones manuales', icon: 'currency_exchange', porcentaje: refunds.manuales.porcentaje, monto: refunds.manuales.monto },
   ...conceptRows(refunds.manuales.conceptos, 'nested', 'manual-'),
 ]
+
+const extraIncomeSeries = (concepts) => colorSeries(concepts.map((concept) => ({
+  key: concept.nombre.toLocaleLowerCase('es'),
+  label: concept.nombre,
+  amount: Number(concept.monto),
+  count: concept.cantidad,
+  porcentaje: concept.porcentaje,
+})))
+
+function ExtraIncomeBreakdown({ extra }) {
+  const [activeKey, setActiveKey] = useState(null)
+  const series = extraIncomeSeries(extra.conceptos)
+  const rows = series.map((concept, index) => ({
+    key: concept.key,
+    label: concept.label,
+    porcentaje: concept.porcentaje,
+    monto: concept.amount,
+    swatchClass: concept.colorClass,
+    segmentKey: segmentKeyOf(concept, index),
+  }))
+  return (
+    <>
+      <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/30">
+        <StackedBar
+          segments={stackSegments(series)}
+          total={Number(extra.total)}
+          label="Otros ingresos por concepto"
+          activeKey={activeKey}
+          onActiveChange={setActiveKey}
+        />
+      </div>
+      <BreakdownTable label="Otros ingresos" total={extra.total} rows={rows} activeKey={activeKey} onActiveChange={setActiveKey} />
+    </>
+  )
+}
 
 function KpiBlockSkeleton() {
   return (
@@ -319,11 +382,7 @@ function ResumenFinanciero() {
             emptyText="No hubo otros ingresos en el período."
             onToggle={() => toggle('incomes')}
           >
-            <BreakdownTable
-              label="Otros ingresos"
-              total={data.ingresos_extra.total}
-              rows={conceptRows(data.ingresos_extra.conceptos, 'row')}
-            />
+            <ExtraIncomeBreakdown extra={data.ingresos_extra} />
           </CollapsibleSection>
 
           <section className={PANEL_CLASS} aria-labelledby="payment-methods-title">

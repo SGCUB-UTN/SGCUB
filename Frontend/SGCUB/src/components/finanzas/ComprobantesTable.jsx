@@ -400,7 +400,7 @@ function ComprobantesTable({
       <SectionHeading
         id="comprobantes-title"
         icon="receipt_long"
-        title="Movimientos y comprobantes de caja"
+        title={`Movimientos de ${formatPeriod(period)}`}
         className={PANEL_HEADING_CLASS}
       />
 
