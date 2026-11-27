@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getConfiguracionGeneral } from '../../api/configuracion'
 import { formatAmount, formatDate } from '../personas/format'
 import { ReceiptLayout, ReceiptSection, ReceiptTotal } from './ReciboComprobante'
+import { isCancelledRefund } from './refunds'
 
 const CREDIT_NOTE = 'NotaCredito'
 
@@ -51,6 +52,9 @@ function ReciboDevolucion({ ref, devolucion }) {
       codigo={devolucion.codigo}
       fecha={formatDate(devolucion.fecha)}
       pie="Comprobante de uso interno · Asociación civil sin fines de lucro exenta"
+      anulado={isCancelledRefund(devolucion)}
+      anulacion={{ fecha: devolucion.fecha_cancelacion }}
+      annulledLabel="Cancelada"
     >
       <ReceiptSection title="Concepto">
         <AmountLine label={devolucion.concepto || '—'} amount={devolucion.monto} strong />

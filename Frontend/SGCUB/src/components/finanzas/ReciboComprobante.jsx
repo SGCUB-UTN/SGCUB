@@ -17,8 +17,8 @@ function formatClubAddress(cfg) {
   return [calleYNumero, pisoDepto, barrio, localidad].filter(Boolean).join(', ')
 }
 
-function annulmentLine(anulacion) {
-  return anulacion?.fecha ? `Anulado el ${formatDate(anulacion.fecha)}` : 'Anulado'
+function annulmentLine(anulacion, label) {
+  return anulacion?.fecha ? `${label} el ${formatDate(anulacion.fecha)}` : label
 }
 
 export function ReceiptSection({ title, children }) {
@@ -51,6 +51,7 @@ export function ReceiptLayout({
   pie,
   anulado = false,
   anulacion = null,
+  annulledLabel = 'Anulado',
   children,
 }) {
   const clubNombre = clubConfig?.club_nombre || DEFAULT_CLUB_NAME
@@ -100,7 +101,7 @@ export function ReceiptLayout({
           <div className="sm:text-right shrink-0 sm:min-w-[210px]">
             <p className="text-xl font-bold uppercase text-on-surface">{titulo}</p>
             <p className="text-base font-bold font-mono text-on-surface tracking-tight">N° {codigo?.split(' ').pop()}</p>
-            {anulado && <p className="text-xs font-semibold text-error">{annulmentLine(anulacion)}</p>}
+            {anulado && <p className="text-xs font-semibold text-error">{annulmentLine(anulacion, annulledLabel)}</p>}
             <p className="text-xs text-on-surface-variant mt-0.5">Fecha: {fecha}</p>
             <p className="text-[11px] text-on-surface-variant/70 mt-1 italic">Documento no válido como factura</p>
           </div>
@@ -136,7 +137,7 @@ export function ReceiptLayout({
       {anulado && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
           <span className="-rotate-45 select-none text-6xl sm:text-8xl md:text-9xl font-extrabold uppercase tracking-widest text-error/20">
-            Anulado
+            {annulledLabel}
           </span>
         </div>
       )}
