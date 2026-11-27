@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
-import { FILTER_CLASS } from '../shared/listFilters'
+import { FILTER_CLASS, FILTER_WIDTH, SEARCH_WIDTH, filterLabel } from '../shared/listFilters'
+import ClearFiltersButton from '../shared/ClearFiltersButton'
 import DataTable from '../shared/DataTable'
+import ExportMenu from '../shared/ExportMenu'
 import FilterSelect from '../shared/FilterSelect'
+import RowIconButton, { RowIcon } from '../shared/RowIconButton'
+import { ROW_LINK_CLASS, stopRowClick } from '../shared/rowLink'
 import SectionHeading from '../shared/SectionHeading'
 import SortableHeader from '../shared/SortableHeader'
+import StatusBadge from '../shared/StatusBadge'
 import TableMessageRow from '../shared/TableMessageRow'
 import TablePagination from '../shared/TablePagination'
 import TableSearchInput from '../shared/TableSearchInput'
@@ -15,7 +20,8 @@ import { formatAmount, formatDate, formatDni } from '../personas/format'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { matchesSearch } from '../shared/search'
-import { downloadCashMovementsCsv } from './cashMovementsCsv'
+import { CASH_EXPORT_COLUMNS, cashExportFilename } from './cashMovementsExport'
+import { KIND_BADGES } from './movementBadges'
 import { conceptGroup } from './conceptOrigins'
 import { descargarComprobantePdf } from '../../api/comprobantes'
 import { descargarDevolucionPdf } from '../../api/devoluciones'
@@ -30,12 +36,6 @@ import { sendReceiptToWhatsApp } from '../../utils/whatsapp'
 
 const HEADER_CLASS = 'py-3 px-4'
 const CELL_CLASS = 'py-3 px-4'
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
-const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-const WHATSAPP_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60'
-const WHATSAPP_DISABLED_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant/30 text-on-surface-variant/30 cursor-not-allowed'
-const CANCEL_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-error/30 text-error hover:bg-error-container/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/60 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
-const DOWNLOAD_ICON_BUTTON_CLASS = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-50 disabled:cursor-not-allowed'
 const COLUMN_COUNT = 6
 const ALL = 'todos'
 const TABS_ID = 'comprobantes-scope'
@@ -59,15 +59,13 @@ const SCOPES = [
   },
 ]
 
-const ANNULLED_BADGE = 'bg-error-container text-on-error-container border-error/20'
-
 const TYPES = {
-  CuotaVigente: { label: 'Cobro de cuotas', group: 'cuotas', badge: 'bg-primary/10 text-primary border-primary/20' },
-  CuotaAnulada: { label: 'Cobro de cuotas anulado', badgeLabel: 'Anulado', group: 'cuotas', badge: ANNULLED_BADGE },
-  IngresoVigente: { label: 'Ingreso', group: 'ingresos', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
-  IngresoAnulado: { label: 'Ingreso anulado', badgeLabel: 'Anulado', group: 'ingresos', badge: ANNULLED_BADGE },
-  NotaCredito: { label: 'Nota de crédito', group: 'devoluciones', badge: 'bg-amber-500/15 text-amber-800 border-amber-500/30' },
-  Manual: { label: 'Devolución manual', group: 'devoluciones', badge: 'bg-error/10 text-error border-error/20' },
+  CuotaVigente: { label: 'Cobro de cuotas', kind: 'Cobro de cuotas', group: 'cuotas' },
+  CuotaAnulada: { label: 'Cobro de cuotas anulado', kind: 'Cobro de cuotas', group: 'cuotas', badge: KIND_BADGES.Anulado },
+  IngresoVigente: { label: 'Ingreso', kind: 'Ingreso', group: 'ingresos' },
+  IngresoAnulado: { label: 'Ingreso anulado', kind: 'Ingreso', group: 'ingresos', badge: KIND_BADGES.Anulado },
+  NotaCredito: { label: 'Nota de crédito', kind: 'Devolución', group: 'devoluciones', badge: KIND_BADGES.NotaCredito },
+  Manual: { label: 'Devolución manual', kind: 'Devolución', group: 'devoluciones', badge: KIND_BADGES.Manual },
 }
 
 const ACTIVE = 'activo'
@@ -166,8 +164,8 @@ function ComprobantesTable({
         filterCode: type,
         refCode: comprobante.codigo,
         typeLabel: TYPES[type].label,
-        badgeLabel: TYPES[type].badgeLabel ?? TYPES[type].label,
-        badgeClass: TYPES[type].badge,
+        kindLabel: TYPES[type].kind,
+        badge: TYPES[type].badge,
         date: comprobante.fecha_emision,
         sortTimestamp: Date.parse(comprobante.fecha_hora || comprobante.fecha_emision || '') || 0,
         sortNumber: comprobante.numero,
@@ -186,6 +184,7 @@ function ComprobantesTable({
 
     const refundItems = devoluciones.map((devolucion) => {
       const cancelled = isCancelledRefund(devolucion)
+      const type = TYPES[devolucion.tipo] ?? TYPES.Manual
       const typeLabel = TYPES[devolucion.tipo]?.label ?? devolucion.tipo_nombre
       return {
         key: `devolucion-${devolucion.devolucion_id}`,
@@ -195,8 +194,8 @@ function ComprobantesTable({
         refundFilter: cancelled ? REFUND_CANCELLED : devolucion.tipo,
         refCode: devolucion.codigo,
         typeLabel: cancelled ? `${typeLabel} cancelada` : typeLabel,
-        badgeLabel: cancelled ? 'Cancelada' : typeLabel,
-        badgeClass: cancelled ? ANNULLED_BADGE : TYPES[devolucion.tipo]?.badge ?? TYPES.Manual.badge,
+        kindLabel: type.kind,
+        badge: cancelled ? KIND_BADGES.Cancelada : type.badge,
         date: devolucion.fecha,
         sortTimestamp: Date.parse(devolucion.fecha || '') || 0,
         sortNumber: devolucion.numero,
@@ -264,8 +263,22 @@ function ComprobantesTable({
   }, [unifiedItems, scope, filters, mainFilter, conceptFilter, search])
 
   const { ordenadas: sorted, orden: sort, ordenarPor: sortBy } = useOrdenTabla(filtered, SORT_VALUES, INITIAL_SORT)
-  const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
+  const { visibleRows, resetPage, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
+  const hasFilters = search.trim() !== '' || mainFilter !== ALL || conceptFilter !== ALL
+  const clearFilters = () => {
+    setSearch('')
+    setMainFilter(ALL)
+    setConceptFilter(ALL)
+    resetPage()
+  }
+  const exportFilters = [
+    `Período: ${formatPeriod(period)}`,
+    SCOPES.find((option) => option.value === scope)?.label,
+    filterLabel(filters.options, mainFilter, filters.label),
+    filters.conceptLabel && filterLabel(conceptOptions, conceptFilter, filters.conceptLabel),
+    search.trim() && `Búsqueda: «${search.trim()}»`,
+  ]
 
   const changeScope = (nextScope) => {
     withPageReset(() => {
@@ -283,15 +296,26 @@ function ComprobantesTable({
     }
   }
 
-  const handleKeyDown = (event, item) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      handleRowAction(item)
-    }
+  const whatsAppBlocker = (item) => {
+    if (item.isCancelledRefund) return CANCELLED_REFUND_BLOCKER
+    return item.socio?.telefono ? '' : 'El socio no tiene un teléfono registrado'
   }
 
-  const handleSendWhatsApp = async (event, item) => {
-    event.stopPropagation()
+  const whatsAppLabel = (item) => {
+    const socio = item.socio
+    if (!socio?.telefono) return `Enviar ${item.refCode} por WhatsApp`
+    const recipient = socio.es_menor && socio.responsable_nombre
+      ? `${socio.responsable_nombre}, responsable de ${item.socioLabel}`
+      : item.socioLabel
+    return `Enviar ${item.refCode} por WhatsApp a ${recipient} (${socio.telefono})`
+  }
+
+  const annulBlocker = (item) => {
+    if (!item.isAnulado) return ''
+    return item.raw.es_ingreso ? 'El ingreso ya está anulado' : 'El pago ya está revertido'
+  }
+
+  const handleSendWhatsApp = async (item) => {
     const socio = item.socio
     const phone = socio?.telefono
     if (!phone || sharingWhatsAppKey) return
@@ -319,10 +343,7 @@ function ComprobantesTable({
     }
   }
 
-  const openCancelRefund = (event, item) => {
-    event.stopPropagation()
-    setCancellingRefund(item.raw)
-  }
+  const openCancelRefund = (item) => setCancellingRefund(item.raw)
 
   const refundCancelled = (updated) => {
     setCancellingRefund(null)
@@ -330,8 +351,7 @@ function ComprobantesTable({
     showToast({ title: 'Devolución cancelada', description: `${updated.codigo} quedó cancelada.` })
   }
 
-  const openAnnulOrRevert = (event, item) => {
-    event.stopPropagation()
+  const openAnnulOrRevert = (item) => {
     if (item.raw.es_ingreso) {
       setAnnullingIncome(item.raw)
     } else {
@@ -348,8 +368,7 @@ function ComprobantesTable({
       : { title: 'Ingreso anulado', description: `${codigo} quedó anulado. Si corresponde devolver dinero, emití una nota de crédito desde el comprobante.` })
   }
 
-  const handleDownload = async (event, item) => {
-    event.stopPropagation()
+  const handleDownload = async (item) => {
     if (downloadingKey) return
     setDownloadingKey(item.key)
     try {
@@ -375,15 +394,17 @@ function ComprobantesTable({
       />
 
       <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/20 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
-        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
           <TableSearchInput
             value={search}
             onChange={withPageReset(setSearch)}
             placeholder="Comprobante, socio, DNI o concepto"
             label="Filtrar movimientos y comprobantes"
+            className={SEARCH_WIDTH}
           />
           <FilterSelect
             className={FILTER_CLASS}
+            width={FILTER_WIDTH}
             value={mainFilter}
             onChange={(event) => withPageReset(setMainFilter)(event.target.value)}
             aria-label={`Filtrar por ${filters.label.toLowerCase()}`}
@@ -396,6 +417,7 @@ function ComprobantesTable({
           {filters.conceptLabel && (
             <FilterSelect
               className={FILTER_CLASS}
+              width={FILTER_WIDTH}
               value={conceptFilter}
               onChange={(event) => withPageReset(setConceptFilter)(event.target.value)}
               aria-label={`Filtrar por ${filters.conceptLabel.toLowerCase()}`}
@@ -406,19 +428,15 @@ function ComprobantesTable({
               ))}
             </FilterSelect>
           )}
+          <ClearFiltersButton onClick={clearFilters} visible={hasFilters} />
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
-          <button
-            type="button"
-            onClick={() => downloadCashMovementsCsv(sorted, period, scope)}
-            disabled={isLoading || Boolean(error) || sorted.length === 0}
-            title="Exporta los movimientos que se ven con la búsqueda y los filtros actuales"
-            className={EXPORT_BUTTON_CLASS}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">file_download</span>
-            Exportar listado
-          </button>
-        </div>
+        <ExportMenu
+          title={`Movimientos de caja de ${formatPeriod(period)}`}
+          filename={cashExportFilename(scope, period)}
+          columns={CASH_EXPORT_COLUMNS}
+          items={isLoading || error ? [] : sorted}
+          filters={exportFilters}
+        />
       </div>
 
       <TableTabs
@@ -453,23 +471,33 @@ function ComprobantesTable({
             emptyText={
               unifiedItems.length === 0
                 ? `No hay movimientos ni comprobantes registrados en ${formatPeriod(period)}.`
-                : 'No hay movimientos que coincidan con el filtro.'
+                : 'Ningún movimiento coincide con la búsqueda o los filtros.'
             }
+            onClearFilters={hasFilters ? clearFilters : undefined}
           />
 
           {!isLoading && !error && visibleRows.map((item) => (
             <tr
               key={item.key}
               onClick={() => handleRowAction(item)}
-              onKeyDown={(event) => handleKeyDown(event, item)}
-              tabIndex={0}
-              role="button"
-              className="hover:bg-surface-container-low/80 focus:bg-surface-container-low focus:outline-none transition-colors cursor-pointer"
+              className="hover:bg-surface-container-low/80 transition-colors cursor-pointer"
             >
               <td className={`${CELL_CLASS} sm:pl-5 whitespace-nowrap`}>
-                <span className="block font-semibold text-primary">{item.refCode}</span>
-                <span className={`${BADGE_CLASS} mt-1 ${item.badgeClass}`}>
-                  {item.badgeLabel}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    stopRowClick(event)
+                    handleRowAction(item)
+                  }}
+                  aria-haspopup="dialog"
+                  aria-label={`Ver ${item.typeLabel.toLocaleLowerCase('es')} ${item.refCode}`}
+                  className={`block font-semibold text-base text-primary cursor-pointer ${ROW_LINK_CLASS}`}
+                >
+                  {item.refCode}
+                </button>
+                <span className="mt-1 flex items-center gap-2">
+                  <span className="text-sm text-on-surface-variant">{item.kindLabel}</span>
+                  {item.badge && <StatusBadge size="md" badge={item.badge} />}
                 </span>
               </td>
               <td className={`${CELL_CLASS} text-on-surface-variant whitespace-nowrap`}>{formatDate(item.date)}</td>
@@ -477,7 +505,7 @@ function ComprobantesTable({
                 {item.socio ? (
                   <>
                     <span className="block text-on-surface">{item.socioLabel}</span>
-                    <span className="block text-xs text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
+                    <span className="block text-sm text-on-surface-variant">DNI {formatDni(item.socio.dni)}</span>
                   </>
                 ) : (
                   <span className="text-on-surface-variant">—</span>
@@ -487,7 +515,7 @@ function ComprobantesTable({
                 <span className="block text-on-surface truncate" title={item.concept}>
                   {item.concept}
                 </span>
-                <span className="block text-xs text-on-surface-variant truncate" title={item.subConcept}>
+                <span className="block text-sm text-on-surface-variant truncate" title={item.subConcept}>
                   {item.subConcept}
                 </span>
               </td>
@@ -503,72 +531,44 @@ function ComprobantesTable({
                 {item.isAnulado ? '' : item.isPositive ? '+ ' : '− '}
                 {formatAmount(item.amount)}
               </td>
-              <td className={`${CELL_CLASS} sm:pr-5 text-right`}>
+              <td className="py-2 px-4 sm:pr-5 text-right">
                 <div className="flex items-center justify-end gap-1.5">
-                  <button
-                    type="button"
-                    onClick={(event) => handleSendWhatsApp(event, item)}
-                    disabled={!item.socio?.telefono || item.isCancelledRefund || sharingWhatsAppKey === item.key}
-                    title={
-                      item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : item.socio?.telefono
-                        ? item.socio.es_menor && item.socio.responsable_nombre
-                          ? `Enviar por WhatsApp a ${item.socio.responsable_nombre} (Responsable de ${item.socioLabel}) (${item.socio.telefono})`
-                          : `Enviar por WhatsApp (${item.socio.telefono})`
-                        : 'Sin teléfono registrado'
-                    }
-                    aria-label={`Enviar ${item.refCode} por WhatsApp`}
-                    className={item.socio?.telefono && !item.isCancelledRefund ? WHATSAPP_ICON_BUTTON_CLASS : WHATSAPP_DISABLED_BUTTON_CLASS}
+                  <RowIconButton
+                    tone="whatsapp"
+                    label={whatsAppLabel(item)}
+                    disabledReason={whatsAppBlocker(item)}
+                    busy={sharingWhatsAppKey === item.key}
+                    onClick={() => handleSendWhatsApp(item)}
                   >
-                    {sharingWhatsAppKey === item.key ? (
-                      <span className="material-symbols-outlined text-[18px] animate-spin" aria-hidden="true">
-                        progress_activity
-                      </span>
-                    ) : (
-                      <WhatsAppIcon className="w-4 h-4 shrink-0" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => handleDownload(event, item)}
-                    disabled={downloadingKey === item.key || item.isCancelledRefund}
-                    title={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : `Descargar PDF (${item.refCode})`}
-                    aria-label={`Descargar PDF de ${item.refCode}`}
-                    className={DOWNLOAD_ICON_BUTTON_CLASS}
+                    <WhatsAppIcon className="w-[18px] h-[18px]" />
+                  </RowIconButton>
+                  <RowIconButton
+                    tone="neutral"
+                    label={`Descargar PDF de ${item.refCode}`}
+                    disabledReason={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : ''}
+                    busy={downloadingKey === item.key}
+                    onClick={() => handleDownload(item)}
                   >
-                    <span className={`material-symbols-outlined text-[20px] ${downloadingKey === item.key ? 'animate-spin' : ''}`} aria-hidden="true">
-                      {downloadingKey === item.key ? 'progress_activity' : 'download'}
-                    </span>
-                  </button>
+                    <RowIcon name="download" />
+                  </RowIconButton>
                   {item.kind === 'devolucion' ? (
-                    <button
-                      type="button"
-                      onClick={(event) => openCancelRefund(event, item)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      disabled={item.isCancelledRefund}
-                      title={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : `Cancelar devolución (${item.refCode})`}
-                      aria-label={`Cancelar devolución ${item.refCode}`}
-                      className={CANCEL_ICON_BUTTON_CLASS}
+                    <RowIconButton
+                      tone="danger"
+                      label={`Cancelar devolución ${item.refCode}`}
+                      disabledReason={item.isCancelledRefund ? CANCELLED_REFUND_BLOCKER : ''}
+                      onClick={() => openCancelRefund(item)}
                     >
-                      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">close</span>
-                    </button>
+                      <RowIcon name="close" />
+                    </RowIconButton>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={(event) => openAnnulOrRevert(event, item)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      disabled={item.isAnulado}
-                      title={
-                        item.isAnulado
-                          ? (item.raw.es_ingreso ? 'El ingreso ya está anulado' : 'El pago ya está revertido')
-                          : item.raw.es_ingreso
-                            ? `Anular ingreso (${item.refCode})`
-                            : `Revertir pago (${item.refCode})`
-                      }
-                      aria-label={item.raw.es_ingreso ? `Anular ingreso ${item.refCode}` : `Revertir pago ${item.refCode}`}
-                      className={CANCEL_ICON_BUTTON_CLASS}
+                    <RowIconButton
+                      tone="danger"
+                      label={item.raw.es_ingreso ? `Anular ingreso ${item.refCode}` : `Revertir pago ${item.refCode}`}
+                      disabledReason={annulBlocker(item)}
+                      onClick={() => openAnnulOrRevert(item)}
                     >
-                      <span className="material-symbols-outlined text-[20px]" aria-hidden="true">undo</span>
-                    </button>
+                      <RowIcon name="undo" />
+                    </RowIconButton>
                   )}
                 </div>
               </td>

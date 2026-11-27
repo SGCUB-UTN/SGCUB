@@ -14,16 +14,10 @@ import CancelRefundModal from './CancelRefundModal'
 import { CANCELLED_REFUND_BLOCKER, isCancelledRefund } from './refunds'
 import { WhatsAppIcon } from './WhatsAppComprobanteButton'
 import { CancellationNotice } from './formParts'
+import { KIND_BADGES } from './movementBadges'
 
 const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
-
-const KIND_BADGES = {
-  Anulado: { label: 'Anulado', tono: 'error' },
-  Cancelada: { label: 'Cancelada', tono: 'error' },
-  NotaCredito: { label: 'Nota de crédito', tono: 'alerta' },
-  Manual: { label: 'Manual', tono: 'neutro' },
-}
 
 const incomeMovement = (comprobante, refunds) => {
   const anulado = comprobante.estado === 'Anulado'
