@@ -17,12 +17,10 @@ import useAssignBenefit from '../hooks/useAssignBenefit'
 import useCuotaPeriod from '../hooks/useCuotaPeriod'
 import useRegisterPayment from '../hooks/useRegisterPayment'
 import SectionDivider from '../components/shared/SectionDivider'
+import { PANEL_BODY_CLASS as SECTION_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../components/shared/panel'
+import { SecondaryButton } from '../components/personas/tabs/parts'
 import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
-const PANEL_CLASS = 'min-w-0 bg-surface-container-lowest border border-outline-variant/30 rounded-lg shadow-sm overflow-hidden'
-const HEADING_CLASS = 'px-4 sm:px-5 border-b'
-const SECTION_CLASS = 'p-4 sm:p-5'
-const GENERATE_BUTTON_CLASS = 'inline-flex items-center gap-1.5 h-10 px-3 rounded bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2'
 
 function Cuotas() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -88,10 +86,9 @@ function Cuotas() {
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Cuotas' }]}
         title="Cuotas"
         actions={(
-          <button type="button" onClick={() => setGenerateOpen(true)} className={GENERATE_BUTTON_CLASS}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">request_quote</span>
+          <SecondaryButton icon="request_quote" onClick={() => setGenerateOpen(true)}>
             Generar cuotas
-          </button>
+          </SecondaryButton>
         )}
       />
       <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>

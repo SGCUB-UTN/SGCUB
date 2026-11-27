@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { FILTER_CLASS } from '../shared/listFilters'
+import { FILTER_CLASS, FILTER_WIDTH, SEARCH_WIDTH } from '../shared/listFilters'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getCuota } from '../../api/cuotas'
 import CuotaDetailPanel from '../finanzas/CuotaDetailPanel'
@@ -20,20 +20,19 @@ import { matchesSearch } from '../shared/search'
 import { formatDni } from '../personas/format'
 import { CUOTA_STATES, CUOTA_STATE_TONES, cuotaStateLabel, cuotaStateShortLabel, isOverdue } from '../finanzas/cuotaStates'
 import StatusBadge from '../shared/StatusBadge'
+import ProfileBadge from '../shared/ProfileBadge'
+import InactiveTag from '../shared/InactiveTag'
 import { TONOS_BADGE } from '../shared/statusTones'
 import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import CategoryFilter from '../shared/CategoryFilter'
 import NotifyCuotasModal from './NotifyCuotasModal'
-import { ALL_CATEGORIES, GENDERS, NO_CATEGORY, NO_CATEGORY_VALUE, categoryMatches, categoryOptions, findGender, genderFilterValue } from '../shared/categoryFilters'
+import { ALL_CATEGORIES, GENDERS, NO_CATEGORY, NO_CATEGORY_VALUE, categoryMatches, categoryOptions, findGender, genderFilterValue, selectedCategory } from '../shared/categoryFilters'
 import useOrdenTabla from '../../hooks/useOrdenTabla'
 import usePagination from '../../hooks/usePagination'
 import { TextSkeleton } from '../shared/Skeleton'
 import {
   CUOTA_TYPES,
-  cuotaTypeBadgeClass,
-  cuotaTypeLabel,
   CUOTAS_EXPORT_COLUMNS,
-  downloadCuotasCsv,
   formatCount,
   formatMoney,
   memberName,
@@ -91,8 +90,6 @@ const SORT_VALUES = {
 }
 const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 
-const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
-const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'size-5 accent-primary cursor-pointer'
 const CHECKBOX_LABEL_CLASS = 'flex items-center py-3 pl-4 sm:pl-5 pr-2 min-h-12 cursor-pointer'
@@ -117,6 +114,12 @@ const categoryText = (name, genero) => {
 const categoryTitle = (name, genero) => {
   const gender = findGender(genero)
   return gender ? `${name} ${gender.label.toLocaleLowerCase('es')}` : name
+}
+
+function CuotaTypeTag({ type }) {
+  if (type === CUOTA_TYPES.PLAYER) return <ProfileBadge>Jugador</ProfileBadge>
+  if (type === CUOTA_TYPES.PARTIAL_LEAVE) return <InactiveTag>Baja parcial</InactiveTag>
+  return null
 }
 
 function CategoryCell({ row }) {
@@ -299,15 +302,17 @@ export default function PeriodCuotasTable({
   return (
     <div className="min-w-0">
       <div className="px-4 sm:px-5 py-4 border-b border-outline-variant/20 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
-        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
+        <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
           <TableSearchInput
             value={search}
             onChange={withPageReset(setSearch)}
             placeholder="Nombre, DNI o N° de socio"
             label="Buscar cuotas"
+            className={SEARCH_WIDTH}
           />
           <FilterSelect
             className={FILTER_CLASS}
+            width={FILTER_WIDTH}
             value={type}
             onChange={(event) => withPageReset(changeType)(event.target.value)}
             aria-label="Filtrar por tipo"
@@ -339,16 +344,18 @@ export default function PeriodCuotasTable({
               ? 'Sin cuotas vencidas'
               : `Notificar ${overdueRows.length === 1 ? 'al vencido' : `a los ${formatCount(overdueRows.length)} vencidos`}`}
           </PrimaryButton>
-          <button
-            type="button"
-            onClick={() => downloadCuotasCsv(sorted, period)}
-            disabled={sorted.length === 0}
-            className={EXPORT_BUTTON_CLASS}
-            title="Exporta las cuotas que se ven con la búsqueda y el filtro actuales"
-          >
-            <Icon name="file_download" />
-            Exportar listado
-          </button>
+          <ExportMenu
+            title={`Cuotas de ${formatPeriod(period)}`}
+            filename={`cuotas-${period}`}
+            columns={CUOTAS_EXPORT_COLUMNS}
+            items={sorted}
+            filters={[
+              tab !== ALL && `Estado: ${activeTab.label}`,
+              type !== ALL && `Tipo: ${TYPE_FILTERS.find((filter) => filter.value === type)?.label}`,
+              category !== ALL_CATEGORIES && `Categoría: ${selectedCategory(category, categories).label}`,
+              search.trim() && `Búsqueda: «${search.trim()}»`,
+            ]}
+          />
         </div>
       </div>
 
@@ -456,7 +463,7 @@ export default function PeriodCuotasTable({
                       <Link to={detailPath(row)} onClick={stopRowClick} className={`font-medium text-on-surface hover:text-primary ${ROW_LINK_CLASS}`}>
                         {name}
                       </Link>
-                      <span className={`${BADGE_CLASS} ${cuotaTypeBadgeClass(row.type)}`}>{cuotaTypeLabel(row.type)}</span>
+                      <CuotaTypeTag type={row.type} />
                     </div>
                     <div className="text-sm text-on-surface-variant">
                       N° {row.numero_socio ?? '—'} · DNI {formatDni(row.dni)}
