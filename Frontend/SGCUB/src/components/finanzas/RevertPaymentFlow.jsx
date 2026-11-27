@@ -180,10 +180,8 @@ function ReversalDone({ detalle, creditNote, onClose }) {
           </p>
         </div>
       </div>
-      <div className="pt-4 border-t border-outline-variant/20 flex flex-wrap items-center justify-end gap-3">
-        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>Cerrar</button>
+      <div className="pt-4 border-t border-outline-variant/20 flex flex-wrap items-center justify-end gap-2">
         <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
-        <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} label="Recibo anulado" />
         {creditNote ? (
           <>
             <DownloadComprobanteButton devolucionId={creditNote.devolucion_id} label="Nota de crédito" />
@@ -196,13 +194,16 @@ function ReversalDone({ detalle, creditNote, onClose }) {
             />
           </>
         ) : (
-          <WhatsAppComprobanteButton
-            socio={detalle.socio}
-            comprobanteId={detalle.comprobante_id}
-            comprobanteCodigo={detalle.codigo}
-            montoTotal={detalle.monto_total}
-            tipo="anulado"
-          />
+          <>
+            <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} label="Recibo anulado" />
+            <WhatsAppComprobanteButton
+              socio={detalle.socio}
+              comprobanteId={detalle.comprobante_id}
+              comprobanteCodigo={detalle.codigo}
+              montoTotal={detalle.monto_total}
+              tipo="anulado"
+            />
+          </>
         )}
       </div>
     </div>

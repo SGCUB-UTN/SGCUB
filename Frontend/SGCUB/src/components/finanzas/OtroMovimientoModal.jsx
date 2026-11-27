@@ -66,8 +66,8 @@ function DevolucionRegistrada({ devolucion, onLeave, onCancelled }) {
       </div>
 
       <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
-        <CancelRefundButton onClick={() => setCancelling(true)} />
         <ViewFinancesButton socio={devolucion.socio} onNavigate={onLeave} />
+        <CancelRefundButton onClick={() => setCancelling(true)} />
         <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />
         <WhatsAppComprobanteButton
           socio={devolucion.socio}

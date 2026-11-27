@@ -9,7 +9,7 @@ function DownloadComprobanteButton({
   devolucionId,
   variant = 'secondary',
   fullWidth = false,
-  label = 'Descargar PDF',
+  label = 'PDF',
 }) {
   const [descargando, setDescargando] = useState(false)
   const [error, setError] = useState('')

@@ -55,9 +55,9 @@ function DevolucionDetailContent({ devolucion: initialDevolucion, opened, onClos
           </p>
         </div>
 
-        <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-3">
-          {!readOnly && !cancelled && <CancelRefundButton onClick={() => setCancelling(true)} />}
+        <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
           <ViewFinancesButton socio={devolucion.socio} onNavigate={onClose} />
+          {!readOnly && !cancelled && <CancelRefundButton onClick={() => setCancelling(true)} />}
           {!cancelled && (
             <>
               <DownloadComprobanteButton devolucionId={devolucion.devolucion_id} />

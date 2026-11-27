@@ -188,8 +188,9 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
+            <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             {!readOnly && detalle.revertible && (
-              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40 mr-auto`}>
+              <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">undo</span>
                 {isIncome ? 'Anular ingreso' : 'Revertir pago'}
               </button>
@@ -198,14 +199,13 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
               <button
                 type="button"
                 onClick={() => setAction('creditNote')}
-                className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low mr-auto`}
+                className={`${ACTION_BUTTON_CLASS} border-outline-variant/60 text-on-surface hover:bg-surface-container-low`}
               >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">currency_exchange</span>
                 Emitir nota de crédito
               </button>
             )}
 
-            <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             <DownloadComprobanteButton comprobanteId={detalle.comprobante_id} />
             <WhatsAppComprobanteButton
               socio={detalle.socio}
