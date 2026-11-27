@@ -650,6 +650,13 @@ class Beca(models.Model):
         null=True,
         blank=True,
     )
+    beca_anterior = models.OneToOneField(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="reemplazo",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "beca"

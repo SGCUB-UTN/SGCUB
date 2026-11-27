@@ -1908,9 +1908,22 @@ def rebuild_cuota_scholarships(cuota, scholarships, reason, authorized_by, user)
     return created
 
 
+def scholarship_lineage(scholarship):
+    ids = []
+    current = scholarship
+    while current is not None:
+        ids.append(current.pk)
+        current = current.beca_anterior
+    return ids
+
+
 def add_missing_scholarships(cuota, scholarships):
     present = {item.beca_id for item in cuota.items.all() if is_linked_scholarship(item)}
-    applied = [apply_scholarship(scholarship, cuota) for scholarship in scholarships if scholarship.pk not in present]
+    applied = [
+        apply_scholarship(scholarship, cuota)
+        for scholarship in scholarships
+        if not present & set(scholarship_lineage(scholarship))
+    ]
     return [item for item in applied if item]
 
 
@@ -1981,16 +1994,37 @@ def cancel_scholarship(scholarship_id, reason, authorized_by, user=None, today=N
 
 @transaction.atomic
 def update_scholarship(scholarship_id, mode, value, start_date, end_date, reason, authorized_by, user=None, today=None):
-    account, scholarship = lock_scholarship(scholarship_id)
-    scholarship.monto = value if mode == ModalidadMontoChoices.MONTO_FIJO else None
-    scholarship.porcentaje = value if mode == ModalidadMontoChoices.PORCENTAJE else None
-    scholarship.fecha_aplicacion = start_date
-    scholarship.fecha_fin = end_date
-    scholarship.motivo = reason
-    scholarship.autorizado_por = authorized_by
-    scholarship.estado = scholarship_state(end_date)
-    scholarship.save(update_fields=[
-        "monto", "porcentaje", "fecha_aplicacion", "fecha_fin", "motivo", "autorizado_por", "estado",
+    account, previous = lock_scholarship(scholarship_id)
+    monto = value if mode == ModalidadMontoChoices.MONTO_FIJO else None
+    porcentaje = value if mode == ModalidadMontoChoices.PORCENTAJE else None
+    unchanged = (
+        previous.monto == monto and previous.porcentaje == porcentaje
+        and previous.fecha_aplicacion == start_date and previous.fecha_fin == end_date
+        and previous.motivo == reason and previous.autorizado_por == authorized_by
+    )
+    if unchanged:
+        return previous
+    previous.estado = EstadoBecaChoices.CANCELADA
+    previous.fecha_cancelacion = timezone.now()
+    previous.motivo_cancelacion = SCHOLARSHIP_UPDATED_REASON
+    previous.cancelado_por = authorized_by
+    previous.usuario_cancelacion = user
+    previous.save(update_fields=[
+        "estado", "fecha_cancelacion", "motivo_cancelacion", "cancelado_por", "usuario_cancelacion",
+    ])
+    scholarship = create_scholarship(account.socio_id, mode, value, start_date, end_date, reason, authorized_by, user)
+    scholarship.beca_anterior = previous
+    scholarship.save(update_fields=["beca_anterior"])
+    ExclusionBeca.objects.bulk_create([
+        ExclusionBeca(
+            beca=scholarship,
+            periodo=exclusion.periodo,
+            motivo=exclusion.motivo,
+            autorizado_por=exclusion.autorizado_por,
+            fecha_creacion=exclusion.fecha_creacion,
+            usuario=exclusion.usuario,
+        )
+        for exclusion in previous.exclusiones.all()
     ])
     refresh_scholarship_items(account, SCHOLARSHIP_UPDATED_REASON, authorized_by, user, today)
     record_scholarship(Accion.BECA_MODIFICADA, scholarship, reason, authorized_by, user, account.socio)

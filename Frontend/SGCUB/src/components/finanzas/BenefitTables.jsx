@@ -28,6 +28,7 @@ const ANNULLED_ITEM = 'Anulado'
 
 const MEMBER_LEAVE_REASON = 'Baja del socio'
 const DISCOUNT_EDITED_REASON = 'Descuento modificado'
+const SCHOLARSHIP_EDITED_REASON = 'Beca modificada'
 
 const TYPES = {
   beca: { label: 'Beca', tono: 'info' },
@@ -41,7 +42,7 @@ const COLUMN_COUNT = 5
 const ROWS_PER_PAGE = 15
 
 const typeBadge = (row) => {
-  if (row.state === 'replaced') return { label: 'Descuento reemplazado', tono: 'neutro' }
+  if (row.state === 'replaced') return { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca reemplazada' : 'Descuento reemplazado', tono: 'neutro' }
   if (row.state === 'cancelled') return { label: row.target.kind === SCHOLARSHIP_TARGET ? 'Beca anulada' : 'Descuento anulado', tono: 'error' }
   return row.type
 }
@@ -55,7 +56,8 @@ const scholarshipValue = (beca) => (beca.porcentaje != null
 const NOT_APPLIED_HINT = 'Solo se pueden modificar beneficios aplicados'
 
 const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
-  const state = SCHOLARSHIP_STATE_KEYS[scholarshipState(beca, today)] ?? 'applied'
+  const baseState = SCHOLARSHIP_STATE_KEYS[scholarshipState(beca, today)] ?? 'applied'
+  const state = baseState === 'cancelled' && beca.motivo_cancelacion === SCHOLARSHIP_EDITED_REASON ? 'replaced' : baseState
   return {
     key: `beca-${beca.beca_id}`,
     type: TYPES.beca,
@@ -68,7 +70,7 @@ const scholarshipRows = (becas, today) => (becas ?? []).map((beca) => {
     blocker: state === 'applied' ? '' : NOT_APPLIED_HINT,
     target: { kind: SCHOLARSHIP_TARGET, beca },
     granted: { date: beca.fecha_creacion ?? beca.fecha_aplicacion, by: beca.autorizado_por },
-    cancellation: state === 'cancelled'
+    cancellation: state === 'cancelled' || state === 'replaced'
       ? { date: beca.fecha_cancelacion, by: beca.cancelado_por, reason: beca.motivo_cancelacion }
       : null,
   }
@@ -138,7 +140,7 @@ function CancellationDetail({ row }) {
   if (row.state === 'replaced') {
     return (
       <CancellationNotice
-        action="Reemplazado por un descuento nuevo"
+        action={row.target.kind === SCHOLARSHIP_TARGET ? 'Reemplazada por una beca nueva' : 'Reemplazado por un descuento nuevo'}
         date={date}
         authorizedBy={by}
         showReason={false}

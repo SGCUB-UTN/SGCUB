@@ -4821,7 +4821,9 @@ class ScholarshipLifecycleTests(APITestCase):
 		self.assertEqual(self.scholarship_amounts(self.august), [])
 
 	def cover_everything(self):
-		self.assertEqual(self.update(valor="100").status_code, 200)
+		response = self.update(valor="100")
+		self.assertEqual(response.status_code, 200)
+		self.scholarship = Beca.objects.get(pk=response.data["beca_id"])
 		october = self.generate("2026-10")
 		self.assertEqual(october.estado_cuota, EstadoCuotaChoices.PAGA)
 		return october
@@ -4899,6 +4901,35 @@ class ScholarshipLifecycleTests(APITestCase):
 		self.assertEqual(previous.monto, Decimal("250.00"))
 		self.assertEqual(previous.motivo_anulacion, "Beca modificada")
 
+	def test_update_replaces_the_scholarship_and_keeps_the_previous_one_as_history(self):
+		response = self.update(motivo="Hermanos en el club", autorizado_por="Tesorería")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		self.scholarship.refresh_from_db()
+		self.assertEqual(self.scholarship.estado, EstadoBecaChoices.CANCELADA)
+		self.assertEqual(self.scholarship.motivo_cancelacion, "Beca modificada")
+		self.assertEqual(self.scholarship.cancelado_por, "Tesorería")
+		self.assertEqual(self.scholarship.porcentaje, Decimal("10.00"))
+		replacement = Beca.objects.get(pk=response.data["beca_id"])
+		self.assertEqual(replacement.beca_anterior, self.scholarship)
+		self.assertEqual(replacement.estado, EstadoBecaChoices.APLICADA)
+		self.assertEqual((replacement.porcentaje, replacement.motivo), (Decimal("20.00"), "Hermanos en el club"))
+		self.assertEqual(self.july.items.get(concepto="Beca").beca, replacement)
+
+	def test_update_does_not_discount_twice_a_cuota_with_partial_payments(self):
+		response = self.client.post(reverse("registrar-pago"), {
+			"socio_id": self.socio.pk,
+			"cuota_ids": [self.july.pk],
+			"monto_total": "1000.00",
+			"medios": [{"medio_de_pago": "Efectivo", "monto": "1000.00"}],
+		}, format="json")
+		self.assertEqual(response.status_code, 201, response.data)
+
+		self.update()
+
+		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("250.00")])
+		self.assertEqual(self.scholarship_amounts(self.august), [Decimal("500.00")])
+
 	def test_update_without_changes_keeps_the_items(self):
 		before = list(ItemCuota.all_objects.filter(concepto="Beca").values_list("pk", flat=True))
 
@@ -4933,8 +4964,9 @@ class ScholarshipLifecycleTests(APITestCase):
 		self.assertEqual(self.scholarship_amounts(self.july), [Decimal("500.00")])
 		self.assertEqual(self.scholarship_amounts(self.august), [])
 		self.assertEqual(self.scholarship_amounts(self.september), [Decimal("500.00")])
-		listed = self.client.get(reverse("beca-list"), {"socio_id": self.socio.pk}).data[0]
-		self.assertEqual([row["periodo"] for row in listed["exclusiones"]], ["2026-08"])
+		listed = self.client.get(reverse("beca-list"), {"socio_id": self.socio.pk}).data
+		applied = next(row for row in listed if row["estado"] == EstadoBecaChoices.APLICADA)
+		self.assertEqual([row["periodo"] for row in applied["exclusiones"]], ["2026-08"])
 
 	def test_excluded_period_is_skipped_when_the_cuota_is_generated(self):
 		ExclusionBeca.objects.create(beca=self.scholarship, periodo="2026-10", motivo="Viaje", autorizado_por="Tesorería")
