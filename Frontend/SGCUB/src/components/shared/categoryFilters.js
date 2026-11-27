@@ -13,19 +13,25 @@ export const findGender = (value) => GENDERS.find((gender) => gender.value === v
 
 export const genderFilterValue = (gender) => `${GENDER_PREFIX}${gender}`
 
+const rowCategories = (row) => [
+  { id: row.categoria_id, name: row.categoria, gender: row.categoria_genero ?? '' },
+  { id: row.categoria_secundaria_id, name: row.categoria_secundaria, gender: row.categoria_secundaria_genero ?? '' },
+].filter((category) => category.id)
+
 export function categoryMatches(row, value) {
   if (value === ALL_CATEGORIES) return true
   if (value === NO_CATEGORY_VALUE) return !row.categoria_id
-  if (value.startsWith(GENDER_PREFIX)) return Boolean(row.categoria_id) && row.categoria_genero === value.slice(GENDER_PREFIX.length)
-  return String(row.categoria_id) === value
+  const categories = rowCategories(row)
+  if (value.startsWith(GENDER_PREFIX)) return categories.some((category) => category.gender === value.slice(GENDER_PREFIX.length))
+  return categories.some((category) => String(category.id) === value)
 }
 
 export function categoryOptions(rows) {
   const categories = new Map()
   rows.forEach((row) => {
-    if (row.categoria_id) {
-      categories.set(row.categoria_id, { value: String(row.categoria_id), name: row.categoria, gender: row.categoria_genero ?? '' })
-    }
+    rowCategories(row).forEach((category) => {
+      categories.set(category.id, { value: String(category.id), name: category.name, gender: category.gender })
+    })
   })
   return [...categories.values()].sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }))
 }

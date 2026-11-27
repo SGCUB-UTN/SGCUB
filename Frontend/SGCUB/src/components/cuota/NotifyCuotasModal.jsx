@@ -100,7 +100,9 @@ function SentResult({ count, onClose }) {
 }
 
 function NotifyCuotasModal({ opened, rows, period, onClose, onSent }) {
-  const recipients = useMemo(() => uniqueRecipients(rows), [rows])
+  const unpaidRows = useMemo(() => rows.filter((row) => !row.paid), [rows])
+  const paidCount = rows.length - unpaidRows.length
+  const recipients = useMemo(() => uniqueRecipients(unpaidRows), [unpaidRows])
   const reachable = recipients.filter(hasEmail)
   const excluded = recipients.filter((recipient) => !hasEmail(recipient))
   const [subject, setSubject] = useState(() => defaultSubject(period))
@@ -155,7 +157,15 @@ function NotifyCuotasModal({ opened, rows, period, onClose, onSent }) {
                   showEmail
                 />
               ) : (
-                <Text size="sm" c="dimmed">Ninguno de los seleccionados tiene email cargado.</Text>
+                <Text size="sm" c="dimmed">{unpaidRows.length === 0 ? 'No hay cuotas impagas para notificar.' : 'Ninguno de los socios tiene email cargado.'}</Text>
+              )}
+              {paidCount > 0 && (
+                <p className="flex items-start gap-2 px-3 py-2.5 rounded border border-outline-variant/30 text-sm text-on-surface-variant">
+                  <span className="material-symbols-outlined shrink-0 text-emerald-700" style={{ fontSize: 20 }} aria-hidden="true">check_circle</span>
+                  {paidCount === 1
+                    ? '1 cuota seleccionada ya está paga: no se notifica.'
+                    : `${formatCount(paidCount)} cuotas seleccionadas ya están pagas: no se notifican.`}
+                </p>
               )}
               {excluded.length > 0 && (
                 <RecipientSection

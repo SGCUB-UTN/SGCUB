@@ -16,8 +16,10 @@ import TableTabs from '../shared/TableTabs'
 import { tabPanelId } from '../shared/tabIds'
 import { matchesSearch } from '../shared/search'
 import { formatDni } from '../personas/format'
-import { CUOTA_STATES, cuotaStateBadgeClass } from '../finanzas/cuotaStates'
-import { GENERO_BADGE_CLASSES } from '../categorias/categoriaFormat'
+import { CUOTA_STATES, CUOTA_STATE_TONES, cuotaStateLabel, cuotaStateShortLabel, isOverdue } from '../finanzas/cuotaStates'
+import StatusBadge from '../shared/StatusBadge'
+import { TONOS_BADGE } from '../shared/statusTones'
+import { PrimaryButton, SecondaryButton } from '../personas/tabs/parts'
 import CategoryFilter from '../shared/CategoryFilter'
 import NotifyCuotasModal from './NotifyCuotasModal'
 import { ALL_CATEGORIES, NO_CATEGORY, categoryMatches, categoryOptions, findGender } from '../shared/categoryFilters'
@@ -36,15 +38,30 @@ import {
 } from './cuotaPeriod'
 
 const ALL = 'all'
-const PENDING = 'pending'
+const ON_TIME = 'on_time'
+const OVERDUE = 'overdue'
 const PAID = 'paid'
 const COLUMN_COUNT = 5
 
 const TABS = [
   { value: ALL, label: 'Todas', matches: () => true, emptyText: 'No hay cuotas en este período.' },
-  { value: PENDING, label: 'Pendientes', matches: (row) => !row.paid, emptyText: 'No hay cuotas pendientes en este período.', badgeClass: 'bg-error-container text-on-error-container' },
+  { value: ON_TIME, label: 'En fecha', matches: (row) => !row.paid && !isOverdue(row), emptyText: 'No hay cuotas en fecha en este período.' },
+  { value: OVERDUE, label: 'Vencidas', matches: (row) => !row.paid && isOverdue(row), emptyText: 'No hay cuotas vencidas en este período.', alertWhenCounted: true },
   { value: PAID, label: 'Pagas', matches: (row) => row.paid, emptyText: 'No hay cuotas pagas en este período.' },
 ]
+
+const isOverdueRow = TABS.find((option) => option.value === OVERDUE).matches
+
+function CuotaStateBadge({ row }) {
+  const state = row.paid ? CUOTA_STATES.PAGA : row.estado_cuota
+  if (!state) return null
+  return (
+    <StatusBadge
+      size="md"
+      badge={{ label: cuotaStateShortLabel(state), title: cuotaStateLabel(state), tono: CUOTA_STATE_TONES[state] ?? 'neutro' }}
+    />
+  )
+}
 const HEADER_CLASS = 'py-3 px-4'
 
 const TYPE_FILTERS = [
@@ -65,7 +82,6 @@ const INITIAL_SORT = { columna: 'name', direccion: 'asc' }
 
 const BADGE_CLASS = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap'
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/40 text-on-surface rounded text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
-const NOTIFY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 h-10 px-3 w-full sm:w-auto shrink-0 bg-primary text-on-primary hover:bg-primary/90 rounded text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed'
 const DELETE_BUTTON_CLASS = 'inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-base font-semibold text-error hover:bg-error-container/60 transition-colors cursor-pointer'
 const CHECKBOX_CLASS = 'w-4 h-4 accent-primary cursor-pointer'
 const TABLE_ID = 'period-cuotas'
@@ -80,17 +96,23 @@ const sumBy = (rows, key) => rows.reduce((total, row) => total + Number(row[key]
 
 const stopRowToggle = (event) => event.stopPropagation()
 
+const categoryText = (name, genero) => {
+  const gender = findGender(genero)
+  return gender ? `${name} (${gender.value})` : name
+}
+
+const categoryTitle = (name, genero) => {
+  const gender = findGender(genero)
+  return gender ? `${name} ${gender.label.toLocaleLowerCase('es')}` : name
+}
+
 function CategoryCell({ row }) {
   if (!row.categoria) return <span className="text-on-surface-variant">{NO_CATEGORY}</span>
-  const gender = findGender(row.categoria_genero)
+  const categories = [[row.categoria, row.categoria_genero]]
+  if (row.categoria_secundaria) categories.push([row.categoria_secundaria, row.categoria_secundaria_genero])
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      {row.categoria}
-      {gender && (
-        <span className={`${BADGE_CLASS} ${GENERO_BADGE_CLASSES[gender.value]}`} title={gender.label}>
-          {gender.shortLabel}
-        </span>
-      )}
+    <span title={categories.map(([name, genero]) => categoryTitle(name, genero)).join(', ')}>
+      {categories.map(([name, genero]) => categoryText(name, genero)).join(', ')}
     </span>
   )
 }
@@ -176,7 +198,7 @@ export default function PeriodCuotasTable({
   const [tab, setTab] = useState(ALL)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [expandedId, setExpandedId] = useState(null)
-  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyRows, setNotifyRows] = useState(null)
 
   const typeCounts = useMemo(() => ({ ...countBy(rows, 'type'), [ALL]: rows.length }), [rows])
   const categories = useMemo(() => categoryOptions(rows), [rows])
@@ -209,7 +231,8 @@ export default function PeriodCuotasTable({
   const { visibleRows, withPageReset, paginationProps } = usePagination(sorted)
   const sortAndReset = withPageReset(sortBy)
 
-  const selectedRows = useMemo(() => rows.filter((row) => selectedIds.has(row.cuota_id)), [rows, selectedIds])
+  const selectedRows = useMemo(() => filtered.filter((row) => selectedIds.has(row.cuota_id)), [filtered, selectedIds])
+  const overdueRows = useMemo(() => matching.filter(isOverdueRow), [matching])
 
   const toggleRow = (cuotaId) => setSelectedIds((current) => {
     const next = new Set(current)
@@ -270,17 +293,16 @@ export default function PeriodCuotasTable({
           />
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 xl:shrink-0">
-          <button
-            type="button"
-            onClick={() => setNotifyOpen(true)}
-            disabled={selectedRows.length === 0}
-            className={NOTIFY_BUTTON_CLASS}
-            title={selectedRows.length === 0 ? 'Seleccioná las cuotas de los socios a notificar' : 'Notifica por email a los socios de las cuotas seleccionadas'}
+          <PrimaryButton
+            icon="notifications"
+            onClick={() => setNotifyRows(overdueRows)}
+            disabled={overdueRows.length === 0}
+            title={overdueRows.length === 0 ? 'No hay cuotas vencidas con la búsqueda y los filtros actuales' : undefined}
           >
-            <Icon name="notifications" />
-            Notificar
-            {selectedRows.length > 0 && <span className="tabular-nums">({formatCount(selectedRows.length)})</span>}
-          </button>
+            {overdueRows.length === 0
+              ? 'Sin cuotas vencidas'
+              : `Notificar ${overdueRows.length === 1 ? 'al vencido' : `a los ${formatCount(overdueRows.length)} vencidos`}`}
+          </PrimaryButton>
           <button
             type="button"
             onClick={() => downloadCuotasCsv(sorted, period)}
@@ -297,9 +319,16 @@ export default function PeriodCuotasTable({
       <TableTabs
         id={TABLE_ID}
         label="Estado de pago"
-        options={TABS.map((option) => ({ ...option, count: tabCounts[option.value] ?? 0 }))}
+        options={TABS.map((option) => ({
+          ...option,
+          count: tabCounts[option.value] ?? 0,
+          badgeClass: option.alertWhenCounted && tabCounts[option.value] > 0 ? TONOS_BADGE.error : undefined,
+        }))}
         value={tab}
-        onChange={withPageReset(setTab)}
+        onChange={withPageReset((nextTab) => {
+          setTab(nextTab)
+          setSelectedIds(new Set())
+        })}
       />
 
       {selectedRows.length > 0 && (
@@ -310,6 +339,9 @@ export default function PeriodCuotasTable({
           detail={<>Saldo <strong className="font-semibold text-on-surface tabular-nums">{formatMoney(sumBy(selectedRows, 'pending'))}</strong></>}
           onClear={() => setSelectedIds(new Set())}
         >
+          <SecondaryButton icon="notifications" onClick={() => setNotifyRows(selectedRows)}>
+            Notificar
+          </SecondaryButton>
           <ExportMenu
             title={`Cuotas de ${formatPeriod(period)}: selección`}
             filename={`cuotas-${period}-seleccion`}
@@ -382,10 +414,11 @@ export default function PeriodCuotasTable({
                     </div>
                   </td>
                   <td className="py-3 px-4"><CategoryCell row={row} /></td>
-                  <td className="py-3 px-4 sm:pr-5 text-right whitespace-nowrap font-semibold">
-                    {row.paid
-                      ? <span className={`${BADGE_CLASS} ${cuotaStateBadgeClass(CUOTA_STATES.PAGA)}`}>Pagada</span>
-                      : formatMoney(row.pending)}
+                  <td className="py-3 px-4 sm:pr-5 text-right whitespace-nowrap">
+                    <div className="flex flex-col items-end gap-1">
+                      {!row.paid && <span className="font-semibold tabular-nums text-on-surface">{formatMoney(row.pending)}</span>}
+                      <CuotaStateBadge row={row} />
+                    </div>
                   </td>
                 </tr>
                 {expanded && (
@@ -407,12 +440,12 @@ export default function PeriodCuotasTable({
 
       <TablePagination id="period-cuotas-rows-per-page" {...paginationProps} />
 
-      {notifyOpen && (
+      {notifyRows && (
         <NotifyCuotasModal
           opened
-          rows={selectedRows}
+          rows={notifyRows}
           period={period}
-          onClose={() => setNotifyOpen(false)}
+          onClose={() => setNotifyRows(null)}
           onSent={() => setSelectedIds(new Set())}
         />
       )}

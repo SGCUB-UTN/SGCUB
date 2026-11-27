@@ -30,14 +30,6 @@ export const CUOTA_STATE_TONES = {
   [CUOTA_STATES.PAGA]: 'ok',
 }
 
-const CUOTA_STATE_BADGE_CLASSES = {
-  [CUOTA_STATES.EN_FECHA]: 'bg-sky-50 text-sky-700 border-sky-200',
-  [CUOTA_STATES.VENCIDA_1]: 'bg-amber-50 text-amber-800 border-amber-200',
-  [CUOTA_STATES.VENCIDA_2]: 'bg-error-container text-on-error-container border-error/20',
-  [CUOTA_STATES.PAGA]: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-}
-const DEFAULT_BADGE_CLASS = 'bg-surface-container text-on-surface-variant border-outline-variant/40'
-
 export const CUOTA_STATE_ORDER = {
   [CUOTA_STATES.VENCIDA_2]: 0,
   [CUOTA_STATES.VENCIDA_1]: 1,
@@ -56,8 +48,6 @@ export const matchesStateFilter = (cuota, filter) => (
 export const cuotaStateLabel = (state) => CUOTA_STATE_LABELS[state] ?? state ?? '—'
 
 export const cuotaStateShortLabel = (state) => CUOTA_STATE_SHORT_LABELS[state] ?? cuotaStateLabel(state)
-
-export const cuotaStateBadgeClass = (state) => CUOTA_STATE_BADGE_CLASSES[state] ?? DEFAULT_BADGE_CLASS
 
 export const countByState = (cuotas, state) => cuotas.filter((cuota) => cuotaState(cuota) === state).length
 
