@@ -67,6 +67,12 @@ const EXCESS_OPTIONS = [
 ]
 
 // Default observation of a payment that settles a reverted one
+const excessReason = (reversal) => {
+  if (!reversal) return ''
+  if (!reversal.lastPeriod) return `Sobrante del pago anulado ${reversal.codigo}`
+  return `Sobrante del pago anulado de ${formatPeriod(reversal.lastPeriod).replace(' de ', ' ')}.`
+}
+
 const reversalNote = (reversal) => {
   if (!reversal) return ''
   return reversal.otherSocio
@@ -528,7 +534,7 @@ function PagoForm({ socio = null, cuenta = null, initialCuotaIds = NO_CUOTAS, re
     reversal ? [] : [emptyPaymentRow(amountInput(firstCuotasTotal(pendingCuotas, suggestedCount)))]
   ))
   const [refundMethod, setRefundMethod] = useState('')
-  const [refundReason, setRefundReason] = useState(() => (reversal ? `Sobrante del pago anulado ${reversal.codigo}` : ''))
+  const [refundReason, setRefundReason] = useState(() => excessReason(reversal))
   const [refundResponsable, setRefundResponsable] = useState('')
   const [observacion, setObservacion] = useState('')
   const [showErrors, setShowErrors] = useState(false)

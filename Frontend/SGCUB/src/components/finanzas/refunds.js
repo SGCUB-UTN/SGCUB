@@ -9,6 +9,7 @@ export const reversalOf = (detalle) => ({
   codigo: detalle.codigo,
   total: availableToRefund(detalle),
   medios: (detalle.pago_detalle?.items_pago ?? []).map((item) => ({ medio: item.medio_de_pago, monto: Number(item.monto) })),
+  lastPeriod: detalle.periodos?.at(-1)?.periodo ?? null,
 })
 
 export const REFUND_CANCELLED = 'Cancelada'

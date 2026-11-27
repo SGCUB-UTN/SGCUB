@@ -11,7 +11,7 @@ export const formatPeriod = (period) => {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-const SHORT_MONTHS = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.']
+const SHORT_MONTHS =['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.']
 
 export const formatShortPeriod = (period) => {
   const [year, month] = String(period ?? '').split('-').map(Number)
