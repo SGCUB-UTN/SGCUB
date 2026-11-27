@@ -30,7 +30,7 @@ function EditRecategorizationForm({ result, categories, onConfirm, onCancel }) {
   const correspondingCategory = () => {
     const suggested = initialCategory(result.categoria_sugerida)
     if (suggested || !result.genero || !result.anio_nacimiento) return suggested
-    const youth = options.find((option) => option.tipo === 'juvenil')
+    const youth = options.find((option) => option.tipo !== 'mayor')
     return youth ? String(youth.categoria_id) : ''
   }
   const [mainCategory, setMainCategory] = useState(

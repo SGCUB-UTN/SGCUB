@@ -117,7 +117,7 @@ function CategoriaFormModal({ opened, onClose, onSubmit, categoria }) {
           />
           <Select
             label="Tipo"
-            description="Juveniles se recategorizan solos, salvo la de mayor edad (4ta), que siempre se revisa a mano. Mayores no se recategorizan."
+            description="Infantiles y juveniles se recategorizan solos, salvo la juvenil de mayor edad (4ta), que siempre se revisa a mano. Mayores no se recategorizan."
             data={TIPO_OPTIONS}
             value={form.tipo}
             onChange={(value) => setField('tipo', value)}
