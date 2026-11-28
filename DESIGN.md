@@ -246,7 +246,7 @@ Es una aplicación de escritorio con un **encabezado fijo** de 70px (escudo + "C
 - **Contenido:** paneles blancos apilados con un gap de 24px (`gutter`). Las tablas van "a sangre" dentro del panel.
 - **KPIs:** grillas de 2–4 columnas separadas por divisores verticales, no por tarjetas.
 - **Espaciado:** escala de 4 / 8 / 16 / 24 / 32px.
-- **Responsive:** se diseña para la PC de la secretaría. Por debajo de 700px el sidebar deja de empujar el contenido y el `main` pierde el padding lateral. Mobile no es un objetivo.
+- **Responsive:** se diseña para la PC de la secretaría; el celular es secundario y sirve sobre todo para consultar. Por debajo de 700px el sidebar deja de empujar el contenido y el `main` pierde el padding lateral. Por debajo de 640px (`max-sm`) las tablas ocultan las columnas secundarias para no desplazarse hacia los costados, los modales ocupan la pantalla completa y el pago de cuotas usa un formulario por pasos con una barra fija abajo (`PagoFormMobile`).
 
 ## Elevation & Depth
 
