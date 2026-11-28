@@ -91,8 +91,8 @@ function EffectivenessKpi({ rate }) {
         aria-label="Porcentaje cobrado de las cuotas del período"
         className="mt-auto pt-2"
       >
-        <div className="h-2 rounded bg-primary-fixed overflow-hidden">
-          <div className={`h-full rounded bg-primary ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Math.min(value ?? 0, 100)}%`) }} />
+        <div className="h-2 rounded bg-surface-container-high overflow-hidden">
+          <div className={`h-full rounded bg-emerald-600 ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Math.min(value ?? 0, 100)}%`) }} />
         </div>
       </div>
     </div>
@@ -116,7 +116,7 @@ function CuotaKpis({ cuotas }) {
       <KpiGrid columns={3} className="pt-5 border-t border-outline-variant/40">
         <EffectivenessKpi rate={cuotas.efectividad} />
         <KpiColumn label="Cuotas pagas" value={`${formatCount(cuotas.pagas)} de ${formatCount(cuotas.generadas)}`} caption="Emitidas en el período" />
-        <KpiColumn label="Recargos por mora" value={formatWholeMoney(surcharges)} title={formatMoney(surcharges)} tone={surcharges > 0 ? 'text-error' : 'text-on-surface'} caption="Aplicados en el período" />
+        <KpiColumn label="Recargos por mora" value={formatWholeMoney(surcharges)} title={formatMoney(surcharges)} caption="Aplicados en el período" />
       </KpiGrid>
     </div>
   )
@@ -140,7 +140,7 @@ function PaymentMethodRows({ methods }) {
             aria-label={`${method.nombre}: ${formatPercentage(method.porcentaje)} de lo ingresado`}
             className="h-3 rounded bg-surface-container-high overflow-hidden"
           >
-            <div className={`h-full rounded bg-primary ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Number(method.porcentaje)}%`) }} />
+            <div className={`h-full rounded bg-emerald-600 ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Number(method.porcentaje)}%`) }} />
           </div>
           <span className="col-span-2 sm:col-span-1 text-sm text-right tabular-nums text-on-surface-variant whitespace-nowrap">
             <strong className="text-on-surface">{formatPercentage(method.porcentaje)}</strong> · {formatMoney(method.monto)}

@@ -8,8 +8,8 @@ import { formatCompactMoney } from './chartFormat'
 const CHART_HEIGHT = 220
 const STAGGER_MS = 20
 const COLLECTED_DELAY_MS = 60
-const BILLED_CLASS = 'bg-primary-fixed'
-const COLLECTED_CLASS = 'bg-primary'
+const BILLED_CLASS = 'bg-emerald-100 ring-1 ring-inset ring-emerald-200'
+const COLLECTED_CLASS = 'bg-emerald-600'
 
 const shortMonth = (period) => {
   const [year, month] = period.split('-').map(Number)
@@ -79,8 +79,8 @@ export default function CollectionEvolutionChart({ evolution }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-on-surface-variant">
-        <LegendItem swatchClass={BILLED_CLASS} label="Facturado (debía ingresar)" />
-        <LegendItem swatchClass={COLLECTED_CLASS} label="Cobrado (realmente ingresó)" />
+        <LegendItem swatchClass={BILLED_CLASS} label="Total a cobrar" />
+        <LegendItem swatchClass={COLLECTED_CLASS} label="Cobrado hasta hoy" />
       </p>
 
       <div className="flex gap-2 min-w-0">

@@ -4,8 +4,8 @@ import DonutChart from '../shared/DonutChart'
 import { legendItemProps } from '../shared/donutLegend'
 
 const PARTS = [
-  { key: 'cuotas', label: 'Cuotas', amountKey: 'cuotas', countKey: 'cantidad_cuotas', fill: 'bg-primary', stroke: 'stroke-primary' },
-  { key: 'extra', label: 'Otros ingresos', amountKey: 'extra', countKey: 'cantidad_extra', fill: 'bg-chart-income', stroke: 'stroke-chart-income' },
+  { key: 'cuotas', label: 'Cuotas', amountKey: 'cuotas', countKey: 'cantidad_cuotas', fill: 'bg-chart-income', stroke: 'stroke-chart-income' },
+  { key: 'extra', label: 'Otros ingresos', amountKey: 'extra', countKey: 'cantidad_extra', fill: 'bg-tertiary', stroke: 'stroke-tertiary' },
 ]
 
 const receiptsLabel = (count) => `${formatCount(count)} ${Number(count) === 1 ? 'comprobante' : 'comprobantes'}`

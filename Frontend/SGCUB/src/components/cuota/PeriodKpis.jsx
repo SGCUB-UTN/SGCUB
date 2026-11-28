@@ -116,7 +116,6 @@ export default function PeriodKpis({ summary, rows, isLoading, error }) {
       <AmountKpi
         label="Recargos por mora"
         value={surcharges}
-        tone={surcharges > 0 ? 'text-error' : 'text-on-surface'}
         caption={plural(surchargedCount, 'cuota con recargo', 'cuotas con recargo')}
       />
       <CollectionMeter
