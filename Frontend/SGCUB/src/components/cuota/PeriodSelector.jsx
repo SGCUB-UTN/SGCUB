@@ -27,7 +27,7 @@ export default function PeriodSelector({ value, onChange }) {
   const today = currentPeriod()
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 max-sm:w-full max-sm:justify-center">
       {value !== today && (
         <button type="button" onClick={() => onChange(today)} className={TODAY_CLASS}>
           <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">calendar_today</span>

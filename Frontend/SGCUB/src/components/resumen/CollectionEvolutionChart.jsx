@@ -17,6 +17,8 @@ const shortMonth = (period) => {
   return new Date(year, month - 1, 1).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '')
 }
 
+const monthInitial = (period) => shortMonth(period).charAt(0)
+
 const niceMax = (value) => {
   if (value <= 0) return 1
   const power = 10 ** Math.floor(Math.log10(value))
@@ -155,7 +157,8 @@ export default function CollectionEvolutionChart({ evolution, period }) {
                     </div>
                   </div>
                   <span className={`text-sm uppercase tracking-wide border-b-2 ${selected ? 'border-primary font-bold text-on-surface' : `border-transparent ${active === index ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}`}>
-                    {shortMonth(row.periodo)}
+                    <span className="sm:hidden" aria-hidden="true">{monthInitial(row.periodo)}</span>
+                    <span className="max-sm:hidden">{shortMonth(row.periodo)}</span>
                   </span>
 
                   {active === index && <ChartTooltip row={row} position={tooltipPosition(index, evolution.length)} />}
