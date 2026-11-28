@@ -3560,6 +3560,8 @@ class ResumenFinancieroTests(APITestCase):
 
 		self.assertEqual(ingresos["total"], Decimal("980.00"))
 		self.assertEqual(ingresos["cuotas"], Decimal("600.00"))
+		self.assertEqual(ingresos["cantidad_cuotas"], 1)
+		self.assertEqual(ingresos["cantidad_extra"], 4)
 		self.assertEqual(
 			[(row["nombre"], row["monto"]) for row in ingresos["origen"]],
 			[("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Donación", Decimal("50.00")), ("Otros", Decimal("30.00"))],

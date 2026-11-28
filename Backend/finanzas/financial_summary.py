@@ -84,11 +84,12 @@ def extra_income_rows(receipts):
     return [{"concepto": receipt.pago.movimiento.concepto, "monto": receipt.monto_total} for receipt in incomes]
 
 
+def cuota_receipts(receipts):
+    return receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
+
+
 def cuota_income(receipts):
-    return (
-        receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
-        .aggregate(total=Sum("monto_total"))["total"] or ZERO
-    )
+    return cuota_receipts(receipts).aggregate(total=Sum("monto_total"))["total"] or ZERO
 
 
 def month_income(period):
@@ -206,6 +207,8 @@ def financial_summary(period):
             "total": total,
             "cuotas": cuotas_total,
             "extra": extra_total,
+            "cantidad_cuotas": cuota_receipts(receipts).count(),
+            "cantidad_extra": len(extra),
             "origen": income_origin(cuotas_total, extra, total),
         },
         "cuotas": cuota_kpis(first_day.strftime(PERIOD_FORMAT)),
