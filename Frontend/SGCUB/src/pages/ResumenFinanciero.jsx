@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { downloadFinancialSummaryPdf } from '../api/resumenFinanciero'
 import PeriodSelector from '../components/cuota/PeriodSelector'
 import { formatCount, formatMoney, formatPercentage, formatWholeMoney, isValidPeriod } from '../components/cuota/cuotaPeriod'
@@ -16,6 +16,7 @@ import SectionHeading from '../components/shared/SectionHeading'
 import StackedBar from '../components/shared/StackedBar'
 import { colorSeries, segmentKeyOf, stackSegments } from '../components/shared/stackedBarSeries'
 import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEADING_CLASS } from '../components/shared/panel'
+import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
 
@@ -78,14 +79,14 @@ function EffectivenessKpi({ rate }) {
   const value = rate == null ? null : Number(rate)
   return (
     <div className="min-w-0 h-full flex flex-col">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">Efectividad</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-on-surface-variant">% cobrado</h3>
       <p className="mt-1 text-2xl font-bold tabular-nums leading-tight text-on-surface">{value == null ? '—' : formatPercentage(value)}</p>
       <div
         role="meter"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={value ?? 0}
-        aria-label="Efectividad de la cobranza"
+        aria-label="Porcentaje cobrado de las cuotas del período"
         className="mt-auto pt-2"
       >
         <div className="h-2 rounded bg-primary-fixed overflow-hidden">
@@ -96,20 +97,24 @@ function EffectivenessKpi({ rate }) {
   )
 }
 
+function BasisNote({ children }) {
+  return <p className="px-4 sm:px-5 py-3 border-t border-outline-variant/30 text-base text-on-surface-variant">{children}</p>
+}
+
 function CuotaKpis({ cuotas }) {
   const debt = Number(cuotas.en_deuda)
   const surcharges = Number(cuotas.recargos)
   return (
     <div className="flex flex-col">
       <KpiGrid columns={3} className="pb-5">
-        <KpiColumn label="Facturado esperado" value={formatWholeMoney(cuotas.esperado)} title={formatMoney(cuotas.esperado)} caption="Lo que debía ingresar" />
-        <KpiColumn label="Cobranza real" value={formatWholeMoney(cuotas.cobrado)} title={formatMoney(cuotas.cobrado)} tone="text-emerald-700" caption="Lo que se cobró" />
-        <KpiColumn label="En deuda" value={formatWholeMoney(debt)} title={formatMoney(debt)} tone={debt > 0 ? 'text-error' : 'text-on-surface'} caption="Falta cobrar" />
+        <KpiColumn label="Total a cobrar" value={formatWholeMoney(cuotas.esperado)} title={formatMoney(cuotas.esperado)} caption="Cuotas más recargos" />
+        <KpiColumn label="Cobrado" value={formatWholeMoney(cuotas.cobrado)} title={formatMoney(cuotas.cobrado)} tone="text-emerald-700" caption="Hasta hoy" />
+        <KpiColumn label="Pendiente" value={formatWholeMoney(debt)} title={formatMoney(debt)} tone={debt > 0 ? 'text-error' : 'text-on-surface'} caption="Falta cobrar" />
       </KpiGrid>
       <KpiGrid columns={3} className="pt-5 border-t border-outline-variant/40">
         <EffectivenessKpi rate={cuotas.efectividad} />
-        <KpiColumn label="Volumen" value={`${formatCount(cuotas.pagas)} / ${formatCount(cuotas.generadas)}`} caption="Cuotas pagas / generadas" />
-        <KpiColumn label="Recargos" value={formatWholeMoney(surcharges)} title={formatMoney(surcharges)} tone={surcharges > 0 ? 'text-error' : 'text-on-surface'} caption="Aplicados por mora" />
+        <KpiColumn label="Cuotas pagas" value={`${formatCount(cuotas.pagas)} de ${formatCount(cuotas.generadas)}`} caption="Emitidas en el período" />
+        <KpiColumn label="Recargos por mora" value={formatWholeMoney(surcharges)} title={formatMoney(surcharges)} tone={surcharges > 0 ? 'text-error' : 'text-on-surface'} caption="Aplicados en el período" />
       </KpiGrid>
     </div>
   )
@@ -361,14 +366,36 @@ function ResumenFinanciero() {
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-1 lg:grid-cols-[fit-content(40%)_1fr] gap-5">
             <section className={PANEL_CLASS} aria-labelledby="income-origin-title">
-              <SectionHeading id="income-origin-title" icon="donut_large" title="Origen de los ingresos" className={HEADING_CLASS} />
+              <SectionHeading
+                id="income-origin-title"
+                icon="donut_large"
+                title={`Ingresos de ${formatPeriod(period)}`}
+                className={HEADING_CLASS}
+                actions={(
+                  <Link to={`/caja?periodo=${period}`} className={`${TEXT_BUTTON_CLASS} text-base`}>
+                    Ver en caja
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
+                  </Link>
+                )}
+              />
               <div className={BODY_CLASS}>
                 <IncomeOriginChart income={data.ingresos} />
               </div>
             </section>
 
             <section className={PANEL_CLASS} aria-labelledby="cuota-kpis-title">
-              <SectionHeading id="cuota-kpis-title" icon="monitoring" title={`Análisis de cuotas de ${formatPeriod(period)}`} className={HEADING_CLASS} />
+              <SectionHeading
+                id="cuota-kpis-title"
+                icon="monitoring"
+                title={`Cuotas de ${formatPeriod(period)}`}
+                className={HEADING_CLASS}
+                actions={(
+                  <Link to={`/finanzas/cuotas?periodo=${period}`} className={`${TEXT_BUTTON_CLASS} text-base`}>
+                    Ver cuotas
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_forward</span>
+                  </Link>
+                )}
+              />
               <div className={BODY_CLASS}>
                 <CuotaKpis cuotas={data.cuotas} />
               </div>
@@ -389,19 +416,6 @@ function ResumenFinanciero() {
             <ExtraIncomeBreakdown extra={data.ingresos_extra} />
           </CollapsibleSection>
 
-          <section className={PANEL_CLASS} aria-labelledby="payment-methods-title">
-            <SectionHeading
-              id="payment-methods-title"
-              icon="credit_card"
-              title="Análisis de ingresos por medio de pago"
-              className={HEADING_CLASS}
-              actions={<TotalLabel amount={data.medios_de_pago.total} />}
-            />
-            <div className={BODY_CLASS}>
-              <PaymentMethodRows methods={data.medios_de_pago} />
-            </div>
-          </section>
-
           <CollapsibleSection
             id="refunds"
             icon="currency_exchange"
@@ -414,10 +428,24 @@ function ResumenFinanciero() {
             onToggle={() => toggle('refunds')}
           >
             <BreakdownTable label="Devoluciones" total={data.devoluciones.total} rows={refundRows(data.devoluciones)} />
-            <p className="px-4 sm:px-5 py-3 border-t border-outline-variant/30 text-sm text-on-surface-variant">
-              Las devoluciones no restan de los ingresos: el dinero devuelto nunca se registró como ingreso o salió de un comprobante anulado.
-            </p>
+            <BasisNote>
+              Las devoluciones no restan de los ingresos. Una devolución manual devuelve dinero que nunca se registró como ingreso, y una nota de crédito sale de un comprobante que ya está anulado.
+            </BasisNote>
           </CollapsibleSection>
+
+          <section className={PANEL_CLASS} aria-labelledby="payment-methods-title">
+            <SectionHeading
+              id="payment-methods-title"
+              icon="credit_card"
+              title="Análisis de ingresos por medio de pago"
+              className={HEADING_CLASS}
+              actions={<TotalLabel amount={data.medios_de_pago.total} />}
+            />
+            <div className={BODY_CLASS}>
+              <PaymentMethodRows methods={data.medios_de_pago} />
+            </div>
+            <BasisNote>Con qué medio se cobraron los ingresos de {formatPeriod(period)}.</BasisNote>
+          </section>
 
           <SectionDivider>Contexto histórico</SectionDivider>
 
@@ -426,6 +454,7 @@ function ResumenFinanciero() {
             <div className={BODY_CLASS}>
               <CollectionEvolutionChart evolution={data.evolucion} />
             </div>
+            <BasisNote>Para cada mes: lo emitido en cuotas y lo cobrado de ellas hasta hoy.</BasisNote>
           </section>
         </div>
       )}
