@@ -7,7 +7,8 @@ import { ROW_HOVER, WIDTH_MOTION, grown } from '../components/shared/chartMotion
 import { HeadingSkeleton, LineSkeletons, RingSkeleton, SkeletonBlock, SkeletonStatus } from '../components/shared/Skeleton'
 import useEntered from '../hooks/useEntered'
 import { getErrorMessage } from '../components/personas/format'
-import CollectionEvolutionChart from '../components/resumen/CollectionEvolutionChart'
+import CollectionEvolutionChart, { CollectionEvolutionTable } from '../components/resumen/CollectionEvolutionChart'
+import SegmentedControl from '../components/shared/SegmentedControl'
 import IncomeOriginChart from '../components/resumen/IncomeOriginChart'
 import { KpiColumn, KpiGrid } from '../components/shared/Kpi'
 import PageHeader from '../components/shared/PageHeader'
@@ -152,7 +153,7 @@ function PaymentMethodRows({ methods }) {
 }
 
 const BREAKDOWN_CELL_Y = 'py-2.5'
-const BREAKDOWN_CELL_X = 'px-4 sm:px-5'
+const BREAKDOWN_CELL_X = 'px-3 sm:px-5'
 
 function RowMarker({ swatchClass, icon }) {
   if (swatchClass) return <span className={`w-2.5 h-2.5 shrink-0 rounded-sm ${swatchClass}`} aria-hidden="true" />
@@ -183,16 +184,16 @@ function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, 
       {...interaction}
       className={`${strong ? 'bg-surface-container-low' : 'border-t border-outline-variant/30'} transition-[opacity,background-color] duration-150 focus:outline-none focus-visible:bg-surface-container-low ${highlightState(segmentKey, activeKey)}`}
     >
-      <th scope="row" className={`${BREAKDOWN_CELL_Y} pr-4 sm:pr-5 ${nested ? 'pl-10 sm:pl-11' : 'pl-4 sm:pl-5'} text-left ${labelTone}`}>
+      <th scope="row" className={`${BREAKDOWN_CELL_Y} pr-2 sm:pr-5 ${nested ? 'pl-8 sm:pl-11' : 'pl-4 sm:pl-5'} text-left ${labelTone}`}>
         <span className="flex items-center gap-2.5">
           <RowMarker swatchClass={swatchClass} icon={icon} />
           {label}
         </span>
       </th>
-      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} w-28 text-right tabular-nums ${strong ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-28 text-right tabular-nums ${strong ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}>
         {formatPercentage(porcentaje)}
       </td>
-      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} w-44 text-right tabular-nums text-on-surface whitespace-nowrap ${strong ? 'font-bold' : nested ? '' : 'font-semibold'}`}>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-44 text-right tabular-nums text-on-surface whitespace-nowrap ${strong ? 'font-bold' : nested ? '' : 'font-semibold'}`}>
         {formatMoney(monto)}
       </td>
     </tr>
@@ -317,6 +318,7 @@ function ResumenFinanciero() {
   const { data, isLoading, error, reload } = useResumenFinanciero(period)
   const { showToast } = useToast()
   const [expanded, setExpanded] = useState({ incomes: false, refunds: false })
+  const [evolutionView, setEvolutionView] = useState('chart')
   const [isExporting, setIsExporting] = useState(false)
 
   const changePeriod = (value) => setSearchParams((current) => {
@@ -453,10 +455,27 @@ function ResumenFinanciero() {
           <SectionDivider>Contexto histórico</SectionDivider>
 
           <section className={PANEL_CLASS} aria-labelledby="evolution-title">
-            <SectionHeading id="evolution-title" icon="trending_up" title="Evolución anual de cobranza (cuotas)" className={HEADING_CLASS} />
-            <div className={BODY_CLASS}>
-              <CollectionEvolutionChart evolution={data.evolucion} />
-            </div>
+            <SectionHeading
+              id="evolution-title"
+              icon="trending_up"
+              title="Evolución anual de cobranza (cuotas)"
+              className={HEADING_CLASS}
+              actions={(
+                <SegmentedControl
+                  label="Ver la evolución como"
+                  options={[{ value: 'chart', label: 'Gráfico' }, { value: 'table', label: 'Tabla' }]}
+                  value={evolutionView}
+                  onChange={setEvolutionView}
+                />
+              )}
+            />
+            {evolutionView === 'chart' ? (
+              <div className={BODY_CLASS}>
+                <CollectionEvolutionChart evolution={data.evolucion} period={period} />
+              </div>
+            ) : (
+              <CollectionEvolutionTable evolution={data.evolucion} period={period} />
+            )}
             <BasisNote>Para cada mes: lo emitido en cuotas y lo cobrado de ellas hasta hoy.</BasisNote>
           </section>
         </div>
