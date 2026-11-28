@@ -21,56 +21,43 @@ import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
 import useToast from '../hooks/useToast'
+import { SecondaryButton } from '../components/personas/tabs/parts'
 import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
-const EXPORT_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded text-sm font-semibold text-on-surface bg-surface-container-lowest hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
-const TOGGLE_BUTTON_CLASS = 'inline-flex items-center justify-center w-8 h-8 rounded-md text-primary hover:bg-primary/5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
 
 function TotalLabel({ amount }) {
   return (
-    <span className="text-sm text-on-surface-variant">
-      Total: <strong className="text-base tabular-nums text-on-surface">{formatMoney(amount)}</strong>
+    <span className="text-base text-on-surface-variant">
+      Total: <strong className="tabular-nums text-on-surface">{formatMoney(amount)}</strong>
     </span>
   )
 }
 
-function ToggleButton({ expanded, controls, label }) {
-  const action = `${expanded ? 'Ocultar' : 'Desplegar'} ${label}`
-  return (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      aria-controls={controls}
-      aria-label={action}
-      title={action}
-      className={TOGGLE_BUTTON_CLASS}
-    >
-      <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 22 }} aria-hidden="true">expand_more</span>
-    </button>
-  )
-}
-
-function CollapsibleSection({ id, icon, title, total, label, expanded, isEmpty, emptyText, onToggle, children }) {
+function CollapsibleSection({ id, icon, title, total, expanded, isEmpty, emptyText, onToggle, children }) {
   const contentId = `${id}-content`
   return (
     <section className={PANEL_CLASS} aria-labelledby={`${id}-title`}>
-      <div onClick={onToggle}>
-        <SectionHeading
-          id={`${id}-title`}
-          icon={icon}
-          title={title}
-          className={`${expanded ? HEADING_CLASS : 'px-4 sm:px-5'} cursor-pointer transition-colors hover:bg-surface-container`}
-          actions={(
-            <>
-              <TotalLabel amount={total} />
-              <ToggleButton expanded={expanded} controls={contentId} label={label} />
-            </>
-          )}
-        />
-      </div>
+      <h2 id={`${id}-title`} className="m-0">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={onToggle}
+          className={`w-full min-h-14 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 bg-surface-container-low text-left cursor-pointer transition-colors hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 ${expanded ? 'border-b border-outline-variant/30' : ''}`}
+        >
+          <span className="flex min-w-0 items-center gap-2 text-base font-semibold text-on-surface">
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: 22 }} aria-hidden="true">{icon}</span>
+            {title}
+          </span>
+          <span className="flex items-center gap-3 shrink-0">
+            <TotalLabel amount={total} />
+            <span className={`material-symbols-outlined text-primary transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 24 }} aria-hidden="true">expand_more</span>
+          </span>
+        </button>
+      </h2>
       {expanded && (
         <div id={contentId}>
-          {isEmpty ? <p className="px-4 sm:px-5 py-4 text-sm text-on-surface-variant">{emptyText}</p> : children}
+          {isEmpty ? <p className="px-4 sm:px-5 py-4 text-base text-on-surface-variant">{emptyText}</p> : children}
         </div>
       )}
     </section>
@@ -126,13 +113,13 @@ function CuotaKpis({ cuotas }) {
 function PaymentMethodRows({ methods }) {
   const entered = useEntered()
   if (!methods.medios.length) {
-    return <p className="text-sm text-on-surface-variant">No hay medios de pago configurados.</p>
+    return <p className="text-base text-on-surface-variant">No hay medios de pago configurados.</p>
   }
   return (
     <ul className="flex flex-col gap-1">
       {methods.medios.map((method) => (
         <li key={method.codigo} className={`grid grid-cols-[minmax(0,8rem)_1fr] sm:grid-cols-[10rem_1fr_auto] items-center gap-x-4 gap-y-1 ${ROW_HOVER}`}>
-          <span className="text-sm font-semibold text-on-surface truncate" title={method.nombre}>{method.nombre}</span>
+          <span className="text-base font-semibold text-on-surface truncate" title={method.nombre}>{method.nombre}</span>
           <div
             role="meter"
             aria-valuemin={0}
@@ -143,7 +130,7 @@ function PaymentMethodRows({ methods }) {
           >
             <div className={`h-full rounded bg-emerald-600 ${WIDTH_MOTION}`} style={{ width: grown(entered, `${Number(method.porcentaje)}%`) }} />
           </div>
-          <span className="col-span-2 sm:col-span-1 text-sm text-right tabular-nums text-on-surface-variant whitespace-nowrap">
+          <span className="col-span-2 sm:col-span-1 text-base text-right tabular-nums text-on-surface-variant whitespace-nowrap">
             <strong className="text-on-surface">{formatPercentage(method.porcentaje)}</strong> · {formatMoney(method.monto)}
           </span>
         </li>
@@ -202,7 +189,7 @@ function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, 
 
 function BreakdownTable({ label, total, rows, activeKey, onActiveChange }) {
   return (
-    <table className="w-full text-sm">
+    <table className="w-full text-base">
       <thead className="sr-only">
         <tr>
           <th scope="col">Tipo</th>
@@ -346,10 +333,9 @@ function ResumenFinanciero() {
         breadcrumb={[{ label: 'Finanzas' }, { label: 'Resumen financiero' }]}
         title="Resumen financiero"
         actions={(
-          <button type="button" disabled={isLoading || isExporting} onClick={handleExport} className={EXPORT_BUTTON_CLASS}>
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">{isExporting ? 'hourglass_top' : 'download'}</span>
-            {isExporting ? 'Generando...' : 'Exportar informe'}
-          </button>
+          <SecondaryButton icon="picture_as_pdf" disabled={isLoading || isExporting} onClick={handleExport}>
+            {isExporting ? 'Generando PDF...' : 'Descargar PDF'}
+          </SecondaryButton>
         )}
       />
 
@@ -412,7 +398,6 @@ function ResumenFinanciero() {
             icon="point_of_sale"
             title="Otros ingresos"
             total={data.ingresos_extra.total}
-            label="otros ingresos"
             expanded={expanded.incomes}
             isEmpty={data.ingresos_extra.conceptos.length === 0}
             emptyText="No hubo otros ingresos en el período."
@@ -426,7 +411,6 @@ function ResumenFinanciero() {
             icon="currency_exchange"
             title="Devoluciones"
             total={data.devoluciones.total}
-            label="devoluciones"
             expanded={expanded.refunds}
             isEmpty={Number(data.devoluciones.total) === 0}
             emptyText="No hubo devoluciones en el período."
