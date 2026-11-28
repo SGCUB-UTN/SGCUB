@@ -154,9 +154,8 @@ const highlightState = (segmentKey, activeKey) => {
 }
 
 function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, icon, segmentKey, activeKey = null, onActiveChange }) {
-  const strong = variant === 'total'
   const nested = variant === 'nested'
-  const labelTone = strong ? 'font-bold text-on-surface' : nested ? 'font-normal text-on-surface-variant' : 'font-semibold text-on-surface'
+  const labelTone = nested ? 'font-normal text-on-surface-variant' : 'font-semibold text-on-surface'
   const interaction = segmentKey && onActiveChange
     ? {
       tabIndex: 0,
@@ -169,7 +168,7 @@ function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, 
   return (
     <tr
       {...interaction}
-      className={`${strong ? 'bg-surface-container-low' : 'border-t border-outline-variant/30'} transition-[opacity,background-color] duration-150 focus:outline-none focus-visible:bg-surface-container-low ${highlightState(segmentKey, activeKey)}`}
+      className={`border-t border-outline-variant/30 first:border-t-0 transition-[opacity,background-color] duration-150 focus:outline-none focus-visible:bg-surface-container-low ${highlightState(segmentKey, activeKey)}`}
     >
       <th scope="row" className={`${BREAKDOWN_CELL_Y} pr-2 sm:pr-5 ${nested ? 'pl-8 sm:pl-11' : 'pl-4 sm:pl-5'} text-left ${labelTone}`}>
         <span className="flex items-center gap-2.5">
@@ -177,17 +176,17 @@ function BreakdownRow({ label, porcentaje, monto, variant = 'row', swatchClass, 
           {label}
         </span>
       </th>
-      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-28 text-right tabular-nums ${strong ? 'font-bold text-on-surface' : 'text-on-surface-variant'}`}>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-28 text-right tabular-nums text-on-surface-variant`}>
         {formatPercentage(porcentaje)}
       </td>
-      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-44 text-right tabular-nums text-on-surface whitespace-nowrap ${strong ? 'font-bold' : nested ? '' : 'font-semibold'}`}>
+      <td className={`${BREAKDOWN_CELL_Y} ${BREAKDOWN_CELL_X} sm:w-44 text-right tabular-nums text-on-surface whitespace-nowrap ${nested ? '' : 'font-semibold'}`}>
         {formatMoney(monto)}
       </td>
     </tr>
   )
 }
 
-function BreakdownTable({ label, total, rows, activeKey, onActiveChange }) {
+function BreakdownTable({ rows, activeKey, onActiveChange }) {
   return (
     <table className="w-full text-base">
       <thead className="sr-only">
@@ -198,7 +197,6 @@ function BreakdownTable({ label, total, rows, activeKey, onActiveChange }) {
         </tr>
       </thead>
       <tbody>
-        <BreakdownRow label={label} porcentaje={100} monto={total} variant="total" />
         {rows.map(({ key, ...row }) => <BreakdownRow key={key} {...row} activeKey={activeKey} onActiveChange={onActiveChange} />)}
       </tbody>
     </table>
@@ -249,7 +247,7 @@ function ExtraIncomeBreakdown({ extra }) {
           onActiveChange={setActiveKey}
         />
       </div>
-      <BreakdownTable label="Otros ingresos" total={extra.total} rows={rows} activeKey={activeKey} onActiveChange={setActiveKey} />
+      <BreakdownTable rows={rows} activeKey={activeKey} onActiveChange={setActiveKey} />
     </>
   )
 }
@@ -408,7 +406,7 @@ function ResumenFinanciero() {
 
           <CollapsibleSection
             id="refunds"
-            icon="currency_exchange"
+            icon="assignment_return"
             title="Devoluciones"
             total={data.devoluciones.total}
             expanded={expanded.refunds}
@@ -416,7 +414,7 @@ function ResumenFinanciero() {
             emptyText="No hubo devoluciones en el período."
             onToggle={() => toggle('refunds')}
           >
-            <BreakdownTable label="Devoluciones" total={data.devoluciones.total} rows={refundRows(data.devoluciones)} />
+            <BreakdownTable rows={refundRows(data.devoluciones)} />
             <BasisNote>
               Las devoluciones no restan de los ingresos. Una devolución manual devuelve dinero que nunca se registró como ingreso, y una nota de crédito sale de un comprobante que ya está anulado.
             </BasisNote>

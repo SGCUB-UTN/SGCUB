@@ -52,7 +52,6 @@ def amount_share(rows, total):
 
 
 def month_receipts(first_day):
-    """Receipts issued in the month and still in force: the money that came in (cash basis)."""
     return Comprobante.objects.filter(
         estado=EstadoComprobanteChoices.VIGENTE,
         fecha_emision__year=first_day.year,
@@ -141,7 +140,6 @@ def previous_periods(first_day, months=EVOLUTION_MONTHS):
 
 
 def collection_evolution(first_day):
-    """Billed vs collected of the cuotas of the last twelve periods, up to the selected one."""
     periods = previous_periods(first_day)
     cuotas = list(Cuota.objects.filter(periodo__in=periods, movimiento__isnull=False).select_related("movimiento"))
     pending = pending_amounts(cuotas)
@@ -162,8 +160,6 @@ def collection_evolution(first_day):
 
 
 def financial_summary(period):
-    """Monthly financial summary. Income, payment methods and refunds follow the money that came in
-    or went out in the month; the cuota indicators and the evolution follow the cuota period."""
     first_day = parse_period(period)
     receipts = month_receipts(first_day)
     cuotas_total = cuota_income(receipts)
