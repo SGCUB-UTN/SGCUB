@@ -6,9 +6,7 @@ import { cancellationSentence } from './cancellations'
 import { claseInput } from '../socios/socioForm'
 import { SelectConFlecha } from '../socios/SocioFormFields'
 
-// Building blocks shared by the finance modals (payment and benefit forms) so they look the same
 
-// Hides the browser's increment arrows on number inputs for money and percentages
 export const NO_SPINNER_CLASS = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 export const SUMMARY_GROUP_CLASS = 'mb-1 text-sm font-semibold uppercase tracking-wider text-outline'
@@ -171,8 +169,6 @@ export function FormSection({ icon, title, description, disabled = false, classN
   )
 }
 
-// Same panel as the Cuotas and Resumen financiero pages: a heading bar on top of the section's content.
-// `flush` drops the content padding, for tables that go edge to edge.
 export function FormPanel({ id, icon, title, description, actions, disabled = false, flush = false, children }) {
   return (
     <fieldset
@@ -187,7 +183,6 @@ export function FormPanel({ id, icon, title, description, actions, disabled = fa
   )
 }
 
-// Selectable card of a mutually exclusive choice (what to do with an excess, how to settle a reversal)
 export function OptionCard({ icon, title, description = '', selected, disabled = false, onSelect }) {
   return (
     <button
@@ -228,13 +223,17 @@ export function CancellationNotice({ action, date, authorizedBy, reason, consequ
   )
 }
 
-export const TICKET_CLASS ='h-full flex flex-col gap-4 p-5 rounded-lg border border-slate-200 bg-slate-50'
+export const TICKET_CLASS = 'h-full flex flex-col gap-4 p-5 rounded-lg border border-outline-variant/40 bg-surface-container-low'
 
-export const SUBMIT_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-primary hover:bg-primary/90 text-surface-container-lowest shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
+export const SUBMIT_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-primary hover:bg-primary/90 text-on-primary shadow-sm focus-visible:ring-primary/60 focus-visible:ring-offset-2'
+
+export const DANGER_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-error hover:bg-error/90 text-on-error shadow-sm focus-visible:ring-error/60 focus-visible:ring-offset-2'
+
+export const SECONDARY_BUTTON_CLASS = 'flex items-center gap-2 min-h-10 px-5 py-2 rounded-lg text-base font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 disabled:cursor-not-allowed bg-surface-container-low hover:bg-surface-container text-on-surface border border-outline-variant/40 shadow-sm focus-visible:ring-primary/60'
 
 export function TicketSection({ title, spread = true, children }) {
   return (
-    <div className="flex flex-1 flex-col gap-1.5 pb-3 border-b border-dashed border-slate-300">
+    <div className="flex flex-1 flex-col gap-1.5 pb-3 border-b border-dashed border-outline-variant">
       <h4 className={SUMMARY_GROUP_CLASS}>{title}</h4>
       <div className={`flex flex-1 flex-col gap-1.5 ${spread ? 'justify-evenly' : 'justify-start'}`}>{children}</div>
     </div>

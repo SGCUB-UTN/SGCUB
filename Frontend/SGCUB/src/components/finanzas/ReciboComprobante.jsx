@@ -36,7 +36,7 @@ export function ReceiptTotal({ label, amount, tone = 'text-primary' }) {
   return (
     <div className="flex justify-between items-center gap-4 px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low/70">
       <strong className="text-on-surface font-semibold">{label}</strong>
-      <strong className={`text-xl font-bold ${tone}`}>{formatAmount(amount)}</strong>
+      <strong className={`text-xl font-bold tabular-nums ${tone}`}>{formatAmount(amount)}</strong>
     </div>
   )
 }
@@ -62,10 +62,8 @@ export function ReceiptLayout({
       ref={ref}
       className="relative border border-outline-variant/40 rounded-2xl overflow-hidden bg-surface-container-lowest shadow-sm"
     >
-      {/* Encabezado institucional: Club a la izquierda, Comprobante a la derecha */}
       <div className="p-5 border-b border-outline-variant/30 bg-surface-container-low/40">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          {/* Lado izquierdo: Identidad y datos del Club */}
           <div className="flex items-start gap-4 min-w-0">
             <img
               src={clubConfig?.club_logo || DEFAULT_CLUB_LOGO}
@@ -97,7 +95,6 @@ export function ReceiptLayout({
             </div>
           </div>
 
-          {/* Lado derecho: Tarjeta de Comprobante / Recibo */}
           <div className="sm:text-right shrink-0 sm:min-w-[210px]">
             <p className="text-xl font-bold uppercase text-on-surface">{titulo}</p>
             <p className="text-base font-bold font-mono text-on-surface tracking-tight">N° {codigo?.split(' ').pop()}</p>
@@ -108,7 +105,6 @@ export function ReceiptLayout({
         </div>
       </div>
 
-      {/* Datos del Socio */}
       <div className="p-5 border-b border-outline-variant/30">
         <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">Datos del socio</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
@@ -129,7 +125,6 @@ export function ReceiptLayout({
 
       {children}
 
-      {/* Pie institucional */}
       <div className="px-5 py-3 bg-surface-container-low/40 text-center text-xs text-on-surface-variant">
         {pie}
       </div>
@@ -170,7 +165,6 @@ function ReciboComprobante({
       anulado={anulado}
       anulacion={anulacion}
     >
-      {/* Desglose de cuotas y conceptos */}
       <div className="border-b border-outline-variant/30">
         {detalle ? (
           <DesgloseComprobante detalle={detalle} flat />
@@ -181,20 +175,18 @@ function ReciboComprobante({
         )}
       </div>
 
-      {/* Medios de pago y Total */}
       <ReceiptSection title="Detalle del cobro">
         <div className="divide-y divide-outline-variant/20">
           {medios.map((medio, index) => (
             <div key={`${medio.medio}-${index}`} className="flex justify-between gap-4 px-5 py-2.5 text-sm">
               <span className="text-on-surface-variant">{medio.medio}</span>
-              <strong className="text-on-surface">{formatAmount(medio.monto)}</strong>
+              <strong className="text-on-surface tabular-nums">{formatAmount(medio.monto)}</strong>
             </div>
           ))}
         </div>
         <ReceiptTotal label="Total abonado" amount={montoTotal} />
       </ReceiptSection>
 
-      {/* Observación si existe */}
       {observacion && (
         <div className="p-5 border-b border-outline-variant/30">
           <p className="text-xs text-on-surface-variant font-medium">Observación</p>

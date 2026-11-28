@@ -9,7 +9,7 @@ import { Campo, SelectConFlecha } from '../socios/SocioFormFields'
 import DownloadComprobanteButton from './DownloadComprobanteButton'
 import WhatsAppComprobanteButton from './WhatsAppComprobanteButton'
 import ViewFinancesButton from './ViewFinancesButton'
-import { AuthorizerSelect, OptionCard, SUBMIT_BUTTON_CLASS } from './formParts'
+import { AuthorizerSelect, OptionCard, SUBMIT_BUTTON_CLASS, DANGER_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from './formParts'
 import RegisterPaymentModal from './RegisterPaymentModal'
 import { availableToRefund, reversalOf } from './refunds'
 import { FULL_CREDIT_NOTE, NEVER_RECEIVED, OTHER_SOCIO, REVERSAL_OUTCOMES, opensPayment } from './reversalOutcomes'
@@ -17,14 +17,11 @@ import ReceiptSkeleton from './ReceiptSkeleton'
 
 const REASON_MAX_LENGTH = 180
 
-// Revert asks who and why and reverts; settle (once reverted) only lets choose again what to do with the money
 const REVERT = 'revert'
 const SETTLE = 'settle'
 const PAYMENT = 'payment'
 const DONE = 'done'
 
-const DANGER_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-error hover:bg-error/90 text-on-error shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
-const SECONDARY_BUTTON_CLASS = 'px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer'
 
 function ReceiptSummary({ detalle }) {
   const socio = detalle.socio
@@ -210,8 +207,6 @@ function ReversalDone({ detalle, creditNote, onClose }) {
   )
 }
 
-// Reverts the latest payment of cuotas and doesn't let go until it's decided what happens with the money:
-// once reverted the modal can't be closed, only another option chosen, until the money is settled.
 function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
   const [load, setLoad] = useState({ loading: true, error: '', detalle: null })
   const [stage, setStage] = useState(REVERT)
@@ -248,7 +243,6 @@ function RevertPaymentFlow({ comprobanteId, opened, onClose, onChanged }) {
     settle(chosen)
   }
 
-  // Already reverted: the responsable and reason of the reversal also sign the credit note
   const resettle = async ({ outcome: chosen, refundMethod }) => {
     if (chosen === FULL_CREDIT_NOTE) {
       const note = await emitirNotaCredito(detalle.comprobante_id, {

@@ -7,7 +7,7 @@ import { formatPeriod, periodEndDate, periodOf, periodStartDate } from '../share
 import PeriodField from '../shared/PeriodField'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AmountModeInput, AuthorizerSelect, BenefitValueError, SUBMIT_BUTTON_CLASS } from './formParts'
+import { AmountModeInput, AuthorizerSelect, BenefitValueError, SUBMIT_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from './formParts'
 import { FIXED, PERCENTAGE, SCHOLARSHIP_TARGET, benefitPayload, benefitValueError, exceedsMax, remainingToPay, roundCents } from './benefitMath'
 
 const REASON_MAX_LENGTH = 140
@@ -163,7 +163,7 @@ function EditBenefitForm({ target, onCancel, onSaved }) {
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer"
+          className={SECONDARY_BUTTON_CLASS}
         >
           Volver
         </button>

@@ -41,7 +41,7 @@ function CreditNotes({ detalle, methodLabel }) {
           <div key={note.devolucion_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0">
               <p className="font-semibold text-on-surface">
-                {note.codigo} · <span className={isCancelledRefund(note) ? 'line-through text-outline' : ''}>{formatAmount(note.monto)}</span>
+                {note.codigo} · <span className={`tabular-nums ${isCancelledRefund(note) ? 'line-through text-outline' : ''}`}>{formatAmount(note.monto)}</span>
                 {isCancelledRefund(note) && <span className="ml-2 text-sm font-semibold text-error">Cancelada</span>}
               </p>
               <p className="text-sm text-on-surface-variant break-words">
@@ -68,7 +68,6 @@ function CreditNotes({ detalle, methodLabel }) {
                   montoTotal={note.monto}
                   tipo="nota_credito"
                   label="WhatsApp"
-                  className="h-9 px-3 text-xs min-w-0"
                 />
               </div>
             )}
@@ -78,7 +77,7 @@ function CreditNotes({ detalle, methodLabel }) {
       {available > 0 && (
         <div className="flex justify-between px-3 py-2 border-t border-outline-variant/20 bg-surface-container-low text-sm">
           <span className="text-on-surface-variant">Disponible para devolver</span>
-          <strong>{formatAmount(available)}</strong>
+          <strong className="tabular-nums">{formatAmount(available)}</strong>
         </div>
       )}
     </section>
@@ -111,7 +110,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
   const isIncome = Boolean(detalle?.es_ingreso)
   const available = detalle ? availableToRefund(detalle) : 0
 
-  // A payment of cuotas is reverted in its own flow, which stays open until the money is settled
   const startReversal = () => {
     if (isIncome) {
       setAction('revert')
@@ -186,6 +184,9 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
           </div>
 
           <div className="shrink-0 pt-3 border-t border-outline-variant/30 flex flex-wrap items-center justify-end gap-2">
+            {!readOnly && !anulado && !isIncome && !detalle.revertible && (
+              <p className="w-full sm:w-auto sm:mr-auto text-base text-on-surface-variant">Solo se puede revertir el último pago del socio.</p>
+            )}
             <ViewFinancesButton socio={detalle.socio} onNavigate={onClose} />
             {!readOnly && detalle.revertible && (
               <button type="button" onClick={startReversal} className={`${ACTION_BUTTON_CLASS} border-error/40 text-error hover:bg-error-container/40`}>
@@ -234,7 +235,6 @@ function ComprobanteDetailContent({ comprobanteId, opened, onClose, onChanged, r
   )
 }
 
-// Detail of a receipt with its actions: revert it (or annul an income), charge it again and refund it
 function ComprobanteDetailModal({ comprobanteId, opened, onClose, onChanged, readOnly = false }) {
   if (!comprobanteId) return null
   return (

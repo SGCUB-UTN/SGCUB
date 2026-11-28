@@ -3555,26 +3555,15 @@ class ResumenFinancieroTests(APITestCase):
 	def resumen(self, **params):
 		return self.client.get(reverse("resumen-financiero"), {"periodo": self.periodo, **params})
 
-	def test_origen_de_los_ingresos_agrupa_los_conceptos_menores(self):
+	def test_ingresos_del_mes_cuentan_solo_los_comprobantes_vigentes(self):
 		ingresos = self.resumen().data["ingresos"]
 
 		self.assertEqual(ingresos["total"], Decimal("980.00"))
 		self.assertEqual(ingresos["cuotas"], Decimal("600.00"))
-		self.assertEqual(
-			[(row["nombre"], row["monto"]) for row in ingresos["origen"]],
-			[("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Donación", Decimal("50.00")), ("Otros", Decimal("30.00"))],
-		)
-		self.assertEqual(ingresos["origen"][0]["porcentaje"], Decimal("61.2"))
-
-	def test_origen_de_los_ingresos_se_ordena_de_mayor_a_menor(self):
-		register_income(self.socio.pk, "Sponsoreo", [{"medio_de_pago": "Transferencia", "monto": Decimal("2000.00")}], Decimal("2000.00"))
-
-		origen = self.resumen().data["ingresos"]["origen"]
-
-		self.assertEqual(
-			[(row["nombre"], row["monto"]) for row in origen],
-			[("Sponsoreo", Decimal("2000.00")), ("Cuotas", Decimal("600.00")), ("Venta de indumentaria", Decimal("300.00")), ("Otros", Decimal("80.00"))],
-		)
+		self.assertEqual(ingresos["extra"], Decimal("380.00"))
+		self.assertEqual(ingresos["cantidad_cuotas"], 1)
+		self.assertEqual(ingresos["cantidad_extra"], 4)
+		self.assertNotIn("origen", ingresos)
 
 	def test_kpis_de_las_cuotas_del_periodo(self):
 		self.assertEqual(self.resumen().data["cuotas"], {
@@ -3641,7 +3630,6 @@ class ResumenFinancieroTests(APITestCase):
 		otro = next(row for row in data["ingresos_extra"]["conceptos"] if row["nombre"] == "Otro ingreso")
 		self.assertEqual((otro["monto"], otro["cantidad"]), (Decimal("100.00"), 2))
 		self.assertEqual([row["nombre"] for row in data["devoluciones"]["manuales"]["conceptos"]], ["Transferencia de más", "Otra devolución"])
-		self.assertIn("Otro ingreso", [row["nombre"] for row in data["ingresos"]["origen"]])
 
 	def test_evolucion_de_los_ultimos_doce_periodos(self):
 		evolucion = self.resumen().data["evolucion"]
@@ -3652,11 +3640,11 @@ class ResumenFinancieroTests(APITestCase):
 		})
 		self.assertIsNone(evolucion[0]["efectividad"])
 
-	def test_conserva_la_deuda_que_usa_el_dashboard(self):
+	def test_no_calcula_la_morosidad(self):
 		data = self.client.get(reverse("resumen-financiero")).data
 
-		for campo in ("socios_en_mora", "monto_adeudado_total", "cuotas_vencidas", "cuotas_vencidas_1", "cuotas_vencidas_2"):
-			self.assertIn(campo, data)
+		for campo in ("socios_en_mora", "monto_adeudado_total", "cuotas_vencidas"):
+			self.assertNotIn(campo, data)
 
 	def test_periodo_invalido(self):
 		self.assertEqual(self.resumen(periodo="2026-13").status_code, 400)
@@ -3667,7 +3655,7 @@ class ResumenFinancieroTests(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/pdf")
 		self.assertIn(f"resumen-financiero-{self.periodo}.pdf", response["Content-Disposition"])
-		for texto in (b"Resumen financiero", b"Venta de indumentaria", b"Devoluciones manuales", b"Transferencia de m", b"Evoluci"):
+		for texto in (b"Resumen financiero", b"Ingresos de", b"Total ingresado", b"Total a cobrar", b"Venta de indumentaria", b"Devoluciones manuales", b"Transferencia de m", b"Evoluci"):
 			with self.subTest(texto=texto):
 				self.assertIn(texto, response.content)
 
@@ -5405,6 +5393,23 @@ class PeriodoCuotasTests(APITestCase):
 		self.assertEqual(filas[self.jugador.pk]["cuota_amount"], Decimal("2500.00"))
 		self.assertEqual(filas[self.jugador.pk]["surcharges"], Decimal("0.00"))
 		self.assertEqual(filas[self.jugador.pk]["pending"], Decimal("2500.00"))
+		self.assertIsNone(filas[self.jugador.pk]["categoria_secundaria"])
+		self.assertIsNone(filas[self.jugador.pk]["categoria_secundaria_id"])
+		self.assertEqual(filas[self.jugador.pk]["categoria_secundaria_genero"], "")
+
+	def test_period_cuotas_list_incluye_la_categoria_secundaria(self):
+		secundaria = Categoria.objects.create(nombre="Primera", anio_vigente=2026, genero=Categoria.GENERO_FEMENINO)
+		jugador = self.jugador.jugador
+		jugador.categoria_secundaria = secundaria
+		jugador.save(update_fields=["categoria_secundaria"])
+
+		response = self.get("cuota-periodo-cuotas")
+
+		self.assertEqual(response.status_code, 200, response.data)
+		fila = next(fila for fila in response.data["results"] if fila["socio_id"] == self.jugador.pk)
+		self.assertEqual(fila["categoria_secundaria"], "Primera")
+		self.assertEqual(fila["categoria_secundaria_id"], secundaria.pk)
+		self.assertEqual(fila["categoria_secundaria_genero"], "F")
 
 	def test_fases_segun_la_fecha_y_las_ejecuciones(self):
 		fases = {fase["key"]: fase["status"] for fase in period_summary("2026-10", today=date(2026, 10, 5))["phases"]}

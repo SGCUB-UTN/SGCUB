@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from django.db.models import Sum
 
-from .delinquency import delinquency_report
 from .generators import PERIOD_FORMAT
 from .models import (
     Comprobante,
@@ -21,12 +20,8 @@ from .period_summary import period_totals
 from .services import parse_period, pending_amounts
 
 ZERO = Decimal("0.00")
-CUOTAS_LABEL = "Cuotas"
-OTHERS_LABEL = "Otros"
 NO_CONCEPT = "Sin concepto"
 CONCEPT_DETAIL_SEPARATOR = " · "
-# Extra income concepts shown on their own in the origin chart; the rest are grouped as "Otros"
-TOP_CONCEPTS = 2
 EVOLUTION_MONTHS = 12
 
 
@@ -57,7 +52,6 @@ def amount_share(rows, total):
 
 
 def month_receipts(first_day):
-    """Receipts issued in the month and still in force: the money that came in (cash basis)."""
     return Comprobante.objects.filter(
         estado=EstadoComprobanteChoices.VIGENTE,
         fecha_emision__year=first_day.year,
@@ -65,30 +59,17 @@ def month_receipts(first_day):
     )
 
 
-def income_origin(cuotas_total, extra_rows, total):
-    ranked = [(group["nombre"], group["monto"]) for group in concept_breakdown(extra_rows, total)]
-    segments = [(CUOTAS_LABEL, cuotas_total), *ranked[:TOP_CONCEPTS]]
-    others = sum((amount for _, amount in ranked[TOP_CONCEPTS:]), ZERO)
-    if others:
-        segments.append((OTHERS_LABEL, others))
-    segments.sort(key=lambda pair: pair[1], reverse=True)
-    return [
-        {"nombre": name, "monto": amount, "porcentaje": percentage(amount, total)}
-        for name, amount in segments
-        if amount or name == CUOTAS_LABEL
-    ]
-
-
 def extra_income_rows(receipts):
     incomes = receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.INGRESO).select_related("pago__movimiento")
     return [{"concepto": receipt.pago.movimiento.concepto, "monto": receipt.monto_total} for receipt in incomes]
 
 
+def cuota_receipts(receipts):
+    return receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
+
+
 def cuota_income(receipts):
-    return (
-        receipts.filter(pago__movimiento__tipo_movimiento=TipoMovimientoChoices.ABONO)
-        .aggregate(total=Sum("monto_total"))["total"] or ZERO
-    )
+    return cuota_receipts(receipts).aggregate(total=Sum("monto_total"))["total"] or ZERO
 
 
 def month_income(period):
@@ -159,7 +140,6 @@ def previous_periods(first_day, months=EVOLUTION_MONTHS):
 
 
 def collection_evolution(first_day):
-    """Billed vs collected of the cuotas of the last twelve periods, up to the selected one."""
     periods = previous_periods(first_day)
     cuotas = list(Cuota.objects.filter(periodo__in=periods, movimiento__isnull=False).select_related("movimiento"))
     pending = pending_amounts(cuotas)
@@ -179,20 +159,7 @@ def collection_evolution(first_day):
     ]
 
 
-def debt_overview():
-    rows = delinquency_report("activos")["filas"]
-    return {
-        "socios_en_mora": len(rows),
-        "monto_adeudado_total": sum((row["monto_adeudado"] for row in rows), ZERO),
-        "cuotas_vencidas": sum(row["cuotas_vencidas"] for row in rows),
-        "cuotas_vencidas_1": sum(row["cuotas_vencidas_1"] for row in rows),
-        "cuotas_vencidas_2": sum(row["cuotas_vencidas_2"] for row in rows),
-    }
-
-
 def financial_summary(period):
-    """Monthly financial summary. Income, payment methods and refunds follow the money that came in
-    or went out in the month; the cuota indicators and the evolution follow the cuota period."""
     first_day = parse_period(period)
     receipts = month_receipts(first_day)
     cuotas_total = cuota_income(receipts)
@@ -201,12 +168,12 @@ def financial_summary(period):
     total = cuotas_total + extra_total
     return {
         "periodo": first_day.strftime(PERIOD_FORMAT),
-        **debt_overview(),
         "ingresos": {
             "total": total,
             "cuotas": cuotas_total,
             "extra": extra_total,
-            "origen": income_origin(cuotas_total, extra, total),
+            "cantidad_cuotas": cuota_receipts(receipts).count(),
+            "cantidad_extra": len(extra),
         },
         "cuotas": cuota_kpis(first_day.strftime(PERIOD_FORMAT)),
         "ingresos_extra": {"total": extra_total, "conceptos": concept_breakdown(extra, extra_total)},

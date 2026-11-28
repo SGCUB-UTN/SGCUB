@@ -1,8 +1,6 @@
 import { SecondaryButton } from '../personas/tabs/parts'
 import { TableSkeletonRows } from './Skeleton'
 
-// Full-width row for the loading, error and empty states of a table.
-// Renders nothing when the table has rows to show.
 export default function TableMessageRow({
   colSpan,
   isLoading = false,

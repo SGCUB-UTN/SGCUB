@@ -3,7 +3,7 @@ import { Modal, Text } from '@mantine/core'
 import { getErrorMessage } from '../personas/format'
 import { claseInput } from '../socios/socioForm'
 import { Campo } from '../socios/SocioFormFields'
-import { AuthorizerSelect, OptionCard } from './formParts'
+import { AuthorizerSelect, OptionCard, DANGER_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from './formParts'
 
 const REASON_MAX_LENGTH = 180
 
@@ -13,7 +13,6 @@ const OTHER_REASON = 'otro'
 
 const NO_PRESETS = []
 
-const DANGER_BUTTON_CLASS = 'px-6 py-2.5 rounded text-sm font-semibold bg-error hover:bg-error/90 text-on-error shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
 
 function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessage, authorizerLabel, authorizerError, withReason, presetReasons, onConfirm, onCancel }) {
   const [authorizer, setAuthorizer] = useState('')
@@ -116,7 +115,7 @@ function AuthorizationForm({ description, confirmLabel, confirmIcon, errorMessag
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="px-5 py-2.5 rounded text-sm font-medium text-on-surface hover:bg-surface-container-low transition-colors border border-outline-variant/40 cursor-pointer"
+          className={SECONDARY_BUTTON_CLASS}
         >
           Volver
         </button>

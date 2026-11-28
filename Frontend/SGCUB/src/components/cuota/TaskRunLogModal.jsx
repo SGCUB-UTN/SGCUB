@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Modal, Text } from '@mantine/core'
+import { Modal } from '@mantine/core'
 import { getCuotaTaskRun } from '../../api/cuotas'
 import LogDownloadButton from '../automatizaciones/LogDownloadButton'
 import { formatPeriod } from '../shared/periodFormat'
@@ -18,16 +18,16 @@ function RunDetails({ run }) {
   const details = [
     ['Tarea', run.tipo_display],
     ['Período', formatPeriod(run.periodo)],
-    ['Origen', `${run.origen_display}${run.usuario ? ` por ${run.usuario}` : ''}`],
+    ['Cómo se inició', `${run.origen_display}${run.usuario ? ` por ${run.usuario}` : ''}`],
     ['Resultado', run.exitosa ? 'Completada correctamente' : 'Con observaciones'],
     ['Inicio', formatDateTime(run.fecha_inicio)],
     ['Duración', duration(run)],
   ]
   return (
-    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-base">
       {details.map(([label, value]) => (
         <div key={label} className="flex justify-between sm:justify-start gap-3">
-          <dt className="text-on-surface-variant sm:w-24 shrink-0">{label}</dt>
+          <dt className="text-on-surface-variant sm:w-32 shrink-0">{label}</dt>
           <dd className={`font-medium ${label === 'Resultado' && !run.exitosa ? 'text-error' : 'text-on-surface'}`}>{value}</dd>
         </div>
       ))}
@@ -55,20 +55,20 @@ export default function TaskRunLogModal({ run, onClose }) {
     <Modal
       opened={runId != null}
       onClose={onClose}
-      title={<Text fw={700} size="xl">Registro de la ejecución</Text>}
+      title="Detalle de la tarea"
       centered
       size="xl"
     >
       {run && (
         <div className="flex flex-col gap-4">
           <RunDetails run={detail ?? run} />
-          <p className="text-sm text-on-surface border-l-2 border-primary pl-3">{run.resumen}</p>
+          <p className="text-base text-on-surface rounded-lg bg-surface-container-low px-3 py-2">{run.resumen}</p>
           {!detail && !current.error && <TextSkeleton label="Cargando registro…" />}
-          {current.error && <p className="text-sm text-error">No se pudo cargar el registro de la ejecución.</p>}
+          {current.error && <p className="text-base text-error" role="alert">No se pudo cargar el detalle de la tarea.</p>}
           {detail && (
             <>
-              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-outline-variant/40 bg-surface-container-low p-3 font-mono text-xs leading-relaxed text-on-surface">
-                {detail.registro || 'La ejecución no dejó registro.'}
+              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-outline-variant/40 bg-surface-container-low p-3 font-mono text-sm leading-relaxed text-on-surface">
+                {detail.registro || 'La tarea no dejó registro.'}
               </pre>
               {detail.registro && (
                 <LogDownloadButton

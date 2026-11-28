@@ -5,7 +5,7 @@ import usePagination from '../../hooks/usePagination'
 import { formatAmount } from '../personas/format'
 import { currentPeriod, formatPeriod } from '../shared/periodFormat'
 import { isPaid } from './accountStatement'
-import { CUOTA_STATES, cuotaState, cuotaStateLabel } from './cuotaStates'
+import { CUOTA_STATES, CUOTA_STATE_TONES, cuotaState, cuotaStateLabel } from './cuotaStates'
 import StatusBadge from '../shared/StatusBadge'
 import CuotaDetailPanel from './CuotaDetailPanel'
 import RowIconButton, { RowIcon } from '../shared/RowIconButton'
@@ -25,19 +25,12 @@ const isPartiallyPaid = (cuota) => !isPaid(cuota) && Number(cuota.monto_pagado ?
 
 const isFuture = (cuota, period) => String(cuota.periodo) > period && !isPaid(cuota) && !isPartiallyPaid(cuota)
 
-const STATE_TONES = {
-  [CUOTA_STATES.EN_FECHA]: 'info',
-  [CUOTA_STATES.VENCIDA_1]: 'alerta',
-  [CUOTA_STATES.VENCIDA_2]: 'error',
-  [CUOTA_STATES.PAGA]: 'ok',
-}
-
 function CuotaStateBadge({ cuota }) {
   const state = cuotaState(cuota)
   if (state === CUOTA_STATES.EN_FECHA && String(cuota.periodo) > currentPeriod()) {
     return <StatusBadge size="md" badge={{ label: 'Próxima', tono: 'neutro' }} />
   }
-  return <StatusBadge size="md" badge={{ label: cuotaStateLabel(state), tono: STATE_TONES[state] ?? 'neutro' }} />
+  return <StatusBadge size="md" badge={{ label: cuotaStateLabel(state), tono: CUOTA_STATE_TONES[state] ?? 'neutro' }} />
 }
 
 const NO_IDS = []

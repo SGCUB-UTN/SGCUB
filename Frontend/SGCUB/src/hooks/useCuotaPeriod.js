@@ -23,7 +23,15 @@ function useCuotaPeriod(period) {
       }))
       load(period)
         .then((data) => store({ data }))
-        .catch((error) => store({ error }))
+        .catch((error) => active && setResources((current) => ({
+          ...current,
+          [name]: {
+            data: current[name].period === period ? current[name].data : null,
+            error,
+            period,
+            key: requestKey,
+          },
+        })))
     })
     return () => { active = false }
   }, [period, requestKey])

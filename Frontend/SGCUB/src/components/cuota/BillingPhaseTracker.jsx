@@ -25,11 +25,7 @@ const PHASE_TITLES = {
   second_due: '2° Vencimiento',
 }
 
-const DONE_COLORS = {
-  generation: { circle: 'bg-emerald-600 text-surface-container-lowest border-emerald-600', line: 'bg-emerald-600' },
-  first_due: { circle: 'bg-amber-500 text-surface-container-lowest border-amber-500', line: 'bg-amber-500' },
-  second_due: { circle: 'bg-error text-on-error border-error', line: 'bg-error' },
-}
+const DONE_COLORS = { circle: 'bg-emerald-50 text-emerald-700 border-emerald-700', line: 'bg-emerald-700' }
 
 const STATUS_DESCRIPTIONS = {
   [DONE]: 'completada',
@@ -83,7 +79,7 @@ function PhaseSteps({ steps }) {
     <ol aria-labelledby="billing-phase-title" className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 sm:gap-0 min-w-0">
       {steps.map((phase, index) => {
         const style = STATUS_STYLES[phase.visualStatus]
-        const doneColors = phase.status === DONE ? DONE_COLORS[phase.key] : null
+        const doneColors = phase.status === DONE ? DONE_COLORS : null
         const isLast = index === steps.length - 1
         return (
           <Fragment key={phase.key}>
@@ -92,15 +88,15 @@ function PhaseSteps({ steps }) {
               style={{ transitionDelay: `${index * 2 * SEQUENCE_MS}ms` }}
               aria-current={phase.visualStatus === CURRENT ? 'step' : undefined}
             >
-              <span className={`w-9 h-9 shrink-0 rounded-full border-2 flex items-center justify-center ${doneColors?.circle ?? style.circle}`} aria-hidden="true">
+              <span className={`w-9 h-9 shrink-0 rounded-[9999px] border-2 flex items-center justify-center ${doneColors?.circle ?? style.circle}`} aria-hidden="true">
                 <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{style.icon}</span>
               </span>
               <span className="flex flex-col min-w-0">
-                <span className={`text-sm font-semibold leading-tight ${style.label}`}>
+                <span className={`text-base font-semibold leading-tight ${style.label}`}>
                   {PHASE_TITLES[phase.key] ?? phase.key}
                   <span className="sr-only">{`, ${STATUS_DESCRIPTIONS[phase.visualStatus]}`}</span>
                 </span>
-                <span className="text-xs text-on-surface-variant tabular-nums">{phaseCaption(phase)}</span>
+                <span className="text-sm text-on-surface-variant tabular-nums">{phaseCaption(phase)}</span>
               </span>
             </li>
             {!isLast && (
@@ -121,10 +117,9 @@ export default function BillingPhaseTracker({ phases, isLoading, error }) {
   const steps = withCurrentStep(phases ?? [])
   return (
     <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-      
       {isLoading && steps.length === 0 && <PhaseSkeleton />}
       {!isLoading && error && steps.length === 0 && (
-        <p className="text-sm text-error">No se pudo cargar la fase del período.</p>
+        <p className="text-base text-on-surface-variant">La etapa del mes no está disponible por ahora.</p>
       )}
       {steps.length > 0 && <PhaseSteps steps={steps} />}
     </div>

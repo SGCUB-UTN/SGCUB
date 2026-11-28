@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getResumenFinanciero } from '../api/resumenFinanciero'
+import { CAJA_CHANGED_EVENT } from '../components/finanzas/cajaEvents'
 
-// Monthly financial summary of `period` ('YYYY-MM'), reloaded when the period changes or on reload()
 export default function useResumenFinanciero(period) {
   const [load, setLoad] = useState({ period: null, data: null, error: null })
   const [version, setVersion] = useState(0)
@@ -10,11 +10,20 @@ export default function useResumenFinanciero(period) {
     let active = true
     getResumenFinanciero(period)
       .then((data) => active && setLoad({ period, data, error: null }))
-      .catch((error) => active && setLoad({ period, data: null, error }))
+      .catch((error) => active && setLoad((current) => ({
+        period,
+        data: current.period === period ? current.data : null,
+        error,
+      })))
     return () => { active = false }
   }, [period, version])
 
   const reload = useCallback(() => setVersion((current) => current + 1), [])
+
+  useEffect(() => {
+    window.addEventListener(CAJA_CHANGED_EVENT, reload)
+    return () => window.removeEventListener(CAJA_CHANGED_EVENT, reload)
+  }, [reload])
 
   const loaded = load.period === period
   return {

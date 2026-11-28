@@ -1,5 +1,3 @@
-// Shared table shell: horizontal scroll wrapper, header row and body with the app's table styles.
-// `headers` receives the <th>/<SortableHeader> cells; rows go as children.
 const HEADER_ROW_CLASS = 'bg-surface-container-low/60 border-b border-outline-variant/30 text-sm font-semibold text-on-surface-variant'
 const HEADER_CASE_CLASS = { upper: 'uppercase tracking-wider', title: 'normal-case' }
 const FOOTER_ROW_CLASS = 'bg-surface-container-low/60 border-t border-outline-variant/30 text-on-surface tabular-nums'

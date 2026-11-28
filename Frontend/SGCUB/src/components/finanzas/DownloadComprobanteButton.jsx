@@ -39,7 +39,7 @@ function DownloadComprobanteButton({
           type="button"
           onClick={descargar}
           disabled={!targetId || descargando}
-          className={`${SUBMIT_BUTTON_CLASS} ${fullWidth ? 'w-full justify-center' : ''} h-11 text-sm`}
+          className={`${SUBMIT_BUTTON_CLASS} ${fullWidth ? 'w-full justify-center' : ''}`}
         >
           <span className="material-symbols-outlined text-[18px]" aria-hidden="true">download</span>
           <span>{descargando ? 'Descargando PDF...' : label}</span>

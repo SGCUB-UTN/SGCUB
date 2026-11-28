@@ -57,10 +57,8 @@ function ComprobantePago({
 
   return (
     <div className="flex flex-col gap-5 flex-1 min-h-0">
-      {/* Estado superior */}
       <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider font-semibold text-emerald-700">Operación confirmada</p>
           <h2 className="text-2xl font-bold text-on-surface">Comprobante de pago</h2>
         </div>
         <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 font-semibold text-sm border border-emerald-500/20">
@@ -103,8 +101,7 @@ function ComprobantePago({
         />
       </div>
 
-      {/* Acciones */}
-      <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+      <div className="shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2 max-sm:[&_button]:w-full max-sm:[&_button]:justify-center">
         <ViewFinancesButton socio={socioCompleto} onNavigate={onLeave} />
         {onRevert && detalle?.revertible && (
           <button

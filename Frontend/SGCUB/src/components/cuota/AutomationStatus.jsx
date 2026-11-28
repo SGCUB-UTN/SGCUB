@@ -4,17 +4,17 @@ import { formatDateTime } from './cuotaPeriod'
 import { TEXT_BUTTON_CLASS } from '../shared/textButton'
 
 const HISTORY_ID = 'automation-history'
-const TOGGLE_BUTTON_CLASS = `${TEXT_BUTTON_CLASS} text-sm shrink-0`
+const TOGGLE_BUTTON_CLASS = `${TEXT_BUTTON_CLASS} min-h-10 text-base shrink-0`
 
 const latestRun = (runs) => runs.reduce((latest, run) => (run.fecha_inicio > latest.fecha_inicio ? run : latest))
 
 function runsStatus(runs, isLoading, error) {
   if (!runs) {
     if (isLoading) return { icon: 'progress_activity', iconClass: 'text-outline animate-spin', text: 'Cargando…' }
-    return { icon: 'error', iconClass: 'text-error', text: error ? 'No se pudo cargar el estado.' : '' }
+    return { icon: 'cloud_off', iconClass: 'text-on-surface-variant', text: error ? 'Estado no disponible por ahora.' : '' }
   }
   if (runs.length === 0) {
-    return { icon: 'schedule', iconClass: 'text-outline', text: 'Todavía no hay ejecuciones en este período' }
+    return { icon: 'schedule', iconClass: 'text-outline', text: 'Todavía no corrió ninguna tarea este mes.' }
   }
   const failed = runs.filter((run) => !run.exitosa).length
   const date = formatDateTime(latestRun(runs).fecha_inicio)
@@ -22,10 +22,10 @@ function runsStatus(runs, isLoading, error) {
     return {
       icon: 'error',
       iconClass: 'text-error',
-      text: `${failed} ${failed === 1 ? 'ejecución con fallos' : 'ejecuciones con fallos'} (${date})`,
+      text: `${failed === 1 ? 'Una tarea tuvo problemas' : `${failed} tareas tuvieron problemas`}. Última: ${date}.`,
     }
   }
-  return { icon: 'check_circle', iconClass: 'text-emerald-600', text: `Aplicadas correctamente, sin fallos (${date})` }
+  return { icon: 'check_circle', iconClass: 'text-emerald-700', text: `Todo salió bien. Última: ${date}.` }
 }
 
 export default function AutomationStatus({ runs, isLoading, error, onOpenLog }) {
@@ -33,12 +33,12 @@ export default function AutomationStatus({ runs, isLoading, error, onOpenLog }) 
   const status = runsStatus(runs, isLoading, error)
 
   return (
-    <div role="region" aria-label="Automatizaciones">
+    <div role="region" aria-label="Tareas automáticas">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t border-outline-variant/30 bg-surface-container-low">
-        <p className="flex items-center gap-2 text-sm text-on-surface min-w-0">
+        <p className="flex items-center gap-2 text-base text-on-surface min-w-0">
           <span className={`material-symbols-outlined shrink-0 ${status.iconClass}`} style={{ fontSize: 20 }} aria-hidden="true">{status.icon}</span>
           <span>
-            <strong className="font-semibold">Automatizaciones:</strong> {status.text}
+            <strong className="font-semibold">Tareas automáticas:</strong> {status.text}
           </span>
         </p>
         <button
@@ -48,7 +48,7 @@ export default function AutomationStatus({ runs, isLoading, error, onOpenLog }) 
           aria-controls={HISTORY_ID}
           className={`${TOGGLE_BUTTON_CLASS} self-start sm:self-auto`}
         >
-          {expanded ? 'Ocultar historial' : 'Ver historial completo'}
+          {expanded ? 'Ocultar historial' : 'Ver historial'}
           <span className={`material-symbols-outlined transition-transform ${expanded ? 'rotate-180' : ''}`} style={{ fontSize: 18 }} aria-hidden="true">expand_more</span>
         </button>
       </div>

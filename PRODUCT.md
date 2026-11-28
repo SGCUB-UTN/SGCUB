@@ -26,7 +26,7 @@ Es un sistema hecho a medida para un club concreto, según su operatoria real. C
 
 ## Operating Context
 
-- Se usa en una sola PC de escritorio, en la secretaría del club, dentro de la red local. No se usa desde celulares ni desde otros equipos.
+- Se usa sobre todo en la PC de escritorio de la secretaría del club, dentro de la red local. También puede abrirse desde un celular, principalmente para consultar información (tablas de Caja, Cuotas y el padrón) y para registrar un pago de cuotas.
 - El uso diario se reparte entre la atención al público en ventanilla (cobros, consultas de estado de cuenta) y la carga administrativa.
 - Los comprobantes y reportes se generan en PDF.
 - Los datos históricos se migran desde planillas y papel con scripts ETL ([scripts/](scripts/)).
