@@ -19,6 +19,8 @@ import { PANEL_BODY_CLASS as BODY_CLASS, PANEL_CLASS, PANEL_HEADING_CLASS as HEA
 import { TEXT_BUTTON_CLASS } from '../components/shared/textButton'
 import { currentPeriod, formatPeriod } from '../components/shared/periodFormat'
 import useResumenFinanciero from '../hooks/useResumenFinanciero'
+import useToast from '../hooks/useToast'
+import LoadErrorBanner from '../components/shared/LoadErrorBanner'
 
 const EXPORT_BUTTON_CLASS = 'inline-flex items-center gap-2 h-10 px-4 border border-outline-variant/50 rounded text-sm font-semibold text-on-surface bg-surface-container-lowest hover:bg-surface-container-low transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
 const TOGGLE_BUTTON_CLASS = 'inline-flex items-center justify-center w-8 h-8 rounded-md text-primary hover:bg-primary/5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60'
@@ -312,10 +314,10 @@ function ResumenFinanciero() {
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedPeriod = searchParams.get('periodo')
   const period = isValidPeriod(requestedPeriod) ? requestedPeriod : currentPeriod()
-  const { data, isLoading, error } = useResumenFinanciero(period)
+  const { data, isLoading, error, reload } = useResumenFinanciero(period)
+  const { showToast } = useToast()
   const [expanded, setExpanded] = useState({ incomes: false, refunds: false })
   const [isExporting, setIsExporting] = useState(false)
-  const [exportError, setExportError] = useState('')
 
   const changePeriod = (value) => setSearchParams((current) => {
     const next = new URLSearchParams(current)
@@ -326,11 +328,11 @@ function ResumenFinanciero() {
 
   const handleExport = async () => {
     setIsExporting(true)
-    setExportError('')
     try {
       await downloadFinancialSummaryPdf(period)
+      showToast({ title: 'Informe descargado', description: `Resumen financiero de ${formatPeriod(period)}.` })
     } catch (err) {
-      setExportError(getErrorMessage(err, 'No se pudo generar el informe PDF.'))
+      showToast({ tone: 'error', title: 'No se pudo generar el informe', description: getErrorMessage(err, 'Probá de nuevo en unos minutos.') })
     } finally {
       setIsExporting(false)
     }
@@ -349,17 +351,18 @@ function ResumenFinanciero() {
         )}
       />
 
-      {exportError && <p className="text-sm text-error" role="alert">{exportError}</p>}
-
       <SectionDivider actions={<PeriodSelector value={period} onChange={changePeriod} />}>
         Resumen mensual
       </SectionDivider>
 
       {isLoading && <SummarySkeleton />}
       {error && (
-        <p className={`${PANEL_CLASS} ${BODY_CLASS} text-error`} role="alert">
-          {getErrorMessage(error, 'No se pudo cargar el resumen financiero.')}
-        </p>
+        <LoadErrorBanner
+          message={data
+            ? 'No pudimos actualizar el resumen. Estás viendo los últimos datos que se cargaron.'
+            : `No pudimos traer el resumen de ${formatPeriod(period)}. Revisá la conexión y probá de nuevo.`}
+          onRetry={reload}
+        />
       )}
 
       {data && (
